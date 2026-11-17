@@ -1,4 +1,7 @@
-"""Independent consumers reject actual native loss in optional Pack graph signals."""
+"""Independent consumers: Pack keeps a partial optional graph and names its actual native loss.
+
+BACK-2047 rejected an incomplete graph to the name-heuristic fallback; BACK-2666 (COMMAND_MODEL
+"Degraded input") keeps it, ranks by the files it read and names each loss once in meta.warnings."""
 import json
 import os
 from pathlib import Path
@@ -84,21 +87,32 @@ def _assert_native_loss(state, profile):
     return warnings
 
 
+# helper.py's importers the partial graph still reads: focus.py, and child/source.py unless child is lost;
+# a denied root leaves no file in the graph.
+_PARTIAL_FAN_IN = {'source': 1, 'unknown-child': 1, 'combined': 1, 'inc-directory': 2, 'parse': 2, 'unknown-root': 0}
+
+
+def _directory_losses(answer):
+    return [w for w in answer['meta'].get('warnings', []) if w.get('unit') == 'directories']
+
+
 @pytest.mark.parametrize('profile', ['source', 'inc-directory', 'unknown-child',
                                      'unknown-root', 'parse', 'combined'])
 def test_native_loss_rejects_pair_and_clears_numeric_fallback_without_changing_protocol(
         tmp_path, native_fault, profile):
     _project(tmp_path)
     _loss(tmp_path, native_fault, profile)
-    failures = []
-    graph, scanned = pack._build_pack_import_graph(tmp_path, failures)
+    failures, lost = [], []
+    graph, scanned = pack._build_pack_import_graph(tmp_path, failures, losses=lost)
     warnings = _assert_native_loss(native_fault, profile)
-    assert graph is None and scanned == set(), (graph, scanned, warnings)
-    assert len(failures) == len(warnings)
-    assert all(tmp_path.as_posix() in message for message in failures)
-    assert all(w['message'] in '\n'.join(failures) for w in warnings)
-    assert pack._fetch_fan_in(tmp_path, []) == {}
-    assert pack._compute_graph_relevance(tmp_path, 'focus', []) == {}
+    owner = native_fault['builds'][-1][0]
+    # BACK-2666: the partial graph is kept; the loss travels with the analysis whose warnings are `warnings`.
+    assert graph is owner.analysis.graph and scanned is owner.analysis.scanned_files, (graph, scanned, warnings)
+    assert failures == [] and lost == [owner.analysis]
+    fan_in = pack._fetch_fan_in(tmp_path, [])
+    assert fan_in.get(str((tmp_path / 'helper.py').resolve()), 0) == _PARTIAL_FAN_IN[profile]
+    relevance = pack._compute_graph_relevance(tmp_path, 'focus', [])
+    assert (relevance.get(str((tmp_path / 'helper.py').resolve()), 0) > 0) is (profile != 'unknown-root')
     assert len(native_fault['builds']) == 3
 
 
@@ -116,16 +130,21 @@ def test_two_requested_signals_keep_primary_rows_and_deduplicate_native_causes(
         row['relative'] for row in answer['files']}
     assert answer['meta']['selected'] == answer['meta']['total_candidates']
     assert not answer.get('error')
-    # Optional loss is not required inventory loss; a file the build parsed only through error
-    # recovery is degraded input, which every noun names (COMMAND_MODEL 'Degraded input', BACK-2665).
+    # A file the build parsed only through error recovery is degraded input, which every noun names
+    # (COMMAND_MODEL 'Degraded input', BACK-2665); the kept graph's other losses are named too, each once (BACK-2666).
     expected = [[(tmp_path / 'bad.py').as_posix()]] if profile in ('parse', 'combined') else []
-    assert [w['files'] for w in answer['meta'].get('warnings', [])] == expected
-    assert all(w['type'] == 'parse_recovered' for w in answer['meta'].get('warnings', []))
-    note = answer['meta'].get('relevance_warning', '')
-    assert 'not computed completely' in note and 'unavailable or incomplete' in note, answer
-    assert 'heuristics and recency only' in note
-    assert all(note.count(w['message']) == 1 for w in warnings), note
-    assert all(row['fan_in'] == row['graph_relevance'] == 0 for row in answer['files'])
+    meta_warnings = answer['meta'].get('warnings', [])
+    assert [w['files'] for w in meta_warnings if w['type'] == 'parse_recovered'] == expected
+    assert not any(w['type'] == 'partial_parse' for w in meta_warnings)
+    directories = _directory_losses(answer)
+    native_directories = [w for w in warnings if w.get('unit') == 'directories']
+    assert len(directories) == len(native_directories) == (0 if profile == 'parse' else 1)
+    assert all(native['message'] in mine['message'] for native, mine in zip(native_directories, directories))
+    assert 'relevance_warning' not in answer['meta'], answer['meta']
+    fan_in = {row['relative']: row['fan_in'] for row in answer['files']}
+    assert fan_in['helper.py'] == _PARTIAL_FAN_IN[profile]
+    relevance = {row['relative']: row['graph_relevance'] for row in answer['files']}
+    assert relevance['helper.py'] > 0
 
 
 @pytest.mark.parametrize('route', ['native-text', 'native-json', 'uri-json'])
@@ -150,12 +169,16 @@ def test_public_legacy_success_reports_optional_fallback_with_healthy_candidates
         assert answer['files'] and not answer.get('error')
         (recovered,) = [w for w in answer['meta']['warnings'] if w['type'] == 'parse_recovered']
         assert [f.rsplit('/', 1)[-1] for f in recovered['files']] == ['bad.py']
-        note = answer['meta'].get('relevance_warning', '')
+        assert not any(w['type'] == 'partial_parse' for w in answer['meta']['warnings'])
+        assert 'relevance_warning' not in answer['meta']
+        note = '\n'.join(w['message'] for w in answer['meta']['warnings'])
     else:
         assert 'focus.py' in result.stdout
         note = result.stdout + result.stderr
-    assert 'not computed completely' in note and 'unavailable or incomplete' in note, note
-    assert all(note.count(w['message']) == 1 for w in warnings), note
+    # BACK-2666: the kept graph's directory loss is named once, and no "not computed completely" advisory.
+    assert 'not computed completely' not in note, note
+    directory = next(w for w in warnings if w.get('unit') == 'directories')
+    assert note.count(directory['message']) == 1, note
 
 
 def test_healthy_pair_identity_and_empty_seed_keep_old_interfaces(tmp_path, native_fault):
@@ -185,9 +208,11 @@ def test_uri_text_visibility_is_existing_binding_residual(tmp_path, native_fault
     _loss(tmp_path, native_fault, 'source')
     result = _run_reveal_direct('pack://' + tmp_path.as_posix() +
                                 '?budget=8000&architecture=true&focus=focus')
-    assert result.returncode == 0 and 'focus.py' in result.stdout
+    # BACK-2666: the kept graph's directory loss is a named loss, so the answer is incomplete (exit 3).
+    assert result.returncode == 3 and 'focus.py' in result.stdout
     _assert_native_loss(native_fault, 'source')
     assert 'heuristics and recency only' not in result.stdout
+    assert result.stdout.count('Optional import graph is incomplete') == 1
 
 
 def test_specialized_tool_builds_requested_signals_and_names_optional_loss(tmp_path, native_fault):
@@ -201,4 +226,4 @@ def test_specialized_tool_builds_requested_signals_and_names_optional_loss(tmp_p
     # Binding (BACK-2045): the specialized tool builds the requested signals like the other
     # spellings, keeps its ordinary packet, and names the optional loss.
     assert len(native_fault['builds']) == 2
-    assert 'not computed completely' in result
+    assert result.count('Optional import graph is incomplete') == 1, result

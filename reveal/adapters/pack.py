@@ -28,6 +28,7 @@ from ..utils.path_utils import (
     to_posix,
     traversal_failed_warning,
     failure_of,
+    PathFailure,
 )
 from ..utils.query_binding import bind_declared_params, boolean_value, verbose_legacy
 from ..utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSpec, exclude_param, param_schema,
@@ -132,30 +133,28 @@ def _get_changed_files(path: Path, since_ref: str) -> Tuple[Set[str], Optional[s
 
 def _build_pack_import_graph(
     path: Path, failures: Optional[List[str]] = None, *, recovered: Optional[List[str]] = None,
+    losses: Optional[List[Any]] = None,
 ) -> Tuple[Optional[Any], Set[Path]]:
     """Build reveal's multi-language import/dependency graph for *path*.
 
-    Returns ``(graph, scanned_files)``, or ``(None, set())`` on any failure, and
-    appends the failure's ``Type: message`` to *failures* when given, so the caller
-    can say the signal it asked for is missing. The files the build read only through
-    tree-sitter error recovery are appended to *recovered* (spelled as *path* is) whether
-    or not the graph is kept: Pack parsed them, so its answer names them (BACK-2665).
-    Shared by ``_fetch_fan_in`` (--architecture) and ``_compute_graph_relevance``
-    (--focus, BACK-833) so there is exactly one lazy-import/build site for
-    the public import-analysis service in this module.
+    Returns ``(graph, scanned_files)``. A graph the build lost part of (a file read only
+    through error recovery, a directory or file it could not read, a lost worker) is kept,
+    as overview:// keeps it, and its ``ImportAnalysis`` is appended to *losses* when given,
+    so the answer names each loss and is incomplete (COMMAND_MODEL "Degraded input",
+    BACK-2666). Only a build that raises gives ``(None, set())``, with its ``Type: message``
+    appended to *failures*. The files read only through tree-sitter error recovery are
+    appended to *recovered* (spelled as *path* is): Pack parsed them, so its answer names
+    them (BACK-2665). Shared by ``_fetch_fan_in`` (--architecture) and
+    ``_compute_graph_relevance`` (--focus, BACK-833) so there is exactly one
+    lazy-import/build site for the public import-analysis service in this module.
     """
     try:
         from ..analyzers.imports.diagnostics import integrity_warnings, recovered_paths
         built = import_analysis.analyze(import_analysis.path_scope(path.resolve()))
         if recovered is not None:
             recovered.extend(as_spelled(found, path) for found in recovered_paths(built.analysis))
-        warnings = integrity_warnings(built.analysis, path)
-        if warnings:
-            if failures is not None:
-                failures.extend(
-                    f"Optional import graph for {to_posix(path)} is incomplete: {warning['message']}"
-                    for warning in warnings)
-            return None, set()
+        if losses is not None and integrity_warnings(built.analysis, path):
+            losses.append(built.analysis)
         return built.analysis.graph, built.analysis.scanned_files
     except Exception as e:  # boundary-ok: broad-except -- the import graph is an optional ranking signal built by the whole imports walk (tree-sitter parsing of every file, resolution; failure set not bounded) and a pack is still useful without it; the failure is returned in `failures` and shown as meta.relevance_warning
         logger.warning('pack: import graph for %s failed: %s', path, e)
@@ -190,15 +189,16 @@ def _pack_edge_rule(graphs: List[Tuple[str, Any]]) -> Dict[str, Any]:
 
 def _fetch_fan_in(path: Path, failures: Optional[List[str]] = None, *,
                   graphs: Optional[List[Tuple[str, Any]]] = None,
-                  recovered: Optional[List[str]] = None) -> Dict[str, int]:
+                  recovered: Optional[List[str]] = None,
+                  losses: Optional[List[Any]] = None) -> Dict[str, int]:
     """Return {abs_path: fan_in} for all files under *path* via the import-analysis service.
 
     Returns empty dict on any failure — callers treat missing entries as fan_in=0
     (the failure is appended to *failures* when given). The graph the counts came from
     is appended to *graphs* when given (as ``('fan_in', graph)``), so the caller can state the rule they follow,
-    and the recovered files to *recovered* (see ``_build_pack_import_graph``).
+    and the recovered files and lost analyses to *recovered* and *losses* (see ``_build_pack_import_graph``).
     """
-    graph, scanned_files = _build_pack_import_graph(path, failures, recovered=recovered)
+    graph, scanned_files = _build_pack_import_graph(path, failures, recovered=recovered, losses=losses)
     if graph is None:
         return {}
     _note_graph(graphs, 'fan_in', graph)
@@ -209,6 +209,7 @@ def _fetch_fan_in(path: Path, failures: Optional[List[str]] = None, *,
 def _compute_graph_relevance(
     path: Path, focus: Optional[str], failures: Optional[List[str]] = None, *,
     graphs: Optional[List[Tuple[str, Any]]] = None, recovered: Optional[List[str]] = None,
+    losses: Optional[List[Any]] = None,
 ) -> Dict[str, float]:
     """Personalized-PageRank relevance score per file, seeded from --focus (BACK-833).
 
@@ -225,12 +226,12 @@ def _compute_graph_relevance(
     Returns {abs_path: score in [0, 1]}; empty on no focus, no matching seed
     files, or any graph-construction failure — callers treat missing entries
     as 0 (pure relevance signal, additive on top of the existing heuristic). The graph
-    the scores walked is appended to *graphs* and the recovered files to *recovered* when given
-    (see ``_fetch_fan_in``).
+    the scores walked is appended to *graphs*, and the recovered files and lost analyses to *recovered*
+    and *losses*, when given (see ``_fetch_fan_in``).
     """
     if not focus:
         return {}
-    graph, scanned_files = _build_pack_import_graph(path, failures, recovered=recovered)
+    graph, scanned_files = _build_pack_import_graph(path, failures, recovered=recovered, losses=losses)
     if graph is None:
         return {}
 
@@ -464,6 +465,44 @@ def _record_file_measurement_warning(failures: Sequence[_FileMeasurementFailure]
                     'observed measured candidates only; unknown line costs are unavailable '
                     f'and excluded from line budgets: {detail}{suffix}'),
     })
+
+
+def _record_graph_loss_warnings(
+    analyses: Sequence[Any], path: Path, discovery_failures: Sequence[OSError],
+    file_failures: Sequence[_FileMeasurementFailure], meta: Dict[str, Any],
+) -> None:
+    """Name what the kept import graph lost, each fact once (BACK-2666).
+
+    The graph's own disclosures, as overview:// gives them, less what Pack already says: a
+    recovered file is Pack's ``parse_recovered`` (BACK-2665), a directory Pack's candidate walk
+    could not list is its discovery warning, and a file Pack could not measure is its
+    measurement warning. Structure failures are left out: Pack reads the graph's edges, not
+    its complexity or structure results. Two builds (fan-in and focus) with one loss say it once.
+    """
+    from ..analyzers.imports.diagnostics import file_loss_warnings
+
+    def key(found: Any) -> str:
+        return to_posix(Path(found).resolve())
+
+    walked = [failure_of(error) for error in discovery_failures]
+    listed_dirs = {key(failure.path) for failure in walked if failure.path}
+    unlocated_listed = any(failure.path is None for failure in walked)
+    measured = {key(found) for found, _operation, _cause in file_failures}
+    found: List[Dict[str, Any]] = []
+    for analysis in analyses:
+        traversal = [PathFailure(where, cause) for where, cause in getattr(analysis.graph, 'traversal_failures', ())
+                     if (key(where) not in listed_dirs if where else not unlocated_listed)]
+        directories = traversal_failed_warning(traversal, path)
+        if directories:
+            # 'subject': not candidate loss; the renderer's "observed eligible files" reads Pack's own walk only.
+            found.append({**directories, 'subject': 'import_graph',
+                          'message': ('Optional import graph is incomplete; fan-in and graph relevance count the '
+                                      'files it read; ' + directories['message'])})
+        found.extend(dict(warning) for warning in file_loss_warnings(analysis, path,
+                                                                     within=lambda f: key(f) not in measured)
+                     if warning['type'] != 'partial_parse')
+    for warning in {(w['type'], w['message']): w for w in found}.values():
+        meta.setdefault('warnings', []).append(warning)
 
 
 def _record_recovered_warning(recovered: Sequence[str], meta: Dict[str, Any]) -> None:
@@ -849,7 +888,9 @@ _ARCHITECTURE = ParamSpec('architecture', 'boolean', 'Boost high fan-in files; i
                           cli=CliBinding(('--architecture',), action='store_true'))
 
 
-_REQUIRED_WARNINGS = {'analysis_incomplete', 'file_measurement_failed', 'parse_recovered'}
+# A kept import graph's losses (worker_lost, analysis_failed, analysis_incomplete) are required too (BACK-2666).
+_REQUIRED_WARNINGS = {'analysis_incomplete', 'file_measurement_failed', 'parse_recovered', 'worker_lost',
+                      'analysis_failed'}
 
 _HELP_EPILOG = (
     "Examples:\n"
@@ -1051,18 +1092,21 @@ class PackAdapter(ResourceAdapter):
         graph_failures: List[str] = []
         graphs: List[Tuple[str, Any]] = []
         recovered: List[str] = []
-        fan_in_scores = (_fetch_fan_in(path, graph_failures, graphs=graphs, recovered=recovered)
+        graph_losses: List[Any] = []
+        fan_in_scores = (_fetch_fan_in(path, graph_failures, graphs=graphs, recovered=recovered,
+                                       losses=graph_losses)
                          if architecture else None)
         graph_relevance_scores = (_compute_graph_relevance(path, focus, graph_failures, graphs=graphs,
-                                                           recovered=recovered)
+                                                           recovered=recovered, losses=graph_losses)
                                   if focus else {})
 
         if graph_failures:
-            # The signal was asked for and could not be built: without this, every file
-            # reads as fan-in 0 / relevance 0 and the ranking looks computed.
+            # The signal was asked for and the build raised: without this, every file
+            # reads as fan-in 0 / relevance 0 and the ranking looks computed. A partial
+            # graph is not this case: it is kept and its losses go to meta.warnings (BACK-2666).
             asked = ' and '.join(n for n, on in (('fan-in', architecture), ('graph-relevance', bool(focus))) if on)
             self.relevance_warning = (
-                f"{asked} not computed completely; the optional import graph is unavailable or incomplete "
+                f"{asked} not computed; the optional import graph is unavailable "
                 f"({'; '.join(dict.fromkeys(graph_failures))}) "
                 "-- files are ranked by filename/entry-point heuristics and recency only"
             )
@@ -1084,6 +1128,7 @@ class PackAdapter(ResourceAdapter):
         selected, meta = _apply_budget(candidates, budget_tokens, budget_lines, path)
         _record_candidate_discovery_warning(path, discovery_failures, meta)
         _record_file_measurement_warning(tuple(file_failures), meta)
+        _record_graph_loss_warnings(graph_losses, path, discovery_failures, file_failures, meta)
         if since:
             meta['since'] = since
             meta['changed_files_count'] = len(_changed_in_scope(path, changed_files))

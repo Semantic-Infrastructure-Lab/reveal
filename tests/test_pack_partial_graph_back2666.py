@@ -143,3 +143,28 @@ def test_plain_pack_still_says_signals_were_not_computed(project):
     """Control: an unrequested signal keeps its advisory."""
     code, answer = _pack(project)
     assert 'not computed' in answer['meta']['relevance_warning'] and code == 0
+
+
+def test_graph_only_loss_does_not_relabel_the_candidates(project, deny_during_build):
+    """The import graph's directory loss leaves Pack's candidate walk whole: the text keeps "files"."""
+    deny_during_build['denied'] = (project / 'child').resolve()
+    result = _run_reveal_direct('pack', project.as_posix(), '--architecture')
+    assert result.returncode == 3
+    assert 'Selected 3 of 3 files' in result.stdout and 'observed eligible' not in result.stdout
+    assert result.stdout.count('Optional import graph is incomplete') == 1
+
+
+@pytest.mark.skipif(sys.platform == 'win32' or (hasattr(os, 'geteuid') and os.geteuid() == 0),
+                    reason='mode 000 files are POSIX-only, and root reads them')
+def test_unreadable_file_both_reads_lose_is_named_once(project):
+    hidden = project / 'child' / 'source.py'
+    hidden.chmod(0)
+    try:
+        code, answer = _pack(project, '--architecture')
+    finally:
+        hidden.chmod(0o644)
+    named = [Path(f).name for w in answer['meta'].get('warnings', [])
+             if w.get('type') in ('file_measurement_failed', 'analysis_failed') for f in w.get('files', [])]
+    assert named == ['source.py'], answer['meta'].get('warnings')
+    assert _fan_in(answer)['helper.py'] == 1
+    assert code == 3

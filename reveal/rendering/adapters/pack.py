@@ -42,7 +42,10 @@ def _format_file_line(f: Dict[str, Any], verbose: bool = True) -> str:
 
 
 def _candidate_discovery_incomplete(meta: Dict[str, Any]) -> bool:
+    """A directory Pack's candidate walk could not list; the import graph's own losses (``subject``
+    ``import_graph``, BACK-2666) leave the candidate population whole."""
     return any(warning.get('type') == 'analysis_incomplete' and warning.get('unit') == 'directories'
+               and warning.get('subject') != 'import_graph'
                for warning in meta.get('warnings') or [])
 
 

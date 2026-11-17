@@ -1,4 +1,7 @@
-"""Pack rejects native incomplete optional graph signals to advisory fallback."""
+"""Pack keeps a native incomplete optional graph and names the loss (BACK-2047, restated by BACK-2666).
+
+BACK-2047 rejected it to the advisory name-heuristic fallback. COMMAND_MODEL "Degraded input" (2026-11-16):
+partial input is disclosed as incomplete, never discarded, so Pack ranks by the files the graph read."""
 import json
 import os
 from pathlib import Path
@@ -86,25 +89,29 @@ def assert_native_loss(observed, loss):
 @pytest.mark.parametrize('with_sink', [False, True])
 def test_existing_graph_pair_rejects_native_partial_input_without_new_protocol(project, observed, loss, with_sink):
     configure(project, observed, loss)
-    failures = []
-    graph, scanned = pack._build_pack_import_graph(project, failures if with_sink else None)
+    failures, lost = [], []
+    graph, scanned = pack._build_pack_import_graph(project, failures if with_sink else None,
+                                                   losses=lost if with_sink else None)
     native = assert_native_loss(observed, loss)
-    assert (graph, scanned) == (None, set()), 'Optional numeric ranks must not use a native incomplete graph'
+    assert graph is native['graph'] and scanned is native['scanned'], 'the partial graph is kept (BACK-2666)'
     if with_sink:
-        assert len(failures) == len(native['warnings'])
-        for warning in native['warnings']:
-            assert any(project.as_posix() in message and warning['message'] in message for message in failures)
+        # The loss reaches the answer through the analysis it came from, not as relevance text.
+        assert failures == [] and len(lost) == 1
+        assert integrity_warnings(lost[0], project.resolve()) == native['warnings']
 
 
 @pytest.mark.parametrize('helper', ['fan-in', 'relevance'])
 def test_existing_numeric_helpers_fall_back_with_one_native_graph_build(project, observed, helper):
     configure(project, observed, 'child')
-    failures = []
-    scores = (pack._fetch_fan_in(project, failures) if helper == 'fan-in'
-              else pack._compute_graph_relevance(project, 'worker', failures))
+    failures, lost = [], []
+    scores = (pack._fetch_fan_in(project, failures, losses=lost) if helper == 'fan-in'
+              else pack._compute_graph_relevance(project, 'worker', failures, losses=lost))
     native = assert_native_loss(observed, 'child')
-    assert scores == {} and isinstance(scores, dict)
-    assert len(failures) == 1 and native['warnings'][0]['message'] in failures[0]
+    # Scores come from the partial graph: core/worker.py, its importer under the lost 'included' unread.
+    worker = str((project / 'core' / 'worker.py').resolve())
+    assert set(scores) == {str(f) for f in native['scanned']} == {worker}
+    assert scores[worker] == (0 if helper == 'fan-in' else 1.0)
+    assert failures == [] and len(lost) == 1 and integrity_warnings(lost[0], project.resolve()) == native['warnings']
 
 
 @pytest.mark.parametrize('view', ['cli-json', 'uri-json', 'cli-text'])
@@ -118,19 +125,24 @@ def test_public_pack_retains_healthy_primary_measurements_and_advisory_outcome(p
             args += ['--format', 'json']
     response = run(*args)
     native = assert_native_loss(observed, 'child')
-    assert response.returncode == 0, (response.stdout, response.stderr)
+    # BACK-2666: the kept graph's loss is a named loss, so the answer is incomplete.
+    assert response.returncode == 3, (response.stdout, response.stderr)
     if view.endswith('json'):
         data = json.loads(response.stdout)
         assert data['type'] == 'pack' and data['meta']['total_candidates'] == data['meta']['selected'] == 2
         assert sorted((row['size'], row['lines'], row['tokens_approx']) for row in data['files']) == [(24, 1, 6), (28, 2, 7)]
+        # worker.py's only importer is under the lost directory; helper.py is not in the partial graph.
         assert all(row['fan_in'] == 0 and row['graph_relevance'] == 0 for row in data['files'])
-        assert not any(w.get('type') == 'analysis_incomplete' for w in data['meta'].get('warnings', []))
-        warning = data['meta'].get('relevance_warning', '')
+        (loss,) = [w for w in data['meta']['warnings'] if w.get('unit') == 'directories']
+        assert loss['type'] == 'analysis_incomplete' and loss['directories'] == ['included']
+        assert 'relevance_warning' not in data['meta']
+        warning = loss['message']
     else:
         assert 'Selected 2 of 2 files' in response.stdout
-        warning = response.stderr
-    assert native['warnings'][0]['message'] in warning and project.as_posix() in warning
-    assert 'not computed completely' in warning and 'heuristics and recency' in warning
+        warning = response.stdout
+        assert 'not computed completely' not in response.stdout + response.stderr
+    assert native['warnings'][0]['message'] in warning and 'Optional import graph is incomplete' in warning
+    assert 'heuristics and recency' not in warning
 
 
 def test_both_requested_signals_keep_existing_two_builds_and_deduplicate_original_causes(project, observed):
@@ -139,11 +151,21 @@ def test_both_requested_signals_keep_existing_two_builds_and_deduplicate_origina
     assert len(observed['builds']) == 2 and observed['events'] == [project / 'included'] * 2
     assert all(len(native['warnings']) == 2 for native in observed['builds'])
     assert result['meta']['total_candidates'] == result['meta']['selected'] == 3
-    assert all(row['fan_in'] == 0 and row['graph_relevance'] == 0 for row in result['files'])
-    warning = result['meta'].get('relevance_warning', '')
+    # Both signals read the partial graph: the focus seed core/worker.py is relevant, nothing has an importer left.
+    assert all(row['fan_in'] == 0 for row in result['files'])
+    assert {row['relative']: row['graph_relevance'] for row in result['files']} == {
+        'core/worker.py': 1.0, 'bad.py': 0.0, 'included/helper.py': 0.0}
+    # Two builds, one loss each: named once. The recovered file is Pack's parse_recovered, not partial_parse too.
+    meta_warnings = result['meta']['warnings']
+    messages = '\n'.join(w['message'] for w in meta_warnings)
     for entry in observed['builds'][0]['warnings']:
-        assert warning.count(entry['message']) == 1
-    assert 'fan-in and graph-relevance not computed completely' in warning
+        if entry['type'] == 'partial_parse':
+            (recovered,) = [w for w in meta_warnings if w['type'] == 'parse_recovered']
+            assert [Path(f).name for f in recovered['files']] == ['bad.py']
+        else:
+            assert messages.count(entry['message']) == 1
+    assert not any(w['type'] == 'partial_parse' for w in meta_warnings)
+    assert 'relevance_warning' not in result['meta']
 
 
 @pytest.mark.parametrize('empty_graph', [False, True])
@@ -184,12 +206,11 @@ def test_specialized_mcp_and_uri_text_share_the_declared_signals(project, observ
     assert type(specialized) is str and 'Selected 2 of 2 files' in specialized
     # Binding (BACK-2045): the specialized tool builds the requested signals like the others
     # and names the optional loss; its text layout is otherwise unchanged.
-    assert len(observed['builds']) == 2 and 'not computed completely' in specialized
+    assert len(observed['builds']) == 2 and specialized.count('Optional import graph is incomplete') == 1
     observed['builds'].clear()
     observed['events'].clear()
     response = run('pack://' + str(project) + '?architecture=true')
     assert len(observed['builds']) == 1 and observed['events'] == [project / 'included']
-    assert response.returncode == 0 and 'Selected 2 of 2 files' in response.stdout
-    # Binding closed the visibility gap (BACK-2045): URI text now carries the advisory on stderr,
-    # exactly as the command always did, with the original cause.
-    assert 'directory enumeration' in response.stderr and 'directory enumeration' not in response.stdout
+    # BACK-2666: the loss is a named warning of the answer (exit 3), printed once with the pack, not an advisory.
+    assert response.returncode == 3 and 'Selected 2 of 2 files' in response.stdout
+    assert response.stdout.count('directory enumeration') == 1 and 'directory enumeration' not in response.stderr
