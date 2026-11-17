@@ -349,3 +349,15 @@ def test_architecture_diff_names_an_unreadable_directory_relative_to_its_snapsho
     for warning in incomplete:
         assert warning['directories'] == ['locked'], warning
     assert str(tmp_path) not in json.dumps(incomplete)
+
+
+def test_python_parse_failure_reuses_the_rules_parse():
+    """The rules' parse and the failure lookup are one cache entry: the lookup after the rules parses nothing."""
+    from reveal.rules import base_mixins
+    base_mixins._cached_ast_outcome.cache_clear()
+    assert base_mixins._cached_ast_parse(BROKEN_PY, 'b.py') is None
+    before = base_mixins._cached_ast_outcome.cache_info()
+    assert base_mixins.python_parse_failure(BROKEN_PY, 'b.py') == _python_reason(BROKEN_PY)
+    after = base_mixins._cached_ast_outcome.cache_info()
+    assert (after.hits, after.misses) == (before.hits + 1, before.misses)
+    assert base_mixins.python_parse_failure('x = 1\n', 'ok.py') is None

@@ -32,28 +32,42 @@ def toml_table(data: Any, *keys: str) -> Dict[str, Any]:
 
 
 @functools.lru_cache(maxsize=4)
-def _cached_ast_parse(content: str, file_path: str) -> Optional[ast.AST]:
-    """Parse Python content into AST with LRU cache.
+def _cached_ast_outcome(content: str, file_path: str) -> Tuple[Optional[ast.AST], Optional[str]]:
+    """``(tree, None)``, or ``(None, why)`` when Python's parser rejects the content, with LRU cache.
 
     Keyed by (content, file_path) so the same file processed by multiple
     rules in one check_file() call hits the cache instead of re-parsing.
     maxsize=4 keeps memory bounded while covering all rules on one file.
+    ``why`` is the parser's message with its line (``invalid syntax (line 4)``).
     """
-    # The answer records the file as not parsed (metrics' parse_degraded, check's rule outcomes), so
-    # beside a JSON answer the log line would only repeat it (BACK-2659).
+    # The answer records the file as not parsed (metrics' parse_degraded and the row's parse_error, check's
+    # rule outcomes), so beside a JSON answer the log line would only repeat it (BACK-2659).
     level = logging.DEBUG if json_answer_running() else logging.WARNING
     try:
-        return parse_python(content, file_path)
+        return parse_python(content, file_path), None
     except SyntaxError as e:
         logger.log(level, "AST parse failed (syntax error) for %s: %s", file_path, e)
-        return None
+        return None, f"{e.msg} (line {e.lineno})" if e.lineno else str(e.msg)
     except (ValueError, RecursionError, MemoryError) as e:
         # ast.parse: null bytes / over-long literals (ValueError, UnicodeEncodeError),
         # nesting deeper than the parser's stack (RecursionError), memory exhaustion.
         # Anything else is a bug in parse_python and escapes to RuleRegistry.check_file,
         # which records the rule as failed instead of clean.
         logger.log(level, "AST parse failed for %s: %s", file_path, e)
-        return None
+        return None, f"{type(e).__name__}: {e}"
+
+
+def _cached_ast_parse(content: str, file_path: str) -> Optional[ast.AST]:
+    """Parse Python content into an AST through the shared cache; None when Python rejects it."""
+    return _cached_ast_outcome(content, file_path)[0]
+
+
+def python_parse_failure(content: str, file_path: str) -> Optional[str]:
+    """Why Python's parser rejected *content* as the rules read it (message and line), or None.
+
+    Shares the rules' cache: after ``RuleRegistry.check_file`` on the same content and path it parses
+    nothing (BACK-2659)."""
+    return _cached_ast_outcome(content, file_path)[1]
 
 
 def _build_kind_buckets(root: Any) -> Dict[str, Tuple[List[Any], List[int]]]:
