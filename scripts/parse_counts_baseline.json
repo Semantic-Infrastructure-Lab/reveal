@@ -1531,7 +1531,7 @@
               "question": "Detailed file measurements"
             },
             {
-              "command": "reveal 'ast://<corpus>?type=function&sort=-complexity'",
+              "command": "reveal 'ast://<corpus>?kind=function&sort=-complexity'",
               "question": "Function complexity ranking"
             },
             {
