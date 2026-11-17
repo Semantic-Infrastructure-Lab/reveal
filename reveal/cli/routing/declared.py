@@ -368,9 +368,7 @@ def _bind_global_all(name, adapter, args, source, spelled=None) -> None:
         return
     key, _, value = fragment.partition('=')
     owner = next((declaration for declaration in adapter.PARAM_SPECS if key in declaration.spellings), None)
-    # the request may already set that control under another of its keys (calls stores --limit as its legacy top)
-    keys = (key,) if owner is None else (*owner.spellings, *((owner.cli.dest,) if owner.cli and owner.cli.dest else ()))
-    given = next(((name, source[name]) for name in keys if source.get(name) is not None), None)
+    given = _typed_value(owner, key, source)
     if given is not None and not _same_control_value(owner, given, (key, value)):
         mark(args, 'all')
         from ...errors import RequestValidationError
@@ -381,6 +379,13 @@ def _bind_global_all(name, adapter, args, source, spelled=None) -> None:
         if spelled is not None:
             spelled[key] = '--all'
     delegate(args, 'all', owner.name if owner is not None else key)
+
+
+def _typed_value(spec, key: str, source) -> tuple | None:
+    """(source key, value) when the typed request already sets *spec*'s control under any of its keys (calls stores
+    --limit under its legacy top), else None."""
+    keys = (key,) if spec is None else (*spec.spellings, *((spec.cli.dest,) if spec.cli and spec.cli.dest else ()))
+    return next(((typed, source[typed]) for typed in keys if source.get(typed) is not None), None)
 
 
 def _same_control_value(spec, left: tuple, right: tuple) -> bool:
