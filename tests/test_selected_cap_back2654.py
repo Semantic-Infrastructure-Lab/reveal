@@ -20,3 +20,11 @@ def test_an_answer_not_selected_or_without_a_cap_names_none():
     for query in ('', 'ranking=false', 'ranking=0', 'view=hot', 'flavor=true', 'rankings=true', 'xranking=true'):
         assert selected_cap(DECLARATIONS, query) is None, query
     assert selected_cap((VIEW,), 'view=hot') is None
+
+
+def test_typed_values_select_as_the_query_does():
+    """A subcommand's typed values (its argparse dests, unset ones None or False) select as the URI query does."""
+    assert selected_cap(DECLARATIONS, {'ranking': True, 'view': None}) == 'top'
+    assert selected_cap(DECLARATIONS, {'rank_legacy': 'yes'}) == 'top'
+    assert selected_cap(DECLARATIONS, {'ranking': False, 'view': 'hot'}) is None
+    assert selected_cap(DECLARATIONS, {}) is None

@@ -421,13 +421,17 @@ def _selects(spec: ParamSpec, value: Any) -> bool:
         return True
 
 
-def selected_cap(declarations: Iterable[ParamSpec], query: str) -> Optional[str]:
-    """The cap of the answer *query* selects: the ``cap`` its answer selector declares, or None when the selected
-    answer declares none (the noun's own ``--all`` declaration applies). Reading the query here is not using it."""
+def selected_cap(declarations: Iterable[ParamSpec], query: Union[str, Mapping[str, Any]]) -> Optional[str]:
+    """The cap of the answer *query* selects (a raw URI query, or a subcommand's typed values): the ``cap`` its answer
+    selector declares, or None when the selected answer declares none (the noun's own ``--all`` declaration applies).
+    Reading the query here is not using it."""
     supplied: Dict[str, Any] = {}
-    for part in filter(None, query.split('&')):
-        key, sep, value = part.partition('=')
-        supplied.setdefault(unquote(key), unquote(value) if sep else True)
+    if isinstance(query, str):
+        for part in filter(None, query.split('&')):
+            key, sep, value = part.partition('=')
+            supplied.setdefault(unquote(key), unquote(value) if sep else True)
+    else:
+        supplied = dict(query)
     for spec in declarations:
         if spec.role == 'operation' and spec.cap:
             if any(_selects(spec, supplied[name]) for name in spec.spellings if name in supplied):
