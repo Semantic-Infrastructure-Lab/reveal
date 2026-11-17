@@ -63,11 +63,36 @@ _REFUSED = re.compile(r'\bexits? 2\b')
 _ANSWER_TARGETS = {'claude': 'sessions', 'codex': '', 'json': 'proj/data.json'}
 _DEFAULT_ARGS = {'calls': ('--callers', 'main'), 'trace': ('--from', 'main')}
 _DEFAULT_QUERY = {'calls': 'callers=main', 'trace': 'from=main'}
-# Requests that make a noun print its cut hints ("... 45 more chars, use ... for the full text").
+# Requests that make a noun print its cut hints ("... 45 more chars, use ... for the full text"): a low snippet budget,
+# and every session view of a session whose texts outgrow each fixed display cut (``long_session``).
+_LONG_VIEWS = ('', '/messages', '/message/0', '/message/1', '/message/2', '/exchanges', '/prompts', '/thinking',
+               '/tools', '/errors', '/workflow', '/timeline', '/digest', '?tools=Bash', '/messages?detail=raw',
+               '/prompts?detail=raw', '/message')
 _CUT_SURFACES = (('claude://session/infernal-earth-0118/messages', '--max-snippet-chars', '10'),
-                 ('claude://session/infernal-earth-0118?tools=Bash', '--max-snippet-chars', '10'))
+                 ('claude://session/infernal-earth-0118?tools=Bash', '--max-snippet-chars', '10'),
+                 *((f'claude://session/long-session{view}',) for view in _LONG_VIEWS))
 _FILE_ROUTE = (('proj/app.py',), ('proj/app.py', 'main'), ('proj/README.md',), ('proj/data.json',), ('proj',),
                ('proj/app.py', '--check'))
+
+@pytest.fixture(scope='module')
+def long_session(harness):
+    """A recorded session in the harness's Claude home whose prompt, answer, thinking, tool output and Bash command
+    each outgrow the display cuts, so the session views print their "N more chars" hints."""
+    from claude_session_fixture import PROJECT_DIR, _record, _tool_result, _tool_use, _write_jsonl
+    text = 'a long line of session text ' * 40
+    turns = [
+        ('user', {'role': 'user', 'content': text}),
+        ('assistant', {'role': 'assistant', 'model': 'claude-opus-4-7', 'content': [
+            {'type': 'thinking', 'thinking': text}, {'type': 'text', 'text': text},
+            _tool_use('t1', 'Bash', command='echo ' + 'x' * 400)], 'usage': {'input_tokens': 1, 'output_tokens': 1}}),
+        ('user', {'role': 'user', 'content': [_tool_result('t1', text, is_error=True)]}),
+        ('assistant', {'role': 'assistant', 'model': 'claude-opus-4-7', 'content': [{'type': 'text', 'text': text}],
+                       'usage': {'input_tokens': 1, 'output_tokens': 1}}),
+    ]
+    _write_jsonl(harness.home / '.claude' / 'projects' / PROJECT_DIR / 'long-session.jsonl',
+                 [_record(kind, 'long-session', i, message) for i, (kind, message) in enumerate(turns)])
+    return harness
+
 
 # --- collecting ---------------------------------------------------------------------------------------------
 
@@ -420,9 +445,9 @@ def _verdict(printed, surface, line, candidates, ran):
 
 # --- the tests ----------------------------------------------------------------------------------------------
 
-def test_hints_and_lines_in_every_declared_answer_follow_the_rules(harness):
+def test_hints_and_lines_in_every_declared_answer_follow_the_rules(long_session):
     """Next steps, breadcrumbs and every other command a declared noun's answer prints (and the file route's)."""
-    failures, ran = _judge(harness, _collect(harness, _answer_surfaces()))
+    failures, ran = _judge(long_session, _collect(long_session, _answer_surfaces()))
     assert ran >= 18, f'the inventory went vacuous: {ran} commands'
     assert not failures, '\n'.join(failures)
 
@@ -453,13 +478,16 @@ _RETIREMENT_CONTEXT = re.compile(r'retired|retiring|deprecated|replaced|replaces
                                  r'formerly|instead of|\bnote:', re.IGNORECASE)
 
 
-def _retired_flags(noun):
-    """The CLI spellings of the noun's note-stage RETIREMENTS rows, and the global ``--verbose`` (rule 4)."""
-    flags = {'--verbose'}
+def _retired_spellings(noun):
+    """{pattern: spelling} for the noun's note-stage RETIREMENTS rows: each CLI flag, each bare query key in a hint
+    ("add ?full"), and the global ``--verbose`` (rule 4)."""
+    spellings = {'--verbose'}
     for key, row in RETIREMENTS.items():
         if key.startswith(f'param:{noun}.') and row.stage == 'note':
-            flags.update(re.findall(r'(?<![\w-])--[\w-]+', row.old))
-    return flags
+            spellings.update(re.findall(r'(?<![\w-])--[\w-]+', row.old))
+            spellings.add('?' + key.partition('.')[2])
+    return {(rf'(?<![\w-]){re.escape(s)}(?![\w-])' if s.startswith('--') else rf'[?&]{re.escape(s[1:])}(?![\w-])'): s
+            for s in spellings}
 
 
 def _owner(surface, line):
@@ -482,20 +510,20 @@ def _retired_flag_lines(harness, surfaces):
                 noun = _owner(surface, line)
                 if noun is None or _RETIREMENT_CONTEXT.search(line):
                     continue
-                for flag in sorted(_retired_flags(noun)):
-                    if re.search(rf'(?<![\w-]){re.escape(flag)}(?![\w-])', line):
-                        failures.append(f'{surface} names {flag} for {noun}: {line.strip()[:160]}')
+                for pattern, spelling in sorted(_retired_spellings(noun).items()):
+                    if re.search(pattern, line) and not URI.search(line):  # a URI is the judge's to run
+                        failures.append(f'{surface} names {spelling} for {noun}: {line.strip()[:160]}')
     return sorted(set(failures))
 
 
-def test_no_hint_or_help_page_names_a_retired_flag_of_its_noun(harness):
+def test_no_hint_or_help_page_names_a_retired_flag_of_its_noun(long_session):
     """A bare flag in a hint or a help line ("use --verbose for the full text") is not a command the judge can run:
     each declared noun's answers and help page, and the shared pages' lines that name a noun, must not name a retired
     CLI spelling of that noun outside a sentence that says it is retired. Declarations are not teaching: each
     subcommand's ``--help`` option list and the schemas' ``cli_flags`` list every flag the parser still accepts."""
     pages = [argv for argv in _help_surfaces() if argv[-1] != '--help' and not argv[0].startswith('help://schemas/')
              and argv[-1] != 'json']
-    failures = _retired_flag_lines(harness, _answer_surfaces() + pages)
+    failures = _retired_flag_lines(long_session, _answer_surfaces() + pages)
     assert not failures, '\n'.join(failures)
 
 
