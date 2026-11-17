@@ -322,7 +322,7 @@ def _collect_dir_results(
     searched = 0
     for root_path, _dirs, files in walk_tree(dir_path, DISPLAY, exclude_patterns=exclude_patterns,
                                              respect_gitignore=respect_gitignore,
-                                             on_hidden=hidden, sort=True):
+                                             on_hidden=hidden):
         for fname in files:
             fpath = root_path / fname
             if exts is not None and fpath.suffix.lower().lstrip('.') not in exts:

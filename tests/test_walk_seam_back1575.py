@@ -63,15 +63,16 @@ def test_on_hidden_reports_each_pruned_dir_once_with_its_cause(tree):
     assert not any(path.startswith(('.venv/', 'keep/')) for path, _, _ in seen)
 
 
-def test_sort_orders_dirs_and_files(tree):
+def test_walk_orders_dirs_and_files(tree):
+    """Always name order, never the filesystem's listing order (BACK-2652)."""
     order = [p.relative_to(tree).as_posix()
-             for p in _walk_code_files(tree, respect_gitignore=False, sort=True)]
+             for p in _walk_code_files(tree, respect_gitignore=False)]
     assert order == ['.github/c.py', 'keep/a.py', 'm/a.py', 'tests/t.py', 'z/b.py']
 
 
 def test_walk_tree_dirs_stay_prunable(tree):
     seen = []
-    for root, dirs, files in walk_tree(tree, ANALYSIS, respect_gitignore=False, sort=True):
+    for root, dirs, files in walk_tree(tree, ANALYSIS, respect_gitignore=False):
         dirs[:] = [d for d in dirs if d != 'z']
         seen.extend(_rel(tree, [root / f for f in files]))
     assert 'z/b.py' not in seen and 'm/a.py' in seen

@@ -1016,7 +1016,6 @@ def _walk_code_files(
     purpose: Optional[WalkPurpose] = None,
     on_hidden: Optional[OnHidden] = None,
     on_error: Optional[Callable[[OSError], None]] = None,
-    sort: bool = False,
 ) -> Iterator[Path]:
     """Yield every file under *path* that a walk for *purpose* keeps (default: analysis).
 
@@ -1043,7 +1042,7 @@ def _walk_code_files(
         purpose = ANALYSIS if prune_noise else DOCS
     for root, _, filenames in walk_tree(path, purpose, exclude_patterns=exclude_patterns,
                                         respect_gitignore=respect_gitignore,
-                                        on_hidden=on_hidden, on_error=on_error, sort=sort):
+                                        on_hidden=on_hidden, on_error=on_error):
         for fname in filenames:
             yield root / fname
 
@@ -1056,7 +1055,6 @@ def walk_tree(
     respect_gitignore: Optional[bool] = None,
     on_hidden: Optional[OnHidden] = None,
     on_error: Optional[Callable[[OSError], None]] = None,
-    sort: bool = False,
 ) -> Iterator[Tuple[Path, List[str], List[str]]]:
     """``os.walk`` over *path* with the purpose's skip rules applied: ``(dir, dirs, files)``.
 
@@ -1065,8 +1063,8 @@ def walk_tree(
     *dirs* is the kept subdirectory list and may still be pruned by the caller.
     *on_hidden(path, is_dir, cause)* is called once per pruned directory (not for its
     subtree) and once per skipped file -- check's ``skipped_*`` counts and grep's and the
-    tree's "N hidden" footers. *sort* orders dirs and files by name, for output that must
-    not depend on the filesystem's listing order.
+    tree's "N hidden" footers. Dirs and files are always in name order, so no answer depends
+    on the filesystem's listing order (BACK-2652; about 0.12 us per file).
     """
     hidden = walk_filter(path, purpose, exclude_patterns, respect_gitignore)
 
@@ -1078,9 +1076,8 @@ def walk_tree(
 
     for root, dirs, filenames in os.walk(str(path), onerror=on_error):
         root_path = Path(root)
-        dirs[:] = [d for d in (sorted(dirs) if sort else dirs) if kept(root_path / d, True)]
-        yield root_path, dirs, [f for f in (sorted(filenames) if sort else filenames)
-                                if kept(root_path / f, False)]
+        dirs[:] = [d for d in sorted(dirs) if kept(root_path / d, True)]
+        yield root_path, dirs, [f for f in sorted(filenames) if kept(root_path / f, False)]
 
 
 def walk_with_causes(
@@ -1119,7 +1116,7 @@ def walk_with_causes(
         root_path = Path(root)
         quiet = root_path in reported
         kept = []
-        for d in dirs:
+        for d in sorted(dirs):  # path order on every platform, so a capped scan keeps the same files (BACK-2652)
             if on_dir is not None:
                 on_dir(root_path / d)
             cause = judge(root_path / d, True, quiet)
@@ -1128,7 +1125,7 @@ def walk_with_causes(
                 if cause is not None or quiet:
                     reported.add(root_path / d)
         dirs[:] = kept
-        for fname in filenames:
+        for fname in sorted(filenames):
             file_path = root_path / fname
             cause = judge(file_path, False, quiet)
             if cause is None or cause in purpose.soft_files:

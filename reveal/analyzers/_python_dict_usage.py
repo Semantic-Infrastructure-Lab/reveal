@@ -174,7 +174,7 @@ def iter_python_files(
         return
     if not path_obj.is_dir():
         return
-    for file_path in _walk_code_files(path_obj, purpose=purpose, sort=True, on_error=on_error):
+    for file_path in _walk_code_files(path_obj, purpose=purpose, on_error=on_error):
         if file_path.suffix in ('.py', '.pyi'):
             yield str(file_path)
 
