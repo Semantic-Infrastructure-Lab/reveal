@@ -834,10 +834,8 @@ class TestProposedChanges:
             query(uri(project), **{control: '1'})
 
     # BACK-2654 rule 7: metrics no longer declares these flags only to reject them, so the declared parser's shared
-    # unknown-flag rejection answers (exit 2, the supported controls on stderr), as on every other noun. That path
-    # prints no JSON error document in --format json on any noun: a cross-noun gap, ruling pending.
-    @pytest.mark.xfail(strict=True, reason='BACK-2654: the declared parser rejects an unknown flag with text only, no '
-                                           'JSON error document in --format json (every noun; ruling pending)')
+    # unknown-flag rejection answers (exit 2, the supported controls on stderr), as on every other noun; in --format
+    # json it answers with the invalid-request JSON document, as every invalid request does (BACK-2654 note #23 (A)).
     @pytest.mark.parametrize('control', ['match', 'kind', 'depth', 'until'])
     def test_unsupported_shared_control_flags_reject_with_a_json_document(self, project, control):
         result, answer = cli_json('metrics', str(project), f'--{control}', '1')

@@ -44,6 +44,10 @@ control whatever its value type; 1b, 1d and 6 read every spelling (aliases and n
       naming both; every ``view`` is such a control.
   18  every scalar global flag repeated with different values exits 2 (presentation flags included); equal is one.
   20  applicability (BACK-2656, measured only): a declared control the selected answer does not read exits 2.
+  21j transports, JSON mode (manager ruling, BACK-2654 note #23 (A)): an invalid subcommand request in ``--format
+      json`` (an unknown flag, a flag missing its value, a value outside its choices, an extra argument) answers with
+      the invalid-request JSON document on stdout, exit 2, naming the problem in the document and on stderr, as an
+      invalid value already does; in text mode stdout stays empty.
   12  repeatability is declared once (``ParamSpec.repeatable``): the CLI appends exactly when it is set, settings
       (limit, offset, sort, depth, detail, view, since, until, format, columns) are scalar, where/match/exclude repeat.
 
@@ -77,7 +81,8 @@ def _declared_nouns():
 
 
 NOUNS = _declared_nouns()
-RULES = ('1a', '1b', '1c', '1d', '2', '3', '3b', '4', '5', '6', '8a', '8b', '10', '12', '16', '17', '18', '20')
+RULES = ('1a', '1b', '1c', '1d', '2', '3', '3b', '4', '5', '6', '8a', '8b', '10', '12', '16', '17', '18', '20',
+         '21j')
 
 # The request each noun answers by default: the parity gate's table (CLI argv after the noun, URI suffix), plus
 # the two declared nouns it has no row for. None: no subcommand (codex is URI-only; stats is metrics' retired scheme).
@@ -124,6 +129,7 @@ EXEMPT = {
     **{(noun, '17'): 'one control at most selects the answer: no two selections to give' for noun in (
         'architecture', 'codex', 'contracts', 'deps', 'hotspots', 'overview', 'pack', 'surface', 'testability',
         'trace')},
+    ('codex', '21j'): 'no subcommand: codex is URI-only, so there is no declared parser to reject a flag',
     **{(noun, '20'): 'no declared control goes unread by the default answer' for noun in (
         'architecture', 'ast', 'claude', 'contracts', 'deps', 'git', 'hotspots', 'markdown', 'overview', 'pack',
         'surface', 'testability', 'trace')},
@@ -131,7 +137,7 @@ EXEMPT = {
 
 # Rules 1, 2, 5, 6, 10 and 12 are the shared seams' defaults (Scott 2026-11-16; BACK-2654 Step 3): their cells must
 # conform on every noun, and none may be recorded below except OUT_OF_SCOPE cells (the prompt names their package).
-DEFAULT_NOW = ('1a', '1b', '1c', '1d', '2', '5', '6', '10', '12', '16', '17', '18')
+DEFAULT_NOW = ('1a', '1b', '1c', '1d', '2', '5', '6', '10', '12', '16', '17', '18', '21j')
 # Cells of those rules owned by another package, named by the prompt: each must still fail (a fixed one is removed).
 _OVERVIEW_TOP = 'out of scope: Overview/Architecture top is its own package (--limit is hand-listed on top)'
 _SWITCH = 'out of scope: the Switches rule renames this noun\'s no_* flag in its own package'
@@ -181,7 +187,7 @@ NOT_YET = {
 }
 
 NOT_YET_BASELINE = {'1a': 0, '1b': 0, '1c': 0, '1d': 0, '2': 0, '3': 0, '3b': 0, '4': 0, '5': 0, '6': 0,
-                    '8a': 0, '8b': 0, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 6}
+                    '8a': 0, '8b': 0, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 6, '21j': 0}
 
 
 # --- the fixture -------------------------------------------------------------------------------------------
@@ -1155,12 +1161,55 @@ def probe_applicability(noun):
     return cases
 
 
+# --- rule 21 (Transports), JSON mode: an invalid subcommand request answers with its JSON document ---------
+
+def _value_flag(noun):
+    """A declared control's flag that takes one value (given last, it is missing that value)."""
+    for action in create_declared_parser(noun)._actions:
+        if (action.option_strings and action.nargs is None and action.dest in {s.name for s in _specs(noun)}
+                and not action.choices):
+            return action.option_strings[0]
+    return None
+
+
+def _invalid_document(run, *names):
+    """Exit 2 with the invalid-request JSON document on stdout, naming each of *names* there and on stderr."""
+    try:
+        doc = json.loads(run.out)
+    except ValueError:
+        return False
+    errors = (doc.get('meta') or {}).get('errors') or [] if isinstance(doc, dict) else []
+    return (run.rc == 2 and 'contract_version' in doc and [e.get('code') for e in errors] == ['invalid_request']
+            and all(name in doc.get('error', '') and name in run.err for name in names))
+
+
+def probe_invalid_requests_answer_json(noun):
+    if _sub(noun) is None:
+        return []
+    wants = 'wants exit 2 with the invalid-request JSON document naming it'
+    requests = {'unknown flag --zz-unknown': (('--zz-unknown', '1'), ('--zz-unknown',)),
+                'value outside --fail-on choices': (('--fail-on', 'zz-choice'), ('--fail-on', 'zz-choice')),
+                'extra argument': (('zz-extra', 'zz-more'), ('zz-more',))}
+    cases = []
+    for label, (extra, names) in requests.items():
+        run = _run(*_sub(noun, *extra), '--format', 'json')
+        cases.append(Case(label, _invalid_document(run, *names), f'{run.brief()} ({wants})'))
+    flag = _value_flag(noun)
+    if flag is not None:
+        run = _run(*_sub(noun), '--format', 'json', flag)
+        cases.append(Case(f'{flag} missing its value', _invalid_document(run, flag), f'{run.brief()} ({wants})'))
+    text = _run(*_sub(noun, '--zz-unknown', '1'))
+    cases.append(Case('text mode: unknown flag', text.rc == 2 and not text.out.strip() and text.says('--zz-unknown'),
+                      f'{text.brief()} (wants exit 2, empty stdout, the flag named on stderr)'))
+    return cases
+
+
 PROBES = {'1a': probe_uri_and_flag, '1b': probe_alias_and_name, '1c': probe_repeated_spelling,
           '1d': probe_repeatable_aliases, '3': probe_unsupported_controls, '3b': probe_unknown_keys,
           '4': probe_verbose_is_detail_full, '8a': probe_bare_shared_keys,
           '8b': probe_bare_field_filters, '10': probe_spellings_declared, '12': probe_repeatability_declared,
           '16': probe_legacy_operations, '17': probe_one_answer, '18': probe_repeated_global_flags,
-          '20': probe_applicability}
+          '20': probe_applicability, '21j': probe_invalid_requests_answer_json}
 # These also run the retirement cases' sample file.
 SAMPLE_PROBES = {'2': probe_retirement_notes, '5': probe_legacy_declarations, '6': probe_alias_notes}
 
