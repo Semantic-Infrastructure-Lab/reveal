@@ -57,20 +57,28 @@ def file_loss_warnings(analysis: ImportAnalysis, base: Optional[Path] = None, *,
         base = None
     counted = (lambda path: True) if within is None else within
     lost = {path for path in analysis.files_lost if counted(path)}
-    partial: List[str] = []
+    partial = [name(path) for path in recovered_paths(analysis, within=within)]
     unread: List[Tuple[str, str]] = []
     for path in analysis.files_failed:
         if path in lost or not counted(path):
             continue
         cause = _unread_cause(analysis, path)
-        if cause is None:
-            partial.append(name(path))
-        else:
+        if cause is not None:
             unread.append((name(path), cause))
     warnings = [parse_failure_warning(partial, base), worker_lost_warning([name(p) for p in lost], base),
                 analysis_skipped_warning(unread, base, 'analysis is incomplete; its imports are missing from the '
                                                        'import graph')]
     return [w for w in warnings if w]
+
+
+def recovered_paths(analysis: ImportAnalysis, *, within: Optional[Callable[[Path], bool]] = None) -> List[Any]:
+    """The files of one import build that tree-sitter read only through error recovery (``partial_parse``),
+    in build order: failed, but neither unreadable nor taken by a dead worker. ``within`` keeps only the
+    files the answer counts as its own (see ``file_loss_warnings``)."""
+    counted = (lambda path: True) if within is None else within
+    lost = set(analysis.files_lost)
+    return [path for path in analysis.files_failed
+            if path not in lost and counted(path) and _unread_cause(analysis, path) is None]
 
 
 def _unread_cause(analysis: ImportAnalysis, path: Any) -> Optional[str]:
