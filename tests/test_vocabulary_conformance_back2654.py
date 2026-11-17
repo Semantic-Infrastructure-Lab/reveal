@@ -169,53 +169,19 @@ RULED_EXEMPT_NOUNS = {'stats': 'rule 9: the retired stats:// scheme is deleted a
 # Cells that do not conform yet: (noun, rule) -> the behaviour observed at fac0718b. May only shrink; every
 # entry reaches zero before the cut.
 NOT_YET = {
-    ('architecture', '3'): 'URI limit, offset, sort, where, match, detail, kind, depth, since, until: exit 0; '
-                           'subcommand offset, sort, where, match, detail, kind, depth, since, until: argparse '
-                           'error; global --limit, --sort, --since, --until on the URI: exit 0',
     ('ast', '3'): 'URI match, detail, depth, tests, since, until, against: exit 0 (bare keys become where fields); '
                   'subcommand match, detail, depth, tests, since, until, against: argparse error; global --since, '
                   '--until on the URI: exit 0',
-    ('calls', '3'): 'URI tests, against: exit 0; URI offset, where, match, since, until: exit 2 without the '
-                    'supported controls; subcommand offset, where, match, tests, since, until, against: argparse '
-                    'error; global --since, --until on the URI: exit 0',
     ('claude', '3'): 'URI kind, depth, tests, against: exit 0; subcommand kind, depth, tests, against: argparse '
                      'error',
-    ('codex', '3'): 'URI limit, offset, sort, where, match, detail, kind, depth, tests, against: exit 0; global '
-                    '--limit, --sort on the URI: exit 0 (no subcommand)',
-    ('contracts', '3'): 'all 12 shared controls: URI exit 0, subcommand argparse error; global --limit, --sort, '
-                        '--since, --until on the URI: exit 0',
-    ('deps', '3'): 'all 12 shared controls: URI exit 0, subcommand argparse error; global --limit, --sort, --since, '
-                   '--until on the URI: exit 0',
     ('git', '3'): 'URI match, kind, depth, tests, against: exit 0; subcommand match, kind, depth, tests, against: '
                   'argparse error',
-    ('hotspots', '3'): 'all 12 shared controls: URI exit 0, subcommand argparse error; global --sort, --since, '
-                       '--until on the URI: exit 0',
-    ('imports', '3'): 'URI against: exit 0; subcommand offset, where, match, kind, depth, since, until, against: '
-                      'argparse error (the URI names the supported controls); global --since, --until on the URI: '
-                      'exit 0',
     ('json', '3'): 'URI match, kind, depth, tests, since, until, against: exit 0; subcommand the same seven: '
                    'argparse error; global --since, --until on the URI: exit 0',
     ('markdown', '3'): 'URI detail, kind, depth, tests, since, until, against: exit 0; subcommand the same seven: '
                        'argparse error; global --since, --until on the URI: exit 0',
     ('metrics', '3'): 'URI against: exit 0; subcommand against: argparse error; global --until on the URI: exit 0 '
                       '(match, kind, depth, until are declared to reject; against is not in that list)',
-    ('overview', '3'): 'URI limit, offset, sort, where, match, detail, kind, depth, since, until: exit 0; '
-                       'subcommand offset, sort, where, match, detail, kind, depth, since, until: argparse error; '
-                       'global --limit, --sort, --since, --until on the URI: exit 0',
-    ('pack', '3'): 'URI limit, offset, sort, where, match, detail, kind, depth, tests, until, against: exit 0; '
-                   'subcommand the same eleven: argparse error; global --limit, --sort, --since, --until on the '
-                   'URI: exit 0',
-    ('patches', '3'): 'URI offset, sort, where, match, detail, kind, depth, since, until, against: exit 0; '
-                      'subcommand the same ten: argparse error; global --sort, --since, --until on the URI: exit 0',
-    ('surface', '3'): 'URI limit, offset, sort, where, match, detail, kind, tests, since, until, against: exit 0; '
-                      'subcommand the same eleven: argparse error; global --limit, --sort, --since, --until on the '
-                      'URI: exit 0',
-    ('testability', '3'): 'URI limit, offset, sort, where, match, detail, kind, depth, since, until, against: exit '
-                          '0; subcommand the same eleven: argparse error; global --sort, --since, --until on the '
-                          'URI: exit 0',
-    ('trace', '3'): 'URI limit, offset, sort, where, match, detail, kind, tests, since, until, against: exit 0; '
-                    'subcommand the same eleven: argparse error; global --limit, --sort, --since, --until on the '
-                    'URI: exit 0',
     ('architecture', '4'): 'no detail declaration; --verbose is its own verbose control (expanded sections), exit 0',
     ('ast', '4'): 'no detail declaration; --verbose: "has no effect" note, exit 0',
     ('calls', '4'): 'the callers view rejects detail=full (exit 2) but --verbose answers with a "has no effect" '
@@ -236,7 +202,6 @@ NOT_YET = {
     ('surface', '4'): 'no detail declaration; --verbose: "has no effect" note, exit 0',
     ('testability', '4'): 'no detail declaration; --verbose accepted silently, exit 0',
     ('trace', '4'): 'no detail declaration; --verbose: "has no effect" note, exit 0',
-    ('codex', '3b'): '?zz-unknown=1: warned and ignored, exit 0 (no subcommand)',
     ('ast', '3b'): '?zz-unknown=1 is read as a where field: a zero-row answer, exit 0; subcommand: argparse error',
     ('ast', '8a'): 'bare match, detail, depth, tests, since, until, against are read as where fields, exit 0 (depth '
                    'is nesting depth, with no note)',
@@ -245,23 +210,11 @@ NOT_YET = {
     ('markdown', '8a'): 'bare detail, kind, depth, tests, since, until, against: exit 0',
     ('metrics', '8a'): 'bare against: exit 0 (match, kind, depth, until reject)',
     ('metrics', '8b'): '?lines=5 is warned unknown and ignored; ?where=lines=5 filters (?lines>10 already filters)',
-    ('architecture', '3b'): '?zz-unknown=1: warned and ignored, exit 0; subcommand --zz-unknown: argparse error',
-    ('calls', '3b'): '?zz-unknown=1: warned and ignored, exit 0; subcommand --zz-unknown: argparse error',
     ('claude', '3b'): '?zz-unknown=1: warned and ignored, exit 0; subcommand --zz-unknown: argparse error',
-    ('contracts', '3b'): '?zz-unknown=1: warned and ignored, exit 0; subcommand --zz-unknown: argparse error',
-    ('deps', '3b'): '?zz-unknown=1: warned and ignored, exit 0; subcommand --zz-unknown: argparse error',
     ('git', '3b'): '?zz-unknown=1: warned and ignored, exit 0; subcommand --zz-unknown: argparse error',
-    ('hotspots', '3b'): '?zz-unknown=1: warned and ignored, exit 0; subcommand --zz-unknown: argparse error',
-    ('imports', '3b'): '?zz-unknown=1: warned and ignored, exit 0; subcommand --zz-unknown: argparse error',
     ('json', '3b'): '?zz-unknown=1: warned and ignored, exit 0; subcommand --zz-unknown: argparse error',
     ('markdown', '3b'): '?zz-unknown=1: warned and ignored, exit 0; subcommand --zz-unknown: argparse error',
     ('metrics', '3b'): '?zz-unknown=1: warned and ignored, exit 0; subcommand --zz-unknown: argparse error',
-    ('overview', '3b'): '?zz-unknown=1: warned and ignored, exit 0; subcommand --zz-unknown: argparse error',
-    ('pack', '3b'): '?zz-unknown=1: warned and ignored, exit 0; subcommand --zz-unknown: argparse error',
-    ('patches', '3b'): '?zz-unknown=1: warned and ignored, exit 0; subcommand --zz-unknown: argparse error',
-    ('surface', '3b'): '?zz-unknown=1: warned and ignored, exit 0; subcommand --zz-unknown: argparse error',
-    ('testability', '3b'): '?zz-unknown=1: warned and ignored, exit 0; subcommand --zz-unknown: argparse error',
-    ('trace', '3b'): '?zz-unknown=1: warned and ignored, exit 0; subcommand --zz-unknown: argparse error',
     ('calls', '20'): 'unread by the default answer, warned and exit 0: kind, external, builtins, test-framework',
     ('codex', '20'): 'unread by the default answer, warned and exit 0: since, until, key, last, tokens, goal, '
                      'matches',
@@ -273,7 +226,7 @@ NOT_YET = {
                        'include_unresolved',
 }
 
-NOT_YET_BASELINE = {'1a': 0, '1b': 0, '1c': 0, '1d': 0, '2': 0, '3': 19, '3b': 19, '4': 17, '5': 0, '6': 0,
+NOT_YET_BASELINE = {'1a': 0, '1b': 0, '1c': 0, '1d': 0, '2': 0, '3': 6, '3b': 6, '4': 17, '5': 0, '6': 0,
                     '8a': 5, '8b': 1, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 6}
 
 
@@ -1523,3 +1476,26 @@ def test_cell(workspace, noun, rule):
                                     f'NOT_YET_BASELINE[{rule!r}] (ratchets only fall)')
     else:
         assert state == 'conforms', f'{noun} x {rule} does not conform:\n  ' + '\n  '.join(failing or ['no cases'])
+
+
+# Rule 3 (Scott 2026-11-16; BACK-2654 note #14): unknown keys and unsupported controls are rejected by ONE shared check
+# at the declared binder and parser, not by a per-adapter opt-in (plan section 5). The nouns still waiting on their
+# field declarations (rule 8) keep their own warning until then; this list only shrinks.
+_OWN_UNKNOWN_KEY_WARNING = {'ast', 'claude', 'git', 'json', 'markdown', 'metrics', 'stats'}
+
+
+@pytest.mark.parametrize('noun', [noun for noun in NOUNS if noun not in _OWN_UNKNOWN_KEY_WARNING])
+def test_no_declared_noun_warns_about_unknown_keys_itself(noun):
+    import inspect
+    source = inspect.getsource(inspect.getmodule(_adapter(noun)))
+    assert 'warn_unknown_query_params(' not in source, f'{noun} keeps its own unknown-key warning'
+
+
+def test_the_unknown_key_message_names_the_controls_and_fields():
+    from reveal.utils.query_binding import unsupported_controls_message
+    from reveal.utils.query_parser import ParamSpec, where_param
+    limit = ParamSpec('limit', 'integer', 'cap', None, int)
+    message = unsupported_controls_message((limit, where_param('w', fields=('name', 'lines'))), ['zz'])
+    assert all(word in message for word in ('zz', 'limit', 'where', 'name', 'lines')), message
+    open_message = unsupported_controls_message((limit, where_param('w', open_fields='any frontmatter key')), ['zz'])
+    assert 'any frontmatter key' in open_message, open_message
