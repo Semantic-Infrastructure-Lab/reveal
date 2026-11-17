@@ -1,5 +1,6 @@
 """Workspace resource handlers for the claude:// adapter — plans, memory, agents, hooks."""
-from reveal.utils.path_utils import to_posix
+from reveal.utils.causes import failure_cause
+from reveal.utils.path_utils import failure_records, to_posix
 import logging
 import stat as stat_module
 from pathlib import Path
@@ -38,6 +39,7 @@ def skipped_entries_warning(field: str, skipped: Iterable[Tuple[Path, BaseExcept
     """One ``entries_skipped`` meta warning for entries a list skipped because they
     could not be read (BACK-1059); None when nothing was skipped. *field* names the
     list, *consequence* says what is missing from the result."""
+    skipped = list(skipped)
     items = sorted((p.name, type(e).__name__) for p, e in skipped)
     if not items:
         return None
@@ -49,6 +51,7 @@ def skipped_entries_warning(field: str, skipped: Iterable[Tuple[Path, BaseExcept
         'field': field,
         'count': len(items),
         'files': names,
+        'failures': failure_records([(p.name, failure_cause(e)) for p, e in skipped]),
         'message': f"{len(items)} {field} entries skipped, unreadable ({causes}) -- {consequence}: "
                    f"{', '.join(names)}{more}",
     }

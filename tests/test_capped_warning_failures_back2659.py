@@ -225,3 +225,9 @@ def test_failure_records_without_a_reason_take_the_given_cause_and_keep_posix_sp
     from reveal.utils.path_utils import failure_records
     assert failure_records([('pkg\\a.py', None)], cause='worker_lost') == [  # noqa: win-path
         {'path': 'pkg/a.py', 'cause': 'worker_lost'}]
+
+
+def test_traversal_failures_arriving_as_lists_are_listed(tmp_path):
+    """Failures that crossed a pool or a JSON cache arrive as lists, not ``PathFailure`` tuples."""
+    warning = traversal_failed_warning([[str(tmp_path / 'd'), 'PermissionError: x']] * 2, tmp_path)
+    assert warning['failures'] == [{'path': 'd', 'cause': 'PermissionError', 'reason': 'PermissionError: x'}]

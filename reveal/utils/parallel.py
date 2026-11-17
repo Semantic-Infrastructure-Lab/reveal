@@ -157,7 +157,7 @@ def worker_lost_warning(lost: Iterable, consequence: str, base: Path | None = No
     """One ``worker_lost`` meta warning for files a dead pool worker kept from being
     processed (BACK-1753/1754); None when nothing was lost. *consequence* says what is
     missing from the result, so the same disclosure reads right for imports and for grep."""
-    from .path_utils import to_posix, to_relative_display
+    from .path_utils import failure_records, to_posix, to_relative_display
     paths = sorted(str(p) for p in lost)
     if not paths:
         return None
@@ -167,6 +167,7 @@ def worker_lost_warning(lost: Iterable, consequence: str, base: Path | None = No
         'type': 'worker_lost',
         'count': len(paths),
         'files': shown,
+        'failures': failure_records([(p, None) for p in paths], base, cause='worker_lost'),
         'message': f"{len(paths)} file(s) not processed, a pool worker died -- {consequence}: "
                    f"{', '.join(shown)}{more}",
     }

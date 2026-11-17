@@ -21,7 +21,7 @@ from ..utils.query_binding import boolean_value
 from ..utils.query_parser import (
     ParamSpec, ParamValueError, mark_query_keys, param_schema, peek_query_items, whole_number,
 )
-from ..utils.path_utils import to_posix
+from ..utils.path_utils import failure_records, to_posix
 from ..errors import RequestValidationError
 from ..utils.results import (
     AnalysisCompleteness, ExecutionFacts, FailureCause, ResultBuilder, note_truncation, outcome_of, result_execution_facts,
@@ -1185,6 +1185,7 @@ class XlsxAdapter(ResourceAdapter):
             warnings=[{
                 'type': 'sheets_unsearched', 'count': len(unsearched),
                 'files': [name for name, _ in unsearched[:5]],
+                'failures': failure_records(unsearched),
                 'message': (f"{len(unsearched)} sheet(s) could not be read and were not searched, so "
                             "matches may be missing: "
                             + ', '.join(f"{name} ({why})" for name, why in unsearched[:5])

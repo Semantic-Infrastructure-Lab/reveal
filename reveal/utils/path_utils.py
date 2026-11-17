@@ -1002,6 +1002,7 @@ def traversal_failed_warning(failures: Sequence[PathFailure],
     warning: WarningEntry = {
         'type': 'analysis_incomplete', 'count': len(paths), 'unit': 'directories',
         'directories': shown, 'causes': causes, 'message': message,
+        'failures': failure_records({(path, cause) for path, cause in failures}, base),
     }
     if unknown:
         warning['unknown_directory_events'] = len(unknown)
@@ -1964,6 +1965,7 @@ def analysis_skipped_warning(skipped: List[Tuple[str, str]], base: Optional[Path
         'type': 'analysis_failed',
         'count': len(paths),
         'files': shown,
+        'failures': failure_records(paths, base),
         'message': f"{len(paths)} file(s) could not be analyzed completely ({causes}) -- {consequence}: "
                    f"{', '.join(shown)}{more}",
     }

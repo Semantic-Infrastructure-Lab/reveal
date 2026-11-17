@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import Dict, Any, Optional, Tuple, cast
 from reveal.reveal_types import CONTRACT_VERSION
+from reveal.utils.path_utils import failure_records
 
 from .parsing import parse_diff_uris, split_trailing_element
 from .resolution import (resolve_uri, extract_metadata, find_element, element_names,
@@ -240,6 +241,7 @@ class DiffAdapter(ResourceAdapter):
             shown = ', '.join(names[:5]) + (f" and {len(names) - 5} more" if len(names) > 5 else '')
             warnings.append({
                 'type': 'analysis_failed', 'field': side, 'count': len(names), 'files': names[:5],
+                'failures': failure_records(skipped.items()),
                 'message': (f"{len(names)} file(s) in {uri} could not be analyzed "
                             f"({', '.join(sorted({c.split(':', 1)[0] for c in skipped.values()}))}) -- "
                             f"their elements are missing from the {side} side, so the diff may show "

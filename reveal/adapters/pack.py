@@ -29,6 +29,7 @@ from ..utils.path_utils import (
     traversal_failed_warning,
     failure_of,
     PathFailure,
+    failure_records,
 )
 from ..utils.query_binding import bind_declared_params, boolean_value, verbose_legacy
 from ..utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSpec, exclude_param, param_schema,
@@ -460,6 +461,8 @@ def _record_file_measurement_warning(failures: Sequence[_FileMeasurementFailure]
         'type': 'file_measurement_failed',
         'files': [path for path, _, _ in shown],
         'operations': sorted({operation for _, operation, _ in failures}),
+        'failures': failure_records((path, f'{cause} ({operation})')
+                                    for path, operation, cause in dict.fromkeys(failures)),
         'causes': [f'{operation}: {cause}' for _, operation, cause in shown],
         'message': ('Pack candidate file measurements are incomplete; counts and rankings cover '
                     'observed measured candidates only; unknown line costs are unavailable '

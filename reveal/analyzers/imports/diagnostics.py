@@ -5,7 +5,7 @@ from typing import Any, Callable, List, Optional, Tuple, cast
 from .types import ImportAnalysis
 from ...reveal_types import PathFailure, WarningEntry
 from ...utils.parallel import worker_lost_warning as _worker_lost_warning
-from ...utils.path_utils import to_posix, to_relative_display
+from ...utils.path_utils import failure_records, to_posix, to_relative_display
 
 def worker_lost_warning(lost_files: List[str], base: Optional[Path] = None) -> Optional[WarningEntry]:
     """One meta warning for the files a dead pool worker took down before they were
@@ -31,6 +31,7 @@ def parse_failure_warning(failed_files: List[str], base: Optional[Path] = None) 
         'type': 'partial_parse',
         'count': len(failed_files),
         'files': shown,
+        'failures': failure_records([(f, None) for f in failed_files], base, cause='partial_parse'),
         'message': (
             f"{len(failed_files)} file(s) parsed with errors -- their imports may be incomplete, "
             f"so import-graph results can under-report: {', '.join(shown)}{more}"

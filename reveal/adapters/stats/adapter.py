@@ -27,7 +27,8 @@ from ...utils.query_parser import (
 )
 from ...utils.query_binding import bind_declared_params, boolean_value
 from ...utils.gitignore import respect_gitignore_param
-from ...utils.path_utils import TestLayout, failure_of, provenance_for_display_path, to_relative_display
+from ...utils.path_utils import (TestLayout, failure_of, failure_records, provenance_for_display_path,
+                                 to_relative_display)
 from ...utils.results import AnalysisCompleteness, ResultBuilder, note_truncation, note_warning, result_execution_facts
 from ...utils.validation import require_path_exists
 from ...utils.parallel import pool_worker_count, submit_each
@@ -716,7 +717,10 @@ class MetricsAdapter(ResourceAdapter):
         places = [f"{name} (line {s['parse_error_line']})" if s.get('parse_error_line') else name
                   for name, s in zip(shown, degraded)]
         more = f" and {len(degraded) - len(shown)} more" if len(degraded) > len(shown) else ''
+        lines = [(s['file'], f"parse error at line {s['parse_error_line']}" if s.get('parse_error_line') else None)
+                 for s in degraded]
         return {'type': 'parse_degraded', 'count': len(degraded), 'files': shown,
+                'failures': failure_records(lines, self.path, cause='parse_degraded'),
                 'message': (f"{len(degraded)} file(s) did not parse cleanly; statistics may be incomplete: "
                             f"{', '.join(places)}{more}")}
 
@@ -733,11 +737,13 @@ class MetricsAdapter(ResourceAdapter):
             more = f" and {len(rules_failed) - len(shown)} more" if len(rules_failed) > len(shown) else ''
             note_warning(result, {
                 'type': 'check_rules_failed', 'count': len(rules_failed), 'files': shown,
+                'failures': failure_records([(f, None) for f in rules_failed], cause='check_rules_failed'),
                 'message': (f"{len(rules_failed)} file(s) had check rules that could not run; their "
                             f"check-issue counts are lower bounds and quality scores may be optimistic: "
                             f"{', '.join(shown)}{more}"),
             })
-        failed = sorted(f['path'] for f in self._analysis_failures if is_failure(f))
+        failures = sorted((f['path'], f['analysis_failed']) for f in self._analysis_failures if is_failure(f))
+        failed = [path for path, _ in failures]
         if not failed:
             return
         shown = [to_relative_display(f, self.path) for f in failed[:5]]
@@ -747,6 +753,7 @@ class MetricsAdapter(ResourceAdapter):
             'type': 'analysis_failed',
             'count': len(failed),
             'files': shown,
+            'failures': failure_records(failures, self.path),
             'message': (f"{len(failed)} file(s) failed analysis and are not counted: "
                         f"{', '.join(shown)}{more}"),
         })

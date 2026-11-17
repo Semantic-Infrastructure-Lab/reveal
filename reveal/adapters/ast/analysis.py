@@ -14,6 +14,7 @@ from ...utils.path_utils import (
     to_posix,
     traversal_failed_warning as traversal_failed_warning,
     failure_of,
+    failure_records,
     analysis_skipped_warning as analysis_skipped_warning,
 )
 from ...utils.invocation_log import json_answer_running
@@ -66,6 +67,7 @@ def recovered_files_warning(paths: Sequence[str]) -> Optional[WarningEntry]:
         'type': 'parse_recovered',
         'count': len(paths),
         'files': shown,
+        'failures': failure_records([(f, None) for f in paths], cause='parse_recovered'),
         'message': f"{len(paths)} file(s) contain syntax tree-sitter could not read; their "
                    f"elements may be incomplete or wrong: {', '.join(shown)}{more}",
     }

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Callable, Dict, Any, Optional, List, Tuple, cast
 
 from ...registry import get_markdown_extensions
-from ...utils.path_utils import _walk_code_files, to_posix, to_relative_display, failure_of
+from ...utils.path_utils import _walk_code_files, to_posix, to_relative_display, failure_of, failure_records
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +63,7 @@ def unreadable_warning(unreadable: List[Tuple[str, str]], consequence: str,
         'type': 'unreadable_files',
         'count': len(paths),
         'files': shown,
+        'failures': failure_records(paths, base),
         'message': f"{len(paths)} file(s) could not be read ({causes}) -- {consequence}: "
                    f"{', '.join(shown)}{more}",
     }
