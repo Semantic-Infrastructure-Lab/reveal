@@ -7,7 +7,7 @@ and multi-URI result rendering.
 import os
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional, Dict, List, Any, Tuple, Iterable
+from typing import TYPE_CHECKING, Optional, Dict, List, Any, Literal, Tuple, Iterable, cast
 
 from ...utils.request_cache import host_request
 from ...utils.results import outcome_of
@@ -156,14 +156,13 @@ def _stdin_check_exit(args: 'Namespace', violations: int, degraded: bool, artifa
 
 
 def _stdin_answer_exit(degraded: bool, uri_exit: int) -> int:
-    """The exit code of ``--stdin`` without ``--check``.
+    """The exit code of ``--stdin`` without ``--check``: the most severe outcome of its requests
+    (COMMAND_MODEL 'Transports'), 3 > 2 > 1 > 0 as ``--stdin --check`` already combines them.
 
-    An unreadable file left the batch answer incomplete: 3, which outranks a failed URI's
-    1 (D6, BACK-2527). A missing file is not counted (BACK-1426).
+    An unreadable file left the batch answer incomplete: 3 (D6, BACK-2527). A URI keeps its own
+    code (an incomplete answer is 3, not 1; BACK-2325). A missing file is not counted (BACK-1426).
     """
-    if degraded:
-        return 3
-    return 1 if uri_exit else 0
+    return max(3 if degraded else 0, uri_exit)
 
 
 def _write_stdin_check_artifact(args: 'Namespace', results: Optional['CheckSinkCollection'], failed: bool) -> bool:
@@ -392,23 +391,59 @@ def _collect_batch_result(uri: str, args: 'Namespace') -> dict:
         answer = resolve_uri(uri, args, consumed=_BATCH_FLAGS)
     except UriUsageError as e:
         return {'uri': uri, 'scheme': scheme, 'status': 'error', 'error': e.message}
+    from ...utils.results import note_incomplete
+    note_incomplete(answer.result, answer.execution_facts)  # what the emit boundary adds to the same answer alone
     entry = {'uri': uri, 'scheme': scheme, 'status': _batch_status(answer), 'data': answer.result}
+    code = _declared_exit(answer, scheme, args)
+    if code is not None:
+        entry['exit_code'] = code
     if entry['status'] == 'error':
-        entry['error'] = answer.result['error']
+        entry['error'] = answer.result.get('error') or _declared_failure_text(answer)
     return entry
+
+
+def _declared_failure_text(answer: 'Answer') -> str:
+    """A failed declared answer's reason when its result has no ``error`` field: its first meta error or warning."""
+    meta = answer.result.get('meta') if isinstance(answer.result, dict) else None
+    for field in ('errors', 'warnings'):
+        for entry in (meta or {}).get(field) or []:
+            if isinstance(entry, dict) and entry.get('message'):
+                return str(entry['message'])
+    return answer.public_diagnostic or 'Required analysis failed'
 
 
 def _batch_status(answer: 'Answer') -> str:
     """A batch entry's status: a failed answer is 'error' and a not-applicable one
-    'not_applicable' (outcome_of); a check reports its own status; anything else ran."""
+    'not_applicable' (outcome_of); a check reports its own status; anything else ran.
+    A declared answer's own execution facts decide first, as they decide the same request's exit
+    alone (COMMAND_MODEL 'Transports', BACK-2325): built from partial input is 'incomplete', never
+    'success'; failed or never started is 'error' even when the result carries no ``error`` text."""
+    from ...utils.results import AnalysisCompleteness
     outcome = outcome_of(answer.result)
     if outcome == 'failed':
         return 'error'
     if outcome == 'not_applicable':
         return 'not_applicable'
+    facts = answer.execution_facts
+    if facts is not None and facts.completeness is AnalysisCompleteness.INCOMPLETE:
+        return 'incomplete'
+    if facts is not None and facts.completeness in (AnalysisCompleteness.FAILED, AnalysisCompleteness.NOT_STARTED):
+        return 'error'
     if answer.kind == 'check':
         return str(answer.result.get('status', 'unknown'))
     return 'success'
+
+
+def _declared_exit(answer: 'Answer', scheme: str, args: 'Namespace') -> Optional[int]:
+    """The exit the same request alone would have (emit_declared_result's mapping and findings policy),
+    for an answer with execution facts; None for a legacy answer, whose status keeps its legacy code."""
+    if answer.execution_facts is None:
+        return None
+    from ..routing.declared import declared_adapter_class
+    from ...utils.results import execution_exit_code
+    declared = declared_adapter_class(scheme)
+    policy = getattr(args, 'fail_on', None) or getattr(declared, 'DEFAULT_FAIL_ON', None) or 'none'
+    return execution_exit_code(answer.execution_facts, fail_on=cast(Literal['none', 'findings'], policy))
 
 
 def _aggregate_batch_stats(results: list) -> dict:
@@ -425,6 +460,7 @@ def _aggregate_batch_stats(results: list) -> dict:
         'successful': sum(1 for r in results if r['status'] in ('success', 'pass')),
         'warnings': sum(1 for r in results if r['status'] == 'warning'),
         'failures': sum(1 for r in results if r['status'] in ('failure', 'error')),
+        'incomplete': sum(1 for r in results if r['status'] == 'incomplete'),
         'not_applicable': sum(1 for r in results if r['status'] == 'not_applicable'),
     }
 
@@ -458,23 +494,26 @@ def _filter_batch_display_results(results: list, only_failures: bool) -> list:
         Filtered or original results
     """
     if only_failures:
-        return [r for r in results if r['status'] in ('failure', 'error', 'warning')]
+        return [r for r in results if r['status'] in ('failure', 'error', 'incomplete', 'warning')]
     return results
 
 
-def _determine_batch_overall_status(failures: int, warnings: int) -> str:
+def _determine_batch_overall_status(failures: int, warnings: int, incomplete: int = 0) -> str:
     """Determine overall batch status.
 
     Args:
         failures: Number of failures
         warnings: Number of warnings
+        incomplete: Number of answers built from partial input
 
     Returns:
-        Status string: 'pass', 'warning', or 'failure'
+        Status string: 'pass', 'warning', 'incomplete', or 'failure'
     """
-    if failures == 0 and warnings == 0:
-        return 'pass'
-    return 'warning' if failures == 0 else 'failure'
+    if failures:
+        return 'failure'
+    if incomplete:
+        return 'incomplete'
+    return 'warning' if warnings else 'pass'
 
 
 def _get_status_indicator(status: str) -> str:
@@ -488,7 +527,7 @@ def _get_status_indicator(status: str) -> str:
     """
     if status in ('success', 'pass'):
         return '✓'
-    elif status == 'warning':
+    elif status in ('warning', 'incomplete'):
         return '⚠'
     elif status == 'not_applicable':
         return '–'
@@ -517,6 +556,8 @@ def _render_batch_text_output(stats: dict, overall_status: str,
         print(f"Warnings: {stats['warnings']} ⚠")
     if stats['failures'] > 0:
         print(f"Failures: {stats['failures']} ✗")
+    if stats['incomplete'] > 0:
+        print(f"Incomplete (built from partial input): {stats['incomplete']} ⚠")
     if stats['not_applicable'] > 0:
         print(f"Not applicable: {stats['not_applicable']} –")
     print(f"Overall Status: {overall_status.upper()}")
@@ -586,7 +627,7 @@ def _render_batch_results(results: list, args: 'Namespace') -> None:
 
     # Determine overall status
     overall_status = _determine_batch_overall_status(
-        stats['failures'], stats['warnings']
+        stats['failures'], stats['warnings'], stats['incomplete']
     )
 
     # Build batch output
@@ -598,6 +639,7 @@ def _render_batch_results(results: list, args: 'Namespace') -> None:
             'successful': stats['successful'],
             'warnings': stats['warnings'],
             'failures': stats['failures'],
+            'incomplete': stats['incomplete'],
             'not_applicable': stats['not_applicable'],
         },
         'adapters': list(by_scheme.keys()),
@@ -616,8 +658,10 @@ def _render_batch_results(results: list, args: 'Namespace') -> None:
         _render_batch_text_output(stats, overall_status, by_scheme, display_results,
                                    summary_only=summary_only)
 
-    # Exit with appropriate code
-    exit_code = _calculate_batch_exit_code(stats['failures'], stats['warnings'])
+    # The most severe outcome of the batch's requests (COMMAND_MODEL 'Transports'): a declared entry
+    # counts with the exit the same request has alone; legacy entries keep their status codes.
+    declared_exits = [r['exit_code'] for r in results if isinstance(r.get('exit_code'), int)]
+    exit_code = max([_calculate_batch_exit_code(stats['failures'], stats['warnings']), *declared_exits])
     sys.exit(exit_code)
 
 

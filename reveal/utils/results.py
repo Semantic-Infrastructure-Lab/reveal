@@ -425,6 +425,26 @@ def note_warning(result: Any, entry: Optional[Dict[str, Any]]) -> None:
         meta['warnings'].append(entry)
 
 
+def note_incomplete(result: Any, facts: Optional[ExecutionFacts]) -> None:
+    """Say in the answer itself that it was built from partial input (exit 3, plan 2.1 kind 3).
+
+    The exit code is the CLI's only other carrier, and MCP, file sinks and batches have none, so
+    every transport's answer carries one ``analysis_incomplete`` warning (COMMAND_MODEL
+    'Transports', BACK-2650). An owner's own ``analysis_incomplete`` entry (directory loss) is kept
+    and its message is made to say so, instead of adding a second entry.
+    """
+    if facts is None or facts.completeness is not AnalysisCompleteness.INCOMPLETE or not isinstance(result, dict):
+        return
+    meta = result.get('meta')
+    warnings = meta.get('warnings') if isinstance(meta, dict) else None
+    existing = next((w for w in warnings or [] if isinstance(w, dict) and w.get('type') == 'analysis_incomplete'), None)
+    if existing is None:
+        note_warning(result, {'type': 'analysis_incomplete',
+                              'message': 'Required analysis is incomplete; usable evidence follows.'})
+    elif 'incomplete' not in str(existing.get('message', '')).lower():
+        existing['message'] = 'Required analysis is incomplete; ' + str(existing.get('message', ''))
+
+
 def _meta_warnings_of(result: Any, kinds: frozenset) -> List[Dict[str, Any]]:
     meta = result.get('meta') if isinstance(result, dict) else None
     warnings = meta.get('warnings') if isinstance(meta, dict) else None

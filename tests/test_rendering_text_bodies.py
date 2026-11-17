@@ -38,7 +38,7 @@ def test_real_failed_answer_emits_no_domain_body(tmp_path, capsys):
     with pytest.raises(SystemExit) as exc:
         answer.emit()
     output = capsys.readouterr()
-    assert exc.value.code == 1 and not output.out
+    assert exc.value.code == 2 and not output.out  # a missing path is an invalid request, as on the direct command (D6)
     assert output.err.count('Error (patches://)') == 1
 
 

@@ -270,14 +270,17 @@ def test_missing_resource_is_structured_usage_in_both_forms(project):
         assert answer['type'] == 'contracts' and answer['error']
 
 
-def test_legacy_stdin_batch_keeps_legacy_partial_success_policy(project, monkeypatch):
+def test_stdin_batch_reports_partial_input_like_the_request(project, monkeypatch):
+    """A recovered parse is partial input: the batch entry says so and the batch exits 3, as the
+    direct request does (COMMAND_MODEL 'Transports', BACK-2325; was legacy 'success', exit 0)."""
     from io import StringIO
     (project/'broken.py').write_text('def broken(:\n', encoding='utf-8')
+    assert run('contracts://proj', '--format', 'json').returncode == 3
     monkeypatch.setattr(sys, 'stdin', StringIO('contracts://proj\n'))
     result = run('--stdin', '--batch', '--format', 'json')
-    assert result.returncode == 0
+    assert result.returncode == 3
     entry, = json.loads(result.stdout)['results']
-    assert entry['status'] == 'success'
+    assert entry['status'] == 'incomplete' and entry['exit_code'] == 3
     assert entry['data']['recovered_files']
 
 

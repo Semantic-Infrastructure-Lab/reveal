@@ -5,6 +5,8 @@ Plain `--stdin` and `@file` caught each URI's SystemExit, printed
 while one of them errored. `@file` had its own copy of the loop; it now goes
 through --stdin's. A missing *file* still skips with a warning: `git diff
 --name-only` lists deleted files, and that degradation is deliberate.
+Since BACK-2325 a URI line exits as the direct request does (a missing path is 2, D6), and the run
+takes the most severe exit of its lines.
 """
 
 import subprocess
@@ -16,18 +18,18 @@ def _run(argv, stdin=''):
                           capture_output=True, text=True, encoding='utf-8', timeout=120)
 
 
-def test_a_failed_uri_on_stdin_exits_1(tmp_path):
+def test_a_failed_uri_on_stdin_fails_the_run_with_its_own_exit(tmp_path):
     (tmp_path / 'ok.py').write_text('def f():\n    return 1\n', encoding='utf-8')
     result = _run(['--stdin'], f'ast:///no/such/dir\nast://{tmp_path}\n')
-    assert result.returncode == 1
+    assert result.returncode == _run(['ast:///no/such/dir']).returncode == 2
     assert 'Path not found' in result.stderr
     assert 'f' in result.stdout  # the rest still ran
 
 
-def test_a_failed_uri_in_an_at_file_exits_1(tmp_path):
+def test_a_failed_uri_in_an_at_file_fails_the_run(tmp_path):
     listing = tmp_path / 'targets.txt'
     listing.write_text('ast:///no/such/dir\n', encoding='utf-8')
-    assert _run([f'@{listing}']).returncode == 1
+    assert _run([f'@{listing}']).returncode == 2
 
 
 def test_good_uris_and_a_missing_file_still_exit_0(tmp_path):

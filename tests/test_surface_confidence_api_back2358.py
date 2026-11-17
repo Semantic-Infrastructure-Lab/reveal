@@ -9,7 +9,7 @@ import pytest
 from conftest import _run_reveal_direct as run, _assert_same_answer_source_spelling
 from reveal import api
 from reveal.adapters.surface import SurfaceAdapter
-from reveal.utils.results import AnalysisCompleteness
+from reveal.utils.results import AnalysisCompleteness, note_incomplete
 from test_surface_parse_recovery import _BROKEN
 from test_surface_traversal_consumer_back2028 import fault, _project
 
@@ -56,8 +56,11 @@ def test_complete_baseline_answer_survives_estimate_omission(tmp_path, case):
     adapter = SurfaceAdapter(str(tmp_path))
     native = adapter.get_structure()
     result = api.query(f'surface://{tmp_path}?respect_gitignore=false')
-    assert result == native
-    legacy = copy.deepcopy(result)
+    # The API answer is the CLI's: the native answer plus the incomplete marker when it is incomplete (BACK-2650).
+    expected_answer = copy.deepcopy(native)
+    note_incomplete(expected_answer, adapter.execution_facts(native))
+    assert result == expected_answer
+    legacy = copy.deepcopy(native)
     assert legacy.pop('test_scope') == {
         'anchor': '.', 'source': 'scan_root_fallback', 'include_anchor_name': True,
         'rule': 'is_test_path',

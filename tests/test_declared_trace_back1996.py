@@ -199,13 +199,18 @@ def test_resource_codec_prefers_existing_literal_and_decodes_once(project):
     assert json.loads(encoded.stdout)['source'] == roots[0].as_posix()
 
 
-def test_legacy_batch_retains_unresolved_nonerror(project):
+def test_batch_exits_like_the_unresolved_request(project):
+    """The batch entry exits as the direct request does (COMMAND_MODEL 'Transports', BACK-2325); the
+    legacy batch read this answer as success, exit 0."""
     import subprocess
     import sys
-    result = subprocess.run([sys.executable, '-m', 'reveal', '--stdin', '--batch', '--format', 'json'],
-                            input=f'trace://{project}?from=absent\n', capture_output=True,
+    uri = f'trace://{project}?from=absent'
+    direct = subprocess.run([sys.executable, '-m', 'reveal', uri, '--format', 'json'], capture_output=True,
                             text=True, encoding='utf-8', timeout=60)
-    assert result.returncode == 0, result.stderr
+    result = subprocess.run([sys.executable, '-m', 'reveal', '--stdin', '--batch', '--format', 'json'],
+                            input=uri + '\n', capture_output=True, text=True, encoding='utf-8', timeout=60)
+    assert direct.returncode != 0
+    assert result.returncode == direct.returncode, result.stderr
     assert 'absent' in result.stdout
 
 

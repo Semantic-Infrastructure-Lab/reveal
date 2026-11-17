@@ -97,7 +97,7 @@ def test_a_name_that_may_be_in_an_unreadable_query_is_incomplete_not_invalid(boo
     code, result = _json('xlsx://damaged.xlsx?powerquery=Bad')
     assert code == 3, result
     assert result['queries'] == []
-    assert [w['type'] for w in result['meta']['warnings']] == ['part_unreadable']
+    assert [w['type'] for w in result['meta']['warnings']] == ['part_unreadable', 'analysis_incomplete']  # plus the answer's own incomplete marker (BACK-2650)
 
 
 def test_a_named_query_answers_with_that_query_only(books):

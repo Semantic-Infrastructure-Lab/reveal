@@ -108,7 +108,7 @@ def test_a_corrupt_requested_sheet_exits_3(books):
 def test_an_overview_with_a_corrupt_sheet_is_incomplete(books):
     code, result, _ = _json('xlsx://corrupt.xlsx')
     assert code == 3, result
-    assert [w['type'] for w in result['meta']['warnings']] == ['sheet_parse_failed']
+    assert [w['type'] for w in result['meta']['warnings']] == ['sheet_parse_failed', 'analysis_incomplete']  # plus the answer's own incomplete marker (BACK-2650)
     assert len(result['sheets']) == 2  # the readable sheet is still listed beside the lost one
 
 
@@ -116,7 +116,7 @@ def test_a_search_that_skipped_a_sheet_is_incomplete(books):
     code, result, _ = _json('xlsx://corrupt.xlsx?search=one')
     assert code == 3, result
     assert result['total_matches'] == 1
-    assert [w['type'] for w in result['meta']['warnings']] == ['sheets_unsearched']
+    assert [w['type'] for w in result['meta']['warnings']] == ['sheets_unsearched', 'analysis_incomplete']  # plus the answer's own incomplete marker (BACK-2650)
 
 
 def _lzma_book(root):

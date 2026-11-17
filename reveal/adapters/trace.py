@@ -335,12 +335,23 @@ def _relpath(file_str: str, base: str) -> str:
 def _render_trace_metadata(report: Dict[str, Any]) -> None:
     """Existing strings remain inline; render every other diagnostic once."""
     from ..utils.warning_render import render_meta_warnings
-    mirrored = set(report.get('warnings', []))
+    mirrored = tuple(report.get('warnings', []))
     meta = dict(report.get('meta') or {})
     for field in ('warnings', 'errors'):
+        # endswith: an incomplete answer's entry gains a leading "Required analysis is incomplete; " at
+        # emit, after the inline copy was taken (note_incomplete), and is still the same diagnostic.
         meta[field] = [entry for entry in meta.get(field, [])
-                       if entry.get('message') not in mirrored]
+                       if not str(entry.get('message', '')).endswith(mirrored) or not mirrored]
     render_meta_warnings({'meta': meta})
+
+def _inline_warnings(report: Dict[str, Any]) -> List[str]:
+    """The report's inline warnings, each as its meta entry was emitted: an incomplete answer's entry
+    gains a leading "Required analysis is incomplete; " after the inline copy was taken (BACK-2650)."""
+    current = [str(entry.get('message', '')) for entry in (report.get('meta') or {}).get('warnings', [])
+               if isinstance(entry, dict)]
+    return [next((message for message in current if message.endswith(warning)), warning)
+            for warning in report.get('warnings', [])]
+
 
 def _render_trace(report: Dict[str, Any]) -> None:
     root = report['root']
@@ -353,7 +364,7 @@ def _render_trace(report: Dict[str, Any]) -> None:
     print(f"Trace: {root}  (depth {depth})")
     print(f"Project: {path}")
     print(f"Resolved: {total_r}  External/unresolved: {total_u}")
-    for warning in report.get('warnings', []):
+    for warning in _inline_warnings(report):
         print(f"⚠ {warning}")
     _render_trace_metadata(report)
     print()

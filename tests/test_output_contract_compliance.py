@@ -1139,6 +1139,14 @@ def test_batch_answers_like_the_uri(harness, scheme):
     there is a failure here (BACK-1554)."""
     for uri in _batch_uris(harness, scheme):
         code, payload, batch_code, entry = harness.run_batch(uri)
+        from reveal.cli.routing.declared import declared_adapter_class
+        if declared_adapter_class(scheme) is not None:
+            # A declared noun's batch line is the same request as the URI form: same answer, same exit
+            # (COMMAND_MODEL 'Transports', BACK-2325); batches used to keep a legacy result identity.
+            assert entry.get('data') == payload, f'{uri}: --batch answered differently from the URI form'
+            assert entry['exit_code'] == code, f'{uri}: --batch entry exit {entry["exit_code"]}, URI form {code}'
+            assert batch_code == code, f'{uri}: --batch exited {batch_code}, the URI form {code}'
+            continue
         expected = _expected_batch_status(code, payload)
         assert entry['status'] == expected, (
             f"{uri}: --batch says {entry['status']!r}, the URI form exits {code} ({expected!r})")

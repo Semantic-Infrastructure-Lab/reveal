@@ -109,6 +109,10 @@ def analyze_file(file_path: Path, calculate_file_stats_func) -> Optional[Dict[st
         stats = calculate_file_stats_func(file_path, structure_dict, analyzer.content)
         if structure_dict.get('_has_errors'):
             stats['parse_degraded'] = True
+            locate = getattr(analyzer, 'first_parse_error_position', None)
+            position = locate() if callable(locate) else None
+            if position is not None:
+                stats['parse_error_line'] = position[0]
 
         # Release large buffers immediately; don't wait for GC.
         # During directory scans (stats://, overview) hundreds of analyzers are

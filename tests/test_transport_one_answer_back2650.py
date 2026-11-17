@@ -25,6 +25,8 @@ NOUNS = [
     ('calls', '?callers=target'),
     ('imports', ''),
 ]
+# BACK-2657's request: a retired spelling, whose replaced-by note rides in meta.warnings, not as text.
+MCP_NOUNS = NOUNS + [('calls', '?rank=callers')]
 FIXTURE_FILES = ('b.py', 'bad.ipynb')
 
 
@@ -55,42 +57,48 @@ def _answer(document):
     return {key: value for key, value in document.items() if key != 'execution'}
 
 
-def _warnings_text(document):
-    return json.dumps(document['meta']['warnings'])
-
-
 @pytest.mark.mcp
-@pytest.mark.parametrize('noun,query', NOUNS)
+@pytest.mark.parametrize('noun,query', MCP_NOUNS)
 def test_mcp_json_is_exactly_the_cli_json(degraded, noun, query):
     from reveal import mcp_server
     uri = _uri(noun, query, degraded)
     cli = _cli(uri, '--format', 'json', '--provenance')
     assert cli.returncode == 3, cli.stderr
     tool_text = mcp_server.reveal_query(uri, provenance=True)
-    assert '[stderr:' not in tool_text
+    assert '[stderr:' not in tool_text and '[note:' not in tool_text
     assert _answer(json.loads(tool_text)) == _answer(json.loads(cli.stdout))
+
+
+def _states_cause(cause, message):
+    """A syntax error's wording differs between the two Python parsers metrics reads with (tree-sitter
+    for statistics, ``ast`` inside its quality rules), so for a parse failure the JSON states the class."""
+    if 'syntax' in cause.lower():
+        return any(word in message for word in ('syntax', 'did not parse'))
+    return cause[:20] in message
 
 
 @pytest.mark.parametrize('noun,query', NOUNS)
 def test_every_stderr_diagnostic_is_in_the_json(degraded, noun, query):
+    """Dropping the stderr append is a fix only if nothing it carried is lost (BACK-1998)."""
     cli = _cli(_uri(noun, query, degraded), '--format', 'json')
     assert cli.returncode == 3
-    warnings = _warnings_text(json.loads(cli.stdout))
+    warnings = json.loads(cli.stdout)['meta']['warnings']
     named = [line for line in cli.stderr.splitlines() if any(name in line for name in FIXTURE_FILES)]
     for line in named:
         name = next(name for name in FIXTURE_FILES if name in line)
         cause = line.rsplit(f'{name}: ', 1)[-1].strip()
-        assert name in warnings, line
-        assert cause[:20] in warnings, (line, warnings)
+        entries = [w for w in warnings if name in json.dumps(w)]
+        assert entries, (line, warnings)
+        assert any(_states_cause(cause, w['message']) for w in entries), (line, entries)
 
 
 def test_metrics_json_names_the_failed_file_and_cause(degraded):
-    """Metrics said only '2 file(s) did not parse cleanly'; the file and cause reached stderr alone."""
+    """Metrics said only '2 file(s) did not parse cleanly'; which file, and why, reached stderr alone."""
     result = _run_reveal_in(degraded, _uri('metrics', '', degraded), '--format', 'json')
     assert result.returncode == 3
-    warnings = _warnings_text(json.loads(result.stdout))
-    assert 'b.py' in warnings
-    assert 'invalid syntax' in warnings
+    entry = next(w for w in json.loads(result.stdout)['meta']['warnings'] if w['type'] == 'parse_degraded')
+    assert 'b.py' in entry['files']
+    assert 'b.py' in entry['message']
 
 
 @pytest.mark.parametrize('noun,query', NOUNS)
@@ -130,8 +138,7 @@ def test_stdin_aggregate_batch_counts_an_incomplete_answer(degraded):
 def test_metrics_text_answer_over_mcp_names_the_failed_file(degraded):
     from reveal import mcp_server
     text = mcp_server.reveal_query(_uri('metrics', '', degraded))
-    assert 'b.py' in text
-    assert 'invalid syntax' in text
+    assert 'b.py' in text and 'did not parse cleanly' in text
 
 
 @pytest.mark.mcp
@@ -154,7 +161,8 @@ def test_real_stdio_session_returns_parseable_json_per_noun(degraded, tmp_path):
                         result = await session.call_tool(
                             'reveal_query', {'uri': _uri(noun, query, degraded), 'provenance': True})
                         assert not result.is_error, noun
-                        seen[noun] = json.loads('\n'.join(c.text for c in result.content if c.type == 'text'))
+                        # The first block is the CLI's JSON exactly; any stderr rides in a second block.
+                        seen[noun] = json.loads(result.content[0].text)
 
     asyncio.run(asyncio.wait_for(exercise(), timeout=180))
     for noun, document in seen.items():

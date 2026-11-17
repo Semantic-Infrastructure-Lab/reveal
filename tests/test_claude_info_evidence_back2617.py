@@ -103,11 +103,12 @@ def test_info_presentation_cannot_change_measured_metadata(transcript, info_home
     assert any(e['code'] == 'invalid_adapter_answer' for e in json.loads(result.stdout)['meta']['errors'])
 
 
-def test_info_legacy_batch_keeps_native_metadata_failure_marker(transcript, info_home, monkeypatch):
+def test_info_batch_keeps_native_metadata_failure_marker_and_the_request_exit(transcript, info_home, monkeypatch):
     deny_stat(monkeypatch, {info_home / 'settings.json'})
+    direct = _run_reveal_in(transcript.parent, 'claude://info', '--format', 'json')
     result = _run_reveal_in(transcript.parent, '--stdin', '--batch', '--format', 'json',
                             stdin='claude://info\n')
-    assert result.returncode == 2
+    assert result.returncode == direct.returncode != 0  # a batch line exits as the request does (BACK-2325)
     answer = json.loads(result.stdout)['results'][0]['data']
     assert answer['error'] and answer['paths']['history']['exists'] is True
 

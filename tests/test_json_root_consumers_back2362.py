@@ -168,7 +168,7 @@ mcp_server.main()
     _run(tmp_path, scenario, code)
 
 
-def test_element_check_and_stdin_batch_keep_legacy_policy(tmp_path):
+def test_element_and_check_keep_legacy_policy_and_stdin_answers_like_the_request(tmp_path):
     from conftest import _run_reveal_in
     path = tmp_path / 'excluded.json'
     path.write_text('{"answer":42}', encoding='utf-8')
@@ -187,8 +187,9 @@ def test_element_check_and_stdin_batch_keep_legacy_policy(tmp_path):
     assert run(uri, 'answer', '--format', 'json').returncode == 2
     failed = run(uri, '--check', '--format', 'json')
     assert failed.returncode == 1
+    direct = run(uri, '--format', 'json')
     batch = _run_reveal_in(tmp_path, '--stdin', '--format', 'json', stdin=uri + '\n')
-    assert batch.returncode == 1
+    assert batch.returncode == direct.returncode == 3  # a --stdin line is the direct request (BACK-2325)
     assert json.loads(batch.stdout)['error']
     path.unlink()
     missing = run(uri, '--check', '--format', 'json')

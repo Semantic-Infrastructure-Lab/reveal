@@ -181,9 +181,10 @@ def test_trusted_suite_bypasses_required_missing_config_through_registered_sdk(p
             result = await session.call_tool('reveal_query', {
                 'uri': _pressure(project / 'src', scheme, explicit), 'provenance': True})
             assert not result.is_error, _text(result)
-            answer, end = json.JSONDecoder().raw_decode(_text(result))
-            # Rich can wrap a long path inside the filename in the legacy stderr suffix.
-            assert 'missing-policy.yaml' in ''.join(_text(result)[end:].split())
+            # The first block is the CLI's JSON exactly; a stderr-only diagnostic rides in a second block (BACK-2650).
+            answer = json.loads(result.content[0].text)
+            # Rich can wrap a long path inside the filename in the stderr block.
+            assert 'missing-policy.yaml' in ''.join(result.content[1].text.split())
             assert answer['summary']['total_patch_uses'] == 2
             assert answer['test_scope']['rule'] == 'tests='
 

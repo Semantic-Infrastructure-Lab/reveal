@@ -112,8 +112,9 @@ def test_a_failed_directory_outside_the_path_is_spelled_relative(tmp_path, monke
     assert result.returncode == 3, result.stderr
     warnings = [w for w in json.loads(result.stdout)['meta']['warnings'] if w.get('type') == 'analysis_incomplete']
     assert [w['directories'] for w in warnings] == [['../other']]
-    assert warnings[0]['message'].startswith('1 identified directory enumeration(s) failed; missing file population '
-                                             'is unknown: ../other (PermissionError')
+    # The incomplete answer's message also says so (COMMAND_MODEL 'Transports', BACK-2650); the spelling is the point here.
+    assert ('1 identified directory enumeration(s) failed; missing file population is unknown: ../other (PermissionError'
+            in warnings[0]['message'])
 
 
 def test_the_library_metadata_keeps_absolute_paths(tmp_path):

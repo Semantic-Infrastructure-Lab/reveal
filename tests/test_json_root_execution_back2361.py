@@ -155,7 +155,7 @@ def test_admission_uses_resource_syntax_before_any_content_load(files, monkeypat
     assert _uri_execution_facts(JsonAdapter, 'missing.json', 'scalar', args) is None
 
 
-def test_element_stdin_and_batch_remain_legacy(files, monkeypatch):
+def test_element_remains_legacy_and_stdin_batches_exit_like_the_request(files, monkeypatch):
     from reveal.adapters.json.renderer import JsonRenderer
     from reveal.cli.routing.uri import resolve_adapter
     element = resolve_adapter(JsonAdapter, JsonRenderer, 'json',
@@ -164,7 +164,8 @@ def test_element_stdin_and_batch_remain_legacy(files, monkeypatch):
     assert element.result['meta']['errors'][0]['code'] == 'invalid_request'
     assert "json://<file>[/path/to/key]" in element.result['error']
     assert api.query(uri(files / 'object.json'), 'scalar')['value'] == 7
-    for options, code in ((['--stdin'], 1), (['--stdin', '--batch'], 2)):
+    # Both batch forms exit as the direct request does, a source failure (COMMAND_MODEL 'Transports', BACK-2325).
+    for options, code in ((['--stdin'], 3), (['--stdin', '--batch'], 3)):
         with monkeypatch.context() as context:
             context.setattr('sys.stdin', io.StringIO(uri(files / 'bad.json') + '\n'))
             failed = run(*options, '--format', 'json')

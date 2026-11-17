@@ -165,6 +165,7 @@ def _bound_query_result(adapter, scheme: str, uri: str, overrides: Dict[str, Any
     """Keep declared alias retirement metadata equal to the CLI's JSON answer."""
     from .cli.invocation import Invocation, invocation_scope, retirement_note, uri_retirement_keys
     from .utils.json_utils import attach_retirements
+    from .utils.results import note_incomplete
     aliases = {f'param:{scheme}.{alias}' for spec in adapter.PARAM_SPECS for alias in spec.aliases}
     keys = uri_retirement_keys(uri) + [f'param:{scheme}.{key}' for key in overrides]
     with invocation_scope(Invocation.parse(['reveal', uri]), retirements_to_stderr=False):
@@ -172,6 +173,10 @@ def _bound_query_result(adapter, scheme: str, uri: str, overrides: Dict[str, Any
             if key in aliases:
                 retirement_note(key)
         result: Dict[str, Any] = attach_retirements(adapter.get_structure())
+        facts_of = getattr(type(adapter), 'execution_facts', None)
+        if callable(facts_of):
+            # The same answer as the CLI's JSON: an incomplete one says so (COMMAND_MODEL 'Transports').
+            note_incomplete(result, facts_of(result))
         return result
 
 

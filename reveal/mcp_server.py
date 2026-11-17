@@ -218,9 +218,7 @@ def _run_and_capture(fn, *args, capture_stderr: bool = True, **kwargs) -> str:
                                                                    RetiredSpellingError)),
                              exception=captured_exception)
     if out.strip():
-        if capture_stderr and err:
-            return f"{out}\n[stderr: {err}]"
-        return out
+        return _with_stderr(out, err) if capture_stderr else out
     if exit_code not in (0, None):
         msg = f"[reveal exited with code {exit_code}]"
         return f"{msg}: {err}" if err else msg
@@ -298,30 +296,64 @@ def _declared_failure(answer) -> str | None:
     return _tool_failure(answer.private_diagnostic or 'Required analysis or output failed', public=False)
 
 
+def _is_json_document(text: str) -> bool:
+    """True when the tool text is one JSON object: the CLI's JSON answer, which must reach the
+    client exactly as the CLI prints it (COMMAND_MODEL 'Transports')."""
+    if not text.lstrip().startswith('{'):
+        return False
+    try:
+        return isinstance(json.loads(text), dict)
+    except ValueError:
+        return False
+
+
+class _JsonAnswer(str):
+    """The CLI's JSON answer, exactly, plus the stderr a terminal would also have shown beside it.
+
+    Direct Python callers get the JSON string; the registered tool sends that stderr as a second
+    content block, never appended into the JSON (COMMAND_MODEL 'Transports', BACK-2650). A diagnostic
+    that exists only on stderr (a missing REVEAL_CONFIG file) is not dropped while it waits for its
+    home in ``meta.warnings``.
+    """
+
+    stderr: str
+
+    def __new__(cls, text: str, *, stderr: str) -> '_JsonAnswer':
+        answer = super().__new__(cls, text)
+        answer.stderr = stderr
+        return answer
+
+
+def _with_stderr(out: str, err: str) -> str:
+    """The CLI's stdout followed by its stderr, as a terminal shows them; a JSON answer stays exactly the
+    CLI's JSON, with stderr carried beside it (_JsonAnswer)."""
+    if not err:
+        return out
+    if _is_json_document(out):
+        return _JsonAnswer(out, stderr=err)
+    return f"{out}\n[stderr: {err}]"
+
+
+def _tool_content(result: str):
+    """What the registered tool returns: the text, or for a JSON answer with stderr beside it, two text
+    blocks, so the first block is the CLI's JSON exactly and still parses."""
+    residual = getattr(result, 'stderr', '')
+    if not residual:
+        return result
+    from mcp.types import CallToolResult, TextContent
+    return CallToolResult(content=[TextContent(type='text', text=str(result)),
+                                   TextContent(type='text', text=f'[stderr: {residual}]')],
+                          structured_content={'result': str(result)})
+
+
 def _with_retirement_notes(output: str) -> str:
     """Append the retired-spelling notes this call used to a text result (ground rule 7). The MCP
     server never prints them to stderr; a JSON result carries them as ``meta.warnings`` already."""
     from .cli.invocation import noted_retirements
     notes = noted_retirements()
-    if not notes or isinstance(output, _ToolFailure):
+    if not notes or isinstance(output, _ToolFailure) or _is_json_document(output):
         return output
-    try:
-        if isinstance(json.loads(output), dict):
-            return output
-    except ValueError:
-        pass
     return output.rstrip('\n') + ''.join(f'\n[note: {entry.text}]' for entry in notes.values()) + '\n'
-
-
-def _note_incomplete_tool_answer(result: dict) -> None:
-    """Keep an owner's existing incomplete disclosure instead of adding a second one."""
-    warnings = result.setdefault('meta', {}).setdefault('warnings', [])
-    existing = next((entry for entry in warnings if entry.get('type') == 'analysis_incomplete'), None)
-    if existing is None:
-        warnings.append({'type': 'analysis_incomplete',
-                         'message': 'Required analysis is incomplete; usable evidence follows.'})
-    elif 'incomplete' not in existing.get('message', '').lower():
-        existing['message'] = 'Required analysis is incomplete; ' + existing.get('message', '')
 
 
 def _run_declared_tool(fn, *args, quiet_usage: bool = False, render=None, **kwargs) -> str:
@@ -333,14 +365,14 @@ def _run_declared_tool(fn, *args, quiet_usage: bool = False, render=None, **kwar
     rendered: list[str] = []
 
     def consume(answer):
-        from .utils.results import AnalysisCompleteness
+        from .utils.results import AnalysisCompleteness, note_incomplete
         answers.append(answer)
         if _declared_failure(answer) is not None:
             return
         partial = answer.execution_facts.completeness is AnalysisCompleteness.INCOMPLETE
-        if partial:
-            _note_incomplete_tool_answer(answer.result)
         if render is not None:
+            # A specialized layout skips the emit boundary that marks an incomplete answer, so mark it here.
+            note_incomplete(answer.result, answer.execution_facts)
             rendered.append(render(answer.result))
         elif partial or (quiet_usage and _trace_absence_compatibility(answer)):
             answer.emit(announce_error=False)
@@ -385,7 +417,7 @@ def mcp_tool(*, annotations: ToolAnnotations | None = None, title: str | None = 
                         raise
                     logging.getLogger(__name__).exception("Native extension panic in MCP tool %s", fn.__name__)
                     raise ToolError(f"Internal error executing tool {fn.__name__}") from None
-                return _raise_if_tool_failure(result, fn.__name__)
+                return _tool_content(_raise_if_tool_failure(result, fn.__name__))
 
         mcp.tool(annotations=annotations, title=title)(wrapper)
         return request

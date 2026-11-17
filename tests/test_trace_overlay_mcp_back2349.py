@@ -89,9 +89,12 @@ def test_trace_depth_absence_actual_source_loss_recovery_and_siblings_through_st
             text = _text(partial)
             data, end = json.JSONDecoder().raw_decode(text)
             warnings = data['meta']['warnings']
-            # Existing SDK capture attaches stderr after the provenance envelope.
+            # The first block is the CLI's JSON exactly; stderr rides in a second block, and the
+            # replaced-by note is in the JSON's meta.warnings, not appended as text (BACK-2650).
+            assert json.loads(partial.content[0].text) == data
             assert '[stderr:' in text[end:] and 'TRACE_SOURCE_READER_DENIED' in text[end:]
-            assert '[note: trace://' in text[end:]
+            assert '[note:' not in text
+            assert any(w.get('code') == 'retired_spelling' and 'trace://' in w['message'] for w in warnings)
             loss = [entry for entry in warnings if entry.get('type') == 'analysis_failed']
             assert len(loss) == 1 and loss[0]['count'] == 7 and len(loss[0]['files']) == 5
         marker.unlink()

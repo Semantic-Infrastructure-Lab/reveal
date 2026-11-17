@@ -110,12 +110,13 @@ def test_file_not_found_after_open_is_source_loss_not_a_missing_request(transcri
     assert proof['source_opened'] is True and proof['request_absent'] is False
 
 
-def test_legacy_batch_keeps_its_authored_history_error(transcript, history):
+def test_batch_keeps_its_authored_history_error_and_the_request_exit(transcript, history):
     with history.open('a', encoding='utf-8') as handle:
         handle.write(json.dumps({'display': 'bad timestamp', 'timestamp': 10 ** 100}) + '\n')
+    direct = _run_reveal_in(transcript.parent, 'claude://history', '--format', 'json')
     result = _run_reveal_in(transcript.parent, '--stdin', '--batch', '--format', 'json',
                             stdin='claude://history\n')
-    assert result.returncode == 2
+    assert result.returncode == direct.returncode != 0  # a batch line exits as the request does (BACK-2325)
     answer = json.loads(result.stdout)['results'][0]['data']
     assert answer['error'] and len(answer['entries']) == 2
 

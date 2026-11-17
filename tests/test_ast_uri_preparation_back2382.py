@@ -41,27 +41,38 @@ def denied_codec(monkeypatch, path):
     monkeypatch.setattr(query_binding, '_resource_exists', exists)
 
 
-@pytest.mark.parametrize('mode', ['element', 'stdin', 'batch', 'check'])
-@pytest.mark.parametrize('failure', ['%FF', '%00', 'permission'])
-def test_unqualified_preparation_returns_legacy_failed_answer(project, monkeypatch, mode, failure):
-    resource = encoded(project) + '/' + failure
-    if failure == 'permission':
-        denied_codec(monkeypatch, resource.split('://', 1)[1])
+def _direct(resource, mode):
     args = _default_args(format='json', **({mode: True} if mode != 'element' else {}))
     out, err = StringIO(), StringIO()
     with redirect_stdout(out), redirect_stderr(err), pytest.raises(SystemExit) as stopped:
         if mode == 'element':
             handle_uri(resource, 'keep', args)
+        elif mode == 'direct':
+            handle_uri(resource, None, _default_args(format='json'))
         else:
             answer = resolve_uri(resource, args)
-            assert answer.execution_facts is None
-            assert answer.kind == 'router'
+            assert answer.execution_facts is not None  # the declared request, not a legacy boundary (BACK-2325)
             answer.emit()
-    assert stopped.value.code == (2 if mode == 'element' else 1)
-    answer = json.loads(out.getvalue())
-    assert answer['error']
-    assert answer['type'] == ('ast_query' if mode == 'element' else 'ast')
     assert 'Traceback' not in err.getvalue()
+    return stopped.value.code, json.loads(out.getvalue())
+
+
+@pytest.mark.parametrize('mode', ['element', 'stdin', 'batch', 'check'])
+@pytest.mark.parametrize('failure', ['%FF', '%00', 'permission'])
+def test_preparation_failure_is_one_structured_answer_on_every_transport(project, monkeypatch, mode, failure):
+    """A batch line used to take a legacy route that answered type 'ast' and exited 1; it is now the
+    direct request's own answer and exit (COMMAND_MODEL 'Transports', BACK-2325)."""
+    resource = encoded(project) + '/' + failure
+    if failure == 'permission':
+        denied_codec(monkeypatch, resource.split('://', 1)[1])
+    code, answer = _direct(resource, mode)
+    assert answer['error']
+    assert answer['type'] == 'ast_query'
+    if mode == 'element':
+        assert code == 2
+    else:
+        assert (code, answer) == _direct(resource, 'direct')
+        assert code == (3 if failure == 'permission' else 2)
 
 
 @pytest.mark.parametrize('mode', ['element', 'stdin'])
@@ -73,7 +84,7 @@ def test_real_cli_unqualified_preparation_is_structured_failure(project, mode, f
         [sys.executable, '-m', 'reveal', *options, '--format', 'json'],
         input=resource + '\n' if mode == 'stdin' else None,
         capture_output=True, text=True, encoding='utf-8', timeout=30)
-    assert result.returncode == (2 if mode == 'element' else 1)
+    assert result.returncode == 2  # an undecodable path is an invalid request on every transport (D6)
     assert 'Traceback' not in result.stderr
     assert json.loads(result.stdout)['error']
 
@@ -89,6 +100,8 @@ def test_exclusion_scope_is_cleared_when_later_preparation_fails(project, monkey
     # The existing bool parser accepts 'invalid'; inject failure after publication
     # to qualify cleanup at this boundary without changing query grammar.
     monkeypatch.setattr(gitignore, 'split_respect_gitignore', split)
+    # The legacy dispatch still serves every undeclared scheme; ast is declared, so pin this to that route.
+    monkeypatch.setattr('reveal.cli.routing.declared.declared_adapter_class', lambda scheme: None)
     failed = resolve_uri(encoded(project) + '?respect_gitignore=invalid',
                          _default_args(format='json', exclude=['omit.py']))
     assert 'respect_gitignore' in failed.result['error']

@@ -400,12 +400,13 @@ def emit_declared_result(result, args, scheme, render, facts, *, execution_answe
     from ...utils.json_utils import (attach_provenance, print_json_result, write_also_json,
                                      write_requested_artifact)
     from ...utils.results import (FailureCause, execution_exit_code,
-                                 failure_execution_facts, merge_execution_facts)
+                                 failure_execution_facts, merge_execution_facts, note_incomplete)
     from .uri import announce_outcome
     if default_fail_on is None:
         default_fail_on = declared_adapter_class(scheme).DEFAULT_FAIL_ON
     policy = getattr(args, 'fail_on', None) or default_fail_on
     output_format = args.format
+    note_incomplete(result, facts)
     result = attach_provenance(result)
     if announce_error:
         announce_outcome(result, f'{scheme}://')

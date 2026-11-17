@@ -90,16 +90,18 @@ def test_display_cut_is_complete_with_a_source_receipt(transcript, suffix, field
                for w in answer['meta']['warnings'])
 
 
-def test_legacy_batches_keep_their_unqualified_boundary(transcript):
+def test_batches_answer_like_the_request(transcript):
+    """A batch line is the same request as the direct command (COMMAND_MODEL 'Transports', BACK-2325);
+    batches used to keep a legacy boundary that read partial input as success."""
     with transcript.open('a', encoding='utf-8') as handle:
         handle.write('broken\n')
-    partial = _run_reveal_in(transcript.parent, '--stdin', '--batch', '--format', 'json',
-                             stdin='claude://session/my-session\n')
-    assert partial.returncode == 0
-    missing = _run_reveal_in(transcript.parent, '--stdin', '--batch', '--format', 'json',
-                             stdin='claude://session/no-such-session\n')
-    assert missing.returncode == 2  # batch aggregate error, preserving its legacy leaf classification
-    assert json.loads(missing.stdout)['results'][0]['data']['meta']['errors'][0]['code'] == 'adapter_error'
+    for uri in ('claude://session/my-session', 'claude://session/no-such-session'):
+        direct = _run_reveal_in(transcript.parent, uri, '--format', 'json')
+        batch = _run_reveal_in(transcript.parent, '--stdin', '--batch', '--format', 'json', stdin=uri + '\n')
+        entry, = json.loads(batch.stdout)['results']
+        assert batch.returncode == direct.returncode == entry['exit_code'], (uri, batch.stdout)
+        assert entry['data'] == json.loads(direct.stdout)
+    assert entry['status'] == 'error'
 
 
 @pytest.mark.mcp

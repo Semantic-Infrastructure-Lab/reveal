@@ -644,18 +644,27 @@ class MetricsAdapter(ResourceAdapter):
         """Directory loss has an unknown missing file population."""
         self._traversal_failures.append(failure_of(error))
 
+    def _parse_degraded_warning(self) -> Optional[Dict[str, Any]]:
+        """The files the parser read only with error recovery, named with the line where known: stderr
+        alone carried which files and why before (COMMAND_MODEL 'Transports', BACK-2650)."""
+        degraded = sorted((s for s in self._analysis_failures if s.get('parse_degraded')), key=lambda s: s['file'])
+        if not degraded:
+            return None
+        shown = [to_relative_display(s['file'], self.path) for s in degraded[:5]]
+        places = [f"{name} (line {s['parse_error_line']})" if s.get('parse_error_line') else name
+                  for name, s in zip(shown, degraded)]
+        more = f" and {len(degraded) - len(shown)} more" if len(degraded) > len(shown) else ''
+        return {'type': 'parse_degraded', 'count': len(degraded), 'files': shown,
+                'message': (f"{len(degraded)} file(s) did not parse cleanly; statistics may be incomplete: "
+                            f"{', '.join(places)}{more}")}
+
     def _disclose_failures(self, result: dict) -> None:
         """Disclose directory and file analysis loss without treating totals as complete."""
         from ..ast.analysis import traversal_failed_warning
         note_warning(result, cast(Optional[Dict[str, Any]],
                                   traversal_failed_warning(self._traversal_failures, self.path)))
         self._disclose_issue_count(result)
-        degraded = [s for s in self._analysis_failures if s.get('parse_degraded')]
-        if degraded:
-            note_warning(result, {
-                'type': 'parse_degraded', 'count': len(degraded),
-                'message': f"{len(degraded)} file(s) did not parse cleanly; statistics may be incomplete",
-            })
+        note_warning(result, self._parse_degraded_warning())
         rules_failed = sorted(s['file'] for s in self._analysis_failures if s.get('check_rules_failed'))
         if rules_failed:
             shown = rules_failed[:5]

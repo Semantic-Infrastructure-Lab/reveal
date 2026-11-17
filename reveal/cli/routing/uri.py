@@ -308,7 +308,9 @@ def handle_uri(uri: str, element: Optional[str], args: 'Namespace',
         sys.exit(2)
     declared = declared_adapter_class(scheme)
     legacy_check = getattr(declared, 'LEGACY_CHECK_TRANSPORT', False) and peek(args, 'check', False)
-    if declared is not None and not peek(args, 'stdin', False) and not legacy_check:
+    # A --stdin line is the same request as the direct command (COMMAND_MODEL 'Transports'): routing
+    # it around the declared path lost its execution facts, so incomplete answers exited 0 (BACK-2325).
+    if declared is not None and not legacy_check:
         run_declared_uri(uri, element, args, consumed, answer_consumer=answer_consumer)
         return
     try:
@@ -373,6 +375,15 @@ def resolve_uri(uri: str, args: 'Namespace', consumed: Iterable[str] = ()) -> An
     a spelling past the cut release.
     """
     _note_retired_spellings(uri)
+    from .declared import declared_adapter_class, run_declared_uri
+    declared = declared_adapter_class(uri.partition('://')[0])
+    if declared is not None and not (getattr(declared, 'LEGACY_CHECK_TRANSPORT', False) and peek(args, 'check', False)):
+        # The same declared request handle_uri answers, captured instead of emitted, so the batch
+        # reads its execution facts (COMMAND_MODEL 'Transports', BACK-2325).
+        answers: List[Answer] = []
+        run_declared_uri(uri, None, args, consumed, answer_consumer=answers.append)
+        if answers:
+            return answers[-1]
     with ExitStack() as dispatch:
         try:
             adapter_class, scheme, resource, args = dispatch.enter_context(_dispatch(uri, None, args, consumed))

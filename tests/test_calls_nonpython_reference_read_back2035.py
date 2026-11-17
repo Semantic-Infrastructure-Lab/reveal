@@ -82,7 +82,9 @@ def file_warning(result):
     assert warning['count'] == 1 and warning['files'][0].endswith('registration.c')
     assert 'PermissionError' in warning['message']
     assert 'incorrect' in warning['message'].lower() or 'false positive' in warning['message'].lower()
-    assert not any(w.get('type') == 'analysis_incomplete' for w in result['meta']['warnings'])
+    # A lost file is not reported as lost directories; the answer's one incomplete marker has no unit (BACK-2650).
+    assert not any(w.get('type') == 'analysis_incomplete' and w.get('unit') == 'directories'
+                   for w in result['meta']['warnings'])
     assert 'confidence' not in result['meta'] and result['meta']['parse_mode'] == 'tree_sitter_partial'
     assert 'analysis_skipped' not in result and 'analysis_traversal_failures' not in result
     assert not result.get('error')

@@ -326,7 +326,7 @@ class TestPreservation:
         mcp_capped = mcp_json(uri(project, 'rank=fan-in&max_files=3'))
         outcome = [w for w in mcp_capped['meta']['warnings'] if w['type'] == 'analysis_incomplete']
         assert len(outcome) == 1
-        assert_equal_answer(_without(mcp_capped, ('analysis_incomplete',)), cli_capped)
+        assert_equal_answer(mcp_capped, cli_capped)  # the incomplete marker is on both now (BACK-2650)
         missing = reveal_query(uri(project, 'importers=nope.py'))
         assert isinstance(missing, _ToolFailure) and 'matched no file' in str(missing)
 
@@ -483,7 +483,7 @@ class TestProposedChanges:
             legacy_result, expected = cli_json(uri(project, 'rank=fan-in&max_files=3'))
             assert legacy_result.returncode == 3
             if transport == 'mcp':
-                actual = _without(mcp_json(uri(project, 'rank=fan-in&scan-limit=3')), ('analysis_incomplete',))
+                actual = mcp_json(uri(project, 'rank=fan-in&scan-limit=3'))  # same marker as the CLI (BACK-2650)
             else:
                 result, actual = {
                     'cli': lambda: cli_json('imports', str(project), '--rank', 'fan-in', '--scan-limit', '3'),
