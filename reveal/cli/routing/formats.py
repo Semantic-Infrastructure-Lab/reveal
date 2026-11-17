@@ -83,8 +83,27 @@ def _format_flag_given() -> bool:
 _SINK_FORMATS = ('text', 'json', 'typed', 'grep')
 
 
+class OutputSinkError(ValueError):
+    """A malformed ``--output`` request: a usage error (exit 2) the caller's parser answers, in JSON mode with the
+    invalid-request document (COMMAND_MODEL "Transports"), else with ``exit_on_sink_error``'s line."""
+
+
 def _sink_error(message: str) -> None:
-    print(f'Error: --output: {message}', file=sys.stderr)  # boundary-ok: print -- the sink usage error line
+    raise OutputSinkError(f'--output: {message}')
+
+
+def drop_file_sinks(args: Any) -> None:
+    """After a malformed ``--output`` request, nothing is written to a file: only the bare stdout specs stay on
+    ``args.output`` (they still say whether the request asked for JSON), and ``--also-json`` goes."""
+    specs = [spec for spec in getattr(args, 'output', None) or () if isinstance(spec, str) and '=' not in spec]
+    args.output = specs or None
+    if getattr(args, 'also_json', None) is not None:
+        args.also_json = None
+
+
+def exit_on_sink_error(error: OutputSinkError) -> None:
+    """The text answer to a malformed ``--output`` request."""
+    print(f'Error: {error}', file=sys.stderr)  # boundary-ok: print -- the sink usage error line
     sys.exit(2)
 
 
@@ -138,8 +157,8 @@ def apply_output_sinks(args: Any, invocation: Any) -> None:
 
     A bare FORMAT is the stdout sink and sets ``args.format``. A ``FORMAT=PATH`` file sink stays on
     ``args.output``, where ``utils.json_utils.file_sinks`` reads it (with ``--also-json``, the retired json
-    sink) for whichever writer the command reaches: no writer reads a flag of its own. A bad sink exits 2
-    here: an unknown format, an empty PATH, two stdout sinks, a stdout sink that disagrees with a typed
+    sink) for whichever writer the command reaches: no writer reads a flag of its own. A bad sink raises
+    ``OutputSinkError`` here (exit 2 at the caller): an unknown format, an empty PATH, two stdout sinks, a stdout sink that disagrees with a typed
     --format, a file sink with ``--stdin`` but no ``--check``, or
     ``--also-json`` mixed with a file sink. A format the target does not render is refused where
     --format is (``require_supported_format``). ``--also-json`` alone still works and prints its note.

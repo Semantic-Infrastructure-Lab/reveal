@@ -36,71 +36,142 @@ class _LenientParseFailed(Exception):
     """A re-parse that only recovers the request's format and target met a usage error of its own."""
 
 
-class _DeclaredParser(argparse.ArgumentParser):
-    """A noun's parser: an unknown flag gets rule 3's teaching (the supported controls and fields, exit 2), the
-    same message the URI gives, not argparse's bare usage error (COMMAND_MODEL "Unsupported controls"). In JSON
-    mode every usage error answers with the invalid-request JSON document the declared route builds for an invalid
-    value (COMMAND_MODEL "Transports"), on every noun."""
-    declarations: tuple = ()
-    noun: str = ''
+class JsonUsageParser(argparse.ArgumentParser):
+    """A parser whose usage errors, in a request that asks for JSON (``--format json`` or the ``--output json``
+    stdout sink), answer with the invalid-request JSON document the declared route builds for an invalid value
+    (COMMAND_MODEL "Transports"; exit 2, the message in the document and on stderr). The one seam for the main parser
+    and every noun's declared parser; in text mode each keeps its own usage error. A subclass names the document's
+    target in ``invalid_request``."""
     _argv: list | None = None
     _lenient: bool = False
 
     def parse_known_args(self, args=None, namespace=None):
-        if not self._lenient:  # the request as typed (main passes it), for error() to recover format and target
+        if not self._lenient:  # the request as typed (main passes it), for a usage error to recover format and target
             self._argv = None if args is None else list(args)
         return super().parse_known_args(args, namespace)
 
-    def error(self, message: str):
+    def invalid_request(self, message: str, args):
+        """The invalid-request Answer for the request *args*, or None when its target has no such document."""
+        return None
+
+    def stop_tolerant_reread(self, message: str) -> None:
+        """Inside the tolerant re-read, a usage error ends it instead of the process."""
         if self._lenient:
             raise _LenientParseFailed(message)
-        flags = [token for token in message.partition(':')[2].split() if token.startswith('-')]
-        if message.startswith('unrecognized arguments:') and flags:
-            from ...utils.query_binding import unsupported_controls_message
-            message = unsupported_controls_message(self.declarations, flags)
-            json_args = self._json_request()
-            if json_args is None:
-                self._print_message(f'{self.prog}: error: {message}\n', sys.stderr)
-                self.exit(2)
-        else:
-            json_args = self._json_request()
-            if json_args is None:
-                super().error(message)
-        adapter = declared_adapter_class(self.noun)
-        path = getattr(json_args, adapter.RESOURCE_SPEC.name, None) or '.'
-        _invalid_answer(adapter, self.noun, path, message, json_args).emit()
-        self.exit(2)  # emit exits with the answer's outcome; this is the usage exit if it did not
 
-    def _json_request(self):
-        """The request's arguments when it asks for JSON (``--format json`` or the ``--output json`` stdout sink),
-        else None. The typed request is parsed again, leniently; one whose own error stops that parse (a flag
-        missing its value, a value outside its choices) keeps the parser's defaults with the format it typed."""
+    def answer_in_json(self, message: str, args=None) -> None:
+        """When the request asks for JSON, answer *message* with the document and exit 2; else return, for the
+        caller's text error. *args*: the parsed request, or None to recover it from the typed words."""
+        args = self._typed_request() if args is None else args
+        if not self._asks_for_json(args):
+            return
+        args.format = 'json'  # a stdout sink the error left unresolved still asked for it
+        answer = self.invalid_request(message, args)
+        if answer is not None:
+            answer.emit()
+            self.exit(2)  # emit exits with the answer's outcome; this is the usage exit if it did not
+
+    def _asks_for_json(self, args) -> bool:
+        if getattr(args, 'format', None) == 'json':
+            return True
+        stdout_sinks = [spec for spec in getattr(args, 'output', None) or () if isinstance(spec, str) and '=' not in spec]
+        return stdout_sinks == ['json'] and 'format' not in self._typed_words()[1]
+
+    def _typed_request(self):
+        """The request parsed again, leniently; one whose own error stops that parse (a flag missing its value, a
+        value outside its choices) is read from the typed words over the parser's defaults: the positionals in
+        order, ``--format`` and ``--output``. A malformed ``--output`` leaves its specs unresolved."""
         from ..invocation import current_invocation
-        from .formats import apply_output_sinks
+        from .formats import OutputSinkError, apply_output_sinks, drop_file_sinks
         self._lenient = True
         try:
             args, _unknown = self.parse_known_args(self._argv or [])
         except _LenientParseFailed:
-            defaults = {action.dest: action.default for action in self._actions if action.dest != argparse.SUPPRESS}
-            args = argparse.Namespace(**{**defaults, **self._defaults})
-            args.format = _typed_format(self._argv or [])
+            args = self._typed_defaults()
         finally:
             self._lenient = False
         invocation = current_invocation()
         if invocation is not None:
-            apply_output_sinks(args, invocation)
-        return args if getattr(args, 'format', None) == 'json' else None
+            try:
+                apply_output_sinks(args, invocation)
+            except OutputSinkError:  # the usage error at hand is the answer; the stdout specs still say what was asked
+                drop_file_sinks(args)
+        return args
+
+    def _typed_defaults(self):
+        defaults = {action.dest: action.default for action in self._actions if action.dest != argparse.SUPPRESS}
+        args = argparse.Namespace(**{**defaults, **self._defaults})
+        positionals, values = self._typed_words()
+        for action, word in zip([a for a in self._actions if not a.option_strings], positionals):
+            setattr(args, action.dest, word)
+        if values.get('format'):
+            args.format = values['format'][-1]
+        if values.get('output'):
+            args.output = values['output']
+        return args
+
+    def _typed_words(self) -> tuple:
+        """(positionals, {dest: [values]}) as typed: a known option takes the value its action declares (one, or
+        none for a switch); an unknown one takes none."""
+        positionals: list = []
+        values: dict = {}
+        words = iter(self._argv or [])
+        for word in words:
+            if word == '--':
+                positionals.extend(words)
+                break
+            if not word.startswith('-') or word == '-':
+                positionals.append(word)
+                continue
+            option, eq, value = word.partition('=')
+            action = self._option_string_actions.get(option)
+            if action is None:
+                continue
+            if not eq and action.nargs != 0:
+                value = next(words, '')
+            values.setdefault(action.dest, []).append(value)
+        return positionals, values
 
 
-def _typed_format(argv: list) -> str | None:
-    """The ``--format`` value as typed (last spelling wins here: this only decides how a usage error is shown)."""
-    found = None
-    for index, token in enumerate(argv):
-        if token == '--format' and index + 1 < len(argv):
-            found = argv[index + 1]
-        elif token.startswith('--format='):
-            found = token.partition('=')[2]
-    return found
+class _DeclaredParser(JsonUsageParser):
+    """A noun's parser: an unknown flag gets rule 3's teaching (the supported controls and fields, exit 2), the
+    same message the URI gives, not argparse's bare usage error (COMMAND_MODEL "Unsupported controls"); in JSON
+    mode every usage error answers with the invalid-request document (``JsonUsageParser``)."""
+    declarations: tuple = ()
+    noun: str = ''
+
+    def error(self, message: str):
+        self.stop_tolerant_reread(message)
+        flags = [token for token in message.partition(':')[2].split() if token.startswith('-')]
+        if message.startswith('unrecognized arguments:') and flags:
+            from ...utils.query_binding import unsupported_controls_message
+            message = unsupported_controls_message(self.declarations, flags)
+            self.answer_in_json(message)
+            self._print_message(f'{self.prog}: error: {message}\n', sys.stderr)
+            self.exit(2)
+        self.answer_in_json(message)
+        super().error(message)
+
+    def invalid_request(self, message: str, args):
+        adapter = declared_adapter_class(self.noun)
+        path = getattr(args, adapter.RESOURCE_SPEC.name, None) or '.'
+        return _invalid_answer(adapter, self.noun, path, message, args)
+
+
+def invalid_uri_request(target, message: str, args):
+    """The invalid-request Answer for a URI target whose noun is declared, or None (a file, another scheme)."""
+    from ...adapters.registry import get_adapter_class
+    if not isinstance(target, str) or '://' not in target:
+        return None
+    scheme, _, resource = target.partition('://')
+    adapter = get_adapter_class(scheme)
+    if (adapter is None or getattr(adapter, 'RESOURCE_SPEC', None) is None
+            or getattr(adapter, 'PARAM_SPECS', None) is None):
+        return None
+    path, _, query = resource.partition('?')
+    # A URI-only noun (codex) has no subcommand declaration to read its findings policy from.
+    return _invalid_prepared_answer(adapter, scheme, path, '?' + query if query else '', message, args,
+                                    default_fail_on=getattr(adapter, 'DEFAULT_FAIL_ON', 'none'))
 
 
 def create_declared_parser(name: str) -> argparse.ArgumentParser:
@@ -402,14 +473,15 @@ def _flagged_query(adapter, name, path, source, transport: str, args, consume) -
     return flagged
 
 
-def _invalid_prepared_answer(adapter, name, path, resource, message, args):
+def _invalid_prepared_answer(adapter, name, path, resource, message, args, *, default_fail_on=None):
     """Keep an unbound request's mode identity when decoding/alias validation fails."""
     selector = getattr(adapter, 'uri_result_type', None)
     try:
         expected_type = selector(resource) if selector is not None else adapter.RESULT_TYPE
     except ValueError:  # the selector reads the same rejected query (BACK-2655): no mode beyond the default
         expected_type = adapter.RESULT_TYPE
-    return _invalid_answer(adapter, name, path, message, args, result_type=expected_type)
+    return _invalid_answer(adapter, name, path, message, args, result_type=expected_type,
+                           default_fail_on=default_fail_on)
 
 
 def _result_type_at(adapter_class, expected_type: str, params: Any, scope_path: str) -> str:

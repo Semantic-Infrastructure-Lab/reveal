@@ -200,6 +200,16 @@ def _resolve_check_path(args: Namespace) -> Path:
     return path
 
 
+def _require_single_file_sinks(args) -> None:
+    """A single-file check writes text, grep and json file sinks only; another is a usage error (exit 2)."""
+    from reveal.cli.routing.formats import OutputSinkError, exit_on_sink_error, require_check_sink_formats
+    from reveal.utils.json_utils import file_sinks
+    try:
+        require_check_sink_formats(file_sinks(args), 'a single-file check')
+    except OutputSinkError as error:
+        exit_on_sink_error(error)
+
+
 def run_check(args: Namespace) -> None:
     """Run check mode — canonical implementation.
 
@@ -255,9 +265,7 @@ def run_check(args: Namespace) -> None:
             from reveal.cli.file_checker import handle_recursive_check
             handle_recursive_check(path, args)
     else:
-        from reveal.cli.routing.formats import require_check_sink_formats
-        from reveal.utils.json_utils import file_sinks
-        require_check_sink_formats(file_sinks(args), 'a single-file check')
+        _require_single_file_sinks(args)
         from reveal.file_handler import _get_analyzer_or_exit, _build_file_cli_overrides
         from reveal.checks import run_pattern_detection
         from reveal.config import RevealConfig

@@ -22,7 +22,7 @@ from .registry import FALLBACK_SUPPORT_NOTE, display_name_for_extension, fallbac
 from . import __version__
 from .utils import copy_to_clipboard, check_for_updates
 from .cli.global_flags import apply_global_flags
-from .cli.routing.formats import apply_output_sinks
+from .cli.routing.formats import OutputSinkError, apply_output_sinks, drop_file_sinks, exit_on_sink_error
 from .cli.invocation import (COMMANDS, Invocation, RetiredSpellingError, invocation_scope,
                              retirement_note)
 from .config import disable_breadcrumbs_permanently
@@ -305,6 +305,19 @@ def _dispatch_and_run(invocation: Invocation) -> None:
             sys.exit(0)
 
 
+def _apply_output_sinks(parser, args: Namespace, invocation: Invocation) -> None:
+    """Resolve the request's ``--output`` sinks; a malformed one is the parser's usage error (in JSON mode, the
+    invalid-request document, where the parser answers one)."""
+    try:
+        apply_output_sinks(args, invocation)
+    except OutputSinkError as error:
+        drop_file_sinks(args)
+        answer_in_json = getattr(parser, 'answer_in_json', None)  # the main and declared parsers; not every command's
+        if answer_in_json is not None:
+            answer_in_json(str(error), args)
+        exit_on_sink_error(error)
+
+
 def _prepare(invocation: Invocation) -> Tuple[Namespace, Callable[[], None]]:
     """Parse ``invocation`` with its command's parser; return the args and what runs them."""
     name = invocation.command
@@ -315,7 +328,7 @@ def _prepare(invocation: Invocation) -> Tuple[Namespace, Callable[[], None]]:
         if invocation.typed('--search'):
             retirement_note('flag:--search')
         validate_navigation_args(args)
-        apply_output_sinks(args, invocation)
+        _apply_output_sinks(parser, args, invocation)
         return args, lambda: _main_impl(invocation, parser, args)
 
     retirement_note(f'subcommand:{name}')
@@ -325,7 +338,7 @@ def _prepare(invocation: Invocation) -> Tuple[Namespace, Callable[[], None]]:
     _show_subcommand_formats(sub_parser, formats)
     _show_subcommand_options(sub_parser, name)
     sub_args = sub_parser.parse_args(invocation.command_argv)
-    apply_output_sinks(sub_args, invocation)
+    _apply_output_sinks(sub_parser, sub_args, invocation)
     _require_subcommand_format(name, sub_args, formats)
     # BACK-1539: the flag ledger and the REVEAL_IGNORE/--exclude walk scope, once for all.
     from .cli.routing.subcommand import dispatch_subcommand

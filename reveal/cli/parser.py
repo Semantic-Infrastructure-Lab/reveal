@@ -14,6 +14,7 @@ from typing import Optional
 _PACKAGE_DIR = Path(__file__).resolve().parent.parent
 from .global_flags import add_exclude_argument, add_gitignore_arguments, rule_patterns
 from ..utils.query_binding import ScalarOnceAction
+from .routing.declared import JsonUsageParser, invalid_uri_request
 from ..rules.base import category_legend
 
 
@@ -765,7 +766,7 @@ def _add_extraction_options(parser: argparse.ArgumentParser) -> None:
                         help='autossl://: filter output to a single named user')
 
 
-class _ScopedErrorArgumentParser(argparse.ArgumentParser):
+class _ScopedErrorArgumentParser(JsonUsageParser):
     """ArgumentParser that gives unrecognized-argument errors a short, scoped
     usage line instead of the full flat usage block.
 
@@ -775,10 +776,16 @@ class _ScopedErrorArgumentParser(argparse.ArgumentParser):
     regardless of what was actually invoked — misleading for a plain `.py`
     file error. This only narrows the *unrecognized arguments* case; other
     argparse errors (bad choice, missing value) keep the default behavior
-    since their usage context is still relevant to the flag involved.
+    since their usage context is still relevant to the flag involved. In JSON mode a URI target whose noun is
+    declared answers with the invalid-request document instead (``JsonUsageParser``).
     """
 
+    def invalid_request(self, message: str, args):
+        return invalid_uri_request(getattr(args, 'path', None), message, args)
+
     def error(self, message: str) -> None:
+        self.stop_tolerant_reread(message)
+        self.answer_in_json(message)
         if message.startswith('unrecognized arguments:'):
             positional_usage = ' '.join(
                 self._format_positional_usage(action)
