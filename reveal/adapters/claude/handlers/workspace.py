@@ -111,6 +111,15 @@ def _read_markdown_resource(directory, name, base, noun) -> Dict[str, Any]:
     return lookup.attach(result)
 
 
+def _search_terms(query_params: Dict[str, Any]) -> List[str]:
+    """The lowered match terms a workspace list keeps a file for: every term, ANDed per file (rule 19)."""
+    return [term.lower() for term in match_terms(query_params.get('search', '')) if term]
+
+
+def _search_echo(terms: List[str]) -> Any:
+    return term_echo(terms) if terms else None
+
+
 def _list_plans(plans_dir: Path, query_params: Dict[str, Any], base: Dict[str, Any]) -> Dict[str, Any]:
     """Collect the existing plan catalog before content/display selection."""
     scan = WorkspaceScan()
@@ -118,7 +127,7 @@ def _list_plans(plans_dir: Path, query_params: Dict[str, Any], base: Dict[str, A
         error = f'Plans directory not found: {plans_dir}' if scan.request_rejected else scan.root_error
         return scan.attach({**base, 'plans': [], 'total': 0, 'error': error})
 
-    search = [term.lower() for term in match_terms(query_params.get('search', '')) if term]  # ANDed per file
+    search = _search_terms(query_params)
     all_files = sorted(scan.markdown(plans_dir), key=lambda p: _mtime(p, scan.ordering_errors), reverse=True)
     plans = []
     skipped: List[Tuple[Path, BaseException]] = []
@@ -156,7 +165,7 @@ def _list_plans(plans_dir: Path, query_params: Dict[str, Any], base: Dict[str, A
         'plans': plans,
         'total': len(all_files),
         'displayed': len(plans),
-        'search': term_echo(search) if search else None,
+        'search': _search_echo(search),
     }
     note_warning(result, skipped_entries_warning('plans', skipped))
     return scan.attach(result)
@@ -174,7 +183,7 @@ def get_memory(conversation_base: Path, resource: str, query_params: Dict[str, A
     # claude://memory/<project-fragment> — filter to matching projects
     parts = resource.split('/', 1)
     filter_project = parts[1].strip() if len(parts) > 1 else ''
-    search = [term.lower() for term in match_terms(query_params.get('search', '')) if term]  # ANDed per file
+    search = _search_terms(query_params)
 
     scan = WorkspaceScan(legacy_discovery_error=True)
     if not scan.directory(conversation_base, required=True):
@@ -221,7 +230,7 @@ def get_memory(conversation_base: Path, resource: str, query_params: Dict[str, A
         'memories': memories,
         'total': len(memories),
         'filter_project': filter_project or None,
-        'search': term_echo(search) if search else None,
+        'search': _search_echo(search),
     }
     note_warning(result, skipped_entries_warning('memory', skipped))
     return scan.attach(result)
@@ -248,7 +257,7 @@ def get_agents(agents_dir: Path, resource: str, query_params: Dict[str, Any]) ->
         error = f'Agents directory not found: {agents_dir}' if scan.request_rejected else scan.root_error
         return scan.attach({**base, 'agents': [], 'total': 0, 'error': error})
 
-    search = [term.lower() for term in match_terms(query_params.get('search', '')) if term]  # ANDed per file
+    search = _search_terms(query_params)
     all_files = sorted(scan.markdown(agents_dir), key=lambda p: _mtime(p, scan.ordering_errors), reverse=True)
     agents = []
     skipped: List[Tuple[Path, BaseException]] = []
@@ -279,7 +288,7 @@ def get_agents(agents_dir: Path, resource: str, query_params: Dict[str, Any]) ->
         'agents': agents,
         'total': len(all_files),
         'displayed': len(agents),
-        'search': term_echo(search) if search else None,
+        'search': _search_echo(search),
     }
     note_warning(result, skipped_entries_warning('agents', skipped))
     return scan.attach(result)

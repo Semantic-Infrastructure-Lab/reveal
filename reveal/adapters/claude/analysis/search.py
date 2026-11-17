@@ -60,29 +60,36 @@ def _extract_first_snippets(jsonl_path: Path, terms: List[str], *, whole_word: b
     try:
         for msg in reader.records():
             role = msg.get('type', '')
-            message = msg.get('message')
             for slot, term in enumerate(terms):
                 if fallbacks[slot] is None:
                     fallbacks[slot] = _sidecar_hit(msg, role, term, message_index, whole_word, window_chars)
-            if role in ('user', 'assistant') and isinstance(message, dict):
-                blocks = _content_to_blocks(message.get('content', []))
-                ts = _snippet_timestamp(msg)
-                for slot, term in enumerate(terms):
-                    if found[slot] is not None:
-                        continue
-                    matches = _collect_block_matches(blocks, term.lower(), term, message_index, role, ts,
-                                                    whole_word=whole_word, window_chars=window_chars)
-                    if matches:
-                        found[slot] = {'excerpt': matches[0].get('excerpt', ''), 'role': role,
-                                       'timestamp': ts, 'message_index': message_index}
-                if all(hit is not None for hit in found):
-                    reader.decision = 'matched-prefix'
-                    return [hit for hit in found if hit is not None]
+            if _content_hits(msg, role, terms, found, message_index, whole_word, window_chars):
+                reader.decision = 'matched-prefix'
+                return [hit for hit in found if hit is not None]
             message_index += 1
     except OSError as exc:
         if errors_out is not None:
             errors_out.append((jsonl_path, exc))
     return [hit or fallback or dict(_NO_SNIPPET) for hit, fallback in zip(found, fallbacks)]
+
+
+def _content_hits(msg: Dict[str, Any], role: str, terms: List[str], found: List[Dict[str, Any] | None],
+                  message_index: int, whole_word: bool, window_chars: int) -> bool:
+    """Record in *found* each term's first content match in this record; True once every term has one."""
+    message = msg.get('message')
+    if role not in ('user', 'assistant') or not isinstance(message, dict):
+        return False
+    blocks = _content_to_blocks(message.get('content', []))
+    ts = _snippet_timestamp(msg)
+    for slot, term in enumerate(terms):
+        if found[slot] is not None:
+            continue
+        matches = _collect_block_matches(blocks, term.lower(), term, message_index, role, ts,
+                                        whole_word=whole_word, window_chars=window_chars)
+        if matches:
+            found[slot] = {'excerpt': matches[0].get('excerpt', ''), 'role': role, 'timestamp': ts,
+                           'message_index': message_index}
+    return all(hit is not None for hit in found)
 
 
 def _sidecar_hit(msg: Dict[str, Any], role: str, term: str, message_index: int,
