@@ -231,3 +231,26 @@ def test_traversal_failures_arriving_as_lists_are_listed(tmp_path):
     """Failures that crossed a pool or a JSON cache arrive as lists, not ``PathFailure`` tuples."""
     warning = traversal_failed_warning([[str(tmp_path / 'd'), 'PermissionError: x']] * 2, tmp_path)
     assert warning['failures'] == [{'path': 'd', 'cause': 'PermissionError', 'reason': 'PermissionError: x'}]
+
+
+@pytest.mark.cli
+@pytest.mark.skipif(sys.platform == 'win32' or (hasattr(os, 'geteuid') and os.geteuid() == 0),
+                    reason='needs POSIX permissions that bind the current user')
+@pytest.mark.parametrize('noun', ['imports', 'metrics'])
+def test_a_real_unreadable_file_is_listed_with_its_reason_and_no_absolute_path(tmp_path, noun):
+    """A denied read's ``str(OSError)`` names the absolute file; an answer that spells files relatively
+    (imports' own spelling, metrics' base) spells it relatively in the reason too (BACK-2249)."""
+    root = tmp_path / 'proj'
+    root.mkdir()
+    (root / 'ok.py').write_text('def a():\n    return 1\n', encoding='utf-8')
+    locked = root / 'locked.py'
+    locked.write_text('x = 1\n', encoding='utf-8')
+    locked.chmod(0)
+    try:
+        result = _cli(tmp_path, f'{noun}://{root.as_posix()}', '--format', 'json')
+    finally:
+        locked.chmod(0o644)
+    assert result.stderr == ''
+    records = [r for w in json.loads(result.stdout)['meta']['warnings'] for r in w.get('failures', ())]
+    assert [(r['path'], r['cause']) for r in records] == [('locked.py', 'PermissionError')]
+    assert 'Permission denied' in records[0]['reason'] and root.as_posix() not in records[0]['reason']
