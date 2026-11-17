@@ -1970,3 +1970,14 @@ def test_each_evidence_field_left_out_of_rule_14_is_the_whole_difference(workspa
     assert (rc_a, rc_b) == (0, 0) and isinstance(doc_a, dict) and isinstance(doc_b, dict), (excluded.brief(), ignored.brief())
     assert doc_a != doc_b, f'{noun}: {names} no longer differ between ignore and --exclude; drop it from EVIDENCE_FIELDS'
     assert _without_fields(doc_a, names) == _without_fields(doc_b, names), f'{noun}: differs beyond {names}'
+
+
+def test_an_explicit_switch_overrides_its_environment_default(workspace):
+    """Rule 14 on a switch (rule 15): REVEAL_BREADCRUMBS=0 is a default, so --breadcrumbs on overrides it; the control
+    is the same environment without the switch, which prints no breadcrumbs (and REVEAL_BREADCRUMBS=1 does)."""
+    with _env(REVEAL_BREADCRUMBS='0'):
+        default, explicit = _run('proj/app.py'), _run('proj/app.py', '--breadcrumbs', 'on')
+    with _env(REVEAL_BREADCRUMBS='1'):
+        enabled = _run('proj/app.py')
+    assert 'Next:' in enabled.out and 'Next:' not in default.out, (enabled.brief(), default.brief())
+    assert explicit.rc == 0 and explicit.out == enabled.out, explicit.brief()
