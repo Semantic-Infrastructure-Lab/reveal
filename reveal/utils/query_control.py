@@ -41,7 +41,8 @@ class ScanBudget:
 
 
 # The query key behind each field, for the flag ledger (BACK-1537).
-_FIELD_KEYS = {'sort_field': 'sort', 'sort_descending': 'sort', 'limit': 'limit', 'offset': 'offset'}
+_FIELD_KEYS = {'sort_field': 'sort', 'sort_descending': 'sort', 'limit': 'limit', 'offset': 'offset',
+               'uncapped': 'limit'}
 
 
 @dataclass
@@ -53,6 +54,8 @@ class ResultControl:
         sort_descending: Sort in descending order
         limit: Maximum number of results (None = no limit)
         offset: Number of results to skip (default: 0)
+        uncapped: the request asked for every row (limit=0 on a cap whose zero is uncapped, the Caps row), so a
+            noun's default cap does not apply either; ``limit`` is then None
 
     One from ``parse_result_control`` counts its query key as used when a field is read, not
     when it is parsed: git:// parses ?limit= for every view and the file view never reads it.
@@ -61,6 +64,7 @@ class ResultControl:
     sort_descending: bool = False
     limit: Optional[int] = None
     offset: int = 0
+    uncapped: bool = False
 
     def any_set(self) -> bool:
         """Whether any control was asked for, without counting it as read (BACK-1542).
@@ -71,6 +75,7 @@ class ResultControl:
         fields = object.__getattribute__(self, '__dict__')
         return (fields.get('sort_field', type(self).sort_field) is not None
                 or fields.get('limit', type(self).limit) is not None
+                or fields.get('uncapped', type(self).uncapped)
                 or (fields.get('offset', type(self).offset) or 0) > 0)
 
     def page_start(self) -> int:
@@ -97,9 +102,12 @@ def declared_result_control(params: QueryParams) -> ResultControl:
     sort = values.get('sort')
     descending = bool(sort and sort.startswith('-'))
     field = sort[1:] if isinstance(sort, str) and sort.startswith('-') else sort
+    limit = values.get('limit')
+    declaration = params.declaration('limit') if isinstance(params, QueryParams) else None
+    uncapped = declaration is not None and limit is not None and declaration.row_cap(limit) is None
     control = ResultControl(sort_field=field,
                             sort_descending=descending,
-                            limit=values.get('limit'), offset=values.get('offset', 0))
+                            limit=None if uncapped else limit, offset=values.get('offset', 0), uncapped=uncapped)
     vars(control)['_reads'] = params._reads
     return control
 

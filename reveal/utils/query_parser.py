@@ -125,6 +125,11 @@ class QueryParams(Dict[str, Any]):
         self._transport = "typed"
         self._normalized: Dict[str, Tuple[Any, Any, Any]] = {}
 
+    def declaration(self, name: str) -> Optional['ParamSpec']:
+        """The declaration *name* was bound through, or None (not bound by a declaration, or changed since)."""
+        entry = self._normalized.get(name)
+        return entry[0] if entry else None
+
     def set_normalized(self, spec: 'ParamSpec', value: Any) -> None:
         """Remember one conversion; detect mutation without converting twice."""
         self[spec.name] = value
@@ -358,6 +363,11 @@ SHARED_CONTROL_NAMES = ('limit', 'offset', 'sort', 'where', 'match', 'detail', '
                         'until', 'against', 'view')
 
 
+# The zero policies under which a cap's 0 means every row (Caps row): 'no cap' for a row cap, 'all' for a ranking or
+# display top, 'uncapped' for Claude's pages. Any other policy (an output budget's 'empty page') keeps 0 literal.
+UNCAPPING_ZEROS = frozenset({'no cap', 'all', 'uncapped'})
+
+
 @dataclass(frozen=True)
 class ParamSpec:
     """One declared query parameter; read explicitly where its value is applied.
@@ -401,6 +411,18 @@ class ParamSpec:
         from dataclasses import replace
         object.__setattr__(self, 'legacy', tuple(entry if entry.owner else replace(entry, owner=self.name)
                                                  for entry in self.legacy))
+
+    @property
+    def zero_uncaps(self) -> bool:
+        """Whether a zero value of this cap means every row (COMMAND_MODEL Caps row: ``--limit 0`` is uncapped)."""
+        return self.zero_policy in UNCAPPING_ZEROS
+
+    def row_cap(self, value: Any) -> Optional[int]:
+        """The row cap *value* asks for: None (every row) for an absent value or a zero this cap declares uncapped,
+        else the value as an int. A default is the caller's: ``LIMIT.row_cap(query.get('limit', 50))``."""
+        if value is None or (self.zero_uncaps and int(value) == 0):
+            return None
+        return int(value)
 
     @property
     def legacy_words(self) -> Tuple[str, ...]:
