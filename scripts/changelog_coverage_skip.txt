@@ -12,3 +12,4 @@ BACK-2590  Internal V039 self-check for native Path expectations in maintainer t
 BACK-2631  Generated plugin-route admission bug introduced after v0.134.0 (d4e30de5) and fixed before release; never shipped.
 BACK-2632  Empty root Claude search rejection introduced after v0.134.0 (3c3d5b51) and fixed before release; never shipped.
 BACK-2633  Markdown link_graph alias loss introduced after v0.134.0 (77142b91) and fixed before release; never shipped.
+BACK-2661  Test harness: deep-nesting tests sweep cyclic garbage first so a foreign finalizer cannot leak a traceback into them (order-dependent flake); no user-visible change.

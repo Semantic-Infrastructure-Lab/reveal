@@ -16,15 +16,75 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ## [Unreleased]
 
-- Calls text replaces long counting rules and standing caveats with one pointer to their existing JSON fields; callees `--detail` keeps the full text. Request-specific warnings and JSON are unchanged (BACK-2599).
-
 ### Behavior changes
+
+- Every declared noun takes one vocabulary on its subcommand, its URI and `reveal.api.query` alike: `--limit/--offset`, `--sort`, `--where`, `--match`, `--detail`, `--view`, `--since/--until`, and switches as `on|off` (`--agent-help` lists the rules under "How options work"). Old spellings still answer until 1.0 with a note naming the replacement, and `reveal.api.query` now notes them as the CLI does. The entries below are the changes a script can see (BACK-2621, BACK-2654, BACK-2655).
+
+- An unknown URI key, an unknown subcommand flag, an explicit `--since`/`--until` on a noun without dates, and a bare key or `where` term on a field Claude, Git or Metrics records do not have now exit 2 naming the controls and fields the noun takes; they were warnings with exit 0, or argparse errors. Markdown, JSON and AST, whose fields come from the data, still warn, as one `unknown_filter_field` warning in `meta.warnings` (AST's was `unknown_filter_key`, Markdown's was a hint). A typed `api.query` keyword a noun does not take raises `UnsupportedOverrideError`, still a `TypeError` (BACK-2654).
+
+- A setting given two different values now exits 2 naming both, on every noun and form: a global flag against the URI (`ast://src?sort=name --sort complexity` let the URI win), a flag typed twice (`--format json --format text`, `--max-items 3 --max-items 7`), a repeated URI key, a legacy beside a current spelling. Equal values count once; filters such as `--where` and `--match` repeat and combine. Two answers in one request (`?hotspots=true&view=hotspots`, two views, a mode beside a view) also exit 2 naming both (BACK-2654, BACK-2655).
+
+- `--verbose` follows each noun's own detail control. On ast, calls (callers view), codex, contracts, json, markdown, metrics, patches, surface, trace and the Claude session overview it exits 2 naming `--detail` or its levels (it printed a "no effect" note). On Claude it is `--detail full`, so `/messages`, `/message/N` and `/exchanges` JSON carry full content. On overview, architecture, hotspots, testability, deps and pack it is a legacy word with a note, and beside an explicit `--top` it exits 2 (verbose used to win) (BACK-2654).
+
+- `limit=0` (`--limit 0`, `api.query(..., limit=0)`) on `ast://`, `git://`, `json://` and `markdown://` returned an empty page; it now returns every row, as on every other noun, and lifts AST's 200-result and each Git view's default cap. `deps` and `surface` `--top 0` (`?top=0`) now show every entry; they showed none. `--max-items 0` is still the empty output budget; for a count-only answer, page past the end with `offset` (BACK-2654).
+
+- `reveal NOUN PATH --all` now answers as `NOUN://PATH --all` on every declared noun (14 of them exited 2 "unsupported control"); a noun without a cap notes `--all` unused on both forms, and `--all` beside a different `--limit` or `--top` exits 2 naming both. `metrics PATH --all --limit N` now exits 2 as on `ast` and `calls`, and plain `metrics PATH --all` no longer carries a false "no effect" note (BACK-2654).
+
+- `--breadcrumbs`, `--fallback`, `--group`, `--snippets` and `--respect-gitignore` take `on|off`: `--group off` shows every check result, `--respect-gitignore off` includes ignored files, and `--breadcrumbs on` now overrides `REVEAL_BREADCRUMBS=0` and `display.breadcrumbs: false`. `--no-breadcrumbs`, `--no-fallback`, `--no-group`, `--no-snippets` and `--no-gitignore` still work with a note until 1.0, `-q` stays `--breadcrumbs off`, and a legacy and a current spelling with different values exit 2. The `.gitignore` hint and the `scope_hidden` `suggestion` now say `--respect-gitignore off` (BACK-2654).
+
+- A bare `--respect-gitignore` typed before the path (`reveal --respect-gitignore DIR`) now reads DIR as its value and exits 2 teaching `on|off`; it was the default and changed nothing. Put it after the path, write `--respect-gitignore=on`, or drop it (BACK-2654).
+
+- Notes, refusals and conflict errors name a flag as you typed it, short and alias spellings included: `--no-group has no effect`, `-i`, `-v`, `--lint`, `--search`, `--top` against `--limit` (they named the flag's first spelling) (BACK-2654).
+
+- Claude echoes its match terms as a JSON list on every reader, one term included (`term`, `search`, the query receipt's `contains`, `meta.workflow_selection.match`); a script that read a string reads `term[0]`. Text still prints one term as itself (BACK-2654).
+
+- `metrics` (subcommand, `metrics://`, `reveal.api.query`) takes `--view hotspots` (the ranked files as rows, capped by `--limit`), `--where` (repeatable; `min_lines`, `max_complexity` and the other thresholds are its terms), `--churn on|off`, `--merges on|off`, `--detail normal|summary` and `--code-only`; `--hotspots`, the thresholds, `--no-churn`, `no_merges` and `summary_only` still work with a note. `reveal PATH --hotspots` exits 2 and teaches `reveal metrics PATH --view hotspots`; a bad `since` date and a negative `limit`, `offset` or `top` exit 2 naming the problem (BACK-2621).
+
+- With `--format json` (or `--output json=PATH`), a usage error on a declared noun's subcommand or URI and a malformed `--output` spec now answer with the invalid-request JSON document (exit 2, the message also on stderr) instead of argparse's text usage; a malformed spec writes no file (BACK-2654).
+
+- `calls://` (and `reveal calls`) now names every file tree-sitter could read only through error recovery in a `parse_recovered` warning and exits 3, as `ast://` and `metrics://` do; scripts that took exit 0 as a complete call graph will see exit 3 on most C and C++ trees (about 27% of curl's files recover). On such a tree a name with no definition answers empty with exit 3, not exit 2 "not found", because the unread region may hold it; `?modules` is unchanged (BACK-2658).
+
+- `reveal pack --architecture`, `--focus` and `--content` (and `pack://` with `architecture=`, `focus=` or `content=`) now name a file parsed only through tree-sitter error recovery in a `parse_recovered` warning and exit 3, as `ast://` and `metrics://` do; they exited 0 and mentioned it only in the relevance advisory or the outline text. On most C and C++ trees `pack --architecture` now exits 3; a plain `reveal pack` parses nothing and is unchanged (BACK-2665).
+
+- `reveal pack --architecture` and `--focus` (and `pack://` with `architecture=`/`focus=`) now rank by the import graph even when part of it could not be read (a recovered parse, an unreadable file or directory, a lost worker), naming each loss once in `meta.warnings` with exit 3, as `overview` does. Before, any such loss discarded the whole graph and files were ranked by name heuristics with only a `relevance_warning`, which on C and C++ trees was nearly always (BACK-2666, BACK-2047).
 
 - A retired spelling's `note: ... is deprecated; use ...` line is no longer printed on stderr beside a `--format json` answer, which already carries it as a `retired_spelling` warning; text answers print it once after the answer instead of before it. A script that read the note from stderr in JSON mode reads `meta.warnings` instead (BACK-2659).
 
-- One answer on every transport. An MCP `reveal_query` JSON answer is now exactly the CLI's JSON: stderr text and `[note: ...]` lines are no longer appended after it, which made it unparseable whenever a file failed to parse; it is always one content block. Every answer built from partial input (exit 3) now says so with one `analysis_incomplete` warning on the CLI (JSON and text), `reveal.api.query` and MCP alike. A `reveal --stdin` URI line is now the same request as the direct command, with its answer and exit (an incomplete answer exited 0, a missing path 1), and the run exits with the most severe of them; `--stdin --batch` entries carry the same answer plus `exit_code`, report partial input as `incomplete`, and the batch exits with the highest entry code. Metrics names the files it could not parse, and the line where known, instead of only counting them. Unsorted file lists and capped scans now follow path order on every platform, so `imports ?scan-limit=N` keeps the same files on Linux, macOS and Windows (BACK-2650, BACK-2657, BACK-2325, BACK-2652).
+- One answer on every transport. An MCP `reveal_query` JSON answer is now exactly the CLI's JSON, always one content block: stderr text and `[note: ...]` lines are no longer appended after it, which made it unparseable whenever a file failed to parse. Every answer built from partial input (exit 3) says so with one `analysis_incomplete` warning on the CLI (JSON and text), `reveal.api.query` and MCP alike. Metrics names the files it could not parse, and the line where known, instead of only counting them (BACK-2650, BACK-2657).
+
+- A `reveal --stdin` URI line is now the same request as the direct command, with its answer and exit (an incomplete answer exited 0, a missing path 1), and the run exits with the most severe of them; `--stdin --batch` entries carry the same answer plus `exit_code`, report partial input as `incomplete`, and the batch exits with the highest entry code. Unsorted file lists and capped scans follow path order on every platform, so `imports ?scan-limit=N` keeps the same files on Linux, macOS and Windows (BACK-2650, BACK-2325, BACK-2652).
 
 - `imports` takes `--sort=-fan-in`, `--limit N`, `--detail normal|full` and `--scan-limit N` (`sort=`, `limit=`, `detail=`, `scan-limit=` in URIs and `reveal.api.query` keywords); `rank=fan-in`, `top`, `verbose` (`--verbose`) and `max_files` still work with a replaced-by note. Two views in one request (`?circular&unused`), `offset`, `where`, `match`, `kind`, `depth`, `since` or `until`, and `--verbose` with `--detail normal` now exit 2; `?unused=false` selects no view instead of exiting 3; the global `--limit` now caps a URI ranking; the `scan_capped` warning's `field` is `scan-limit`, not `max_files` (BACK-2620).
+
+- AST, Markdown, JSON, Git and Claude gain CLI/API controls shared with URI queries. Qualified inspections distinguish invalid requests (2) from source/output loss (3), preserving usable partial results. File and element JSON share an envelope: `source` identifies the file; extracted code moves to `content`. Check shows medium and above and gates on high by default. Metrics totals cover all filtered files; text renders the selected rows. Calls exposes syntax-derived parameters and import-target evidence. Python imports prefer packages over namespace candidates. Claude/Codex session readers disclose incomplete input. Pass Calls controls to query or its constructor, rather than get_structure.
+
+- Incomplete required analysis now exits 3 even when findings exist; a findings-gate match cannot hide an incomplete answer (BACK-2588, BACK-2602).
+
+- Retired spellings print a "replaced by" note naming their current replacement.
+
+- Git gains a generated CLI over its existing owners, with request/source/output exits 2/3 and source evidence across direct views. Historical semantic blame uses the selected blob; element-parser failures, decoding loss, unreadable refs and failed content searches cannot become clean absence. Canonical aggregate `limit` caps authors/buckets after counting; `scan-limit` bounds commit input, while legacy `type=` aggregate windows keep their meaning. Earlier search failures no longer contaminate healthy followups. Original semantic URI constraints are validated before typed API overrides, including AST predicates (BACK-2616, BACK-2613).
+
+- Git Python queries now bind declared controls before execution: `view`, repeated `where` and time bounds, pagination, ref, detail and merge policy reach the existing owners. Typed booleans and `merges=on/off` give an explicit positive switch; legacy numeric merges remains ownership-only. Original invalid predicates cannot be hidden by typed overrides (BACK-2616).
+
+- JSON gains a generated CLI and typed API controls using the existing loader and predicate engine. `where` filters arrays; `view` selects inspection; raw flatten text keeps canonical JSON enveloped while the legacy data-only spelling keeps its array. All direct views carry execution evidence and use usage/source-failure exits 2/3. File-only commands reject walking flags (BACK-2615).
+
+- Markdown gains a generated CLI and typed API controls over its existing operations. `where` filters frontmatter, repeated `match` terms search body text, and `view` selects links or aggregation. Listing columns use `columns` (`fields=` remains an alias); `--fields` keeps JSON projection. Every direct query view now records source decisions and exits 3 for required source loss, retaining partial evidence. Registered MCP rejects fully failed source and keeps partial answers (BACK-2614).
+
+- AST gains a generated `reveal ast PATH` command and constructor-bound typed API controls over the existing filter parser. Repeated `--where`/`where=` constraints are ANDed; `kind` and `view` select element kinds and existing views. API overrides, including zero/false, now apply after URI validation; negative page controls reject before analysis (BACK-2613).
+
+- Check now displays medium and above and gates on high by default. Low findings have one count; `--severity low` shows their rows. `--fail-on none|low|medium|high` controls the full-population gate independently of display filters and pagination; `--fail-on findings` keeps the displayed-findings gate. Incomplete analysis and required output failure still exit 3 (BACK-2602).
+
+- File outlines and element views now carry the shared JSON envelope. Extracted code is `content`; `source` identifies the file, in CLI JSON and Python `element()`. Update code-reading consumers from `result["source"]` to `result["content"]`. Element-view envelopes preserve depth and ownership warnings alongside additional coverage notes (BACK-2630). Check file/directory JSON shares `files` and `summary`; Imports analysis metadata is in `meta`, with `metadata` retained as an additive-stage alias (BACK-2601).
+
+- Python import resolution now continues past namespace-directory candidates to a regular package
+  on a later import root, and prefers packages over same-named module files in `from` imports too.
+  `reveal imports DIR` previously missed or misattributed these dependencies in monorepos. (BACK-2610)
+
+- `reveal FILE` structure views now exit 2 for invalid Office archives or notebook document shapes,
+  and 3 when required parsing, worksheet analysis or output fails; they previously exited 1.
+  `xlsx://` overviews also preserve workbook parse failures instead of reporting an empty success,
+  and oversized required sheets exit 3. Healthy empty answers, recovered file parses and display
+  cuts remain successful. (BACK-2588)
 
 ### Added
 
@@ -36,7 +96,19 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 - A warning that names five files and counts the rest (`analysis_failed`, `analysis_incomplete`, `parse_degraded`, `worker_lost` and their siblings) also carries `failures`: every file with its cause class and full reason (for a broken `.py` file in `metrics`/`hotspots`, Python's parse message and line, also on the file's row as `parse_error`), so a `--format json` answer says which files failed and why, which only the text answer's per-file stderr lines said before (BACK-2659).
 
+- `claude://` `match` repeats, and its terms must all appear per row of the answer (a message, turn, tool result, history entry, session, plan, agent or memory); one term answers as before. `pack` takes `detail=normal|full` (`--detail`), and its `verbose` notes `detail=full` (BACK-2654).
+
 ### Fixed
+
+- The file view's JSON (`reveal FILE --format json`: structure, element, metadata and typed views) and the directory tree, `--files` and `--meta` JSON now carry the `retired_spelling` warning of a retired spelling they were given, like the URI and subcommand answers (BACK-2654).
+
+- `--max-items` and `--head/--tail/--range` now restate the noun's own count of rows shown (Metrics `population.displayed_files`, Patches `displayed_groups`, Calls `?rank=callers` `top`, Testability's reported counts): `reveal metrics proj --max-items 2` showed 2 rows and said 11. When the noun's own limit and one of these both cut a list, the `truncated` warning names both: `cause` stays the cut that set `shown`, a new `causes` list names every cut, and the message gives each cut's hint. Population totals are unchanged (BACK-2653).
+
+- `--max-items` and `--head/--tail/--range` now cut `git://<repo>` and `git://<repo>@<ref>` recent commits, a `json://` array value and `patches://<path>?view=pressure`'s patch and boundary hotspots, and disclose the cut as on other nouns; they returned every row and said nothing (BACK-2667).
+
+- Over MCP, a URI answer is freed when its request ends: a `sqlite://` answer kept its connection open until a later garbage collection on another thread closed it, and the resulting `ProgrammingError` report appeared on stderr in a later, unrelated tool call (BACK-2674).
+
+- Calls text replaces long counting rules and standing caveats with one pointer to their existing JSON fields; callees `--detail` keeps the full text. Request-specific warnings and JSON are unchanged (BACK-2599).
 
 - A config problem is now part of the answer: a missing `REVEAL_CONFIG` file, a config file (or `.reveal/stats-quality.yaml`) that cannot be loaded, a value that fails the schema, a non-integer `REVEAL_C901_THRESHOLD`/`REVEAL_E501_MAX_LENGTH` or an unknown rule setting is a `config_warning` entry in `meta.warnings` of every `--format json`, `reveal.api.query` and MCP answer (MCP returns one block again), and one `warning:` line on stderr after a text answer, instead of a log line per config read that JSON never carried; `check` no longer adds its own "config ... could not be loaded" note beside it, and `reveal health` no longer calls such a check incomplete (BACK-2659).
 
@@ -105,38 +177,6 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 - `metrics` summary totals and averages now describe all analyzed files kept by the filters. Text output includes each selected file's lines and complexity, matching its displayed-row count. `--limit`, offset and summary-only output change displayed rows without changing those aggregates (BACK-2592, BACK-2628).
 
 - Python `query("calls://…", callers="NAME", depth=2)` now applies declared keyword controls before choosing a mode. Unknown keywords raise `TypeError`; pass controls to `query` or the constructor instead of `CallsAdapter.get_structure` (BACK-2608).
-
-### Behavior changes
-
-- AST, Markdown, JSON, Git and Claude gain CLI/API controls shared with URI queries. Qualified inspections distinguish invalid requests (2) from source/output loss (3), preserving usable partial results. File and element JSON share an envelope: `source` identifies the file; extracted code moves to `content`. Check shows medium and above and gates on high by default. Metrics totals cover all filtered files; text renders the selected rows. Calls exposes syntax-derived parameters and import-target evidence. Python imports prefer packages over namespace candidates. Claude/Codex session readers disclose incomplete input. Pass Calls controls to query or its constructor, rather than get_structure.
-
-- Incomplete required analysis now exits 3 even when findings exist; a findings-gate match cannot hide an incomplete answer (BACK-2588, BACK-2602).
-
-- Retired spellings print a "replaced by" note naming their current replacement.
-
-- Git gains a generated CLI over its existing owners, with request/source/output exits 2/3 and source evidence across direct views. Historical semantic blame uses the selected blob; element-parser failures, decoding loss, unreadable refs and failed content searches cannot become clean absence. Canonical aggregate `limit` caps authors/buckets after counting; `scan-limit` bounds commit input, while legacy `type=` aggregate windows keep their meaning. Earlier search failures no longer contaminate healthy followups. Original semantic URI constraints are validated before typed API overrides, including AST predicates (BACK-2616, BACK-2613).
-
-- Git Python queries now bind declared controls before execution: `view`, repeated `where` and time bounds, pagination, ref, detail and merge policy reach the existing owners. Typed booleans and `merges=on/off` give an explicit positive switch; legacy numeric merges remains ownership-only. Original invalid predicates cannot be hidden by typed overrides (BACK-2616).
-
-- JSON gains a generated CLI and typed API controls using the existing loader and predicate engine. `where` filters arrays; `view` selects inspection; raw flatten text keeps canonical JSON enveloped while the legacy data-only spelling keeps its array. All direct views carry execution evidence and use usage/source-failure exits 2/3. File-only commands reject walking flags (BACK-2615).
-
-- Markdown gains a generated CLI and typed API controls over its existing operations. `where` filters frontmatter, repeated `match` terms search body text, and `view` selects links or aggregation. Listing columns use `columns` (`fields=` remains an alias); `--fields` keeps JSON projection. Every direct query view now records source decisions and exits 3 for required source loss, retaining partial evidence. Registered MCP rejects fully failed source and keeps partial answers (BACK-2614).
-
-- AST gains a generated `reveal ast PATH` command and constructor-bound typed API controls over the existing filter parser. Repeated `--where`/`where=` constraints are ANDed; `kind` and `view` select element kinds and existing views. API overrides, including zero/false, now apply after URI validation; negative page controls reject before analysis (BACK-2613).
-
-- Check now displays medium and above and gates on high by default. Low findings have one count; `--severity low` shows their rows. `--fail-on none|low|medium|high` controls the full-population gate independently of display filters and pagination; `--fail-on findings` keeps the displayed-findings gate. Incomplete analysis and required output failure still exit 3 (BACK-2602).
-
-- File outlines and element views now carry the shared JSON envelope. Extracted code is `content`; `source` identifies the file, in CLI JSON and Python `element()`. Update code-reading consumers from `result["source"]` to `result["content"]`. Element-view envelopes preserve depth and ownership warnings alongside additional coverage notes (BACK-2630). Check file/directory JSON shares `files` and `summary`; Imports analysis metadata is in `meta`, with `metadata` retained as an additive-stage alias (BACK-2601).
-
-- Python import resolution now continues past namespace-directory candidates to a regular package
-  on a later import root, and prefers packages over same-named module files in `from` imports too.
-  `reveal imports DIR` previously missed or misattributed these dependencies in monorepos. (BACK-2610)
-
-- `reveal FILE` structure views now exit 2 for invalid Office archives or notebook document shapes,
-  and 3 when required parsing, worksheet analysis or output fails; they previously exited 1.
-  `xlsx://` overviews also preserve workbook parse failures instead of reporting an empty success,
-  and oversized required sheets exit 3. Healthy empty answers, recovered file parses and display
-  cuts remain successful. (BACK-2588)
 
 ## [0.134.0] - 2026-11-09
 
