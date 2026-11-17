@@ -167,18 +167,6 @@ RULED_EXEMPT_NOUNS = {'stats': 'rule 9: the retired stats:// scheme is deleted a
 # Cells that do not conform yet: (noun, rule) -> the behaviour observed at fac0718b. May only shrink; every
 # entry reaches zero before the cut.
 NOT_YET = {
-    ('ast', '3'): 'URI match, detail, depth, tests, since, until, against: exit 0 (bare keys become where fields); '
-                  'subcommand match, detail, depth, tests, since, until, against: argparse error; global --since, '
-                  '--until on the URI: exit 0',
-    ('json', '3'): 'URI match, kind, depth, tests, since, until, against: exit 0; subcommand the same seven: '
-                   'argparse error; global --since, --until on the URI: exit 0',
-    ('markdown', '3'): 'URI detail, kind, depth, tests, since, until, against: exit 0; subcommand the same seven: '
-                       'argparse error; global --since, --until on the URI: exit 0',
-    ('ast', '8a'): 'bare match, detail, depth, tests, since, until, against are read as where fields, exit 0 (depth '
-                   'is nesting depth, with no note)',
-    ('json', '8a'): 'bare match, kind, depth, tests, since, until, against: exit 0',
-    ('markdown', '8a'): 'bare detail, kind, depth, tests, since, until, against: exit 0',
-    ('metrics', '8b'): '?lines=5 is warned unknown and ignored; ?where=lines=5 filters (?lines>10 already filters)',
     ('calls', '20'): 'unread by the default answer, warned and exit 0: kind, external, builtins, test-framework',
     ('codex', '20'): 'unread by the default answer, warned and exit 0: since, until, key, last, tokens, goal, '
                      'matches',
@@ -190,8 +178,8 @@ NOT_YET = {
                        'include_unresolved',
 }
 
-NOT_YET_BASELINE = {'1a': 0, '1b': 0, '1c': 0, '1d': 0, '2': 0, '3': 3, '3b': 0, '4': 0, '5': 0, '6': 0,
-                    '8a': 3, '8b': 1, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 6}
+NOT_YET_BASELINE = {'1a': 0, '1b': 0, '1c': 0, '1d': 0, '2': 0, '3': 0, '3b': 0, '4': 0, '5': 0, '6': 0,
+                    '8a': 0, '8b': 0, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 6}
 
 
 # --- the fixture -------------------------------------------------------------------------------------------
@@ -717,7 +705,8 @@ def _teaches(run, noun, control):
 
 
 def probe_unsupported_controls(noun):
-    keys = {name for spec in _specs(noun) for name in (spec.name, *spec.aliases)}
+    # a shared control name a noun declares as a legacy word (AST depth) is supported until the cut (rule 8)
+    keys = {name for spec in _specs(noun) for name in (spec.name, *spec.aliases, *spec.legacy_words)}
     flags = {flag for spec in _specs(noun) for flag in (spec.cli.flags if spec.cli else ())}
     flags |= {f'--{flag}' for spec in _specs(noun) for flag, _value in spec.cli_flags}
     global_flags = {flag.option[2:]: flag for flag in FLAG_SPECS}
@@ -1505,9 +1494,7 @@ def test_cell(workspace, noun, rule):
 _OWN_UNKNOWN_KEY_WARNING: set = set()
 # A call kept for another rule: unknown keys never reach it, so it is not an unknown-key check.
 _KEPT_FOR_ANOTHER_RULE = {'codex': 'warns that full is unread outside exchanges (rule 20 applicability, BACK-2656), '
-                                   'on api.query and the adapter too, where the CLI ledger does not reach',
-                          **{noun: 'warns that a declared field written FIELD=VALUE (?lines=5) is not yet a filter '
-                                   '(rule 8b, item C); unknown keys never reach it' for noun in ('metrics', 'stats')}}
+                                   'on api.query and the adapter too, where the CLI ledger does not reach'}
 
 
 @pytest.mark.parametrize('noun', [noun for noun in NOUNS
@@ -1587,3 +1574,68 @@ def test_the_typo_warning_has_one_builder():
         for module in __import__('pkgutil').walk_packages(__import__(package, fromlist=['_']).__path__, package + '.'):
             source = inspect.getsource(__import__(module.name, fromlist=['_']))
             assert 'this may be a typo' not in source, f'{module.name} builds its own typo warning'
+
+
+# --- rule 8 (Step 4 item C): bare shared-control keys, AST's legacy depth, Metrics' FIELD=VALUE -------------------
+
+@pytest.mark.parametrize('uri,key', [('markdown://proj?kind=guide', 'kind'), ('markdown://proj?depth>1', 'depth'),
+                                     ('json://proj/rows.json?match=a', 'match'),
+                                     ('json://proj/rows.json?kind>=1', 'kind'), ('ast://proj?since=2020-01-01', 'since'),
+                                     ('ast://proj?detail=full', 'detail')])
+def test_a_bare_shared_control_name_is_never_a_field(workspace, uri, key):
+    """Rule 8a on the open-field nouns: a bare key spelling a shared control the noun does not declare exits 2,
+    naming it and teaching where=KEY for the field of that name; it used to filter on a field of that name."""
+    run = _run(uri, '--format', 'json')
+    assert run.rc == 2 and not run.out.strip(), run.brief()
+    assert run.says(f"'{key}'", 'supported controls', f'where={key}'), run.err
+
+
+def noun_of(uri):
+    return uri.partition('://')[0]
+
+
+@pytest.mark.parametrize('uri,rows', [('markdown://proj?where=kind=guide', 0), ('markdown://proj?title=Guide', 1),
+                                      ('json://proj/rows.json?where=kind=1', 0), ('json://proj/rows.json?name=a', 1)])
+def test_a_field_keeps_its_name_inside_where_and_other_bare_fields_still_filter(workspace, uri, rows):
+    """Negative controls: an explicit where on a field named like a shared control, and a bare non-control field."""
+    run = _run(uri, '--format', 'json')
+    assert run.rc == 0, run.brief()
+    answer = json.loads(run.out)
+    found = answer['value'] if noun_of(uri) == 'json' else answer['results']
+    assert len(found) == rows, answer
+
+
+DEEP = 'def flat(x):\n    return x\n\n\ndef nested(x):\n    if x:\n        for i in x:\n            if i:\n' \
+       '                return i\n    return None\n'
+
+
+@pytest.fixture
+def deep(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / 'deep.py').write_text(DEEP, encoding='utf-8')
+    return 'deep.py'
+
+
+def test_ast_depth_is_a_translated_legacy_word_of_where():
+    where = _spec_for('ast', 'where')
+    assert 'depth' in where.legacy_words and _spec_for('ast', 'depth') is where
+    row = RETIREMENTS['param:ast.depth']
+    assert row.stage == 'note' and not row.standalone and 'where=depth' in row.replacement
+
+
+@pytest.mark.parametrize('term', ['depth=0', 'depth>1', 'depth>=3', 'depth<=1'])
+def test_ast_bare_depth_answers_as_where_depth(deep, term):
+    """Rule 16 parity (JSON and text): ``?depth OP N`` is ``?where=depth OP N`` on the element's nesting-depth field,
+    with the param:ast.depth note; the filter binds on the fixture (one of two functions)."""
+    from conftest import without_retirement_notes
+    legacy, canonical = f'ast://{deep}?{term}', f'ast://{deep}?where={term}'
+    plain = _run(f'ast://{deep}', '--format', 'json')
+    new, old = _run(canonical, '--format', 'json'), _run(legacy, '--format', 'json')
+    assert new.rc == old.rc == plain.rc == 0, (new.brief(), old.brief())
+    assert json.loads(plain.out)['total_results'] == 2 and json.loads(new.out)['total_results'] == 1
+    assert 'param:ast.depth' in _retired_fields(json.loads(old.out))
+    assert not _retired_fields(json.loads(new.out))
+    assert without_retirement_notes(json.loads(old.out)) == json.loads(new.out)
+    text_old, text_new = _run(legacy), _run(canonical)
+    assert text_old.rc == text_new.rc == 0 and text_old.out == text_new.out
+    assert 'ast ?depth' in text_old.err and 'ast ?depth' not in text_new.err
