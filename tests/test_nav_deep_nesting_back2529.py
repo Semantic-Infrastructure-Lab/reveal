@@ -10,6 +10,7 @@ import gc
 import pytest
 
 from conftest import _run_reveal_direct
+from reveal.utils.threadsafe import main_thread_gc
 
 pytestmark = pytest.mark.component
 
@@ -23,6 +24,16 @@ def _nested_python(path, depth):
     return path
 
 
+def _run_deep(*args):
+    """Run reveal in-process with the heap's cyclic garbage swept first and collection held off.
+
+    The request runs at the recursion limit on purpose. In-process it shares the pytest worker's
+    heap, so a collection inside that stack would finalize garbage earlier tests left there, and a
+    finalizer's RecursionError reaches stderr through pytest's unraisable hook (BACK-2661)."""
+    with main_thread_gc():
+        return _run_reveal_direct(*args)
+
+
 def _nested_js(path, depth):
     path.write_text('function f(a) {\n  var x;\n  x = ' + 'g(' * depth + 'a' + ')' * depth
                     + ';\n  return x;\n}\n', encoding='utf-8')
@@ -34,7 +45,7 @@ def _nested_js(path, depth):
 def test_deep_nesting_is_an_analysis_failure_not_a_traceback(tmp_path, flag, lang):
     make = _nested_python if lang == 'py' else _nested_js
     source = make(tmp_path / f'deep.{lang}', DEEP)
-    result = _run_reveal_direct(str(source), 'f', flag)
+    result = _run_deep(str(source), 'f', flag)
     assert result.returncode == 3, (result.returncode, result.stderr[-500:])
     assert 'Traceback' not in result.stderr and 'RecursionError' not in result.stderr
     assert flag.split('=')[0] in result.stderr and "'f'" in result.stderr
@@ -64,7 +75,7 @@ def test_foreign_finalizer_at_depth_does_not_reach_stderr(tmp_path, lang):
     # finalized another test's garbage there; its RecursionError broke pytest's unraisable hook and
     # that traceback landed in the captured stderr (3 of 5 whole-suite runs). A fresh `reveal`
     # process with collection on every allocation finalizes nothing on this path (12 of 12 flag and
-    # language cases), so the product's answer must not depend on what else is on the heap.
+    # language cases), so the cause is the shared heap and the tests isolate it (`_run_deep`).
     make = _nested_python if lang == 'py' else _nested_js
     source = make(tmp_path / f'deep.{lang}', DEEP)
     threshold = gc.get_threshold()
@@ -72,7 +83,7 @@ def test_foreign_finalizer_at_depth_does_not_reach_stderr(tmp_path, lang):
     _ForeignGarbage()
     gc.set_threshold(1)
     try:
-        result = _run_reveal_direct(str(source), 'f', '--inputs')
+        result = _run_deep(str(source), 'f', '--inputs')
     finally:
         gc.set_threshold(*threshold)
         _ForeignGarbage.armed = False
@@ -92,7 +103,7 @@ def test_shallow_nesting_still_answers(tmp_path, flag):
 
 def test_json_format_emits_no_partial_document(tmp_path):
     source = _nested_python(tmp_path / 'deep.py', DEEP)
-    result = _run_reveal_direct(str(source), 'f', '--boundary', '--format', 'json')
+    result = _run_deep(str(source), 'f', '--boundary', '--format', 'json')
     assert result.returncode == 3
     assert result.stdout == ''
 
@@ -102,6 +113,7 @@ def test_mcp_nav_reports_a_public_failure(tmp_path):
     from reveal.mcp_server import _ToolFailure, reveal_nav
 
     source = _nested_python(tmp_path / 'deep.py', DEEP)
-    answer = reveal_nav(path=str(source), element='f', flag='boundary')
+    with main_thread_gc():
+        answer = reveal_nav(path=str(source), element='f', flag='boundary')
     assert isinstance(answer, _ToolFailure) and answer.public, answer
     assert 'nested' in str(answer) and 'Traceback' not in str(answer)
