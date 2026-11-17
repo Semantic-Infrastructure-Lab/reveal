@@ -217,7 +217,7 @@ def test_a_retired_spelling_prints_its_replacement_and_answers_like_metrics(proj
     as_old = run(*old_argv(project), '--format', 'json')
     as_new = run(*new_argv(project), '--format', 'json')
     assert as_old.returncode == as_new.returncode == 0, as_old.stderr + as_new.stderr
-    assert as_old.stderr.count(note) == 1
+    assert as_old.stderr.count(note) == 0  # the JSON carries it, below (BACK-2659)
     assert 'deprecated' not in as_new.stderr, 'the new spelling prints no note'
 
     old_doc, new_doc = json.loads(as_old.stdout), json.loads(as_new.stdout)
@@ -235,8 +235,10 @@ def test_the_hotspots_noun_prints_only_its_own_retirement_note(project):
     result = run('hotspots', str(project), '--format', 'json')
     assert result.returncode == 0, result.stderr
     assert 'stats://' not in result.stderr
-    assert [line for line in result.stderr.splitlines() if 'deprecated' in line] == [
+    text = run('hotspots', str(project))
+    assert [line for line in text.stderr.splitlines() if 'deprecated' in line] == [
         f"note: {RETIREMENTS['subcommand:hotspots'].text}"]
+    assert 'deprecated' not in result.stderr  # the JSON carries it (BACK-2659)
     assert [w['field'] for w in json.loads(result.stdout).get('meta', {}).get('warnings', [])
             if w.get('code') == 'retired_spelling'] == ['subcommand:hotspots']
 
@@ -272,5 +274,8 @@ def test_health_answers_a_retired_uri_target_and_notes_it_once(tmp_path, scheme)
     result = run('health', f'{scheme}://{tmp_path / "clean"}', '--format', 'json')
     assert result.returncode == 0, (result.stdout, result.stderr)
     assert json.loads(result.stdout)['results'][0]['outcome'] == 'ok'
-    notes = result.stderr.count('note: stats:// is deprecated; use metrics://<path> (the same answer).')
-    assert notes == (1 if scheme == 'stats' else 0)
+    # The JSON answer carries the note (BACK-2659), never stderr beside it.
+    assert 'deprecated' not in result.stderr
+    fields = [w['field'] for w in json.loads(result.stdout).get('meta', {}).get('warnings', [])
+              if w.get('code') == 'retired_spelling']
+    assert fields == (['scheme:stats'] if scheme == 'stats' else [])

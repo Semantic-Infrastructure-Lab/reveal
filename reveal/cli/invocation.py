@@ -27,7 +27,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Callable, Dict, Iterator, NamedTuple, Optional, Sequence, Tuple
 
-from ..utils.invocation_log import current_log, log_scope
+from ..utils.invocation_log import current_log, log_scope, noted_for_json
 
 
 class CommandSpec(NamedTuple):
@@ -572,10 +572,10 @@ def _shared_name_retirement(key: str) -> Optional[Retirement]:
 
 def retirement_note(key: str) -> Optional[Retirement]:
     """The one hook: consulted where each kind of spelling is parsed. Returns the table row for
-    *key*, or None when it is not retired (nothing printed). A ``note`` row prints its note to
-    stderr once per invocation (when a host asked for stderr) and joins the log that the JSON
-    ``meta.warnings`` entry is built from; ``phase7`` is only recorded; ``error`` raises
-    RetiredSpellingError."""
+    *key*, or None when it is not retired (nothing printed). A ``note`` row joins the invocation's
+    log: a JSON answer carries it as a ``meta.warnings`` entry, and otherwise its note is printed on
+    stderr once, after the answer (when a host asked for stderr; ``utils.invocation_log``);
+    ``phase7`` is only recorded; ``error`` raises RetiredSpellingError."""
     entry = RETIREMENTS.get(key) or _shared_name_retirement(key)
     if entry is None:
         return None
@@ -586,10 +586,9 @@ def retirement_note(key: str) -> Optional[Retirement]:
         return entry
     if entry.stage == 'phase7':
         log.recorded[key] = entry
-    elif key not in log.noted:
-        log.noted[key] = entry
-        if log.to_stderr:
-            print(f'note: {entry.text}', file=sys.stderr)  # boundary-ok: print -- the one retirement note
+    else:
+        # Said once, by the log: in a JSON answer's meta.warnings, else on stderr after the answer.
+        log.noted.setdefault(key, entry)
     return entry
 
 
@@ -600,11 +599,12 @@ def noted_retirements() -> Dict[str, Retirement]:
 
 
 def retirement_warnings() -> list:
-    """meta.warnings entries for noted_retirements(): code ``retired_spelling``. ``field`` is the
-    key, so two retired spellings are two entries under note_warning's (type, code, field) dedupe."""
+    """meta.warnings entries for the noted retirements, for a JSON document (which then carries the
+    note: it is not printed on stderr beside a JSON answer): code ``retired_spelling``. ``field`` is
+    the key, so two retired spellings are two entries under note_warning's (type, code, field) dedupe."""
     return [{'type': 'retired_spelling', 'code': 'retired_spelling', 'message': entry.text, 'field': key, 'old': entry.old,
              'replacement': entry.replacement, 'stage': entry.stage}
-            for key, entry in noted_retirements().items()]
+            for key, entry in noted_for_json().items()]
 
 
 _QUERY_OPERATOR = re.compile(r'!=|~=|>=|<=|=|>|<')

@@ -40,7 +40,8 @@ def _same(path, element, old, new, extra=()):
             assert before.stdout == after.stdout
         from reveal.cli.invocation import RETIREMENTS
         correction = f"note: {RETIREMENTS['flag:' + old].text}\n"
-        assert before.stderr.count(correction) == 1
+        # Said once: in the JSON answer's meta.warnings, or on stderr after a text answer (BACK-2659).
+        assert before.stderr.count(correction) == (0 if fmt == 'json' else 1)
         assert before.stderr.replace(correction, '', 1) == after.stderr
         assert 'deprecated' not in after.stderr
 
@@ -129,7 +130,7 @@ def test_empty_is_success_and_legacy_names_report_one_correction(project, old, n
     notes = [w for w in json.loads(result.stdout)['meta']['warnings'] if w['type'] == 'retired_spelling']
     assert len(notes) == 1 and notes[0]['old'] == old
     assert '--effects' in notes[0]['replacement']
-    assert result.stderr.count('deprecated') == 1
+    assert result.stderr.count('deprecated') == 0  # the JSON carries it (BACK-2659)
 
 
 def test_legacy_boundary_depth_policy_remains_unmodified(project):

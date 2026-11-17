@@ -112,7 +112,8 @@ def test_callers_answers_exactly_like_target(project, extra):
     assert new_json == old_json
     assert new_json['type'] == 'calls_query' and new_json['total_callers'] == 2
     note = 'note: calls ?target= (--target) is deprecated; use ?callers=FUNC (--callers FUNC), the same answer.\n'
-    assert old.stderr == note + new.stderr
+    assert note.strip() == f"note: {[w for w in warnings if w.get('code') == 'retired_spelling'][0]['message']}"
+    assert old.stderr == new.stderr  # the JSON carries the note (BACK-2659)
 
 
 def test_callers_subcommand_flag_equals_the_uri(project):

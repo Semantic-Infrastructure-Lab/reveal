@@ -36,7 +36,9 @@ def test_search_alias_names_replacement_and_preserves_json(source, spelling):
     (legacy_doc, legacy_retired), (current_doc, current_retired) = _answer(legacy.stdout), _answer(current.stdout)
     assert legacy_doc == current_doc
     assert legacy_retired == ['flag:--search'] and current_retired == []
-    assert 'deprecated' in legacy.stderr and '--name' in legacy.stderr
+    assert 'deprecated' not in legacy.stderr  # the JSON carries the note (BACK-2659)
+    assert [w['replacement'] for w in json.loads(legacy.stdout)['meta']['warnings']
+            if w.get('code') == 'retired_spelling'] == ['--name PATTERN (regex)']
     assert 'deprecated' not in current.stderr
 
 
@@ -55,7 +57,7 @@ def test_file_check_alias_names_replacement_and_preserves_findings(source, has_i
     assert legacy_retired == ['flag:--check'] and current_retired == []
     if has_issue:
         assert 'B001' in legacy.stdout
-    assert 'deprecated' in legacy.stderr and 'reveal check' in legacy.stderr
+    assert 'deprecated' not in legacy.stderr  # the JSON carries the note (BACK-2659)
     assert 'deprecated' not in current.stderr
 
 

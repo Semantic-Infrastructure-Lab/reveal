@@ -82,7 +82,7 @@ def test_testability_prints_its_replacement_once_and_the_new_spelling_prints_non
     old = run(f'testability://{repo}', '--format', 'json')
     new = run(f'patches://{repo}?view=pressure', '--format', 'json')
     assert old.returncode == new.returncode == 0, old.stderr + new.stderr
-    assert old.stderr.count(NOTE) == 1
+    assert old.stderr.count(NOTE) == 0  # the JSON carries it, below (BACK-2659)
     assert 'deprecated' not in new.stderr
     retirement = [w for w in json.loads(old.stdout)['meta']['warnings'] if w.get('code') == 'retired_spelling']
     assert [(w['old'], w['stage']) for w in retirement] == [('testability://', 'note')]

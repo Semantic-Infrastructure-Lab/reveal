@@ -95,8 +95,9 @@ def test_a_retired_spelling_prints_one_note_and_the_answer_is_unchanged(monkeypa
     as_json = _run_reveal_direct(*argv, '--format', 'json')
     as_text = _run_reveal_direct(*argv)
 
-    # Exactly one note on stderr, in either format; the exit code and the answer do not move.
-    assert _notes(as_json.stderr, text) == 1
+    # Said exactly once: in the JSON answer's meta.warnings (never also on stderr beside it, BACK-2659),
+    # or on stderr after a text answer; the exit code and the answer do not move.
+    assert _notes(as_json.stderr, text) == 0
     assert _notes(as_text.stderr, text) == 1
     assert as_json.returncode == base_json.returncode
     assert as_text.returncode == base_text.returncode
@@ -150,16 +151,19 @@ def test_an_operator_spells_the_parameter_before_it():
 def test_a_repeated_spelling_notes_once_per_invocation(monkeypatch, source):
     text = _retire(monkeypatch, 'param:ast.name', 'ast://?name=')
     result = _run_reveal_direct(f'ast://{source}?name=auth*&name=gate*', '--format', 'json')
-    assert _notes(result.stderr, text) == 1
+    assert _notes(result.stderr, text) == 0
     assert len(_warnings(json.loads(result.stdout))) == 1
+    assert _notes(_run_reveal_direct(f'ast://{source}?name=auth*&name=gate*').stderr, text) == 1
 
 
 def test_two_retired_spellings_are_two_notes_and_two_warnings(monkeypatch, source):
     one = _retire(monkeypatch, 'param:ast.name', 'ast://?name=', 'A')
     two = _retire(monkeypatch, 'value:ast.kind=function', 'ast://?kind=function', 'B')
     result = _run_reveal_direct(f'ast://{source}?kind=function&name=auth*', '--format', 'json')
-    assert _notes(result.stderr, one) == _notes(result.stderr, two) == 1
+    assert _notes(result.stderr, one) == _notes(result.stderr, two) == 0
     assert sorted(w['replacement'] for w in _warnings(json.loads(result.stdout))) == ['A', 'B']
+    text = _run_reveal_direct(f'ast://{source}?kind=function&name=auth*')
+    assert _notes(text.stderr, one) == _notes(text.stderr, two) == 1
 
 
 def test_phase7_is_recorded_and_prints_nothing(monkeypatch, source):
@@ -321,7 +325,7 @@ def test_every_production_row_is_exercised_and_prints_once(source):
             continue  # no answer to note on: the error-stage test below runs it
         result = _run_reveal_direct(*argv(str(source)), '--format', 'json')
         text = RETIREMENTS[key].text
-        assert _notes(result.stderr, text) == 1, (key, result.stderr)
+        assert _notes(result.stderr, text) == 0, (key, result.stderr)  # the JSON carries it (BACK-2659)
         expected = [ALSO_NOTED[key], key] if key in ALSO_NOTED else [key]
         assert sorted(w['field'] for w in _warnings(json.loads(result.stdout))) == sorted(expected)
 
@@ -419,7 +423,7 @@ def test_declared_alias_flag_notes_the_spelling_used(monkeypatch, source):
     alias = _run_reveal_direct('ast', str(source), '--type', 'function', '--format', 'json')
     canonical = _run_reveal_direct('ast', str(source), '--kind', 'function', '--format', 'json')
     assert alias.returncode == canonical.returncode == 0
-    assert _notes(alias.stderr, text) == 1
+    assert _notes(alias.stderr, text) == 0  # the JSON carries it (BACK-2659)
     assert not _warnings(json.loads(canonical.stdout))
     assert _warnings(json.loads(alias.stdout))[0]['field'] == 'param:ast.type'
     assert _without_retirement_warning(json.loads(alias.stdout)) == _without_retirement_warning(json.loads(canonical.stdout))

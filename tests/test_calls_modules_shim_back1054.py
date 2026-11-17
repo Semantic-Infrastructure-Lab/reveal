@@ -204,8 +204,8 @@ def test_both_spellings_answer_the_same_and_print_the_note(fx2):
     cli, cli_doc = _json('calls', str(fx2), '--modules')
     for run, doc in ((uri, uri_doc), (cli, cli_doc)):
         assert run.returncode == 0, run.stderr
-        assert run.stderr.count('deprecated') == 1, run.stderr
-        assert 'imports://<path>?importers' in run.stderr
+        assert run.stderr.count('deprecated') == 0, run.stderr  # the JSON carries the note (BACK-2659)
+        assert 'imports://<path>?importers' in _retired(doc)[0]['message']
         assert [w['field'] for w in _retired(doc)] == ['param:calls.modules']
     strip = lambda doc: {k: v for k, v in doc.items() if k != 'meta'}  # noqa: E731
     assert strip(uri_doc) == {**strip(cli_doc), 'source': uri_doc['source']}
@@ -216,9 +216,9 @@ def test_external_prints_its_own_note(tmp_path):
     root = _write(tmp_path / 'proj', OUTSIDE)
     run, doc = _json(f'calls://{(root / "pkg").as_posix()}?modules&external')
     assert run.returncode == 0, run.stderr
-    assert run.stderr.count('deprecated') == 2
+    assert run.stderr.count('deprecated') == 0  # the JSON carries both notes (BACK-2659)
     assert [w['field'] for w in _retired(doc)] == ['param:calls.modules', 'param:calls.external']
-    assert 'scope=root' in run.stderr
+    assert 'scope=root' in _retired(doc)[1]['message']
 
 
 def test_other_calls_modes_print_no_note_and_keep_their_answer(fx2):

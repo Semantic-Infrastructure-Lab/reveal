@@ -74,7 +74,7 @@ def test_a_retired_spelling_notes_once_and_answers_as_before(project, monkeypatc
     noted, noted_doc = _json(*argv)
     text = run(*argv, '--no-gitignore')
     for key in keys:
-        assert noted.stderr.count(f'note: {RETIREMENTS[key].text}') == 1, (key, noted.stderr)
+        assert noted.stderr.count(f'note: {RETIREMENTS[key].text}') == 0, (key, noted.stderr)  # in the JSON (BACK-2659)
         assert text.stderr.count(f'note: {RETIREMENTS[key].text}') == 1, (key, text.stderr)
     assert sorted(w['field'] for w in _retired(noted_doc)) == sorted(keys)
     for key in ROWS:

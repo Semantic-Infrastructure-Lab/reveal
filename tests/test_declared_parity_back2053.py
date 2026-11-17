@@ -195,12 +195,23 @@ def without_architecture_note(noun, answer, spelling):
     return result
 
 
-def parity_stderr(noun, stderr, spelling, *, noted=True):
+def _carries_retirement(stdout):
+    """A JSON answer that carries the retired_spelling entry: then the note is not also on stderr (BACK-2659)."""
+    try:
+        document = json.loads(stdout)
+    except ValueError:
+        return False
+    warnings = (document.get('meta') or {}).get('warnings') or [] if isinstance(document, dict) else []
+    return any(isinstance(w, dict) and w.get('code') == 'retired_spelling' for w in warnings)
+
+
+def parity_stderr(noun, stderr, spelling, *, noted=True, stdout=''):
     if noun != 'architecture':
         return stderr
     line = f"note: {architecture_retirement(spelling)['message']}\n"
-    assert stderr.count(line) == int(noted)
-    return stderr.replace(line, '', 1) if noted else stderr
+    on_stderr = noted and not _carries_retirement(stdout)
+    assert stderr.count(line) == int(on_stderr)
+    return stderr.replace(line, '', 1) if on_stderr else stderr
 
 
 def assert_equal_stdout(noun, left, right):
@@ -239,7 +250,7 @@ def test_json_answers_match(project, noun, provenance):
         assert left['execution']['command'].startswith(f'reveal {noun} ')
         assert right['execution']['command'].startswith(f'reveal {noun}://')
     assert_equal_answers(noun, left, right)
-    assert parity_stderr(noun, a.stderr, 'cli') == parity_stderr(noun, b.stderr, 'uri')
+    assert parity_stderr(noun, a.stderr, 'cli', stdout=a.stdout) == parity_stderr(noun, b.stderr, 'uri', stdout=b.stdout)
 
 
 @pytest.mark.parametrize('noun', NOUNS)
@@ -248,7 +259,7 @@ def test_text_output_matches(project, noun):
     assert a.returncode == b.returncode == 0, (a.stderr, b.stderr)
     assert a.stdout.strip()
     assert_equal_stdout(noun, a.stdout, b.stdout)
-    assert parity_stderr(noun, a.stderr, 'cli') == parity_stderr(noun, b.stderr, 'uri')
+    assert parity_stderr(noun, a.stderr, 'cli', stdout=a.stdout) == parity_stderr(noun, b.stderr, 'uri', stdout=b.stdout)
 
 
 @pytest.mark.parametrize('noun', NOUNS)
@@ -258,11 +269,11 @@ def test_requested_artifact_equals_the_primary_json(project, tmp_path, noun):
         artifact = tmp_path / f'{spelling}.json'
         result = run(noun, spelling, '--output', f'json={artifact}')
         assert result.returncode == 0, result.stderr
-        parity_stderr(noun, result.stderr, spelling)
+        parity_stderr(noun, result.stderr, spelling, stdout=result.stdout)
         docs[spelling] = json.loads(artifact.read_text(encoding='utf-8'))
         primary = run(noun, spelling, '--format', 'json')
         assert primary.returncode == 0, primary.stderr
-        parity_stderr(noun, primary.stderr, spelling)
+        parity_stderr(noun, primary.stderr, spelling, stdout=primary.stdout)
         assert docs[spelling] == json.loads(primary.stdout)
     assert_equal_answers(noun, docs['cli'], docs['uri'])
 
@@ -274,7 +285,7 @@ def test_failed_artifact_write_keeps_the_answer_and_exits_three(project, tmp_pat
     b = run(noun, 'uri', '--also-json', str(tmp_path))
     assert a.returncode == b.returncode == 3, (a.stderr, b.stderr)
     assert a.stdout == b.stdout and a.stdout.strip()
-    assert parity_stderr(noun, a.stderr, 'cli') == parity_stderr(noun, b.stderr, 'uri')
+    assert parity_stderr(noun, a.stderr, 'cli', stdout=a.stdout) == parity_stderr(noun, b.stderr, 'uri', stdout=b.stdout)
     assert 'artifact' in a.stderr.lower()
     assert 'Traceback' not in a.stderr
 
@@ -287,7 +298,7 @@ def test_missing_resource_is_rejected_alike(project, noun, fmt):
     b = run(noun, 'uri', '--format', fmt, resource=resource)
     assert a.returncode == b.returncode == 2, (a.stderr, b.stderr)
     assert_equal_stdout(noun, a.stdout, b.stdout)
-    assert parity_stderr(noun, a.stderr, 'cli') == parity_stderr(noun, b.stderr, 'uri')
+    assert parity_stderr(noun, a.stderr, 'cli', stdout=a.stdout) == parity_stderr(noun, b.stderr, 'uri', stdout=b.stdout)
 
 
 @pytest.mark.parametrize('gate', ['findings', 'none'])
@@ -315,10 +326,11 @@ def test_fail_on_means_the_same_before_after_and_on_a_uri(project, noun, gate):
     assert_equal_stdout(noun, runs['after'].stdout, runs['uri'].stdout)
     if expected == 2:
         assert runs['after'].stderr == runs['before'].stderr
-        assert parity_stderr(noun, runs['after'].stderr, 'cli') == parity_stderr(
-            noun, runs['uri'].stderr, 'uri', noted=noun != 'architecture')
+        assert parity_stderr(noun, runs['after'].stderr, 'cli', stdout=runs['after'].stdout) == parity_stderr(
+            noun, runs['uri'].stderr, 'uri', noted=noun != 'architecture', stdout=runs['uri'].stdout)
     else:
-        assert parity_stderr(noun, runs['after'].stderr, 'cli') == parity_stderr(noun, runs['uri'].stderr, 'uri')
+        assert parity_stderr(noun, runs['after'].stderr, 'cli', stdout=runs['after'].stdout) == parity_stderr(
+            noun, runs['uri'].stderr, 'uri', stdout=runs['uri'].stdout)
     if expected == 2:
         assert 'not supported' in runs['uri'].stderr
 
@@ -356,8 +368,8 @@ def test_option_values_are_read_alike(project, noun, flags):
     else:
         assert a.returncode == 0 and a.stdout.strip()
         if noun == 'architecture':
-            parity_stderr(noun, a.stderr, 'cli')
-            parity_stderr(noun, b.stderr, 'uri')
+            parity_stderr(noun, a.stderr, 'cli', stdout=a.stdout)
+            parity_stderr(noun, b.stderr, 'uri', stdout=b.stdout)
 
 
 @pytest.mark.parametrize('noun', NOUNS)
@@ -404,6 +416,9 @@ def test_a_retired_nouns_spellings_differ_only_by_their_own_note(project, monkey
         doc['meta']['warnings'] = [w for w in warnings if w.get('code') != 'retired_spelling']
     assert fields == [[f'subcommand:{noun}'], [f'scheme:{noun}']]
     assert_equal_answers(noun, left, right)
+    # The JSON answers carry the notes (fields above), so neither is also on stderr (BACK-2659); text prints each.
+    assert [[line for line in r.stderr.splitlines() if 'deprecated' in line] for r in (a, b)] == [[], []]
+    a, b = run(noun, 'cli'), run(noun, 'uri')
     notes = [[line for line in r.stderr.splitlines() if 'deprecated' in line] for r in (a, b)]
     assert notes == [[f'note: {RETIREMENTS[f"subcommand:{noun}"].text}'], [f'note: {RETIREMENTS[f"scheme:{noun}"].text}']]
 

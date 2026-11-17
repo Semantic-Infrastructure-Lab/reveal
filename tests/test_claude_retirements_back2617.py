@@ -40,7 +40,7 @@ def test_retirement_adds_exactly_one_notice_and_keeps_the_reader_answer(transcri
     key = 'param:claude.' + name
     entry = RETIREMENTS[key]
     assert records[0]['field'] == key and records[0]['message'] == entry.text
-    assert result.stderr == 'note: ' + entry.text + '\n'
+    assert result.stderr == ''  # the JSON carries the note (BACK-2659)
     restored = copy.deepcopy(answer)
     restored['meta']['warnings'].remove(records[0])
     assert restored == expected

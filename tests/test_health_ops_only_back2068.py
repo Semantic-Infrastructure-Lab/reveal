@@ -26,7 +26,7 @@ def test_the_row_names_check_and_the_ops_targets():
 def test_a_code_target_prints_one_note_and_carries_one_warning(tmp_path):
     (tmp_path / 'a.py').write_text('x = 1\n', encoding='utf-8')
     result = run('health', str(tmp_path), '--format', 'json')
-    assert result.stderr.count(f'note: {RETIREMENTS[KEY].text}') == 1, result.stderr
+    assert result.stderr.count(f'note: {RETIREMENTS[KEY].text}') == 0, result.stderr  # in the JSON (BACK-2659)
     assert [w['field'] for w in _retired(json.loads(result.stdout))] == [KEY]
 
 

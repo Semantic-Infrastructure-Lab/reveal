@@ -219,9 +219,11 @@ def _assert_runs_as_written(harness, query, output_type, retired_note=None):
     argv = _without_format(_argv(query))  # the JSON run replaces the recipe's format: one --format (BACK-2654)
     code, out, err, _ = harness.run_subcommand(argv[0], *argv[1:], '--format', 'json')
     if retired_note is not None:
-        lines = err.splitlines()
-        assert lines.count(retired_note) == 1, f"{query}: expected {retired_note!r} once in {lines[:3]}"
-        err = '\n'.join(line for line in lines if line != retired_note)
+        # The JSON answer carries the note, and it is not also printed on stderr (BACK-2659).
+        assert retired_note not in err.splitlines(), f"{query}: {retired_note!r} on stderr beside JSON"
+        carried = [w.get('message') for w in (json.loads(out).get('meta') or {}).get('warnings') or []
+                   if isinstance(w, dict) and w.get('code') == 'retired_spelling']
+        assert carried.count(retired_note.removeprefix('note: ')) == 1, f"{query}: expected {retired_note!r} in {carried}"
     problems = [line for line in err.splitlines()
                 if PROBLEM_LINE.search(line) and not any(n in line for n in ENVIRONMENT_NOISE)]
     assert not problems, f"{query}: stderr {problems[:3]}"

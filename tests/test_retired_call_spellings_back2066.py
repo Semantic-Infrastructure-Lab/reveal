@@ -114,8 +114,8 @@ def test_a_retired_call_spelling_prints_one_note_and_keeps_its_answer(monkeypatc
 
     # One note and nothing else deprecated: reveal trace is not also noted as trace://.
     assert text_run.stderr.count(f'note: {text}') == 1, text_run.stderr
-    assert json_run.stderr.count(f'note: {text}') == 1, json_run.stderr
-    assert text_run.stderr.count('deprecated') == json_run.stderr.count('deprecated') == 1
+    assert json_run.stderr.count('deprecated') == 0, json_run.stderr  # the JSON carries it (BACK-2659)
+    assert text_run.stderr.count('deprecated') == 1
     assert [w['field'] for w in _retired(json.loads(json_run.stdout))] == [key]
 
     with monkeypatch.context() as m:
@@ -155,7 +155,7 @@ def test_depends_root_notes_its_own_scheme_not_the_calls_parameter(project):
     note is the scheme's."""
     result = run(f'depends://{project}?root={project}', '--format', 'json')
     assert [w['field'] for w in _retired(json.loads(result.stdout))] == ['scheme:depends']
-    assert result.stderr.count('deprecated') == 1 and 'calls ?root=' not in result.stderr
+    assert 'deprecated' not in result.stderr  # the JSON carries the one note (BACK-2659)
 
 
 @pytest.mark.parametrize('case', CASES)

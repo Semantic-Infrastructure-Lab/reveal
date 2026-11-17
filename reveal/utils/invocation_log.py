@@ -29,6 +29,7 @@ class InvocationLog:
         self.recorded: Dict[str, Any] = {}   # phase7-stage retired spellings, recorded only
         self.warnings: Dict[Tuple[str, str], Dict[str, Any]] = {}  # meta.warnings entries, by (code, message)
         self.attached: set = set()           # keys of warnings some JSON document carried
+        self.notes_attached: set = set()     # keys of retired spellings some JSON document carried
         self.json_answer = False             # the answer is a JSON document (CLI --format json)
 
 
@@ -56,6 +57,8 @@ def log_scope(to_stderr: bool = True) -> Iterator[InvocationLog]:
     finally:
         _LOG.reset(token)
         if log.to_stderr:
+            for note in unreported_notes(log):
+                print(f'note: {note.text}', file=sys.stderr)  # boundary-ok: print -- the one retirement note, when no JSON answer carried it
             for entry in unreported_warnings(log):
                 print(f"warning: {entry['message']}", file=sys.stderr)  # boundary-ok: print -- the one stderr line of an invocation warning no JSON answer carried
 
@@ -86,6 +89,20 @@ def unreported_warnings(log: Optional[InvocationLog] = None) -> List[Dict[str, A
     if log is None:
         return []
     return [entry for key, entry in log.warnings.items() if not (log.json_answer and key in log.attached)]
+
+
+def noted_for_json() -> Dict[str, Any]:
+    """The note-stage retired spellings, by key, for a JSON document; each is then counted as carried."""
+    log = _LOG.get()
+    if log is None:
+        return {}
+    log.notes_attached.update(log.noted)
+    return dict(log.noted)
+
+
+def unreported_notes(log: InvocationLog) -> List[Any]:
+    """The retired spellings the answer did not carry (as ``unreported_warnings``)."""
+    return [note for key, note in log.noted.items() if not (log.json_answer and key in log.notes_attached)]
 
 
 def answer_is_json(is_json: bool) -> None:

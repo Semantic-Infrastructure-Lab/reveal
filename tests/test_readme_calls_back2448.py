@@ -77,7 +77,7 @@ def _answer(harness, query):
     assert output.strip(), 'legacy ranking printed nothing'
     keys = ('param:calls.rank', 'param:calls.top')
     expected = [RETIREMENTS[key] for key in keys]
-    assert error.splitlines() == [f'note: {row.text}' for row in expected]
+    assert 'deprecated' not in error  # the JSON carries both notes, checked below (BACK-2659)
     answer = json.loads(output)
     notes = [w for w in answer['meta']['warnings'] if w.get('code') == 'retired_spelling']
     assert [(w['field'], w['replacement']) for w in notes] == [

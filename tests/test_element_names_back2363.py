@@ -46,7 +46,7 @@ def test_new_and_retired_names_have_identical_complete_answers(path, old, positi
     legacy = run(path.as_posix(), *positionals, '--' + old, *extra, '--format', 'json')
     assert legacy.returncode == canonical.returncode
     assert without_note(json.loads(legacy.stdout), old) == answer
-    assert legacy.stderr.count(f'--{old} is deprecated; use --{NAMES[old]}.') == 1
+    assert 'deprecated' not in legacy.stderr  # the JSON carries the note (BACK-2659)
 
 
 @pytest.fixture
@@ -108,7 +108,7 @@ def test_callsites_equals_range_and_retired_equals_spelling(source):
     answer = json.loads(current.stdout)
     assert (answer['meta']['from_line'], answer['meta']['to_line']) == (3, 3)
     assert without_note(json.loads(old.stdout), 'calls') == answer
-    assert old.stderr.count('--calls is deprecated; use --callsites.') == 1
+    assert 'deprecated' not in old.stderr  # the JSON carries the note (BACK-2659)
 
 
 @pytest.mark.parametrize('abbreviation,old', [('mutation', 'mutations'), ('writ', 'writes')])
@@ -118,7 +118,7 @@ def test_abbreviated_retired_flags_cannot_bypass_notes_or_cut(source, abbreviati
     key = 'flag:--' + old
     entry = RETIREMENTS[key]
     response = run(source, 'extract', '--' + abbreviation, '--format', 'json')
-    assert response.returncode == 0 and response.stderr.count(entry.text) == 1
+    assert response.returncode == 0 and response.stderr.count(entry.text) == 0  # the JSON carries it (BACK-2659)
     without_note(json.loads(response.stdout), old)
     monkeypatch.setitem(RETIREMENTS, key, Retirement(entry.old, entry.replacement, 'error'))
     rejected = run(source, 'extract', '--' + abbreviation)

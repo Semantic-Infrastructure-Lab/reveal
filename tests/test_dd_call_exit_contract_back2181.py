@@ -141,7 +141,7 @@ def test_depends_json_exits_0_with_the_partial_verdict_in_meta_warnings(partial)
     assert sorted(d['file'] for d in doc['dependents']) == ['src/b.js', 'src/bad.js']
     assert {'partial_parse', 'retired_spelling'} <= _warning_types(doc)
     assert 'parsed with errors' in doc['warning']
-    assert result.stderr.count(NOTE) == 1
+    assert result.stderr.count(NOTE) == 0  # the JSON carries it (retired_spelling above; BACK-2659)
 
 
 def test_depends_directory_json_exits_0_with_its_shape(partial):

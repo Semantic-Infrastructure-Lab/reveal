@@ -36,9 +36,9 @@ def test_old_navigation_answers_canonically_and_corrects_once(source, old, new, 
     assert old_answer['meta']['flag'] == new_answer['meta']['flag']
     warnings = old_answer['meta']['warnings']
     assert [w['field'] for w in warnings if w['type'] == 'retired_spelling'] == [field]
-    assert old_run.stderr.count('deprecated') == 1
+    assert old_run.stderr.count('deprecated') == 0  # the JSON carries the note (BACK-2659)
     if old == '--flowto':
-        assert 'reachability verdict is retired' in old_run.stderr
+        assert 'reachability verdict is retired' in [w for w in warnings if w['type'] == 'retired_spelling'][0]['message']
         assert 'BLOCKED' not in old_run.stdout
 
 
