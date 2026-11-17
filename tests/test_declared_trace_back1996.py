@@ -223,7 +223,10 @@ def test_transport_noops_and_explicit_exclusions(project):
     for flags in (['--verbose'], ['--all', '--verbose']):
         rejected = run(*requests(project)[1], *flags)
         assert rejected.returncode == 2 and "'detail'" in rejected.stderr and not rejected.stdout
-    assert run(*requests(project)[0], '--all').returncode == 2
+    # BACK-2654 item 1c: the subcommand takes the global --all as the URI form does (it used to exit 2): trace declares
+    # no --all, so it is the same no-op on both forms
+    typed = run(*requests(project)[0], '--all')
+    assert typed.returncode == 0 and typed.stdout == shown.stdout
     (project / 'hidden.py').write_text('def external_api():\n    return 1\n', encoding='utf-8')
     for argv in requests(project):
         included = run(*argv, '--format', 'json')

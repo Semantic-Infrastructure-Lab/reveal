@@ -191,7 +191,15 @@ def test_verbose_lifts_caps_but_all_preserves_explicit_top(project):
     # BACK-2654 rule 1: --all sets top too, so beside ?top=1 it is a conflict (the URI's top used to win).
     capped = run('hotspots://proj?top=1', '--all', '--format', 'json')
     assert capped.returncode == 2 and '--all conflicts with top=1' in capped.stderr
-    assert run('hotspots', 'proj', '--all').returncode == 2
+    # BACK-2654 item 1c: the subcommand takes the global --all as the URI form does (it used to exit 2), and beside a
+    # different --top it is the same conflict
+    typed_all = run('hotspots', 'proj', '--all', '--format', 'json')
+    uri_all = run('hotspots://proj', '--all', '--format', 'json')
+    assert typed_all.returncode == uri_all.returncode == 0
+    equal_answers(json.loads(typed_all.stdout), json.loads(uri_all.stdout))
+    assert len(json.loads(typed_all.stdout)['file_hotspots']) == 13
+    typed_capped = run('hotspots', 'proj', '--top', '1', '--all')
+    assert typed_capped.returncode == 2 and '--top conflicts with --all' in typed_capped.stderr
 
 
 @pytest.mark.parametrize('transport', ['cli', 'uri'])

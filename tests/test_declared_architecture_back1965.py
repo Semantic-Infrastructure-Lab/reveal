@@ -234,11 +234,7 @@ def test_diff_actual_scope_and_fast_proof(project, flags):
             assert left['analysis']['basis'] == 'identical_tree'
 
 
-def test_all_keeps_explicit_cli_boundary_and_expands_uri_map(project):
-    rejected = run('architecture', 'proj', '--all')
-    assert rejected.returncode == 2 and not rejected.stdout
-    # BACK-2654 rule 3: the unknown flag gets the teaching (supported controls), not argparse's bare error.
-    assert "unsupported control '--all'; supported controls: top, " in rejected.stderr
+def test_all_expands_the_map_alike_on_both_forms(project):
     for number in range(6):
         folder = project / f'component{number}'
         folder.mkdir()
@@ -248,6 +244,10 @@ def test_all_keeps_explicit_cli_boundary_and_expands_uri_map(project):
     assert ordinary.returncode == expanded.returncode == 0
     assert json.loads(ordinary.stdout)['map']['components']['returned'] == 5
     assert json.loads(expanded.stdout)['map']['components']['returned'] == 7
+    # BACK-2654 item 1c: the subcommand takes the global --all as the URI form does (it used to exit 2)
+    typed = run('architecture', 'proj', '--all', '--format', 'json')
+    assert typed.returncode == 0, typed.stderr
+    equal_answers(json.loads(typed.stdout), json.loads(expanded.stdout))
 
 
 @pytest.mark.parametrize('mode', ['ordinary', 'diff'])

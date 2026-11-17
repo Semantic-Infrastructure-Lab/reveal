@@ -273,7 +273,11 @@ def test_scope_ignores_and_excludes_match(project):
 
 
 def test_existing_presentation_boundaries_and_sibling_surface(project):
-    assert run('deps', 'proj', '--all').returncode == 2
+    # BACK-2654 item 1c: the global --all reaches the subcommand as it reaches the URI form (it used to exit 2)
+    typed_all = run('deps', 'proj', '--all', '--format', 'json')
+    uri_all = run('deps://proj', '--all', '--format', 'json')
+    assert typed_all.returncode == uri_all.returncode == 0, (typed_all.stderr, uri_all.stderr)
+    equal_answers(json.loads(typed_all.stdout), json.loads(uri_all.stdout))
     full = run('deps://proj?top=0', '--all')
     # --verbose is the legacy word of an uncapped top (BACK-2654 note #17): beside a different top it conflicts
     verbose = run('deps', 'proj', '--verbose')
