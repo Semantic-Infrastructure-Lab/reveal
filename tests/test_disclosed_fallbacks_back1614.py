@@ -50,9 +50,17 @@ def test_grep_names_a_file_whose_structure_failed(tmp_path, monkeypatch, caplog)
 
 
 def test_health_targets_of_the_wrong_shape_are_named(tmp_path, monkeypatch, caplog):
+    """The config schema owns `health:` since BACK-2659: it drops the wrong shape and names it, in
+    the answer (config_schema_invalid, key `health`) and, outside an invocation, in the log."""
+    from reveal.utils.invocation_log import log_scope
     (tmp_path / '.reveal.yaml').write_text('health: [not, a, mapping]\n', encoding='utf-8')
     monkeypatch.chdir(tmp_path)
-    with caplog.at_level(logging.WARNING, logger='reveal.cli.commands.health'):
+    with caplog.at_level(logging.WARNING, logger='reveal.config'):
         targets = health._detect_targets()
     assert targets == ['.']  # fell through to the default
-    assert '.reveal.yaml health.targets ignored' in caplog.text
+    assert 'Invalid config in' in caplog.text and '.reveal.yaml' in caplog.text
+    with log_scope(to_stderr=False) as log:
+        assert health._detect_targets() == ['.']
+    (entry,) = log.warnings.values()
+    assert (entry['code'], entry['key']) == ('config_schema_invalid', 'health')
+    assert 'health:' in entry['message'] and 'default' in entry['message']
