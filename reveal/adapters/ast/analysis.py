@@ -16,6 +16,7 @@ from ...utils.path_utils import (
     failure_of,
     analysis_skipped_warning as analysis_skipped_warning,
 )
+from ...utils.invocation_log import json_answer_running
 from ...utils.results import outcome_of
 
 logger = logging.getLogger(__name__)
@@ -24,8 +25,10 @@ logger = logging.getLogger(__name__)
 
 def _warn_failed(file_path: str, failure: str) -> None:
     """The per-file stderr line; the disclosure that reaches a result is the caller's
-    (StructureList.skipped, ImportAnalysis.structure_failures)."""
-    print(f"Warning: Failed to analyze {file_path}: {failure}", file=sys.stderr)
+    (StructureList.skipped, ImportAnalysis.structure_failures). Beside a JSON answer it is not
+    printed: the JSON names the file (or, for a noun that does not read it, rightly leaves it out)."""
+    if not json_answer_running():
+        print(f"Warning: Failed to analyze {file_path}: {failure}", file=sys.stderr)
 
 
 class StructureList(List[Dict[str, Any]]):

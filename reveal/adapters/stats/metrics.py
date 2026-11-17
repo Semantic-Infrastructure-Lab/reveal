@@ -246,7 +246,10 @@ def _count_local_check_issues(
             if sev in counts:
                 counts[sev] += 1
     except Exception as e:  # boundary-ok: broad-except -- check_file() loads the project's .reveal.yaml and runs the file-local registered rules, plugin rules included (arbitrary code); one file's failed rule run must not drop its other statistics, and it is recorded as check_rules_failed in the file's stats
-        logger.warning(f"Check rules failed for {file_path}, counting as 0 issues: {e}")
+        # Recorded as check_rules_failed in the file's stats, which a JSON answer carries (BACK-2659).
+        from ...utils.invocation_log import json_answer_running
+        logger.log(logging.DEBUG if json_answer_running() else logging.WARNING,
+                   "Check rules failed for %s, counting as 0 issues: %s", file_path, e)
         return counts, ['all rules']
     return counts, sorted({err['rule'] for err in rule_errors})
 

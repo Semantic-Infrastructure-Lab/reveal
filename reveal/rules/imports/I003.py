@@ -33,9 +33,17 @@ from ..base import BaseRule, Detection, RulePrefix, Severity, RuleScope
 from ...analyzers.imports.python import extract_python_imports
 from ...analyzers.imports.resolver import resolve_python_import
 from ...utils.request_cache import register_request_cache
+from ...utils.invocation_log import json_answer_running
 from ...utils.path_utils import failure_of
 
 logger = logging.getLogger(__name__)
+
+
+def _beside_answer() -> int:
+    """The level of a line that repeats this rule's unavailable outcome: each such line is followed by
+    ``self.unavailable(...)``, which a JSON answer carries, so beside one it is debug (BACK-2659)."""
+    return logging.DEBUG if json_answer_running() else logging.WARNING
+
 
 # Module-level cache: directory_path -> (layer_config, project_root, load_error)
 # All files in the same directory resolve to the same .reveal.yaml, so we
@@ -105,7 +113,7 @@ class I003(BaseRule):
             layer_config, project_root, load_error = self._load_config_and_find_root(path)
         except (ImportError, OSError) as e:
             # PyYAML missing, or the directory walk hit an unreadable path
-            logger.warning(f"I003: failed to load layer config for {file_path}: {e}")
+            logger.log(_beside_answer(), "I003: failed to load layer config for %s: %s", file_path, e)
             return self.unavailable(
                 f"layer config lookup failed: {failure_of(e).cause}", file_path)
 
@@ -120,7 +128,7 @@ class I003(BaseRule):
         try:
             imports = extract_python_imports(path)
         except Exception as e:  # boundary-ok: broad-except -- the extractor walks tree-sitter nodes of arbitrary user source (native binding, no enumerable error set); one file must not end the run, and it is recorded as this rule's unavailable outcome with the file as subject
-            logger.warning(f"I003: failed to extract imports from {file_path}: {e}")
+            logger.log(_beside_answer(), "I003: failed to extract imports from %s: %s", file_path, e)
             return self.unavailable(f"import extraction failed: {type(e).__name__}: {e}", file_path)
 
         # Check each import against layer rules
@@ -171,7 +179,7 @@ class I003(BaseRule):
             if config_file.exists():
                 loaded = _try_load(config_file)
                 if isinstance(loaded, str):
-                    logger.warning(f"I003: {loaded}")      # once per directory, like the cache
+                    logger.log(_beside_answer(), "I003: %s", loaded)      # once per directory, like the cache
                     result = (None, None, loaded)
                 elif loaded is not None:
                     result = (loaded[0], loaded[1], None)

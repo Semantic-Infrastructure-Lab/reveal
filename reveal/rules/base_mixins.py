@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from ..core import _zero_arg, get_tree, iter_tree, tree_root
 from ..core.treesitter_compat import zero_arg_getter
 from ..core.treesitter_parse import _ThreadLocalMemo
+from ..utils.invocation_log import json_answer_running
 from ..utils.pyparse import parse_python
 
 logger = logging.getLogger(__name__)
@@ -38,17 +39,20 @@ def _cached_ast_parse(content: str, file_path: str) -> Optional[ast.AST]:
     rules in one check_file() call hits the cache instead of re-parsing.
     maxsize=4 keeps memory bounded while covering all rules on one file.
     """
+    # The answer records the file as not parsed (metrics' parse_degraded, check's rule outcomes), so
+    # beside a JSON answer the log line would only repeat it (BACK-2659).
+    level = logging.DEBUG if json_answer_running() else logging.WARNING
     try:
         return parse_python(content, file_path)
     except SyntaxError as e:
-        logger.warning(f"AST parse failed (syntax error) for {file_path}: {e}")
+        logger.log(level, "AST parse failed (syntax error) for %s: %s", file_path, e)
         return None
     except (ValueError, RecursionError, MemoryError) as e:
         # ast.parse: null bytes / over-long literals (ValueError, UnicodeEncodeError),
         # nesting deeper than the parser's stack (RecursionError), memory exhaustion.
         # Anything else is a bug in parse_python and escapes to RuleRegistry.check_file,
         # which records the rule as failed instead of clean.
-        logger.warning(f"AST parse failed for {file_path}: {e}")
+        logger.log(level, "AST parse failed for %s: %s", file_path, e)
         return None
 
 
@@ -205,7 +209,8 @@ class TreeSitterParsingMixin:
         try:
             return tree_root(get_tree(language, content, filename=file_path))
         except Exception as e:  # boundary-ok: broad-except -- Parser.parse is a native binding whose error types are not enumerable from Python; the caller skips the file and the warning names it and the language
-            logger.warning(f"tree-sitter parse failed for {file_path} ({language}): {e}")
+            logger.log(logging.DEBUG if json_answer_running() else logging.WARNING,
+                       "tree-sitter parse failed for %s (%s): %s", file_path, language, e)
             return None
 
     def _parse_treesitter_or_skip(self, content: str, file_path: str, language: str) -> tuple:
