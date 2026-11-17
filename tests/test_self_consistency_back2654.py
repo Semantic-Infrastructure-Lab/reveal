@@ -56,7 +56,7 @@ _SCHEMES = '|'.join(sorted(NOUNS, key=len, reverse=True))
 URI = re.compile(rf"(?<![\w/.-])(?:{_SCHEMES})://[^\s'\"`|]*")
 COMMAND = re.compile(rf"(?<![\w/.-])reveal\s+(?:{_SCHEMES})(?=\s|$)[^\n`|#\\]*")
 # Prose that ends a command quoted in a sentence: "reveal calls <path> --callers NAME - CLI subcommand form".
-_PROSE_END = re.compile(r'\s(?:[-\u2014]|or|and|instead|then)(?:\s|$)|\s\(|[,;](?:\s|$)|\.\s|\.$')
+_PROSE_END = re.compile(r'\s(?:[-\u2014]|or|and|instead|then)(?:\s|$)|\s\(|\s{2,}\S|[,;](?:\s|$)|\.\s|\.$')
 # A sentence that shows a request in order to say it is refused: its exit 2 is the point, not a fault.
 _REFUSED = re.compile(r'\bexits? 2\b')
 
@@ -103,11 +103,13 @@ def _found_in(text):
 def _add(found, text, surface):
     for line in text.split('\n'):
         for command in _found_in(line):
-            found.setdefault(command.rstrip('.:;,)'), (surface, line))
+            sources = found.setdefault(command.rstrip('.:;,)'), [])
+            if (surface, line) not in sources:
+                sources.append((surface, line))
 
 
 def _collect(harness, surfaces):
-    """{printed command: (the surface that printed it, its line)} for each argv in *surfaces*."""
+    """{printed command: [(a surface that printed it, its line), ...]} for each argv in *surfaces*."""
     found = {}
     for argv in surfaces:
         _, out, err, _ = harness.run_subcommand(argv[0], *argv[1:])
@@ -143,12 +145,15 @@ def _answer_surfaces():
             surfaces.append((f'{noun}://{target}?' + '&'.join(filter(None, (base, query))), '--format', 'json'))
         if noun in COMMANDS:
             argv = (noun, target or '.', *_DEFAULT_ARGS.get(noun, ()))
-            surfaces += [argv, (*argv, '--format', 'json')]
+            surfaces += [argv, (*argv, '--format', 'json'), (*argv, '--nosuchflag')]
+        # A refused or typo'd request prints the noun's teaching: the supported controls, a "did you mean" hint.
+        for typo in ('nosuchkey=1', 'functions'):
+            surfaces.append((f'{noun}://{target}?' + '&'.join(filter(None, (base, typo))),))
     return surfaces + list(_CUT_SURFACES) + list(_FILE_ROUTE)
 
 
 def _help_surfaces():
-    surfaces = [('--agent-help',), ('help://',), ('help://quick',), ('help://examples',)]
+    surfaces = [('--help',), ('--help-all',), ('--agent-help',), ('help://',), ('help://quick',), ('help://examples',)]
     surfaces += [(f'help://examples/{task}',) for task in sorted(_EXAMPLE_RECIPES)]
     for noun in NOUNS:
         surfaces += [(f'help://{noun}',), (f'help://{noun}', '--format', 'json'),
@@ -174,7 +179,7 @@ def _spec_examples():
                     printed = f'{noun}://session/infernal-earth-0118{example}'
                 else:
                     printed = f"{noun}://{_EXAMPLE_TARGETS.get(noun, 'src')}?{example.lstrip('?')}"
-                found.setdefault(printed, (f'help://schemas/{noun} {spec.name}', example))
+                found.setdefault(printed, []).append((f'help://schemas/{noun} {spec.name}', example))
     return found
 
 
@@ -338,7 +343,8 @@ def _own_scheme_note(field, surface):
         rf'(?:help://(?:schemas/)?{name}\b|^{name}(?:://|\s))', surface)
 
 
-def _problems(harness, argv, surface):
+def _raw_problems(harness, argv):
+    """(kind, field, message) for each fault of the answer to *argv*: an invalid request, a retirement note."""
     code, out, _, _ = harness.run_subcommand(*_json_argv(argv))
     try:
         doc = json.loads(out)
@@ -348,12 +354,22 @@ def _problems(harness, argv, surface):
     problems = []
     errors = [e for e in meta.get('errors') or [] if isinstance(e, dict)]
     if code == 2 and any(e.get('code') == 'invalid_request' for e in errors):
-        problems.append(f"invalid request: {doc.get('error')}")
+        problems.append(('invalid request', '', str(doc.get('error'))))
     for warning in meta.get('warnings') or []:
-        if isinstance(warning, dict) and warning.get('code') == 'retired_spelling' \
-                and not _own_scheme_note(warning.get('field', ''), surface):
-            problems.append(f"note: {warning.get('message')}")
+        if isinstance(warning, dict) and warning.get('code') == 'retired_spelling':
+            problems.append(('note', warning.get('field', ''), str(warning.get('message'))))
     return problems
+
+
+def _excused(problem, surface):
+    kind, field, _ = problem
+    return kind == 'note' and _own_scheme_note(field, surface)
+
+
+def _problems(harness, argv, surface):
+    """The faults of *argv*'s answer as printed by *surface*, one line each."""
+    return [f'{kind}: {message}' for kind, field, message in _raw_problems(harness, argv)
+            if not _excused((kind, field, message), surface)]
 
 
 # A Claude query printed without its resource (``claude://?tools=Bash``) answers on one of these.
@@ -382,19 +398,24 @@ def _candidates(printed, examples=False):
 def _judge(harness, found, examples=False):
     """The problems of every printed command in *found*, one line each, and how many ran. A resource-less query
     is judged on the first resource that takes it."""
-    failures, ran = [], set()
-    for printed, (surface, line) in sorted(found.items()):
-        candidates = [argv for argv in _candidates(printed, examples) if tuple(argv) not in ran]
-        if not candidates:
-            continue
-        ran.update(tuple(argv) for argv in candidates)
-        judged = [(argv, _problems(harness, argv, surface)) for argv in candidates]
-        argv, problems = next(((a, p) for a, p in judged if not any(x.startswith('invalid') for x in p)), judged[0])
-        for problem in problems:
-            if problem.startswith('invalid request') and _REFUSED.search(line):
-                continue
-            failures.append(f'{surface} prints {printed!r} (ran {" ".join(argv)}): {problem}')
+    failures, ran = [], {}
+    for printed, sources in sorted(found.items()):
+        candidates = _candidates(printed, examples)
+        for argv in candidates:  # each request runs once; every printed spelling of it is judged
+            if tuple(argv) not in ran:
+                ran[tuple(argv)] = _raw_problems(harness, argv)
+        for surface, line in sources if candidates else ():
+            failures.extend(_verdict(printed, surface, line, candidates, ran))
     return failures, len(ran)
+
+
+def _verdict(printed, surface, line, candidates, ran):
+    """The failure lines of one printed command on one surface."""
+    judged = [(argv, [f'{p[0]}: {p[2]}' for p in ran[tuple(argv)] if not _excused(p, surface)])
+              for argv in candidates]
+    argv, problems = next(((a, p) for a, p in judged if not any(x.startswith('invalid') for x in p)), judged[0])
+    return [f'{surface} prints {printed!r} (ran {" ".join(argv)}): {problem}' for problem in problems
+            if not (problem.startswith('invalid request') and _REFUSED.search(line))]
 
 
 # --- the tests ----------------------------------------------------------------------------------------------
