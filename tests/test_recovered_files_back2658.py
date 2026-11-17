@@ -33,6 +33,8 @@ def test_warning_names_up_to_five_then_counts_the_rest():
         'type': 'parse_recovered',
         'count': 7,
         'files': ['d/f1.c', 'd/f2.c', 'd/f3.c', 'd/f4.c', 'd/f5.c'],
+        # Every capped failure warning lists each subject uncapped in failures (BACK-2659).
+        'failures': [{'path': f'd/f{i}.c', 'cause': 'parse_recovered'} for i in range(1, 8)],
         'message': '7 file(s) contain syntax tree-sitter could not read; their elements may be '
                    'incomplete or wrong: d/f1.c, d/f2.c, d/f3.c, d/f4.c, d/f5.c and 2 more',
     }
