@@ -15,7 +15,8 @@ from typing import List, Type, Optional, Dict, Any, FrozenSet, Tuple
 from .base import BaseRule, Detection, RulePrefix, RuleScope, Severity
 from reveal.config import config_warning, get_config, note_config_warning
 from reveal.utils.request_cache import register_request_cache
-from reveal.utils.path_utils import TestLayout
+from reveal.utils.path_utils import TestLayout, failure_of, to_posix
+from reveal.utils.plugin_warnings import DiscoveryNotes, plugin_warning
 from reveal.errors import TestLayoutValidationError, TestLayoutConfigError
 
 logger = logging.getLogger(__name__)
@@ -63,6 +64,9 @@ def _reset_rule_discovery() -> None:
 
 
 register_request_cache(__name__, _reset_rule_discovery)
+
+# What the last discovery met, replayed by a discover() call that finds it done (BACK-2659).
+_discovery_notes = DiscoveryNotes(logger)
 
 
 class RuleRegistry:
@@ -225,11 +229,11 @@ class RuleRegistry:
             try:
                 rule_class.severity = Severity(severity.lower())
             except ValueError:
-                logger.warning(
-                    f"Rule {rule_class.code}: unknown severity {severity!r} "
-                    f"(expected one of {[s.value for s in Severity]}); "
-                    f"treating it as {Severity.MEDIUM.value}"
-                )
+                message = (f"rule {rule_class.code}: unknown severity {severity!r} "
+                           f"(expected one of {[s.value for s in Severity]}); treated as {Severity.MEDIUM.value}")
+                _discovery_notes.note(
+                    plugin_warning('rule_severity_unknown', message, rule=rule_class.code, severity=str(severity)),
+                    logging.WARNING, "Rule %s", message[len('rule '):])
                 rule_class.severity = Severity.MEDIUM
 
         category = rule_class.category
@@ -284,11 +288,13 @@ class RuleRegistry:
             f"mkdir -p {user_rules_dir} && "
             f"mv {legacy_user_dir}/* {user_rules_dir}/"
         )
-        logger.warning(
-            f"Using legacy rules directory: {legacy_user_dir}\n"
-            f"Please migrate to XDG-compliant location: {user_rules_dir}\n"
-            f"Run: {migrate_cmd}"
-        )
+        _discovery_notes.note(
+            plugin_warning('rules_dir_legacy',
+                           f"rules are read from the legacy directory {to_posix(legacy_user_dir)}; move them to "
+                           f"{to_posix(user_rules_dir)} ({migrate_cmd})",
+                           path=to_posix(legacy_user_dir), replacement=to_posix(user_rules_dir)),
+            logging.WARNING, "Using legacy rules directory: %s\nPlease migrate to XDG-compliant location: %s\nRun: %s",
+            legacy_user_dir, user_rules_dir, migrate_cmd)
         cls._discover_dir(legacy_user_dir, "user.rules", external=True)
 
     @classmethod
@@ -314,8 +320,10 @@ class RuleRegistry:
             force: Force rediscovery even if already discovered
         """
         if cls._discovered and not force:
+            _discovery_notes.replay()
             return
 
+        _discovery_notes.clear()
         cls._rules = []
         cls._rules_by_code = {}
         _effective_codes_cache.clear()
@@ -416,16 +424,22 @@ class RuleRegistry:
             if rule_class:
                 cls._register_rule_in_registry(rule_class)
             elif cls._should_warn_about_missing_rule_class(expected_class_name):
-                logger.warning(
-                    f"File {module_file} does not contain a valid "
-                    f"rule class named {expected_class_name}"
-                )
+                _discovery_notes.note(
+                    plugin_warning('rule_class_missing',
+                                   f"rule module {to_posix(module_file)} has no rule class named "
+                                   f"{expected_class_name}, so it was skipped",
+                                   path=to_posix(module_file), rule=expected_class_name),
+                    logging.WARNING, "File %s does not contain a valid rule class named %s",
+                    module_file, expected_class_name)
 
-        except Exception as e:  # boundary-ok: broad-except -- rule modules in the user/project rule dirs run arbitrary top-level code, so one broken plugin must not stop the others loading; logged at error with traceback naming the file
-            logger.error(
-                f"Failed to import rule from {module_file}: {e}",
-                exc_info=True
-            )
+        except Exception as e:  # boundary-ok: broad-except -- rule modules in the user/project rule dirs run arbitrary top-level code, so one broken plugin must not stop the others loading; a plugin_warning names the file, the traceback goes to debug
+            cause = failure_of(e).cause
+            _discovery_notes.note(
+                plugin_warning('plugin_load_failed',
+                               f"rule module {to_posix(module_file)} did not load ({cause}), so its rule did not run",
+                               path=to_posix(module_file), kind='rule', reason=cause),
+                logging.ERROR, "Failed to import rule from %s: %s", module_file, cause)
+            logger.debug("Failed to import rule from %s", module_file, exc_info=True)
 
     @classmethod
     def _apply_select_filter(

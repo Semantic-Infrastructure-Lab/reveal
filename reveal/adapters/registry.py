@@ -17,6 +17,9 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from ..utils.causes import failure_cause
+from ..utils.plugin_warnings import DiscoveryNotes, plugin_warning
+
 logger = logging.getLogger(__name__)
 
 # Resource probes are discoverable separately from the code/docs/data first screen.
@@ -126,6 +129,8 @@ def _import_adapter_module(scheme: str) -> None:
 # Scheme → adapter class mapping populated by @register_adapter decorators.
 _ADAPTER_REGISTRY: Dict[str, type] = _SchemeRegistry()
 _adapter_plugins_loaded: bool = False
+# What discovery met, replayed into every invocation that discovers again (BACK-2659).
+_adapter_plugin_notes = DiscoveryNotes(logger)
 
 # Scheme → renderer class mapping populated by @register_renderer decorators.
 # Read it through get_renderer_class / list_renderer_schemes, which load the adapter first.
@@ -155,8 +160,14 @@ def _load_adapter_plugin_dir(plugin_dir: Path) -> None:
             sys.modules[module_name] = mod
             spec.loader.exec_module(mod)
             logger.debug('Loaded adapter plugin: %s', plugin_dir.name)
-    except Exception as e:  # boundary-ok: broad-except -- importing a user-supplied plugin runs arbitrary code (SyntaxError, ImportError, anything its module body raises); one bad plugin must not stop reveal or the other plugins, and the warning names the plugin
-        logger.warning('Adapter plugin load failed (%s): %s', plugin_dir.name, e)
+    except Exception as e:  # boundary-ok: broad-except -- importing a user-supplied plugin runs arbitrary code (SyntaxError, ImportError, anything its module body raises); one bad plugin must not stop reveal or the other plugins, and a plugin_warning names it
+        cause, where = failure_cause(e), plugin_dir.as_posix()  # no path_utils: it reaches this module
+        _adapter_plugin_notes.note(
+            plugin_warning('plugin_load_failed',
+                           f"adapter plugin {where} did not load ({cause}), so its URI scheme is "
+                           "not available", path=where, kind='adapter', reason=cause),
+            logging.WARNING, 'Adapter plugin load failed (%s): %s', plugin_dir.name, cause)
+        logger.debug('Adapter plugin load failed: %s', plugin_dir, exc_info=True)
 
 
 def discover_adapter_plugins(cwd: Optional[Path] = None) -> None:
@@ -175,8 +186,10 @@ def discover_adapter_plugins(cwd: Optional[Path] = None) -> None:
     """
     global _adapter_plugins_loaded
     if _adapter_plugins_loaded:
+        _adapter_plugin_notes.replay()
         return
     _adapter_plugins_loaded = True
+    _adapter_plugin_notes.clear()
 
     base = cwd if cwd is not None else Path.cwd()
     plugin_dirs = [
@@ -195,6 +208,7 @@ def _reset_adapter_plugin_discovery() -> None:
     """Reset plugin discovery state — for test isolation only."""
     global _adapter_plugins_loaded
     _adapter_plugins_loaded = False
+    _adapter_plugin_notes.clear()
 
 
 def register_adapter(scheme: str):

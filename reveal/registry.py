@@ -18,6 +18,9 @@ import re
 from pathlib import Path
 from typing import FrozenSet, Optional, Dict, Any
 
+from .utils.causes import failure_cause
+from .utils.plugin_warnings import DiscoveryNotes, plugin_warning
+
 logger = logging.getLogger(__name__)
 
 # What the generic tree-sitter fallback honestly delivers (BACK-1447): the raw file view
@@ -145,6 +148,8 @@ AMBIGUOUS_EXTENSIONS: Dict[str, str] = {
 
 # Plugin discovery state — reset via _reset_plugin_discovery() in tests
 _plugins_loaded: bool = False
+# What discovery met, replayed into every invocation that discovers again (BACK-2659).
+_plugin_notes = DiscoveryNotes(logger)
 
 
 def discover_plugins(cwd: Optional[Path] = None) -> None:
@@ -160,8 +165,10 @@ def discover_plugins(cwd: Optional[Path] = None) -> None:
     """
     global _plugins_loaded
     if _plugins_loaded:
+        _plugin_notes.replay()
         return
     _plugins_loaded = True
+    _plugin_notes.clear()
 
     base = cwd if cwd is not None else Path.cwd()
     plugin_dirs = [
@@ -184,14 +191,21 @@ def _load_plugin_file(plugin_file: Path) -> None:
             mod = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(mod)
             logger.debug('Loaded plugin: %s', plugin_file)
-    except Exception as e:  # boundary-ok: broad-except -- a user plugin is arbitrary code; the failure is logged at warning with the plugin name and the rest still load
-        logger.warning('Plugin load failed (%s): %s', plugin_file.name, e)
+    except Exception as e:  # boundary-ok: broad-except -- a user plugin is arbitrary code; the failure is a plugin_warning naming the plugin, and the rest still load
+        cause, where = failure_cause(e), plugin_file.as_posix()  # path_utils imports this module
+        _plugin_notes.note(
+            plugin_warning('plugin_load_failed',
+                           f"analyzer plugin {where} did not load ({cause}), so its file types use "
+                           "the built-in analyzers", path=where, kind='analyzer', reason=cause),
+            logging.WARNING, 'Plugin load failed (%s): %s', plugin_file.name, cause)
+        logger.debug('Plugin load failed: %s', plugin_file, exc_info=True)
 
 
 def _reset_plugin_discovery() -> None:
     """Reset plugin discovery state — for test isolation only."""
     global _plugins_loaded
     _plugins_loaded = False
+    _plugin_notes.clear()
     # The cached extension sets include what discovery registered and the next call rediscovers.
     _drop_extension_caches()
 
