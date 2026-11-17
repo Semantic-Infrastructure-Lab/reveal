@@ -262,7 +262,7 @@ def _target(noun, path):
     versus a directory, an element), the names are the fixture's."""
     path = path.strip().rstrip('/')
     if noun == 'claude':
-        parts = path.split('/')
+        parts = path.split('/')  # noqa: win-path (a claude:// URI path, never a filesystem path)
         if parts[0] == 'session' and len(parts) > 1:
             name = parts[1] if parts[1] in SESSION_NAMES else 'infernal-earth-0118'
             rest = ['1' if part.isdigit() else part for part in parts[2:]]

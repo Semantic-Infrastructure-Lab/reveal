@@ -64,7 +64,7 @@ def test_real_method_field_is_not_corrected_as_a_shorthand(capsys):
 
 def test_plural_method_shorthand_and_unknown_field_hints_remain(capsys):
     _suggest_filter_correction('methods==True')
-    assert '?type=method' in capsys.readouterr().out
+    assert '?kind=method' in capsys.readouterr().out  # the canonical spelling (BACK-2654, type is legacy)
     _suggest_filter_correction('methdo==False')
     assert "'methdo' is not a recognized filter key" in capsys.readouterr().out
 
