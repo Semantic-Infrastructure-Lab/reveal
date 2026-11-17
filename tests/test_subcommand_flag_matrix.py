@@ -63,7 +63,7 @@ from reveal.cli.invocation import COMMANDS as SUBCOMMANDS  # noqa: E402
 # Extend this, don't guess at cross-file wiring by other means.
 _CROSS_FILE_READERS = {
     'check': ('reveal/cli/file_checker.py',),
-    'claude': ('reveal/adapters/claude/adapter.py',),
+    'claude': ('reveal/adapters/claude/adapter.py', 'reveal/adapters/claude/pagination.py'),
 }
 
 # Cells provably honored by an observable output difference (mirrors PROBES in
@@ -168,6 +168,10 @@ def _reads_via_shared_seam(name, flag):
         # (--verbose: its legacy word verbose, else detail=full, else exit 2; BACK-2654 rule 4).
         from reveal.cli.routing.flag_specs import FLAG_SPECS
         if any(spec.dest == flag and spec.declared_binding is not None for spec in FLAG_SPECS):
+            return True
+        # The declared runner binds --all through the URI form's own --all declaration (CLI_QUERY_FLAGS, re-keyed to
+        # the selected answer's cap; BACK-2654 item 1c); a noun that declares none leaves it to the ledger's note.
+        if flag == 'all' and getattr(adapter_cls, 'CLI_QUERY_FLAGS', {}).get('all'):
             return True
         # A declared parameter bound to the flag's dest is read where the adapter applies it.
         if any(_declared_spec_carries_flag(spec, flag) for spec in adapter_cls.PARAM_SPECS):

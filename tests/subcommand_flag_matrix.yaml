@@ -12,10 +12,10 @@ paths:
 subcommands:
   architecture:
     all:
-      reason: --all is not declared on `reveal architecture`'s own parser -- argparse
-        rejects it loudly (unrecognized arguments), not a silent gap
-      review: not-applicable
-      via: []
+      reason: 'BACK-2654 item 1c: the declared runner binds --all through the URI form''s own --all declaration (all=true, the map expansion); test_declared_parity_back2053.py::test_option_values_are_read_alike compares both forms.'
+      review: honored
+      via:
+      - declared-read
     respect_gitignore:
       reason: 'BACK-1386: applied to every walker by apply_global_flags; PROBES entry
         proves an output diff'
@@ -70,10 +70,10 @@ subcommands:
       - declared-read
   calls:
     all:
-      reason: --all is not declared on `reveal calls`'s own parser -- argparse rejects
-        it loudly (unrecognized arguments), not a silent gap; the subcommand takes --top N
-      review: not-applicable
-      via: []
+      reason: 'BACK-2654 item 1c: the declared runner binds --all through the URI form''s own --all declaration (limit=1000000); test_declared_parity_back2053.py::test_option_values_are_read_alike compares both forms; test_all_beside_a_different_limit_is_one_invalid_request_on_both_forms covers the conflict.'
+      review: honored
+      via:
+      - declared-read
     respect_gitignore:
       reason: 'BACK-1386: applied to every walker by apply_global_flags; PROBES entry
         proves an output diff'
@@ -127,10 +127,10 @@ subcommands:
       - declared-unused
   claude:
     all:
-      reason: --all is not declared on `reveal claude`'s own parser -- argparse rejects
-        it loudly (unrecognized arguments), not a silent gap
-      review: not-applicable
-      via: []
+      reason: 'BACK-2654 item 1c: accepted as on the URI form; the shared post_process lifts the session-list display cap (claude/pagination.py) on both forms, compared by test_declared_parity_back2053.py::test_option_values_are_read_alike'
+      review: honored
+      via:
+      - declared-read
     respect_gitignore:
       reason: --respect_gitignore is not declared on `reveal claude`'s own parser
         -- argparse rejects it loudly (unrecognized arguments), not a silent gap
@@ -153,10 +153,10 @@ subcommands:
       - declared-read
   contracts:
     all:
-      reason: --all is not declared on `reveal contracts`'s own parser -- argparse
-        rejects it loudly (unrecognized arguments), not a silent gap
+      reason: 'BACK-2654 item 1c: accepted as on the URI form; contracts declares no --all (no cap it lifts), so the flag ledger names it unused on both forms (unused_flag), compared by test_declared_parity_back2053.py::test_option_values_are_read_alike'
       review: not-applicable
-      via: []
+      via:
+      - declared-unused
     respect_gitignore:
       reason: 'BACK-1386: applied to every walker by apply_global_flags; PROBES entry
         proves an output diff'
@@ -182,10 +182,10 @@ subcommands:
       - declared-read
   deps:
     all:
-      reason: --all is not declared on `reveal deps`'s own parser -- argparse rejects
-        it loudly (unrecognized arguments), not a silent gap
-      review: not-applicable
-      via: []
+      reason: 'BACK-2654 item 1c: accepted as on the URI form; deps declares no --all fragment, and its ACCEPTS_TOP renderer lifts the text display cap on both forms (TEXT_ONLY_EFFECT in test_flag_ledger.py); test_declared_parity_back2053.py::test_option_values_are_read_alike compares both forms.'
+      review: honored
+      via:
+      - declared-read
     respect_gitignore:
       reason: 'BACK-1386: applied to every walker by apply_global_flags; PROBES entry
         proves an output diff'
@@ -297,10 +297,10 @@ subcommands:
       - declared-unused
   hotspots:
     all:
-      reason: --all is not declared on `reveal hotspots`'s own parser -- argparse
-        rejects it loudly (unrecognized arguments), not a silent gap
-      review: not-applicable
-      via: []
+      reason: 'BACK-2654 item 1c: the declared runner binds --all through the URI form''s own --all declaration (top=1000000); test_declared_parity_back2053.py::test_option_values_are_read_alike compares both forms; test_all_lifts_the_same_cap_on_both_forms proves 10 -> 14 rows on both forms.'
+      review: honored
+      via:
+      - declared-read
     respect_gitignore:
       reason: 'BACK-1386: applied to every walker by apply_global_flags; PROBES entry
         proves an output diff'
@@ -326,10 +326,10 @@ subcommands:
       - declared-read
   imports:
     all:
-      reason: --all is not declared on `reveal imports`'s own parser -- argparse rejects
-        it loudly (unrecognized arguments), not a silent gap
+      reason: 'BACK-2654 item 1c: accepted as on the URI form; imports declares no --all (no cap it lifts), so the flag ledger names it unused on both forms (unused_flag), compared by test_declared_parity_back2053.py::test_option_values_are_read_alike'
       review: not-applicable
-      via: []
+      via:
+      - declared-unused
     respect_gitignore:
       reason: 'BACK-1386: applied to every walker by apply_global_flags; PROBES entry
         proves an output diff'
@@ -355,10 +355,10 @@ subcommands:
       - declared-read
   json:
     all:
-      reason: --all is not declared on `reveal json`'s own parser -- argparse rejects
-        it loudly (unrecognized arguments), not a silent gap
+      reason: 'BACK-2654 item 1c: accepted as on the URI form; json declares no --all (no cap it lifts), so the flag ledger names it unused on both forms (unused_flag), compared by test_declared_parity_back2053.py::test_option_values_are_read_alike'
       review: not-applicable
-      via: []
+      via:
+      - declared-unused
     respect_gitignore:
       reason: --respect_gitignore is not declared on `reveal json`'s own parser --
         argparse rejects it loudly (unrecognized arguments), not a silent gap
@@ -383,10 +383,10 @@ subcommands:
       - declared-read
   markdown:
     all:
-      reason: --all is not declared on `reveal markdown`'s own parser -- argparse
-        rejects it loudly (unrecognized arguments), not a silent gap
+      reason: 'BACK-2654 item 1c: accepted as on the URI form; markdown declares no --all (no cap it lifts), so the flag ledger names it unused on both forms (unused_flag), compared by test_declared_parity_back2053.py::test_option_values_are_read_alike'
       review: not-applicable
-      via: []
+      via:
+      - declared-unused
     respect_gitignore:
       reason: Shared gitignore scope controls the existing walker; PROBES compares
         tracked-only versus ignored inputs.
@@ -412,10 +412,10 @@ subcommands:
       - declared-read
   metrics:
     all:
-      reason: --all is not declared on `reveal metrics`'s own parser -- argparse rejects
-        it loudly (unrecognized arguments), not a silent gap; the subcommand takes --top N
-      review: not-applicable
-      via: []
+      reason: 'BACK-2654 item 1c: the declared runner binds --all through the URI form''s own --all declaration (limit=1000000, top=1000000 under the legacy hotspots ranking); test_declared_parity_back2053.py::test_option_values_are_read_alike compares both forms; test_all_lifts_the_same_cap_on_both_forms proves 10 -> 14 ranked files on --hotspots and --view hotspots.'
+      review: honored
+      via:
+      - declared-read
     respect_gitignore:
       reason: 'BACK-2146: applied to every walker by apply_global_flags; PROBES entry
         proves an output diff'
@@ -499,10 +499,10 @@ subcommands:
       - declared-read
   pack:
     all:
-      reason: --all is not declared on `reveal pack`'s own parser -- argparse rejects
-        it loudly (unrecognized arguments), not a silent gap
+      reason: 'BACK-2654 item 1c: accepted as on the URI form; pack declares no --all (no cap it lifts), so the flag ledger names it unused on both forms (unused_flag), compared by test_declared_parity_back2053.py::test_option_values_are_read_alike'
       review: not-applicable
-      via: []
+      via:
+      - declared-unused
     respect_gitignore:
       reason: 'BACK-1386: applied to every walker by apply_global_flags; PROBES entry
         proves an output diff'
@@ -527,10 +527,10 @@ subcommands:
       - declared-read
   patches:
     all:
-      reason: --all is not declared on `reveal patches`'s own parser -- argparse rejects
-        it loudly (unrecognized arguments), not a silent gap
-      review: not-applicable
-      via: []
+      reason: 'BACK-2654 item 1c: the declared runner binds --all through the URI form''s own --all declaration (limit=1000000); test_declared_parity_back2053.py::test_option_values_are_read_alike compares both forms.'
+      review: honored
+      via:
+      - declared-read
     respect_gitignore:
       reason: The declared runner applies the global gitignore scope to the test walk;
         probed by hand on a tree whose ignored directory holds a test file (1 use
@@ -611,10 +611,10 @@ subcommands:
       via: []
   surface:
     all:
-      reason: --all is not declared on `reveal surface`'s own parser -- argparse rejects
-        it loudly (unrecognized arguments), not a silent gap
+      reason: 'BACK-2654 item 1c: accepted as on the URI form; surface declares no --all (no cap it lifts), so the flag ledger names it unused on both forms (unused_flag), compared by test_declared_parity_back2053.py::test_option_values_are_read_alike'
       review: not-applicable
-      via: []
+      via:
+      - declared-unused
     respect_gitignore:
       reason: 'BACK-1386: applied to every walker by apply_global_flags; PROBES entry
         proves an output diff'
@@ -640,10 +640,10 @@ subcommands:
       - declared-read
   testability:
     all:
-      reason: --all is not declared on `reveal testability`'s own parser -- argparse
-        rejects it loudly (unrecognized arguments), not a silent gap
-      review: not-applicable
-      via: []
+      reason: 'BACK-2654 item 1c: the declared runner binds --all through the URI form''s own --all declaration (top=1000000); test_declared_parity_back2053.py::test_option_values_are_read_alike compares both forms.'
+      review: honored
+      via:
+      - declared-read
     respect_gitignore:
       reason: 'BACK-1386: applied to every walker by apply_global_flags; PROBES entry
         proves an output diff'
@@ -668,10 +668,10 @@ subcommands:
       - declared-read
   trace:
     all:
-      reason: --all is not declared on `reveal trace`'s own parser -- argparse rejects
-        it loudly (unrecognized arguments), not a silent gap
+      reason: 'BACK-2654 item 1c: accepted as on the URI form; trace declares no --all (no cap it lifts), so the flag ledger names it unused on both forms (unused_flag), compared by test_declared_parity_back2053.py::test_option_values_are_read_alike'
       review: not-applicable
-      via: []
+      via:
+      - declared-unused
     respect_gitignore:
       reason: 'BACK-1386: applied to every walker by apply_global_flags; PROBES entry
         proves an output diff'

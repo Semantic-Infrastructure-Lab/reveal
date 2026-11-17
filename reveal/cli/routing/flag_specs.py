@@ -231,18 +231,25 @@ def _declared_fragment(args: Any, spec: FlagSpec, binding: Callable[[Any], tuple
     return f"{key}={'true' if value is True else value}"
 
 
-def _fragment_for(args: Any, spec: FlagSpec, adapter_class: Any, scheme: str, declared: Mapping,
-                  resource: str) -> str | None:
+def _fragment_for(args: Any, spec: FlagSpec, adapter_class: Any, scheme: str, resource: str) -> str | None:
     """The fragment *spec* reaches this adapter with: from a declared noun's own declarations when the flag binds
     that way (rule 4), else the adapter's CLI_QUERY_FLAGS declaration, re-keyed to the cap the selected answer
     declares when the flag lifts a cap (--all on Metrics' legacy hotspots ranking lifts top, elsewhere limit)."""
     declarations = getattr(adapter_class, 'PARAM_SPECS', None)
     if spec.declared_binding is not None and declarations:
         return _declared_fragment(args, spec, spec.declared_binding, declarations, scheme)
-    fragment = declared.get(spec.dest)
+    return declared_flag_fragment(spec, adapter_class, resource.partition('?')[2])
+
+
+def declared_flag_fragment(spec: FlagSpec, adapter_class: Any, selection: Any) -> str | None:
+    """The fragment the adapter's CLI_QUERY_FLAGS declaration gives *spec*, re-keyed to the cap of the answer
+    *selection* selects (a raw URI query or a subcommand's typed values) when the flag lifts a cap. One answer for
+    both forms of a request: the URI injection and the declared subcommand both read it (BACK-2654)."""
+    fragment = _declared(adapter_class).get(spec.dest)
+    declarations = getattr(adapter_class, 'PARAM_SPECS', None)
     if spec.answer_cap and fragment and declarations:
         from ...utils.query_binding import selected_cap
-        cap = selected_cap(declarations, resource.partition('?')[2])
+        cap = selected_cap(declarations, selection)
         if cap:
             return f"{cap}={fragment.partition('=')[2]}"
     return fragment
@@ -253,7 +260,6 @@ def inject_query_flags(resource: str, scheme: str, args: Any) -> str:
     declares; print a note for the flags it does not support (where the spec says to)."""
     from ...adapters.base import get_adapter_class
     adapter_class = get_adapter_class(scheme)
-    declared = _declared(adapter_class)
     honors_result_control = getattr(adapter_class, 'HONORS_RESULT_CONTROL', True)
     injected: dict[str, tuple[str, str]] = {}  # query key -> (the flag that set it, its fragment)
     for spec in FLAG_SPECS:
@@ -265,7 +271,7 @@ def inject_query_flags(resource: str, scheme: str, args: Any) -> str:
             print(f"Note: {spec.option} has no effect on {scheme}:// -- it does not take "
                   f"sort=/limit=/offset=.", file=sys.stderr)
             continue
-        fragment = _fragment_for(args, spec, adapter_class, scheme, declared, resource)
+        fragment = _fragment_for(args, spec, adapter_class, scheme, resource)
         if fragment and spec.unbounded is not None and value == 0:
             value = _native_uncapped_value(adapter_class, fragment, spec.unbounded)
         fragment = fragment or spec.universal

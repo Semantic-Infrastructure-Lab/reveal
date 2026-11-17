@@ -217,13 +217,15 @@ def create_declared_parser(name: str) -> argparse.ArgumentParser:
     parser.noun = name
     scalar_settings(parser)
     _describe_fail_on(parser, tuple(getattr(adapter, 'FINDINGS_POLICIES', ('none',))))
+    # The global --all reaches every declared noun's subcommand as it reaches its URI form (BACK-2654): it binds
+    # what the noun's --all declaration gives the selected answer, and a noun that declares none notes it unused.
+    parser.add_argument('--all', action='store_true',
+                        help='Show all results: lift the cap of the selected answer (the same as --all on the URI '
+                             'form; a note says when the answer has no cap to lift)')
     add_declared_arguments(parser, adapter.PARAM_SPECS, adapter.RESOURCE_SPEC)
     add_declared_presentation_options(parser, getattr(adapter, 'CLI_PRESENTATION_FLAGS', ()))
     if callable(getattr(adapter, 'reconfigure_base_path', None)):
         _add_base_path_option(parser)
-    if name == 'overview':
-        parser.add_argument('--all', action='store_true',
-                            help='Show every entry in capped sections (same expansion as --verbose)')
     _add_universal_filter_flags(parser)
     if adapter.RESOURCE_SPEC.walks:
         add_exclude_argument(parser)
@@ -352,16 +354,43 @@ def run_declared_uri(uri: str, element: str | None, args, consumed=(), *, answer
     _run_declared(name, args, path, query, 'uri', consumed, answer_consumer=answer_consumer)
 
 
-def _bind_legacy_cli_values(name, adapter, args, source, spelled=None):
-    """Apply opted-in global flag values (``--all`` lifting a declared cap) through the same declaration as URI
-    forwarding."""
-    for spec in adapter.PARAM_SPECS:
-        for flag, value in spec.cli_flags:
-            if peek(args, flag, False) is True and spec.name not in source:
-                source[spec.name] = value
-                if spelled is not None:
-                    spelled[spec.name] = _global_option(flag)
-                delegate(args, flag, spec.name)
+def _bind_global_all(name, adapter, args, source, spelled=None) -> None:
+    """The subcommand's global ``--all`` through the URI form's own seam (``declared_flag_fragment``, BACK-2654): the
+    noun's ``--all`` declaration, re-keyed to the cap of the answer the typed values select. A value the request
+    already sets differently is an invalid request naming both flags, as on the URI form; a noun that declares no
+    ``--all`` leaves it unread, so the ledger notes it unused on both forms."""
+    if peek(args, 'all', False) is not True:
+        return
+    from .flag_specs import FLAG_SPECS, declared_flag_fragment
+    spec = next(flag for flag in FLAG_SPECS if flag.dest == 'all')
+    fragment = declared_flag_fragment(spec, adapter, {key: value for key, value in source.items() if value is not None})
+    if not fragment:
+        return
+    key, _, value = fragment.partition('=')
+    owner = next((declaration for declaration in adapter.PARAM_SPECS if key in declaration.spellings), None)
+    # the request may already set that control under another of its keys (calls stores --limit as its legacy top)
+    keys = (key,) if owner is None else (*owner.spellings, *((owner.cli.dest,) if owner.cli and owner.cli.dest else ()))
+    given = next(((name, source[name]) for name in keys if source.get(name) is not None), None)
+    if given is not None and not _same_control_value(owner, given, (key, value)):
+        mark(args, 'all')
+        from ...errors import RequestValidationError
+        typed = (spelled or {}).get(given[0], '--' + given[0])
+        raise RequestValidationError(f'{typed} conflicts with --all: both set {key} with different values; give one')
+    if given is None:
+        source[key] = value
+        if spelled is not None:
+            spelled[key] = '--all'
+    delegate(args, 'all', owner.name if owner is not None else key)
+
+
+def _same_control_value(spec, left: tuple, right: tuple) -> bool:
+    """Two (spelling, raw value) pairs of one control, compared as the control reads them."""
+    if spec is None:
+        return str(left[1]) == str(right[1])
+    try:
+        return bool(spec.validate(spec.canonical_value(*left)) == spec.validate(spec.canonical_value(*right)))
+    except ValueError:  # a value the control rejects is rejected when it binds; as typed, the two differ
+        return False
 
 
 def _bind_global_verbose(name, adapter, args, source, spelled=None) -> None:
@@ -389,7 +418,6 @@ def _delegate_typed_parameters(name, adapter, args, source, transport: str, spel
     """Forward declaration accounting only after the receiving ledger exists."""
     if transport != 'typed':
         return
-    _bind_legacy_cli_values(name, adapter, args, source, spelled)
     from ...utils.query_binding import legacy_flag_dests
     for spec in adapter.PARAM_SPECS:
         dest = (spec.cli.dest if spec.cli else None) or spec.name
@@ -498,6 +526,7 @@ def _flagged_query(adapter, name, path, source, transport: str, args, consume, s
     if transport != 'uri':
         try:
             _bind_global_verbose(name, adapter, args, source, spelled)
+            _bind_global_all(name, adapter, args, source, spelled)
         except ValueError as exc:
             consume(_invalid_prepared_answer(adapter, name, path, query_resource, str(exc), args))
             return None

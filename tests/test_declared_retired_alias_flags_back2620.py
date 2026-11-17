@@ -12,9 +12,9 @@ import pytest
 
 from reveal.cli import invocation
 from reveal.cli.invocation import Invocation, Retirement, invocation_scope, noted_retirements
-from reveal.cli.routing.declared import _bind_global_verbose, _bind_legacy_cli_values, _note_retired_flags
+from reveal.cli.routing.declared import _bind_global_all, _bind_global_verbose, _note_retired_flags
 from reveal.utils.query_binding import prepare_declared_params
-from reveal.utils.query_parser import CliBinding, LegacySpelling, ParamSpec
+from reveal.utils.query_parser import CliBinding, LegacySpelling, ParamSpec, param_cli_flags
 
 # scan_limit is a spelling variant (an alias); max_files and verbose are other words (legacy entries, BACK-2654).
 SCAN = ParamSpec('scan-limit', 'integer', 'Input budget', None, int, aliases=('scan_limit',),
@@ -29,6 +29,7 @@ ROWS = ParamSpec('rows', 'integer', 'Row cap', None, int, cli_flags=(('all', '10
 
 class Demo:
     PARAM_SPECS = (SCAN, DETAIL, ROWS)
+    CLI_QUERY_FLAGS = param_cli_flags(PARAM_SPECS)  # --all is rows=1000000, as on the URI form
 
 
 @pytest.fixture(autouse=True)
@@ -47,7 +48,7 @@ def bound_noted(source=None, **flags):
     args = argparse.Namespace(**flags)
     with invocation_scope(Invocation.parse(['reveal', 'demo', '.']), retirements_to_stderr=False):
         source = dict(source or {})
-        _bind_legacy_cli_values('demo', Demo, args, source)
+        _bind_global_all('demo', Demo, args, source)
         _bind_global_verbose('demo', Demo, args, source)
         return sorted(noted_retirements()), source
 
