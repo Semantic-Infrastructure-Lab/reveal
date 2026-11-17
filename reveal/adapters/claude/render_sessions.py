@@ -1,4 +1,6 @@
 """Session-level renderers for the Claude adapter."""
+from .match_terms import term_label
+
 
 
 def _render_claude_session_list(result: dict) -> None:
@@ -178,7 +180,7 @@ def _render_claude_history(result: dict) -> None:
     total = result.get('total_entries', 0)
     matched = result.get('match_count', 0)
     displayed = result.get('displayed_count', matched)
-    search = result.get('search')
+    search = term_label(result.get('search'))
     project = result.get('project')
     since = result.get('since')
 
@@ -277,7 +279,7 @@ def _render_claude_chain(result: dict) -> None:
 
 def _render_claude_cross_session_search(result: dict) -> None:
     """Render cross-session search results."""
-    term = result.get('term', '')
+    term = term_label(result.get('term', ''))
     scanned = result.get('sessions_scanned', 0)
     count = result.get('match_count', 0)
     since = result.get('since')
@@ -317,7 +319,7 @@ def _render_claude_cross_session_search(result: dict) -> None:
 def _render_claude_search_results(result: dict) -> None:
     """Render search results with excerpts."""
     session = result.get('session', 'unknown')
-    term = result.get('term', '')
+    term = term_label(result.get('term', ''))
     count = result.get('match_count', 0)
 
     print(f"Search: \"{term}\" in {session}")

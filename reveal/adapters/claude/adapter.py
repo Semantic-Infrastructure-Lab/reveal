@@ -22,6 +22,7 @@ from ...errors import RequestValidationError
 from ...utils.results import ResultBuilder, note_warning
 from .params import PARAM_SPECS, bind_query, bind_request
 from .workflow_selection import select_workflow_result, remember_workflow_selection, MATCH_RULE
+from .match_terms import holds_all, match_terms, term_echo
 from .discovery import ConversationDiscovery, TranscriptNotFoundError, first_timestamp as _first_timestamp
 from .handlers.sessions import (
     list_sessions as _h_list_sessions,
@@ -879,8 +880,8 @@ class ClaudeAdapter(ResourceAdapter):
             results = [r for r in results if r.get('is_error')]
 
         if 'contains' in self.query_params:
-            pattern = self.query_params['contains'].lower()
-            results = [r for r in results if pattern in r.get('content', '').lower()]
+            terms = match_terms(self.query_params['contains'])  # repeated terms AND per tool result (rule 19)
+            results = [r for r in results if holds_all(r.get('content', ''), terms)]
 
         from .controls import composite_query_receipt, COMPOSITE_QUERY_RULE
         base['meta']['query_rule'] = COMPOSITE_QUERY_RULE

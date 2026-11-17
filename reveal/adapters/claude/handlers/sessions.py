@@ -11,6 +11,7 @@ from reveal.utils.lines import split_lines
 from reveal.utils.path_utils import to_posix
 
 from ..analysis import search_sessions_for_term, get_files_touched
+from ..match_terms import holds_all, match_terms, term_echo
 from ....utils.results import ResultBuilder, note_warning
 from .workspace import skipped_entries_warning
 from ..catalog import SessionEntries, collect_session_entries, attach_catalog_evidence
@@ -265,12 +266,12 @@ def list_sessions(conversation_base: Path, query_params: Dict[str, Any]) -> Dict
         contract_version=CONTRACT_VERSION,
     )
 
-    name_filter = query_params.get('search', '').lower()
+    name_filter = [term for term in match_terms(query_params.get('search', '')) if term]  # ANDed per session
 
     catalog = collect_session_entries(conversation_base, _collect_sessions_from_dir)
     sessions = sorted(catalog, key=lambda x: x['modified'], reverse=True)
     if name_filter:
-        sessions = [s for s in sessions if name_filter in str(s['session']).lower()]
+        sessions = [s for s in sessions if holds_all(str(s['session']), name_filter)]
 
     base.update({
         'session_count': len(sessions),
@@ -332,7 +333,7 @@ def search_sessions(conversation_base: Path, query_params: Dict[str, Any]) -> Di
         source_type='directory',
         contract_version=CONTRACT_VERSION,
         data={
-            'term': term,
+            'term': term if isinstance(term, str) else term_echo(match_terms(term)),
             'since': since or None,
             'until': until or None,
             'whole_word': whole_word,

@@ -8,11 +8,15 @@ from typing import Any, Dict, List, Tuple
 
 from .messages import _content_to_blocks, _collect_block_matches, _find_excerpt, _matches_term
 from .records import TranscriptRecords
+from ..match_terms import match_terms
 
 
 def _snippet_timestamp(record: Dict[str, Any]) -> str:
     value = record.get('timestamp')
     return value[:16].replace('T', ' ') if isinstance(value, str) else ''
+
+
+_NO_SNIPPET: Dict[str, Any] = {'excerpt': '', 'role': '', 'timestamp': '', 'message_index': None}
 
 
 def _extract_first_snippet(jsonl_path: Path, term: str, *, whole_word: bool = False,
@@ -37,9 +41,19 @@ def _extract_first_snippet(jsonl_path: Path, term: str, *, whole_word: bool = Fa
         Dict with keys ``excerpt``, ``role``, ``timestamp``, ``message_index``.
         ``message_index`` is ``None`` when no match is found.
     """
-    lower = term.lower()
+    return _extract_first_snippets(jsonl_path, [term], whole_word=whole_word, window_chars=window_chars,
+                                   errors_out=errors_out, reads_out=reads_out)[0]
+
+
+def _extract_first_snippets(jsonl_path: Path, terms: List[str], *, whole_word: bool = False,
+                            window_chars: int = 120,
+                            errors_out: List[Tuple[Path, BaseException]] | None = None,
+                            reads_out: List[TranscriptRecords] | None = None) -> List[Dict[str, Any]]:
+    """Each term's first excerpt in one read of the file (``_extract_first_snippet`` for several terms): a content
+    match, else the first sidecar match, else no snippet. The read stops once every term has a content match."""
+    found: List[Dict[str, Any] | None] = [None] * len(terms)
+    fallbacks: List[Dict[str, Any] | None] = [None] * len(terms)
     message_index = 0
-    fallback: Dict[str, Any] | None = None
     reader = TranscriptRecords(jsonl_path, replace_decode=True)
     if reads_out is not None:
         reads_out.append(reader)
@@ -47,27 +61,28 @@ def _extract_first_snippet(jsonl_path: Path, term: str, *, whole_word: bool = Fa
         for msg in reader.records():
             role = msg.get('type', '')
             message = msg.get('message')
-            if fallback is None:
-                fallback = _sidecar_hit(msg, role, term, message_index, whole_word, window_chars)
+            for slot, term in enumerate(terms):
+                if fallbacks[slot] is None:
+                    fallbacks[slot] = _sidecar_hit(msg, role, term, message_index, whole_word, window_chars)
             if role in ('user', 'assistant') and isinstance(message, dict):
-                content = message.get('content', [])
-                blocks = _content_to_blocks(content)
+                blocks = _content_to_blocks(message.get('content', []))
                 ts = _snippet_timestamp(msg)
-                matches = _collect_block_matches(blocks, lower, term, message_index, role, ts,
-                                                whole_word=whole_word, window_chars=window_chars)
-                if matches:
+                for slot, term in enumerate(terms):
+                    if found[slot] is not None:
+                        continue
+                    matches = _collect_block_matches(blocks, term.lower(), term, message_index, role, ts,
+                                                    whole_word=whole_word, window_chars=window_chars)
+                    if matches:
+                        found[slot] = {'excerpt': matches[0].get('excerpt', ''), 'role': role,
+                                       'timestamp': ts, 'message_index': message_index}
+                if all(hit is not None for hit in found):
                     reader.decision = 'matched-prefix'
-                    return {
-                        'excerpt': matches[0].get('excerpt', ''),
-                        'role': role,
-                        'timestamp': ts,
-                        'message_index': message_index,
-                    }
+                    return [hit for hit in found if hit is not None]
             message_index += 1
     except OSError as exc:
         if errors_out is not None:
             errors_out.append((jsonl_path, exc))
-    return fallback or {'excerpt': '', 'role': '', 'timestamp': '', 'message_index': None}
+    return [hit or fallback or dict(_NO_SNIPPET) for hit, fallback in zip(found, fallbacks)]
 
 
 def _sidecar_hit(msg: Dict[str, Any], role: str, term: str, message_index: int,
@@ -95,7 +110,7 @@ def _sidecar_hit(msg: Dict[str, Any], role: str, term: str, message_index: int,
 
 def search_sessions_for_term(
     sessions: List[Dict[str, Any]],
-    term: str,
+    term: Any,
     *,
     workers: int = 8,
     whole_word: bool = False,
@@ -113,7 +128,8 @@ def search_sessions_for_term(
         sessions: List of session dicts (each must have ``path``, ``session``,
             ``modified``, ``project``).  Produced by
             ``_collect_sessions_from_dir``.
-        term: Search term (case-insensitive substring match).
+        term: Search term (case-insensitive substring match), or terms ANDed per session: a session qualifies
+            when every term matches, and gets one snippet per term.
         workers: Compatibility argument for the former byte prefilter.
         whole_word: If True, only return sessions where the term appears as a
             whole word (word-boundary semantics) in decoded content.
@@ -126,7 +142,8 @@ def search_sessions_for_term(
         ``readme_present``, ``excerpt``, ``role``, ``timestamp``,
         ``message_index`` (0-based index for ``claude://session/NAME/message/N``).
     """
-    if not sessions or not term:
+    terms = [item for item in match_terms(term) if item]
+    if not sessions or not terms:
         return []
 
     # Build a path → session-dict index for quick lookup after grep.
@@ -138,10 +155,20 @@ def search_sessions_for_term(
     results = []
     for path in all_paths:
         session = path_to_session[path]
-        snippet = _extract_first_snippet(path, term, whole_word=whole_word,
-                                         window_chars=window_chars, errors_out=errors_out, reads_out=reads_out)
-        if snippet['message_index'] is None:
+        snippets = _extract_first_snippets(path, terms, whole_word=whole_word, window_chars=window_chars,
+                                           errors_out=errors_out, reads_out=reads_out)
+        if any(snippet['message_index'] is None for snippet in snippets):
             continue
+        results.extend(_session_rows(session, [s for n, s in enumerate(snippets) if s not in snippets[:n]]))
+
+    results.sort(key=lambda x: x['modified'], reverse=True)
+    return results
+
+
+def _session_rows(session: Dict[str, Any], snippets: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """One result row per distinct snippet of a qualifying session."""
+    results: List[Dict[str, Any]] = []
+    for snippet in snippets:
         results.append({
             'session':       session['session'],
             'modified':      session['modified'],
@@ -154,6 +181,4 @@ def search_sessions_for_term(
         })
         if session.get('readme_present'):
             results[-1]['readme_present'] = True
-
-    results.sort(key=lambda x: x['modified'], reverse=True)
     return results

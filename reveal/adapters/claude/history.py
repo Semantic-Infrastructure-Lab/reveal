@@ -7,11 +7,13 @@ from ...reveal_types import CONTRACT_VERSION
 from ...utils.results import (AnalysisCompleteness, ExecutionFacts, FailureCause, ResultBuilder,
                               note_warning, result_execution_facts)
 from .analysis.records import TranscriptRecords, valid_record_proof
+from .match_terms import holds_all, match_terms, term_echo
 
 
 def read_history(home, params, *, opener) -> Dict[str, Any]:
     path = home / 'history.jsonl'
-    search, project = params.get('search', '').lower(), params.get('project', '').lower()
+    search = [term.lower() for term in match_terms(params.get('search', '')) if term]  # ANDed per entry
+    project = params.get('project', '').lower()
     since = params.get('since', '')
     since = date.today().isoformat() if since == 'today' else since
     reader = TranscriptRecords(path, replace_decode=True, opener=opener)
@@ -23,7 +25,7 @@ def read_history(home, params, *, opener) -> Dict[str, Any]:
              'count_rule': 'All nonblank history records before date/project/text/display filters; decoded objects are interpreted until EOF or the first required operation failure'}
     result: Dict[str, Any] = dict(ResultBuilder.create(
         'claude_history', to_posix(path), source_type='file', contract_version=CONTRACT_VERSION,
-        data={'search': search or None, 'project': project or None, 'since': since or None,
+        data={'search': term_echo(search) if search else None, 'project': project or None, 'since': since or None,
               'total_entries': reader.analyzed, 'match_count': len(entries), 'entries': entries},
         meta={'history_analysis': proof, 'warnings': [], 'errors': []}))
     if error is not None:
@@ -59,7 +61,7 @@ def _history_entry(record, since, search, project_filter):
     iso = datetime.fromtimestamp(timestamp / 1000).isoformat(timespec='seconds') if timestamp else ''
     if since and iso[:10] < since:
         return None
-    if search and search not in prompt.lower():
+    if search and not holds_all(prompt, search):
         return None
     if project_filter and project_filter not in project.lower():
         return None

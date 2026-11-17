@@ -1,6 +1,8 @@
 """Message-level renderers for the Claude adapter."""
 from typing import Optional
 
+from .match_terms import term_label
+
 
 def _full_output(result):
     return bool(result.get('full') or result.get('_display', {}).get('verbose'))
@@ -535,7 +537,7 @@ def _render_claude_messages(result: dict) -> None:
     """Render assistant narrative turns (text only, no tool calls)."""
     session = result.get('session', 'unknown')
     total = result.get('total_turns', 0)
-    search = result.get('search')
+    search = term_label(result.get('search'))
 
     display = result.get('_display', {})
     verbose = display.get('verbose', False) or result.get('full', False)

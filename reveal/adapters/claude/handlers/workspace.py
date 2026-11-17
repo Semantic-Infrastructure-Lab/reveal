@@ -11,6 +11,7 @@ from ....utils.results import ResultBuilder, note_warning
 from reveal.utils.lines import split_lines
 from ..workspace_scan import WorkspaceScan
 from ..markdown_lookup import MarkdownLookup
+from ..match_terms import holds_all, match_terms, term_echo
 
 logger = logging.getLogger(__name__)
 
@@ -117,7 +118,7 @@ def _list_plans(plans_dir: Path, query_params: Dict[str, Any], base: Dict[str, A
         error = f'Plans directory not found: {plans_dir}' if scan.request_rejected else scan.root_error
         return scan.attach({**base, 'plans': [], 'total': 0, 'error': error})
 
-    search = query_params.get('search', '').lower()
+    search = [term.lower() for term in match_terms(query_params.get('search', '')) if term]  # ANDed per file
     all_files = sorted(scan.markdown(plans_dir), key=lambda p: _mtime(p, scan.ordering_errors), reverse=True)
     plans = []
     skipped: List[Tuple[Path, BaseException]] = []
@@ -127,7 +128,7 @@ def _list_plans(plans_dir: Path, query_params: Dict[str, Any], base: Dict[str, A
             stat = plan_file.stat()
             modified = datetime.fromtimestamp(stat.st_mtime).isoformat(timespec='seconds')
             content = scan.read_text(plan_file)
-            if search and search not in content.lower():
+            if search and not holds_all(content, search):
                 scan.complete(plan_file, filtered=True)
                 continue
             title = ''
@@ -155,7 +156,7 @@ def _list_plans(plans_dir: Path, query_params: Dict[str, Any], base: Dict[str, A
         'plans': plans,
         'total': len(all_files),
         'displayed': len(plans),
-        'search': search or None,
+        'search': term_echo(search) if search else None,
     }
     note_warning(result, skipped_entries_warning('plans', skipped))
     return scan.attach(result)
@@ -173,7 +174,7 @@ def get_memory(conversation_base: Path, resource: str, query_params: Dict[str, A
     # claude://memory/<project-fragment> — filter to matching projects
     parts = resource.split('/', 1)
     filter_project = parts[1].strip() if len(parts) > 1 else ''
-    search = query_params.get('search', '').lower()
+    search = [term.lower() for term in match_terms(query_params.get('search', '')) if term]  # ANDed per file
 
     scan = WorkspaceScan(legacy_discovery_error=True)
     if not scan.directory(conversation_base, required=True):
@@ -196,7 +197,7 @@ def get_memory(conversation_base: Path, resource: str, query_params: Dict[str, A
                                key=lambda p: _mtime(p, scan.ordering_errors), reverse=True):
             try:
                 content = scan.read_text(mem_file)
-                if search and search not in content.lower():
+                if search and not holds_all(content, search):
                     scan.complete(mem_file, filtered=True)
                     continue
                 stat = mem_file.stat()
@@ -220,7 +221,7 @@ def get_memory(conversation_base: Path, resource: str, query_params: Dict[str, A
         'memories': memories,
         'total': len(memories),
         'filter_project': filter_project or None,
-        'search': search or None,
+        'search': term_echo(search) if search else None,
     }
     note_warning(result, skipped_entries_warning('memory', skipped))
     return scan.attach(result)
@@ -247,7 +248,7 @@ def get_agents(agents_dir: Path, resource: str, query_params: Dict[str, Any]) ->
         error = f'Agents directory not found: {agents_dir}' if scan.request_rejected else scan.root_error
         return scan.attach({**base, 'agents': [], 'total': 0, 'error': error})
 
-    search = query_params.get('search', '').lower()
+    search = [term.lower() for term in match_terms(query_params.get('search', '')) if term]  # ANDed per file
     all_files = sorted(scan.markdown(agents_dir), key=lambda p: _mtime(p, scan.ordering_errors), reverse=True)
     agents = []
     skipped: List[Tuple[Path, BaseException]] = []
@@ -255,7 +256,7 @@ def get_agents(agents_dir: Path, resource: str, query_params: Dict[str, Any]) ->
     for agent_file in all_files:
         try:
             content = scan.read_text(agent_file)
-            if search and search not in content.lower():
+            if search and not holds_all(content, search):
                 scan.complete(agent_file, filtered=True)
                 continue
             stat = agent_file.stat()
@@ -278,7 +279,7 @@ def get_agents(agents_dir: Path, resource: str, query_params: Dict[str, Any]) ->
         'agents': agents,
         'total': len(all_files),
         'displayed': len(agents),
-        'search': search or None,
+        'search': term_echo(search) if search else None,
     }
     note_warning(result, skipped_entries_warning('agents', skipped))
     return scan.attach(result)

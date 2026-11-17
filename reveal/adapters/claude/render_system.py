@@ -1,4 +1,6 @@
 """System/config renderers for the Claude adapter."""
+from .match_terms import term_label
+
 
 
 def _render_claude_info(result: dict) -> None:
@@ -87,7 +89,7 @@ def _render_claude_plans(result: dict) -> None:
     plans = result.get('plans', [])
     total = result.get('total', 0)
     displayed = result.get('displayed', total)
-    search = result.get('search')
+    search = term_label(result.get('search'))
 
     count_line = f'Plans: {total} total'
     if search:
@@ -190,7 +192,7 @@ def _render_claude_memory(result: dict) -> None:
     error = result.get('error')
     memories = result.get('memories', [])
     total = result.get('total', 0)
-    search = result.get('search')
+    search = term_label(result.get('search'))
     filter_project = result.get('filter_project')
 
     count_line = f'Memory files: {total}'
@@ -240,7 +242,7 @@ def _render_claude_agents(result: dict) -> None:
     agents = result.get('agents', [])
     total = result.get('total', 0)
     displayed = result.get('displayed', total)
-    search = result.get('search')
+    search = term_label(result.get('search'))
 
     count_line = f'Agents: {total} total'
     if search:

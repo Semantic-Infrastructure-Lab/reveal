@@ -3,6 +3,7 @@
 import re
 from typing import Dict, List, Any, Optional
 
+from ..match_terms import holds_all, match_terms, term_echo
 from .overview import get_overview
 from .prompts import _content_to_blocks, _is_real_prompt  # noqa: F401 (re-exported: search.py, tests)
 
@@ -293,7 +294,20 @@ def _collect_block_matches(
     return matches
 
 
-def search_messages(messages: List[Dict], term: str, session_name: str,
+def _message_matches(blocks: list, terms: List[str], msg_index: int, role: str, ts: str) -> list:
+    """One message's block matches: none unless every term matches one of its blocks, then the block excerpts of
+    every term (a repeated match ANDs per message, rule 19)."""
+    per_term = [_collect_block_matches(blocks, term.lower(), term, msg_index, role, ts) for term in terms]
+    if not all(per_term):
+        return []
+    kept: list = []
+    for match in (match for found in per_term for match in found):
+        if match not in kept:
+            kept.append(match)
+    return kept
+
+
+def search_messages(messages: List[Dict], term: Any, session_name: str,
                     contract_base: Dict[str, Any]) -> Dict[str, Any]:
     """Search all message content for a term (case-insensitive).
 
@@ -301,7 +315,7 @@ def search_messages(messages: List[Dict], term: str, session_name: str,
 
     Args:
         messages: List of message dictionaries
-        term: Search term (case-insensitive substring match)
+        term: Search term (case-insensitive substring match), or terms ANDed per message
         session_name: Name of the session
         contract_base: Base contract fields
 
@@ -311,7 +325,7 @@ def search_messages(messages: List[Dict], term: str, session_name: str,
     base = contract_base.copy()
     base['type'] = 'claude_search_results'
 
-    lower_term = term.lower()
+    terms = match_terms(term)
     matches = []
 
     for i, msg in enumerate(messages):
@@ -322,11 +336,11 @@ def search_messages(messages: List[Dict], term: str, session_name: str,
         blocks = _content_to_blocks(msg.get('message', {}).get('content', []))
         ts = (msg.get('timestamp') or '')[:16].replace('T', ' ')
 
-        matches.extend(_collect_block_matches(blocks, lower_term, term, i, role, ts))
+        matches.extend(_message_matches(blocks, terms, i, role, ts))
 
     base.update({
         'session': session_name,
-        'term': term,
+        'term': term_echo(terms),
         'match_count': len(matches),
         'matches': matches,
     })
@@ -336,7 +350,7 @@ def search_messages(messages: List[Dict], term: str, session_name: str,
 
 def get_messages(messages: List[Dict], session_name: str,
                  contract_base: Dict[str, Any],
-                 search: Optional[str] = None) -> Dict[str, Any]:
+                 search: Any = None) -> Dict[str, Any]:
     """Extract assistant narrative text turns (not tool calls).
 
     Returns what the assistant *said* — explanations, summaries, decisions —
@@ -347,7 +361,7 @@ def get_messages(messages: List[Dict], session_name: str,
         messages: List of message dictionaries
         session_name: Name of the session
         contract_base: Base contract fields
-        search: Optional search term to filter messages containing it
+        search: Optional search term (or terms, ANDed per turn) to filter messages containing it
 
     Returns:
         Dictionary with assistant messages list
@@ -355,7 +369,7 @@ def get_messages(messages: List[Dict], session_name: str,
     base = contract_base.copy()
     base['type'] = 'claude_messages'
 
-    lower_search = search.lower() if search else None
+    terms = [term for term in match_terms(search) if term]
     turns: List[Dict[str, Any]] = []
 
     for i, msg in enumerate(messages):
@@ -374,7 +388,7 @@ def get_messages(messages: List[Dict], session_name: str,
 
         text = '\n\n'.join(text_parts)
 
-        if lower_search and lower_search not in text.lower():
+        if terms and not holds_all(text, terms):
             continue
 
         ts = (msg.get('timestamp') or '')[:16].replace('T', ' ')
@@ -391,8 +405,8 @@ def get_messages(messages: List[Dict], session_name: str,
         'total_turns': len(turns),
         'messages': turns,
     })
-    if search:
-        base['search'] = search
+    if terms:
+        base['search'] = term_echo(terms)
 
     return base
 

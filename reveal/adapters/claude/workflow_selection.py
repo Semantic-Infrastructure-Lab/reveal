@@ -4,8 +4,13 @@ from typing import Any, Dict, Mapping
 
 from .controls import WORKFLOW_WHERE_RULE
 from .handlers.post_process import select_workflow_rows
+from .match_terms import match_terms, term_echo
 
 MATCH_RULE = 'Case-insensitive literal substring of workflow tool name or operation detail; not tool-result text'
+
+
+def _match_echo(value):
+    return value if value is None or isinstance(value, str) else term_echo(match_terms(value))
 
 
 def workflow_selection_requested(params):
@@ -20,14 +25,15 @@ def select_workflow_result(result: Dict[str, Any], params: Mapping[str, Any]) ->
     terms = params.get('where')
     for expression in terms or ():
         rows = select_workflow_rows(rows, tool=expression.partition('==')[2])
-    rows = select_workflow_rows(rows, term=params.get('match'))
+    for term in match_terms(params.get('match')):  # repeated terms AND per row (rule 19)
+        rows = select_workflow_rows(rows, term=term)
     result.update(workflow=rows, displayed_steps=len(rows))
     if len(rows) < before:
         result['filtered_from'] = before
     if terms is not None:
         result.setdefault('scope', {}).update(where=list(terms), where_rule=WORKFLOW_WHERE_RULE)
     result.setdefault('meta', {})['workflow_selection'] = {
-        'match': params.get('match'), 'where': list(terms) if terms is not None else None,
+        'match': _match_echo(params.get('match')), 'where': list(terms) if terms is not None else None,
         'match_rule': MATCH_RULE, 'where_rule': WORKFLOW_WHERE_RULE,
         'before': before, 'selected': len(rows),
     }

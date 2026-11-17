@@ -53,6 +53,11 @@ def _session_substring(value):
     return f'session~={text(value)}'
 
 
+def _terms(value):
+    """Match terms: one string, or every repeat of a repeated match (rule 19), each a string."""
+    return [text(item) for item in value] if isinstance(value, (list, tuple)) else [text(value)]
+
+
 def _spec(name, schema):
     convert: Callable[[Any], Any] = text
     if name in PRESENCE_FLAGS:
@@ -90,8 +95,8 @@ PARAM_SPECS = tuple(_spec(name, schema) for name, schema in _SCHEMA_QUERY_PARAMS
     ParamSpec('timeline', 'flag', 'Chronological message timeline (legacy query selector)', None, presence, cli=CliBinding(('--timeline',), action='store_true')),
     ParamSpec('detail', 'string', 'summary, normal, full or raw; levels are qualified by the existing reader', None, text, choices=('summary', 'normal', 'full', 'raw'), cli=CliBinding(('--detail',))),
     ParamSpec('view', 'string', 'Existing session answer: ' + ', '.join(SESSION_VIEW_NAMES), None, text, choices=SESSION_VIEW_NAMES, role='operation', cli=CliBinding(('--view',))),
-    ParamSpec('match', 'string', 'Match text in this resource: session content, narrative messages, tool results, workflow tool/detail text, cross-session content, workspace lists or history; unsupported views reject',
-              None, text, uri_codec='percent', cli=CliBinding(('--match',))),
+    ParamSpec('match', 'array', 'Match text in this resource: session content, narrative messages, tool results, workflow tool/detail text, cross-session content, workspace lists or history; repeat to require every term in each row (a message, turn, tool result, entry, session, file or workflow row); unsupported views reject',
+              None, _terms, uri_codec='percent', repeatable=True, cli=CliBinding(('--match',))),
 )
 
 

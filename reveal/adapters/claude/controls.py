@@ -119,7 +119,10 @@ COMPOSITE_QUERY_RULE = 'Canonical JSON receipt of applied bound filters; indepen
 
 def composite_query_receipt(params):
     """Describe the filters actually applied, including literal API overlays."""
+    from .match_terms import match_terms, term_echo
     values = {name: params[name] for name in ('tools', 'errors', 'contains') if name in params}
+    if 'contains' in values and not isinstance(values['contains'], str):  # repeated terms (rule 19)
+        values['contains'] = term_echo(match_terms(values['contains']))
     return json.dumps(values, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
 
 
@@ -149,15 +152,18 @@ def date_requirement_error(adapter, result):
 
 
 def apply_match(params, resource):
+    from .match_terms import match_terms
     value = params.get('match')
     params.pop('match', None)
     if value is None:
         return
+    terms = match_terms(value)
     target = _match_target(params, resource)
     for name in ('search', 'contains'):
-        if name in params and (name != target or params[name] != value):
+        if name in params and (name != target or match_terms(params[name]) != terms):
             raise RequestValidationError(f'match conflicts with {name} on this resource')
-    params[target] = value
+    # One term reaches its reader as the string it always was; several AND per row of the answer (rule 19).
+    params[target] = terms[0] if len(terms) == 1 else terms
 
 
 def _match_target(params, resource):
