@@ -450,6 +450,17 @@ invocation, informational, never on stderr beside a JSON answer) (BACK-2659):
 Plugins are discovered once per process; every later discovery replays what the first one met, so a
 long-lived MCP server reports a broken plugin in every answer, not only the first.
 
+### Nothing beside a JSON answer
+
+A `--format json` answer is the whole answer: nothing is printed on stderr beside it, and an MCP
+`reveal_query` JSON result is one content block, the CLI's JSON exactly (BACK-2659). Per-file
+failures are in the JSON (`analysis_failed`, `parse_degraded`, a rule's `unavailable` outcome, a
+file's `check_rules_failed`), so the per-file lines a text answer prints (`Warning: Failed to analyze
+<file>: <cause>`, `AST parse failed ... for <file>`, I003's `layer config ... could not be used`,
+`Check rules failed for <file>`) are not printed in JSON mode, by pool workers either. Where the JSON
+caps a file list (`analysis_failed` names five files, counts the rest and gives the cause classes), the
+text answer's lines remain the place for every file and the full cause text.
+
 ---
 
 ## Outcomes: failed, not applicable, truncated, ok
