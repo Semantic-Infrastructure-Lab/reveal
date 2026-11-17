@@ -61,8 +61,8 @@ def test_metadata_date_override_reaches_existing_index_owner(codex):
 
 
 def test_unknown_override_rejects(codex):
-    with pytest.raises(TypeError, match='Unsupported declared'):
-        query('codex://sessions', invented_control=True)
+    with pytest.raises(TypeError, match="unsupported control 'invented_control'; supported controls: "):
+        query('codex://sessions', invented_control=True)  # rule 7's one message (BACK-2654)
 
 
 def test_original_bad_matches_cannot_be_hidden(codex):
