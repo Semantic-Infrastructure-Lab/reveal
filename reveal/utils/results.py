@@ -324,12 +324,23 @@ def restate_shown_counts(result: Any, paths: Sequence[str], shown: int) -> None:
     another mode of the noun does not produce stays absent.
     """
     for path in paths:
-        *parents, key = path.split('.')
-        holder = result
-        for part in parents:
-            holder = holder.get(part) if isinstance(holder, dict) else None
-        if isinstance(holder, dict) and type(holder.get(key)) is int:
+        holder, key = dotted_holder(result, path)
+        if holder is not None and type(holder.get(key)) is int:
             holder[key] = shown
+
+
+def dotted_holder(result: Any, path: str) -> Tuple[Optional[Dict[str, Any]], str]:
+    """The dict that holds the last key of the dotted *path* in *result*, and that key (BACK-2667).
+
+    ``'commits.recent'`` names ``result['commits']['recent']``; a name without a dot is a top-level
+    key. The holder is ``None`` when a step is missing or not a dict, so another view's shape reads
+    as absent. The key need not be present in the holder: the caller decides what to read or set.
+    """
+    *parents, key = path.split('.')
+    holder = result
+    for part in parents:
+        holder = holder.get(part) if isinstance(holder, dict) else None
+    return (holder if isinstance(holder, dict) else None), key
 
 
 def relabel_truncations(result: Any, field: str, hint: str) -> None:
