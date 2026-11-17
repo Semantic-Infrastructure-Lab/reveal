@@ -25,7 +25,8 @@ def test_cli_uri_api_filter_and_zero_overrides(data):
     b = answer(data, 'json://data.json/items?where=n%3E1&sort=-n')
     assert a == b and a['value'] == [{'type': 'photo', 'n': 3}]
     uri = f'json://{data / "data.json"}/items?limit=1'
-    assert query(uri, limit=0)['value'] == []
+    # limit=0 overrides the URI's limit=1 and is no cap (Caps row, BACK-2654; it was an empty page)
+    assert query(uri, limit=0)['value'] == query(f'json://{data / "data.json"}/items')['value'] != []
     assert len(query(uri)['value']) == 1
 
 

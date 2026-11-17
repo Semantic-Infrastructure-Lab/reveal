@@ -118,7 +118,7 @@ def test_top_zero_retains_required_census_without_ast_analysis(tmp_path, name):
     from reveal.adapters.ast import AstAdapter
     child = tree(tmp_path, 'ast')
     with denied(child):
-        ast = AstAdapter(str(tmp_path), 'complexity>9&limit=0').get_structure()
+        ast = AstAdapter(str(tmp_path), 'complexity>9&offset=1').get_structure()  # an empty page (limit=0 is no cap)
         assert ast['total_results'] == 1 and ast['displayed_results'] == 0
         with patch.object(AstAdapter, 'get_structure', side_effect=AssertionError('ordinary map must not run AST')) as child_call:
             result, state = request(name, tmp_path, 'top=0')

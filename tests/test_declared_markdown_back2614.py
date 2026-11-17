@@ -59,7 +59,8 @@ def test_existing_views_share_generated_bindings(docs, flags, suffix, kind):
 def test_zero_and_false_overrides_remain_explicit(docs):
     from reveal.api import query
     uri = f'markdown://{docs}?match=world&limit=1'
-    assert query(uri, limit=0)['results'] == []
+    # limit=0 overrides the URI's limit=1 and is no cap (Caps row, BACK-2654; it was an empty page)
+    assert query(uri, limit=0)['results'] == query(f'markdown://{docs}?match=world')['results'] != []
     assert len(query(uri)['results']) == 1
 
 

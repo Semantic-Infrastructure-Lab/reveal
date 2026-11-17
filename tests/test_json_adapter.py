@@ -567,12 +567,14 @@ class TestJsonAdapterFiltering(unittest.TestCase):
         self.assertEqual(len(users), 3)
 
     def test_zero_limit(self):
-        """Should support limit=0 (return empty array)."""
+        """limit=0 is no cap: every element (Caps row, BACK-2654; it used to return an empty array)."""
         adapter = JsonAdapter(f'{self.users_json}/users', 'limit=0')
         result = adapter.get_structure()
 
         users = result['value']
-        self.assertEqual(len(users), 0)
+        everything = JsonAdapter(f'{self.users_json}/users', '').get_structure()['value']
+        self.assertEqual(len(users), len(everything))
+        self.assertGreater(len(users), 0)
 
     def test_offset_greater_than_total(self):
         """Should handle offset greater than array length."""
