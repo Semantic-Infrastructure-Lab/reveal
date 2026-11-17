@@ -167,3 +167,39 @@ def test_real_stdio_session_returns_parseable_json_per_noun(degraded, tmp_path):
     asyncio.run(asyncio.wait_for(exercise(), timeout=180))
     for noun, document in seen.items():
         assert 'analysis_incomplete' in [w['type'] for w in document['meta']['warnings']], noun
+
+
+@pytest.mark.mcp
+@pytest.mark.component
+def test_real_stdio_session_carries_a_missing_reveal_config_in_the_json(tmp_path):
+    """BACK-2659: the diagnostic that rode in the second block (stderr) is in the JSON, so the
+    result is one block; a request with no config problem stays one block without the warning."""
+    pytest.importorskip('mcp')
+    from mcp import ClientSession, StdioServerParameters
+    from mcp.client.stdio import stdio_client
+
+    clean = tmp_path / 'clean'
+    clean.mkdir()
+    (clean / 'ok.py').write_text('def ok():\n    return 1\n', encoding='utf-8')
+    seen = {}
+
+    async def exercise(label, extra):
+        env = {key: value for key, value in os.environ.items() if not key.startswith('REVEAL_')}
+        env.update(REVEAL_DISK_CACHE='0', XDG_CONFIG_HOME=str(tmp_path / 'xdg'), **extra)
+        params = StdioServerParameters(command=sys.executable, args=['-m', 'reveal.mcp_server'], env=env)
+        with (tmp_path / f'server-stderr-{label}.txt').open('w', encoding='utf-8') as errlog:
+            async with stdio_client(params, errlog=errlog) as (read, write):
+                async with ClientSession(read, write) as session:
+                    await session.initialize()
+                    for noun, query in (('ast', ''), ('metrics', ''), ('calls', '?callers=ok')):
+                        result = await session.call_tool(
+                            'reveal_query', {'uri': _uri(noun, query, clean), 'provenance': True})
+                        assert not result.is_error, noun
+                        seen[label, noun] = [block.text for block in result.content]
+
+    asyncio.run(asyncio.wait_for(exercise('missing', {'REVEAL_CONFIG': str(tmp_path / 'nope.yaml')}), timeout=180))
+    asyncio.run(asyncio.wait_for(exercise('valid', {}), timeout=180))
+    for (label, noun), blocks in seen.items():
+        assert len(blocks) == 1, (label, noun, blocks[1:])
+        codes = [w.get('code') for w in json.loads(blocks[0])['meta']['warnings'] if w.get('type') == 'config_warning']
+        assert codes == (['config_file_missing'] if label == 'missing' else []), (label, noun)
