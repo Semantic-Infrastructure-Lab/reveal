@@ -191,7 +191,7 @@ smaller than the budget.
 ### Usage
 
 ```
-reveal pack PATH [--budget N] [--focus TOPIC] [--since REF] [--content] [--verbose]
+reveal pack PATH [--budget N] [--focus TOPIC] [--since REF] [--content] [--detail full]
 ```
 
 `PATH` accepts a directory or a single file. For a file with `--since`, Git
@@ -209,7 +209,7 @@ other changed files are not added to a single-file selection.
 | `--focus TOPIC` | Emphasize files matching this name pattern (e.g., `--focus auth`), plus files structurally related to a match via the import/dependency graph (a personalized-PageRank relevance score, so a helper a matching file imports ranks above an unrelated file even without a name match) |
 | `--content` | Emit content for the selected files: changed files raw (first 500 lines), key files as structure, the rest by name only |
 | `--architecture` | Boost high fan-in (core abstraction) files; prepend architecture brief |
-| `--verbose` | Show per-file token/line counts |
+| `--detail full` | Show per-file token/line counts (replaced `--verbose`) |
 | `--format json` | Machine-readable output |
 
 `--architecture` fan-in and `--focus` relevance read the import graph and state their rule: a `Rule:` line under
@@ -313,7 +313,7 @@ reveal pack .                              # Default 2000-token budget
 reveal pack . --budget 4000              # Larger budget
 reveal pack . --budget 500-lines          # Line-based budget
 reveal pack . --focus auth                # Emphasize auth module
-reveal pack ./src --budget 8000 --verbose # Show per-file token counts
+reveal pack ./src --budget 8000 --detail full # Show per-file token counts
 reveal pack . --content                   # Structure content, not just file list
 reveal pack src/ --since main --content --budget 8000  # Full agent context: changed + structure
 reveal pack src/ --since main --budget 8000    # PR context: changed files first (manifest only)

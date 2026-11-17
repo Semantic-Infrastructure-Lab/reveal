@@ -275,10 +275,13 @@ def test_scope_ignores_and_excludes_match(project):
 def test_existing_presentation_boundaries_and_sibling_surface(project):
     assert run('deps', 'proj', '--all').returncode == 2
     full = run('deps://proj?top=0', '--all')
-    verbose = run('deps', 'proj', '--top', '0', '--verbose')
-    uri_verbose = run('deps://proj?top=0', '--verbose')
+    # --verbose is the legacy word of an uncapped top (BACK-2654 note #17): beside a different top it conflicts
+    verbose = run('deps', 'proj', '--verbose')
+    uri_verbose = run('deps://proj', '--verbose')
     assert full.returncode == verbose.returncode == uri_verbose.returncode == 0
     assert full.stdout == verbose.stdout == uri_verbose.stdout
+    for conflict in (run('deps', 'proj', '--top', '0', '--verbose'), run('deps://proj?top=0', '--verbose')):
+        assert conflict.returncode == 2 and 'top' in conflict.stderr and 'verbose' in conflict.stderr
     assert 'os' in full.stdout and 'sys' in full.stdout
     assert run('surface', 'proj', '--top', '0', '--format', 'json').returncode == 0
 

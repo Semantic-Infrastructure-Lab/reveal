@@ -1485,7 +1485,9 @@ class TestClaudeMessageRangeRenderer:
         assert 'more chars' not in out
         assert 'x' * 700 in out
 
-    def test_verbose_flag_disables_truncation(self, capsys):
+    def test_only_the_answers_detail_disables_truncation(self, capsys):
+        # --verbose is detail=full (BACK-2654 rule 4): it reaches the renderer as the answer's own full, tested
+        # above; a display-side verbose is no second switch.
         from reveal.adapters.claude.renderer import ClaudeRenderer
         long_text = 'y' * 700
         messages = [{'turn': 1, 'message_index': 0, 'role': 'user', 'timestamp': '',
@@ -1494,7 +1496,7 @@ class TestClaudeMessageRangeRenderer:
         result['_display']['verbose'] = True
         ClaudeRenderer._render_claude_message_range(result)
         out = capsys.readouterr().out
-        assert 'more chars' not in out
+        assert 'more chars' in out
 
     def test_filtered_from_shown_in_header(self, capsys):
         from reveal.adapters.claude.renderer import ClaudeRenderer

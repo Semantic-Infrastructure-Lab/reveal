@@ -50,7 +50,7 @@ def test_every_declaration_has_a_spec():
 
 def test_declarations_exist():
     assert {(s, d) for s, d, _ in _declarations()} >= {
-        ('hotspots', 'all'), ('imports', 'verbose'), ('git', 'since'), ('git', 'until'),
+        ('hotspots', 'all'), ('git', 'since'), ('git', 'until'),
         ('overview', 'respect_gitignore'), ('stats', 'respect_gitignore')}
 
 
@@ -140,7 +140,10 @@ def test_all_and_verbose_stay_silent_on_adapters_without_a_declaration():
 
 def test_all_and_verbose_inject_where_declared():
     assert _inject('.', 'hotspots', all=True)[0] == '.?top=1000000'
-    assert _inject('.', 'imports', verbose=True)[0] == '.?detail=full'  # BACK-2620: --verbose is detail=full
+    # BACK-2654 rule 4: --verbose binds from the noun's declarations, never CLI_QUERY_FLAGS: imports declares the
+    # legacy word verbose (detail=full), claude only detail
+    assert _inject('.', 'imports', verbose=True)[0] == '.?verbose=true'
+    assert _inject('.', 'claude', verbose=True)[0] == '.?detail=full'
 
 
 def test_namespace_missing_the_flags_is_tolerated():

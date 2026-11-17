@@ -330,6 +330,11 @@ VALUE_CASES = [
 ]
 
 
+def rejection(stderr):
+    """The request's error lines, which a typed command and its URI answer alike."""
+    return [line for line in stderr.splitlines() if line.startswith('Error')]
+
+
 def ignored_flags(stderr):
     """The flags a 'has no effect' note names; the sentence names the spelling, so compare the flags."""
     return sorted(line.split()[2] for line in stderr.splitlines() if line.startswith('Note: ') and 'has no effect' in line)
@@ -344,8 +349,10 @@ def test_option_values_are_read_alike(project, noun, flags):
     assert_equal_stdout(noun, a.stdout, b.stdout)
     assert ignored_flags(a.stderr) == ignored_flags(b.stderr)
     if a.returncode == 2:
-        # parser-level rejection: no answer, a usage message in both spellings
-        assert not a.stdout and 'usage:' in a.stderr and 'usage:' in b.stderr
+        # no answer: a parser-level rejection (a usage message) in both spellings, or the same request rejection
+        # (rule 4: --verbose is --detail full, which the request lacks; BACK-2654)
+        assert not a.stdout and not b.stdout
+        assert ('usage:' in a.stderr and 'usage:' in b.stderr) or rejection(a.stderr) == rejection(b.stderr) != []
     else:
         assert a.returncode == 0 and a.stdout.strip()
         if noun == 'architecture':

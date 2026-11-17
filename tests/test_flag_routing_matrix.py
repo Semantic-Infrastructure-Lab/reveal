@@ -12,7 +12,9 @@ Channels by which a flag reaches a URI adapter (only these exist):
   declared          adapter lists the flag in CLI_QUERY_FLAGS; handle_uri injects it
   structure-param   get_structure() has a parameter named after the flag (auto-discovered)
   adapter-reads-args  adapter/renderer module reads `args.<flag>` itself
-  routing-special   renderer declares ACCEPTS_TOP (all/verbose -> its render_structure(top=))
+  routing-special   renderer declares ACCEPTS_TOP (all -> its render_structure(top=))
+  declared-binding  the flag's FlagSpec binds from a declared noun's PARAM_SPECS (--verbose: the noun's legacy word
+                    verbose, else detail=full, else exit 2 naming detail; BACK-2654 rule 4)
 A flag with no channel is accepted and silently does nothing. Each such cell must be
 classified `not-applicable` (with a reason) or stays `unreviewed` -- the honest
 "nobody has decided yet", which is the backlog this matrix exists to make visible.
@@ -178,7 +180,9 @@ def derive_matrix():
     from reveal.adapters import base
     from reveal.adapters.base import get_renderer_class
 
+    from reveal.cli.routing.flag_specs import FLAG_SPECS
     readers = {flag: _flag_readers(flag) for flag in FLAGS}
+    bound_flags = {spec.dest for spec in FLAG_SPECS if spec.declared_binding is not None}
     matrix = {}
     for scheme in sorted(base.list_supported_schemes()):
         cls = base.get_adapter_class(scheme)
@@ -199,8 +203,10 @@ def derive_matrix():
                 via.append('structure-param')
             if any(r.startswith(scope) for r in readers[flag]):
                 via.append('adapter-reads-args')
-            if accepts_top and flag in ('all', 'verbose'):
+            if accepts_top and flag == 'all':
                 via.append('routing-special')
+            if flag in bound_flags and getattr(cls, 'PARAM_SPECS', None):
+                via.append('declared-binding')
             if flag in ROUTING_SPECIAL.get(scheme, ()):
                 via.append('routing-special')
             cells[flag] = via

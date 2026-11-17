@@ -62,11 +62,12 @@ subcommands:
       review: not-applicable
       via: []
     verbose:
-      reason: No verbosity control in this reader; the shared flag ledger reports
-        that --verbose has no effect.
-      review: not-applicable
+      reason: 'BACK-2654 rule 4: --verbose is --detail full, bound from the
+        declarations; this noun declares no detail, so it exits 2 naming detail and its
+        controls.'
+      review: honored
       via:
-      - declared-unused
+      - declared-read
   calls:
     all:
       reason: --all is not declared on `reveal calls`'s own parser -- argparse rejects
@@ -90,11 +91,12 @@ subcommands:
       review: not-applicable
       via: []
     verbose:
-      reason: calls accepts shared verbosity but nothing it prints changes with it; the
-        flag ledger names it as a no-op, as for calls:// (BACK-2066).
-      review: not-applicable
+      reason: 'BACK-2654 rule 4: --verbose is --detail full, bound from the
+        declarations; it answers on callees and exits 2 naming detail where the view
+        has no full level.'
+      review: honored
       via:
-      - declared-unused
+      - declared-read
   check:
     all:
       reason: --all is not declared on `reveal check`'s own parser -- argparse rejects
@@ -172,11 +174,12 @@ subcommands:
       review: not-applicable
       via: []
     verbose:
-      reason: contracts:// output has no --top/limit concept anywhere to lift; confirmed
-        live, no truncation exists to expand
-      review: not-applicable
+      reason: 'BACK-2654 rule 4: --verbose is --detail full, bound from the
+        declarations; this noun declares no detail, so it exits 2 naming detail and its
+        controls.'
+      review: honored
       via:
-      - declared-unused
+      - declared-read
   deps:
     all:
       reason: --all is not declared on `reveal deps`'s own parser -- argparse rejects
@@ -372,11 +375,12 @@ subcommands:
       review: not-applicable
       via: []
     verbose:
-      reason: No verbosity control in this reader; the shared flag ledger reports
-        that --verbose has no effect.
-      review: not-applicable
+      reason: 'BACK-2654 rule 4: --verbose is --detail full, bound from the
+        declarations; it answers on the flatten view and exits 2 naming detail
+        elsewhere.'
+      review: honored
       via:
-      - declared-unused
+      - declared-read
   markdown:
     all:
       reason: --all is not declared on `reveal markdown`'s own parser -- argparse
@@ -400,11 +404,12 @@ subcommands:
       review: not-applicable
       via: []
     verbose:
-      reason: No verbosity control in this reader; the shared flag ledger reports
-        that --verbose has no effect.
-      review: not-applicable
+      reason: 'BACK-2654 rule 4: --verbose is --detail full, bound from the
+        declarations; this noun declares no detail, so it exits 2 naming detail and its
+        controls.'
+      review: honored
       via:
-      - declared-unused
+      - declared-read
   metrics:
     all:
       reason: --all is not declared on `reveal metrics`'s own parser -- argparse rejects
@@ -431,11 +436,12 @@ subcommands:
       via:
       - declared-read
     verbose:
-      reason: metrics accepts shared verbosity but nothing it prints changes with it; the
-        flag ledger names it as a no-op, as for calls:// (BACK-2146).
-      review: not-applicable
+      reason: 'BACK-2654 rule 4: --verbose is --detail full, bound from the
+        declarations; metrics'' levels are normal and summary, so it exits 2 naming
+        them.'
+      review: honored
       via:
-      - declared-unused
+      - declared-read
   offline:
     all:
       reason: --all is not declared on `reveal offline`'s own parser -- argparse rejects
@@ -543,11 +549,12 @@ subcommands:
       review: not-applicable
       via: []
     verbose:
-      reason: patches accepts shared verbosity but nothing it prints changes with it;
-        the flag ledger names it as a no-op, as for calls:// (BACK-2160).
-      review: not-applicable
+      reason: 'BACK-2654 rule 4: --verbose is --detail full, bound from the
+        declarations; this noun declares no detail, so it exits 2 naming detail and its
+        controls.'
+      review: honored
       via:
-      - declared-unused
+      - declared-read
   review:
     all:
       reason: --all is not declared on `reveal review`'s own parser -- argparse rejects
@@ -625,11 +632,12 @@ subcommands:
       review: not-applicable
       via: []
     verbose:
-      reason: surface's --top already defaults to None (unlimited) -- there is no
-        default cap for --verbose to lift
-      review: not-applicable
+      reason: 'BACK-2654 rule 4: --verbose is --detail full, bound from the
+        declarations; this noun declares no detail, so it exits 2 naming detail and its
+        controls.'
+      review: honored
       via:
-      - declared-unused
+      - declared-read
   testability:
     all:
       reason: --all is not declared on `reveal testability`'s own parser -- argparse
@@ -681,8 +689,9 @@ subcommands:
       review: not-applicable
       via: []
     verbose:
-      reason: Trace accepts shared verbosity but expansion is controlled by depth;
-        verbosity is an explicit no-op disclosed by the flag ledger.
-      review: not-applicable
+      reason: 'BACK-2654 rule 4: --verbose is --detail full, bound from the
+        declarations; this noun declares no detail, so it exits 2 naming detail and its
+        controls.'
+      review: honored
       via:
-      - declared-unused
+      - declared-read

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import re
 import os
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -19,7 +20,7 @@ from .base import ResourceAdapter, register_adapter, register_renderer
 from ..errors import NotApplicableError
 from ..utils.path_utils import TestLayout, is_test_dir
 from ..rendering.adapters.testability import TestabilityRenderer
-from ..utils.query_binding import bind_declared_params, boolean_value
+from ..utils.query_binding import bind_declared_params, boolean_value, verbose_legacy
 from ..utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSpec,
                                   param_schema, peek_query_items, whole_number)
 from ..utils.results import AnalysisCompleteness, result_execution_facts
@@ -135,6 +136,22 @@ def _resolve_test_paths(src_path: Path, tests: Optional[List[str]],
     return list(dict.fromkeys([root, *beside, *declared]))
 
 
+# The pressure report's controls, declared once for testability:// and patches ?view=pressure (BACK-2160).
+PRESSURE_SPECS = (
+    ParamSpec('tests', 'array', 'Test paths, trusted as the suite (omitted: default project test/support policy and candidate suite roots)', None,
+              _test_roots, uri_codec='comma-percent', role='analysis',
+              cli=CliBinding(('--tests',), nargs='+')),
+    ParamSpec('top', 'integer', 'Maximum groups per hotspot list; zero is unlimited', 20,
+              _top, zero_policy='unlimited', role='presentation', cli=CliBinding(('--top',))),
+    ParamSpec('min_patches', 'integer', 'Minimum patches for a target group', 3,
+              _threshold, role='analysis', cli=CliBinding(('--min-patches',))),
+    ParamSpec('min_categories', 'integer', 'Minimum boundary categories', 3,
+              _threshold, role='analysis', cli=CliBinding(('--min-categories',))),
+    ParamSpec('include_unresolved', 'boolean', 'Include low-count unresolved targets', False,
+              boolean_value, role='analysis', cli=CliBinding(('--include-unresolved',), action='store_true')),
+)
+
+
 @register_adapter('testability')
 @register_renderer(TestabilityRenderer)
 class TestabilityAdapter(ResourceAdapter):
@@ -152,19 +169,10 @@ class TestabilityAdapter(ResourceAdapter):
     DEFAULT_FAIL_ON = 'none'
     RESOURCE_SPEC = ResourceSpec(uri_codec='existing-path-first')
     BUDGET_LIST_FIELD = ('patch_hotspots', 'boundary_hotspots')
-    PARAM_SPECS = (
-        ParamSpec('tests', 'array', 'Test paths, trusted as the suite (omitted: default project test/support policy and candidate suite roots)', None,
-                  _test_roots, uri_codec='comma-percent', role='analysis',
-                  cli=CliBinding(('--tests',), nargs='+')),
-        ParamSpec('top', 'integer', 'Maximum groups per hotspot list; zero is unlimited', 20,
-                  _top, zero_policy='unlimited', role='presentation', cli=CliBinding(('--top',))),
-        ParamSpec('min_patches', 'integer', 'Minimum patches for a target group', 3,
-                  _threshold, role='analysis', cli=CliBinding(('--min-patches',))),
-        ParamSpec('min_categories', 'integer', 'Minimum boundary categories', 3,
-                  _threshold, role='analysis', cli=CliBinding(('--min-categories',))),
-        ParamSpec('include_unresolved', 'boolean', 'Include low-count unresolved targets', False,
-                  boolean_value, role='analysis', cli=CliBinding(('--include-unresolved',), action='store_true')),
-    )
+    # verbose lifts the group caps: the legacy word of top=0 (rule 16 parity, BACK-2654 note #17). patches'
+    # pressure view declares PRESSURE_SPECS without it: the word belongs to the retired spelling.
+    PARAM_SPECS = tuple(replace(spec, legacy=(verbose_legacy(0, 'top=0 (--top 0)'),)) if spec.name == 'top' else spec
+                        for spec in PRESSURE_SPECS)
 
     def __init__(self, resource: str, query: Optional[str] = None, *,
                  params: Optional[Dict[str, Any]] = None):
@@ -263,11 +271,11 @@ class TestabilityAdapter(ResourceAdapter):
             ],
         }
 
-    def get_structure(self, verbose: bool = False, **kwargs: Any) -> Dict[str, Any]:
-        return testability_report(self.path, self.query_params, verbose)
+    def get_structure(self) -> Dict[str, Any]:
+        return testability_report(self.path, self.query_params)
 
 
-def testability_report(resource: str, query_params: Any, verbose: bool = False) -> Dict[str, Any]:
+def testability_report(resource: str, query_params: Any) -> Dict[str, Any]:
     """The report both ``testability://`` and ``patches://?view=pressure`` answer (BACK-2160): one owner, read from
     the declared parameters of whichever adapter was asked."""
     from reveal.testability.report import build_testability_report
@@ -275,8 +283,7 @@ def testability_report(resource: str, query_params: Any, verbose: bool = False) 
 
     path = Path(resource)
     tests = TestabilityAdapter.PARAM_SPECS[0].read(query_params)
-    from .overview import UNLIMITED_TOP
-    top = UNLIMITED_TOP if verbose else TestabilityAdapter.PARAM_SPECS[1].read(query_params)
+    top = TestabilityAdapter.PARAM_SPECS[1].read(query_params)
     min_patches = TestabilityAdapter.PARAM_SPECS[2].read(query_params)
     min_categories = TestabilityAdapter.PARAM_SPECS[3].read(query_params)
     include_unresolved = TestabilityAdapter.PARAM_SPECS[4].read(query_params)

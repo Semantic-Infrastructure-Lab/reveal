@@ -17,7 +17,7 @@ from ..rendering.adapters.hotspots import HotspotsRenderer
 from ..utils.path_utils import EVIDENCE, resolve_project_root, walk_tree
 from ..utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSpec,
                                   nonnegative_display_limit, param_schema, whole_number)
-from ..utils.query_binding import bind_declared_params, boolean_value
+from ..utils.query_binding import bind_declared_params, boolean_value, verbose_legacy
 from ..utils.results import AnalysisCompleteness, ResultBuilder, result_execution_facts
 
 
@@ -27,9 +27,9 @@ def _hotspots_top(value: Any) -> int:
     return nonnegative_display_limit(value)
 
 
-def _ranking_top(params: Dict[str, Any], verbose: bool) -> int:
+def _ranking_top(params: Dict[str, Any]) -> int:
     top = cast(int, _TOP.read(params))
-    if verbose or top == 0:
+    if top == 0:
         from reveal.adapters.overview import UNLIMITED_TOP
         return UNLIMITED_TOP
     return top
@@ -46,7 +46,9 @@ def _hotspots_min(value: Any) -> int:
 
 _TOP = ParamSpec('top', 'integer', 'Retained items per ranking (0 = all)', 10,
                  _hotspots_top, ('top=20',), minimum=0, zero_policy='all',
-                 role='presentation', cli=CliBinding(('--top',), metavar='N'))
+                 role='presentation', cli=CliBinding(('--top',), metavar='N'),
+                 # verbose lifts both caps: the legacy word of top=0 (rule 16 parity, BACK-2654 note #17)
+                 legacy=(verbose_legacy(0, 'top=0 (--top 0)'),))
 _MIN_COMPLEXITY = ParamSpec('min_complexity', 'integer', 'Minimum complexity to analyze', 10,
                             _hotspots_min, ('min_complexity=15',), role='analysis',
                             cli=CliBinding(('--min-complexity',), metavar='N'))
@@ -397,7 +399,7 @@ class HotspotsAdapter(ResourceAdapter):
                 'failure exits 3; invalid requests exit 2.',
                 'top caps both JSON and text rankings (0 = all; negative values reject). '
                 'Whole decimal/scientific values are accepted; min_complexity remains signed. '
-                '--verbose lifts both caps. URI --all lifts caps only without explicit top; '
+                'top=0 (legacy --verbose) lifts both caps. URI --all lifts caps only without explicit top; '
                 'the subcommand does not accept --all.',
             ],
             'see_also': [
@@ -443,10 +445,10 @@ class HotspotsAdapter(ResourceAdapter):
             ],
         }
 
-    def get_structure(self, verbose: bool = False, **kwargs: Any) -> Dict[str, Any]:
+    def get_structure(self) -> Dict[str, Any]:
         with self.composition_run():
             path = Path(self.path)
-            top = _ranking_top(self.query_params, verbose)
+            top = _ranking_top(self.query_params)
             min_cx = _MIN_COMPLEXITY.read(self.query_params)
             functions_only = _FUNCTIONS_ONLY.read(self.query_params)
             files_only = _FILES_ONLY.read(self.query_params)

@@ -33,10 +33,11 @@ def test_defaults_are_not_submitted_controls(tmp_path):
     assert request['params'] == {} and request['kwargs'] == {}
 
 
+# --verbose is the legacy word of all (BACK-2654 note #17): it binds as all.
 @pytest.mark.parametrize('flag', ['--all', '--verbose'])
 def test_expansion_is_a_declared_control(tmp_path, flag):
     request = bound_request(tmp_path, flag)
-    assert request['params'][flag[2:]] is True
+    assert request['params'] == {'all': True}
     assert request['kwargs'] == {}
 
 

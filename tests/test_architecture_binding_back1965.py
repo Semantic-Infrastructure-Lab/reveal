@@ -53,13 +53,14 @@ def test_diff_population_preserves_existing_multiplier(tmp_path, monkeypatch, to
     assert seen == [expected]
 
 
-@pytest.mark.parametrize('flag', ['all', 'verbose'])
-def test_expansion_changes_only_the_canonical_map(tmp_path, flag):
+# verbose is the legacy word of all (BACK-2654 note #17): it reaches the owner as the query, not a keyword.
+@pytest.mark.parametrize('query,keywords', [('top=0', {'all': True}), ('top=0&verbose=true', {})])
+def test_expansion_changes_only_the_canonical_map(tmp_path, query, keywords):
     for number in range(7):
         folder = tmp_path / f'part{number}'
         folder.mkdir()
         (folder / 'value.py').write_text('VALUE=1\n', encoding='utf-8')
-    result = ArchitectureAdapter(str(tmp_path), 'top=0').get_structure(**{flag: True})
+    result = ArchitectureAdapter(str(tmp_path), query).get_structure(**keywords)
     assert result['map']['components']['returned'] == 7
 
 

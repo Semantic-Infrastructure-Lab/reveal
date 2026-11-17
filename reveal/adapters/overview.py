@@ -23,7 +23,7 @@ from ..utils.entry_points import ENTRY_POINT_RULE_BASE, is_active_entry_point
 from ..utils.gitignore import gitignore_scope, respect_gitignore_param
 from ..utils.path_utils import (HiddenTally, as_spelled, failure_of, hidden_entries_warning,
                                traversal_failed_warning)
-from ..utils.query_binding import bind_declared_params, boolean_value
+from ..utils.query_binding import bind_declared_params, boolean_value, verbose_legacy
 from ..utils.query_parser import (CliBinding, ParamSpec, ParamValueError, QueryParams, ResourceSpec,
                                   exclude_param, nonempty_scalar, nonnegative_display_limit, param_schema,
                                   split_exclude_param)
@@ -191,7 +191,7 @@ _AGAINST = ParamSpec('against', 'string', 'Compare the live working tree against
                      cli=CliBinding(('--against',), metavar='REF'))
 
 
-def _validate_comparison_controls(params, *, all_requested=False, verbose_requested=False) -> None:
+def _validate_comparison_controls(params, *, all_requested=False) -> None:
     supplied = dict(peek_query_items(params))
     if supplied.get('against') is None:
         return
@@ -199,7 +199,7 @@ def _validate_comparison_controls(params, *, all_requested=False, verbose_reques
         _obsolete_git(supplied['no_git'])
     if 'tests' in supplied:
         _obsolete_tests(supplied['tests'])
-    if supplied.keys() & {'no_imports', 'all', 'verbose'} or all_requested or verbose_requested:
+    if supplied.keys() & {'no_imports', 'all'} or all_requested:
         raise ValueError('overview comparison does not support no_imports, all or verbose')
 
 
@@ -429,7 +429,7 @@ class OverviewAdapter(ResourceAdapter):
     LEGACY_INIT = False
     BOUND_QUERY_CALL = True
     RESOURCE_IS_PATH = True
-    CLI_QUERY_FLAGS = {'all': 'all=true', 'verbose': 'verbose=true',
+    CLI_QUERY_FLAGS = {'all': 'all=true',
                        'respect_gitignore': 'respect_gitignore=false'}
     RESULT_TYPE = 'overview'
     FINDINGS_POLICIES = ('none',)
@@ -448,10 +448,9 @@ class OverviewAdapter(ResourceAdapter):
         ParamSpec('tests', 'string', 'Removed: use metrics or AST for test-filtered rankings',
                   'exclude', _obsolete_tests, role='analysis',
                   cli=CliBinding(('--tests',), metavar='{include,exclude}')),
+        # verbose only lifts the section caps: the legacy word of all (rule 16 parity, BACK-2654 note #17)
         ParamSpec('all', 'boolean', 'Expand map evidence; diagnostic details remain capped at 50',
-                  False, boolean_value, role='presentation'),
-        ParamSpec('verbose', 'boolean', 'Expand map evidence; diagnostic details remain capped at 50',
-                  False, boolean_value, role='presentation'),
+                  False, boolean_value, role='presentation', legacy=(verbose_legacy(True, 'all=true (--all)'),)),
         _AGAINST,
         exclude_param(),
     )
@@ -471,8 +470,7 @@ class OverviewAdapter(ResourceAdapter):
     @staticmethod
     def validate_request(params, args):
         flags = vars(args)  # Validation must not count inspected controls as applied.
-        _validate_comparison_controls(params, all_requested=flags.get('all', False),
-                                       verbose_requested=flags.get('verbose', False))
+        _validate_comparison_controls(params, all_requested=flags.get('all', False))
 
     def answer_requirement_error(self, result, expected_type, prior_facts=None):
         if expected_type == 'overview_diff':
@@ -580,9 +578,9 @@ class OverviewAdapter(ResourceAdapter):
                 'notes': ['Ordinary overview is a bounded static import map, not a quality assessment.',
                           'Comparison uses the live working tree and retains required snapshot losses.']}
 
-    def get_structure(self, all: bool = False, verbose: bool = False, **kwargs: Any) -> RevealResult:
+    def get_structure(self, all: bool = False, **kwargs: Any) -> RevealResult:
         with self.composition_run():
-            _validate_comparison_controls(self.query_params, all_requested=all, verbose_requested=verbose)
+            _validate_comparison_controls(self.query_params, all_requested=all)
             path = Path(self.path)
             # Direct API calls do not pass through the CLI's existing resource stat.
             # A missing/inaccessible target must not become a successful empty walk.
@@ -591,10 +589,7 @@ class OverviewAdapter(ResourceAdapter):
             if self.result_type_for(self.query_params) == 'overview_diff':
                 return self._comparison(path, _AGAINST.read(self.query_params), top)
             no_imports = self.PARAM_SPECS[2].read(self.query_params)
-            all_requested = self.PARAM_SPECS[4].read(self.query_params)
-            verbose_requested = self.PARAM_SPECS[5].read(self.query_params)
-            expanded = all_requested or verbose_requested
-            top = UNLIMITED_TOP if all or verbose or expanded else top
+            top = UNLIMITED_TOP if all or self.PARAM_SPECS[4].read(self.query_params) else top
             scope = _run_scope(self, path)
             facts, status = ((None, 'not_requested') if no_imports else _run_imports_analysis(
                 self, path, top, scope_usable=bool(scope.get('total_code_files'))))

@@ -216,10 +216,13 @@ def test_batch_exits_like_the_unresolved_request(project):
 
 def test_transport_noops_and_explicit_exclusions(project):
     baseline = run(*requests(project)[1])
-    for flags in (['--all'], ['--verbose'], ['--all', '--verbose']):
-        shown = run(*requests(project)[1], *flags)
-        assert shown.returncode == 0
-        assert shown.stdout == baseline.stdout
+    shown = run(*requests(project)[1], '--all')
+    assert shown.returncode == 0
+    assert shown.stdout == baseline.stdout
+    # --verbose is --detail full (BACK-2654 rule 4): trace declares no detail, so it is rejected, not a no-op
+    for flags in (['--verbose'], ['--all', '--verbose']):
+        rejected = run(*requests(project)[1], *flags)
+        assert rejected.returncode == 2 and "'detail'" in rejected.stderr and not rejected.stdout
     assert run(*requests(project)[0], '--all').returncode == 2
     (project / 'hidden.py').write_text('def external_api():\n    return 1\n', encoding='utf-8')
     for argv in requests(project):

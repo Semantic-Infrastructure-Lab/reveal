@@ -178,12 +178,16 @@ def test_original_resource_identity(project, name):
 def test_verbose_lifts_caps_but_all_preserves_explicit_top(project):
     for i in range(12):
         (project/f'f{i}.py').write_text((project/'a.py').read_text(encoding='utf-8'), encoding='utf-8')
-    left = run('hotspots', 'proj', '--top', '1', '--verbose', '--format', 'json')
-    right = run('hotspots://proj?top=1', '--verbose', '--format', 'json')
+    left = run('hotspots', 'proj', '--verbose', '--format', 'json')
+    right = run('hotspots://proj', '--verbose', '--format', 'json')
     assert left.returncode == right.returncode == 0
     a, b = json.loads(left.stdout), json.loads(right.stdout)
     equal_answers(a, b)
     assert len(a['file_hotspots']) == len(a['function_hotspots']) == 13
+    # BACK-2654 note #17: --verbose is the legacy word of top=0, so beside a different top it conflicts (rule 1);
+    # it used to override the explicit top.
+    for conflict in (run('hotspots', 'proj', '--top', '1', '--verbose'), run('hotspots://proj?top=1', '--verbose')):
+        assert conflict.returncode == 2 and 'top' in conflict.stderr and 'verbose' in conflict.stderr
     # BACK-2654 rule 1: --all sets top too, so beside ?top=1 it is a conflict (the URI's top used to win).
     capped = run('hotspots://proj?top=1', '--all', '--format', 'json')
     assert capped.returncode == 2 and '--all conflicts with top=1' in capped.stderr

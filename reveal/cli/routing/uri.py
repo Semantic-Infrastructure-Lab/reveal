@@ -1517,7 +1517,8 @@ def _render_structure_detail_kwargs(renderer_class: type, adapter: Any) -> dict:
 
 
 def _render_structure_top_kwargs(renderer_class: type, args: 'Namespace', adapter: Any = None) -> dict:
-    """Forward --all/--verbose, or the adapter's own ``?top=N``, to render_structure() (BACK-1226, BACK-1606).
+    """Forward --all, or the adapter's own ``?top=N``, to render_structure() (BACK-1226, BACK-1606). A noun's legacy
+    --verbose reaches it as that top (BACK-2654 note #17).
 
     render_structure(result, args.format) never passed args.top/all/verbose through
     for ANY URI-invoked renderer, so overview://'s per-section caps (Components,
@@ -1534,9 +1535,8 @@ def _render_structure_top_kwargs(renderer_class: type, args: 'Namespace', adapte
     behavior nobody asked this ticket to touch.
     """
     detail_kwargs = _render_structure_detail_kwargs(renderer_class, adapter)
-    if getattr(renderer_class, 'ACCEPTS_TOP', False) is True and (
-            peek(args, 'all', False) or peek(args, 'verbose', False)):
-        mark(args, 'all', 'verbose')
+    if getattr(renderer_class, 'ACCEPTS_TOP', False) is True and peek(args, 'all', False):
+        mark(args, 'all')
         from ...defaults import UNLIMITED_TOP
         return {'top': UNLIMITED_TOP, **detail_kwargs}
     declarations = getattr(type(adapter), 'PARAM_SPECS', ())

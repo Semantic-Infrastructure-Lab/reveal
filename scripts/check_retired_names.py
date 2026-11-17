@@ -53,6 +53,15 @@ LIST_ITEM = re.compile(r'\s*(?:[-*+]|\d+\.)\s')
 # `--check` / `--lint` are retired for the file route only: `reveal ssl://host --check`,
 # `reveal @hosts.txt --check` and `reveal --stdin --check` are the live spellings.
 FILE_ROUTE_CHECK = re.compile(r"reveal\s+(?!@|-|\S*://)[^\s|'\"]+\s[^|\n]*--(?:check|lint)(?![\w-])")
+# `--verbose` is retired on the declared nouns only (it is `--detail full` there, or the noun's legacy word verbose;
+# COMMAND_MODEL "Detail", BACK-2654): the file route, nginx and review keep the live flag.
+def _declared_verbose():
+    from reveal.adapters.base import get_adapter_class, list_supported_schemes
+    nouns = sorted(s for s in list_supported_schemes() if getattr(get_adapter_class(s), 'PARAM_SPECS', None))
+    names = '|'.join(re.escape(noun) for noun in nouns)
+    return re.compile(rf"(?:(?<![\w/.-])reveal\s+(?:{names})\b|(?<![\w-])(?:{names})://)[^|\n#]*--verbose(?![\w-])")
+
+
 # `reveal health` takes ops targets; a plain path (code) is `reveal check`'s. `.conf` stays an ops target.
 HEALTH_ARG = re.compile(r"reveal\s+health\b([^|\n#]*)")
 def _outline_names_a_code_element(line):
@@ -119,6 +128,8 @@ def _patterns(key):
     if kind == 'flag':
         if key == 'flag:--check':
             return [FILE_ROUTE_CHECK]
+        if key == 'flag:--verbose':
+            return [_declared_verbose()]
         return [re.compile(rf'(?<![\w-]){re.escape(rest)}(?![\w-])')]
     if kind == 'target' and key == 'target:health.code':
         return [_health_names_a_code_path]
@@ -141,6 +152,8 @@ def _sample(key):
         scheme, _, pair = rest.partition('.')
         param, _, value = pair.partition('=')
         return f"reveal '{scheme}://src/?{param}={value}'"
+    if key == 'flag:--verbose':
+        return 'reveal surface src/ --verbose'
     if kind == 'flag':
         return f'reveal src/app.py {rest}'
     if key == 'target:health.code':

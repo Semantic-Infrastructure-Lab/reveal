@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from ...utils.query_parser import join_exclude_patterns
+from ..invocation import retirement_note
 from .ledger import delegate, mark, peek
 
 
@@ -41,6 +42,9 @@ class FlagSpec:
                                           # adapter's own `top=0` may mean "nothing" (hotspots)
     control: bool = False                 # sets a request control: a declared noun that does not receive it
                                           # exits 2 naming its controls (rule 3, BACK-2654)
+    # A declared noun (PARAM_SPECS) binds the flag from its own declarations, never from CLI_QUERY_FLAGS:
+    # declarations -> (key, value); raises when the noun declares nothing to receive it (rule 4, note #17).
+    declared_binding: Callable[[Any], tuple] | None = None
 
 
 # The value functions `peek`: reading a flag here is not using it. inject_query_flags marks a
@@ -56,6 +60,11 @@ def _switch(dest: str) -> Callable[[Any], bool | None]:
 def _set(dest: str) -> Callable[[Any], Any | None]:
     # Unlike _typed, a falsy value counts: --limit 0 is a real request (no cap).
     return lambda args: peek(args, dest)
+
+
+def _verbose_binding(declarations: Any) -> tuple:
+    from ...utils.query_binding import verbose_binding
+    return verbose_binding(declarations)
 
 
 def _sort(args: Any) -> str | None:
@@ -76,10 +85,11 @@ FLAG_SPECS: tuple[FlagSpec, ...] = (
     FlagSpec('since', '--since', _typed('since'), warn_unsupported=True, already_scoped=('date>',), control=True),
     FlagSpec('until', '--until', _typed('until'), warn_unsupported=True, already_scoped=('date<',), control=True),
     FlagSpec('respect_gitignore', '--no-gitignore', _no_gitignore, warn_unsupported=True),
-    # --all / --verbose: many adapters honor them without a query fragment (claude,
-    # nginx, overview), so a missing declaration is not evidence of a dropped flag.
+    # --all / --verbose: undeclared adapters honor them without a query fragment (nginx),
+    # so a missing declaration is not evidence of a dropped flag.
     FlagSpec('all', '--all', _switch('all')),
-    FlagSpec('verbose', '--verbose', _switch('verbose')),
+    # --verbose is --detail full on a declared noun, or the noun's own legacy word verbose (rule 4, note #17).
+    FlagSpec('verbose', '--verbose', _switch('verbose'), declared_binding=_verbose_binding),
     # metrics' global switches (BACK-2621): forwarded as declared fragments, not by matching get_structure's
     # parameter names; an adapter that declares neither reports them as unused flags.
     FlagSpec('hotspots', '--hotspots', _switch('hotspots')),
@@ -204,6 +214,19 @@ def _reject_unreceived_control(adapter_class: Any, spec: FlagSpec) -> None:
         raise RequestValidationError(unsupported_controls_message(declarations, [spec.option]))
 
 
+def _declared_fragment(args: Any, spec: FlagSpec, binding: Callable[[Any], tuple], declarations: Any,
+                       scheme: str) -> str:
+    """The fragment a declared noun's own declarations give *spec*, with its note (rule 4, BACK-2654 note #17): the
+    noun's legacy word, under its ``param:`` row, or ``detail=full``, under the flag's own row."""
+    try:
+        key, value = binding(declarations)
+    except ValueError:
+        mark(args, spec.dest)
+        raise
+    retirement_note('flag:' + spec.option if key == 'detail' else f'param:{scheme}.{key}')
+    return f"{key}={'true' if value is True else value}"
+
+
 def inject_query_flags(resource: str, scheme: str, args: Any) -> str:
     """Append the query fragment for every CLI flag in effect that this scheme's adapter
     declares; print a note for the flags it does not support (where the spec says to)."""
@@ -221,7 +244,10 @@ def inject_query_flags(resource: str, scheme: str, args: Any) -> str:
             print(f"Note: {spec.option} has no effect on {scheme}:// -- it does not take "
                   f"sort=/limit=/offset=.", file=sys.stderr)
             continue
-        fragment = declared.get(spec.dest)
+        declarations = getattr(adapter_class, 'PARAM_SPECS', None)
+        fragment = (_declared_fragment(args, spec, spec.declared_binding, declarations, scheme)
+                    if spec.declared_binding is not None and declarations
+                    else declared.get(spec.dest))
         if fragment and spec.unbounded is not None and value == 0:
             value = _native_uncapped_value(adapter_class, fragment, spec.unbounded)
         fragment = fragment or spec.universal

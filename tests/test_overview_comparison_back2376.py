@@ -269,14 +269,15 @@ def test_api_comparison_controls_reject_before_map_or_engine(project, monkeypatc
     assert calls == []
 
 
-@pytest.mark.parametrize('control', ['all', 'verbose'])
-def test_direct_owner_comparison_controls_cannot_bypass_validation(project, monkeypatch, control):
+# verbose is the legacy word of all (BACK-2654 note #17): it reaches the owner as the query, not a keyword.
+@pytest.mark.parametrize('query,keywords', [('against=HEAD', {'all': True}), ('against=HEAD&verbose=true', {})])
+def test_direct_owner_comparison_controls_cannot_bypass_validation(project, monkeypatch, query, keywords):
     from reveal.adapters import overview
     def forbidden(*args, **kwargs):
         raise AssertionError('direct incompatible comparison reached census')
     monkeypatch.setattr(overview, '_run_scope', forbidden)
     with pytest.raises(ValueError):
-        OverviewAdapter(str(project), 'against=HEAD').get_structure(**{control: True})
+        OverviewAdapter(str(project), query).get_structure(**keywords)
 
 
 def test_api_none_resets_operation_and_typed_top_overrides_uri(project, monkeypatch):

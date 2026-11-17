@@ -768,9 +768,11 @@ key (`?authr`, `?authr=Scott`) gets the stderr warning "Unknown query param" ins
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `limit` | integer | 20 (refs), 50 (history) | Maximum results |
-| `verbose` | boolean | false | Legacy full blame detail; use `detail=full` |
 | `offset` | integer | 0 | Skip N results |
 | `sort` | string | `date` | Sort order (date, author, message) |
+
+The retired `verbose` (and the global `--verbose`) is replaced by `detail=full`: it answers the same full blame
+detail and prints a note.
 
 ### Examples
 

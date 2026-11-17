@@ -61,7 +61,7 @@ import pytest
 
 from conftest import _run_reveal_direct
 from test_declared_parity_back2053 import APP, CASES
-from test_retirements_back2066 import PRODUCTION_CASES, SOURCE
+from test_retirements_back2066 import PRODUCTION_CASES, SOURCE, commit_sample
 from reveal.adapters.base import get_adapter_class, list_supported_schemes
 from reveal.adapters.factory import uses_bound_query_call
 from reveal.cli.invocation import COMMANDS, RETIREMENTS
@@ -102,16 +102,14 @@ _NO_ALIAS = 'declares no aliased control: there is no alias and name to give twi
 _NO_LEGACY = 'no note-stage RETIREMENTS row spells this noun: there is no legacy spelling to note'
 EXEMPT = {
     **{(noun, '1b'): _NO_ALIAS for noun in ('architecture', 'codex', 'contracts', 'deps', 'hotspots', 'json',
-                                            'overview', 'pack', 'patches', 'surface', 'testability', 'trace')},
-    **{(noun, '2'): _NO_LEGACY for noun in ('codex', 'contracts', 'git', 'json', 'overview', 'pack', 'patches',
-                                            'surface')},
+                                            'overview', 'patches', 'surface', 'testability', 'trace')},
+    **{(noun, '2'): _NO_LEGACY for noun in ('codex', 'contracts', 'json', 'patches', 'surface')},
     **{(noun, '1d'): 'declares no repeatable control with an alias'
        for noun in NOUNS if noun not in ('claude', 'markdown', 'metrics', 'stats')},
     **{(noun, '5'): 'no note-stage param: row whose replacement is a control of this noun' for noun in (
-        'architecture', 'codex', 'contracts', 'deps', 'git', 'hotspots', 'json', 'overview', 'pack', 'patches',
-        'surface', 'testability', 'trace')},
+        'codex', 'contracts', 'json', 'patches', 'surface', 'trace')},
     **{(noun, '6'): 'declares no alias: nothing to note or keep note-free' for noun in (
-        'architecture', 'codex', 'contracts', 'deps', 'hotspots', 'json', 'overview', 'pack', 'patches',
+        'architecture', 'codex', 'contracts', 'deps', 'hotspots', 'json', 'overview', 'patches',
         'surface', 'testability', 'trace')},
     **{(noun, '8a'): 'no where expression: a bare key is never read as a field'
        for noun in ('architecture', 'calls', 'codex', 'contracts', 'deps', 'hotspots', 'imports', 'overview',
@@ -120,8 +118,7 @@ EXEMPT = {
         'architecture', 'calls', 'codex', 'contracts', 'deps', 'hotspots', 'imports', 'overview', 'pack', 'patches',
         'surface', 'testability', 'trace')},
     **{(noun, '16'): 'no legacy word and no standalone legacy parameter: nothing to translate or mark' for noun in (
-        'architecture', 'codex', 'contracts', 'deps', 'hotspots', 'json', 'overview', 'pack',
-        'patches', 'surface', 'testability', 'trace')},
+        'codex', 'contracts', 'json', 'patches', 'surface', 'trace')},
     **{(noun, '17'): 'one control at most selects the answer: no two selections to give' for noun in (
         'architecture', 'codex', 'contracts', 'deps', 'hotspots', 'overview', 'pack', 'surface', 'testability',
         'trace')},
@@ -232,6 +229,7 @@ def workspace(tmp_path, monkeypatch):
     sample = tmp_path / 'sample' / 'sample.py'
     sample.parent.mkdir()
     sample.write_text(SOURCE, encoding='utf-8')
+    commit_sample(sample)
     return sample
 
 
@@ -772,6 +770,15 @@ def _verbose_forms(noun):
     return forms
 
 
+def _read_answer(run, noun):
+    """The answer without its unused-input warnings: which inputs a transport's ledger reports unread is rule 20
+    (BACK-2656), where the subcommand and the URI still differ, not what the request answered."""
+    rc, doc = _answer(run, noun)
+    if isinstance(doc, dict) and isinstance(doc.get('meta'), dict) and 'warnings' in doc['meta']:
+        doc['meta']['warnings'] = [w for w in doc['meta']['warnings'] if w.get('code') != 'unused_input']
+    return rc, doc
+
+
 def _verbose_as_declared(noun, owner):
     """The global --verbose is the noun's declared spelling ``verbose``: the same answer as ``?verbose=true``, with
     that spelling's own note (its RETIREMENTS row) on CLI JSON."""
@@ -781,8 +788,8 @@ def _verbose_as_declared(noun, owner):
     for form, argv in _verbose_forms(noun).items():
         verbose = _run(*argv, '--verbose', '--format', 'json')
         doc = json.loads(verbose.out) if verbose.out.strip().startswith('{') else None
-        ok = (verbose.rc != 2 and _answer(verbose, noun) == _answer(declared, noun) and key in _retired_fields(doc)
-              and not _mentions(verbose, '--verbose'))
+        ok = (verbose.rc != 2 and _read_answer(verbose, noun) == _read_answer(declared, noun)
+              and key in _retired_fields(doc) and not _mentions(verbose, '--verbose'))
         cases.append(Case(f'{form} --verbose is ?verbose ({owner.name})', ok,
                           f'{verbose.brief()} vs {declared.brief()}: retired fields {_retired_fields(doc)} '
                           f'(wants the same answer and the {key} note)'))
@@ -887,7 +894,8 @@ def _legacy_conflict_cases(noun, key, legacy, specs, sample):
         spec = _spec_for(noun, name)
         if spec is None or _repeatable(spec):
             continue  # a repeatable canonical control accumulates the legacy term (rule 1)
-        other = next((v for v in _candidate_values(spec) if v != str(value)), None)
+        same = str(value).lower() if isinstance(value, bool) else str(value)  # a boolean translation spells true
+        other = next((v for v in _candidate_values(spec) if v != same), None)
         label = f'?{legacy}= vs ?{name}='
         if other is not None:
             cases.append(_conflict_case(label, _run(f'{uri}&{name}={other}', '--format', 'json'), (legacy, name)))

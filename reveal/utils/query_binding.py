@@ -8,7 +8,8 @@ from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Union
 from urllib.parse import quote, unquote
 
 from ..errors import RequestValidationError
-from .query_parser import ParamSpec, QueryParams, ResourceSpec, parse_query_params, peek_query_items, query_key
+from .query_parser import (LegacySpelling, ParamSpec, ParamValueError, QueryParams, ResourceSpec, parse_query_params,
+                           peek_query_items, query_key)
 
 
 def boolean_value(value: Any) -> bool:
@@ -18,6 +19,30 @@ def boolean_value(value: Any) -> bool:
     if isinstance(value, str) and value.lower() in ('true', 'false', 'yes', 'no', '1', '0'):
         return value.lower() in ('true', 'yes', '1')
     raise ValueError('expected true or false')
+
+
+def verbose_legacy(value: Any, replacement: str) -> LegacySpelling:
+    """The legacy word ``verbose`` on the control it stands for (COMMAND_MODEL "Detail", BACK-2654 note #17):
+    ``detail=full`` where it adds detail, the uncapping value of the cap it lifts elsewhere. ``verbose=false`` is the
+    control's default. *replacement* is what the rejection of a non-boolean value teaches."""
+    def codec(raw: Any) -> Any:
+        try:
+            return value if boolean_value(raw) else None
+        except ValueError:
+            raise ParamValueError(f'verbose must be a valid boolean, got {raw!r}: use {replacement}') from None
+    return LegacySpelling('verbose', codec=codec)
+
+
+def verbose_binding(declarations: Iterable[ParamSpec]) -> tuple:
+    """(key, value) the global ``--verbose`` binds on a declared noun (rule 4, BACK-2654 note #17): the noun's own
+    spelling ``verbose`` where a control declares it, otherwise ``detail=full``. A noun without either declaration
+    rejects it, naming detail and its controls."""
+    declarations = tuple(declarations)
+    if any('verbose' in spec.spellings for spec in declarations):
+        return 'verbose', True
+    if any(spec.name == 'detail' for spec in declarations):
+        return 'detail', 'full'
+    raise RequestValidationError('--verbose is --detail full: ' + unsupported_controls_message(declarations, ['detail']))
 
 
 def legacy_presence_value(value: Any) -> bool:

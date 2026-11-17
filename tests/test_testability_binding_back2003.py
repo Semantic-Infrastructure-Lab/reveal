@@ -269,16 +269,13 @@ def test_typed_numeric_controls_reject_boolean_fraction_and_nonfinite(project, v
 
 
 @pytest.mark.parametrize('output_format', ['text', 'json'])
-def test_verbose_override_keeps_explicit_top_unused_in_ledger(project, observed, output_format):
+def test_verbose_is_top_zero_and_conflicts_with_an_explicit_top(project, observed, output_format):
+    # BACK-2654 note #17: --verbose is the legacy word of top=0 (every group). It used to override an explicit
+    # --top, which was then reported unused; now the two settings conflict (rule 1) and the analysis never runs.
     src, tests = project
-    response = run('testability', str(src), '--tests', str(tests), '--top', '1',
-                   '--verbose', '--format', output_format)
+    response = run('testability', str(src), '--tests', str(tests), '--verbose', '--format', output_format)
     assert response.returncode == 0, (response.stdout, response.stderr)
-    assert observed['builds'][0]['top'] > 1
-    if output_format == 'json':
-        warnings = [w for w in json.loads(response.stdout)['meta']['warnings']
-                    if w['type'] == 'unused_flag']
-        assert [(w['code'], w['fields']) for w in warnings] == [('unused_flag', ['--top'])]
-        assert '--top' not in response.stderr
-    else:
-        assert response.stderr.count('--top has no effect') == 1
+    assert observed['builds'][0]['top'] == 0
+    conflict = run('testability', str(src), '--tests', str(tests), '--top', '1', '--verbose', '--format', output_format)
+    assert conflict.returncode == 2 and 'top' in conflict.stderr and 'verbose' in conflict.stderr
+    assert len(observed['builds']) == 1

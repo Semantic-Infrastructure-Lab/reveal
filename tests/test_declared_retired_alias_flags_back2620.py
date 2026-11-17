@@ -1,8 +1,8 @@
 """A declared subcommand notes a retired alias however the command line spells it (BACK-2620).
 
 Two spellings reach a declared parameter without naming the alias as its URI key: a hyphenated
-subcommand flag for an underscore alias (``--max-files`` for ``max_files``) and a legacy global flag
-bound through ``ParamSpec.cli_flags`` that is itself an alias (``--verbose`` for ``detail=full``).
+subcommand flag for an underscore alias (``--max-files`` for ``max_files``) and the global ``--verbose`` on a noun that
+declares the legacy word ``verbose`` (``detail=full``; the one declared path, BACK-2654 rule 4).
 Both must consult the same ``param:<name>.<alias>`` row the URI spelling does; canonical flags and
 cli_flags that are not aliases (``--all``) note nothing.
 """
@@ -12,7 +12,7 @@ import pytest
 
 from reveal.cli import invocation
 from reveal.cli.invocation import Invocation, Retirement, invocation_scope, noted_retirements
-from reveal.cli.routing.declared import _bind_legacy_cli_values, _note_retired_flags
+from reveal.cli.routing.declared import _bind_global_verbose, _bind_legacy_cli_values, _note_retired_flags
 from reveal.utils.query_binding import prepare_declared_params
 from reveal.utils.query_parser import CliBinding, LegacySpelling, ParamSpec
 
@@ -22,7 +22,7 @@ SCAN = ParamSpec('scan-limit', 'integer', 'Input budget', None, int, aliases=('s
                  cli=CliBinding(('--scan-limit',), dest='scan_limit'))
 DETAIL = ParamSpec('detail', 'string', 'How much', None, str,
                    legacy=(LegacySpelling('verbose', codec=lambda value: 'full' if value is True else 'normal'),),
-                   cli_flags=(('verbose', 'full'),), cli=CliBinding(('--detail',)))
+                   cli=CliBinding(('--detail',)))
 ROWS = ParamSpec('rows', 'integer', 'Row cap', None, int, cli_flags=(('all', '1000000'),),
                  cli=CliBinding(('--rows',)))
 
@@ -48,6 +48,7 @@ def bound_noted(source=None, **flags):
     with invocation_scope(Invocation.parse(['reveal', 'demo', '.']), retirements_to_stderr=False):
         source = dict(source or {})
         _bind_legacy_cli_values('demo', Demo, args, source)
+        _bind_global_verbose('demo', Demo, args, source)
         return sorted(noted_retirements()), source
 
 

@@ -34,9 +34,7 @@ adapters:
       via: []
     verbose:
       via:
-      - declared
-      - structure-param
-      - routing-special
+      - declared-binding
   ast:
     all:
       via:
@@ -65,11 +63,8 @@ adapters:
       review: not-applicable
       via: []
     verbose:
-      reason: any unrecognized ?key becomes a structural-attribute filter (generic
-        filter mechanism, adapter.py); verbose==True filter live-confirmed to match
-        0 AST nodes, not a detail toggle
-      review: not-applicable
-      via: []
+      via:
+      - declared-binding
   autossl:
     all:
       via:
@@ -130,10 +125,8 @@ adapters:
       review: not-applicable
       via: []
     verbose:
-      reason: 'CLI_QUERY_FLAGS declares only ''all''; render_structure(result, format)
-        has no verbose param; confirmed live: ''Unknown query param verbose'' warning'
-      review: not-applicable
-      via: []
+      via:
+      - declared-binding
   classify:
     all:
       reason: get_structure lists every file already (classify.py:216-249); no [:N]
@@ -195,7 +188,7 @@ adapters:
       - declared
     verbose:
       via:
-      - adapter-reads-args
+      - declared-binding
   codex:
     all:
       review: unreviewed
@@ -222,11 +215,8 @@ adapters:
       via:
       - declared
     verbose:
-      reason: 'get_structure(**kwargs) has no per-item detail toggle; confirmed live:
-        ''Unknown query param verbose'' warning (adapter.py:213). Distinct from BACK-1384
-        (codex''s all-gap is a hardcoded per-session match count, not a detail concern)'
-      review: not-applicable
-      via: []
+      via:
+      - declared-binding
   contracts:
     all:
       review: unreviewed
@@ -255,11 +245,8 @@ adapters:
       review: not-applicable
       via: []
     verbose:
-      reason: 'render_structure(result, format) has no verbose param, no detail-level
-        concept; confirmed live: ''Unknown query param verbose'' warning (contracts.py:1009).
-        Distinct from BACK-1384 (contracts'' all-gap is impls[:5], a count issue)'
-      review: not-applicable
-      via: []
+      via:
+      - declared-binding
   cpanel:
     all:
       reason: no result-count query param; domain/ssl/acl-check listings return every
@@ -358,7 +345,7 @@ adapters:
       via: []
     verbose:
       via:
-      - routing-special
+      - declared-binding
   diff:
     all:
       reason: output is "what changed" (additions/removals/modifications), not a ranked/truncatable
@@ -499,7 +486,7 @@ adapters:
       - declared
     verbose:
       via:
-      - declared
+      - declared-binding
   help:
     all:
       review: unreviewed
@@ -567,7 +554,7 @@ adapters:
       via: []
     verbose:
       via:
-      - structure-param
+      - declared-binding
   imports:
     all:
       reason: ?rank= is unclamped by default (imports.py:207-210); the one real cap
@@ -599,7 +586,7 @@ adapters:
       via: []
     verbose:
       via:
-      - declared
+      - declared-binding
   json:
     all:
       reason: no default cap found in adapter or legacy modes; confirmed live, output
@@ -634,11 +621,8 @@ adapters:
       review: not-applicable
       via: []
     verbose:
-      reason: 'get_structure(**kwargs) has no query validation; confirmed live: ?verbose=1
-        output byte-identical, no warning -- output shape (type/path/value) is already
-        fixed regardless of query (adapter.py:94)'
-      review: not-applicable
-      via: []
+      via:
+      - declared-binding
   letsencrypt:
     all:
       reason: cert inventory is meant to be exhaustive (orphan/duplicate detection
@@ -701,12 +685,8 @@ adapters:
       review: unreviewed
       via: []
     verbose:
-      reason: 'any unrecognized ?key=value becomes a frontmatter-field filter (generic
-        filter mechanism); confirmed live: ?verbose=1 looked for docs with frontmatter
-        field ''verbose'', matched 0 of 69 -- wiring --verbose here would collide
-        with any doc that has a real verbose: frontmatter key (adapter.py:282)'
-      review: not-applicable
-      via: []
+      via:
+      - declared-binding
   metrics:
     all:
       via:
@@ -727,12 +707,8 @@ adapters:
       review: unreviewed
       via: []
     verbose:
-      reason: 'stats:// renamed (BACK-2069), the same adapter class: CLI_QUERY_FLAGS
-        declares only respect_gitignore/all; get_structure''s summary_only already
-        defaults to the fuller (non-summarized) shape -- nothing left for verbose
-        to add'
-      review: not-applicable
-      via: []
+      via:
+      - declared-binding
   mysql:
     all:
       review: unreviewed
@@ -829,9 +805,7 @@ adapters:
       via: []
     verbose:
       via:
-      - declared
-      - structure-param
-      - routing-special
+      - declared-binding
   pack:
     all:
       reason: budget-constrained curation (?budget=) is the adapter's purpose; --all
@@ -865,8 +839,7 @@ adapters:
       via: []
     verbose:
       via:
-      - declared
-      - structure-param
+      - declared-binding
   patches:
     all:
       via:
@@ -895,11 +868,8 @@ adapters:
       review: not-applicable
       via: []
     verbose:
-      reason: 'CLI_QUERY_FLAGS declares only ''all''; get_structure(**kwargs) has
-        no detail-level concept; confirmed live: ''Unknown query param verbose'' warning
-        (adapter.py:26)'
-      review: not-applicable
-      via: []
+      via:
+      - declared-binding
   reveal:
     all:
       reason: self-introspection metadata (adapters/rules/analyzers) is small and
@@ -1035,12 +1005,8 @@ adapters:
       review: unreviewed
       via: []
     verbose:
-      reason: 'CLI_QUERY_FLAGS declares only respect_gitignore/all; get_structure''s
-        summary_only already defaults to the fuller (non-summarized) shape -- nothing
-        left for verbose to add; confirmed live: ''Unknown query param verbose'' warning
-        (adapter.py:183-186,438-446)'
-      review: not-applicable
-      via: []
+      via:
+      - declared-binding
   surface:
     all:
       reason: top defaults to None (surface.py:291,336) -- already unclamped; confirmed
@@ -1071,10 +1037,8 @@ adapters:
       review: not-applicable
       via: []
     verbose:
-      reason: 'render_structure(result, format, top) has no verbose param, no detail-level
-        concept; confirmed live: ''Unknown query param verbose'' warning (surface.py:419)'
-      review: not-applicable
-      via: []
+      via:
+      - declared-binding
   testability:
     all:
       via:
@@ -1105,8 +1069,7 @@ adapters:
       via: []
     verbose:
       via:
-      - structure-param
-      - routing-special
+      - declared-binding
   trace:
     all:
       reason: --all conventionally lifts a RESULTS cap (top=N/limit=N); trace's cap
@@ -1141,10 +1104,8 @@ adapters:
       review: not-applicable
       via: []
     verbose:
-      reason: 'render_structure(result, format) has no verbose param, no detail-level
-        concept; confirmed live: ''Unknown query param verbose'' warning (trace.py:266)'
-      review: not-applicable
-      via: []
+      via:
+      - declared-binding
   xlsx:
     all:
       review: unreviewed

@@ -648,14 +648,21 @@ class TestRenderStructureTopForwarding:
         adapter.get_structure.return_value = {}
         return adapter
 
-    @pytest.mark.parametrize('flag', ['all', 'verbose'])
-    def test_overview_renderer_gets_unlimited_top(self, flag):
+    def test_overview_renderer_gets_unlimited_top(self):
         # The real renderer: a mock matched by name would hide a lost ACCEPTS_TOP declaration.
         from reveal.adapters.overview import OverviewRenderer
-        args = _args(**{flag: True})
+        args = _args(all=True)
         with patch.object(OverviewRenderer, 'render_structure') as render:
             _render_structure(self._adapter(), OverviewRenderer, args)
         assert render.call_args.kwargs['top'] >= 10**6
+
+    def test_verbose_reaches_the_renderer_only_through_the_declared_control(self):
+        # --verbose is a noun's legacy word of its uncapping control (BACK-2654 note #17): the request binds it, so
+        # the renderer reads the bound control, never the raw flag.
+        from reveal.adapters.overview import OverviewRenderer
+        with patch.object(OverviewRenderer, 'render_structure') as render:
+            _render_structure(self._adapter(), OverviewRenderer, _args(verbose=True))
+        assert 'top' not in render.call_args.kwargs
 
     def test_overview_renderer_gets_no_top_kwarg_when_unset(self):
         """No --top/--all/--verbose passed: let render_structure keep its own default."""

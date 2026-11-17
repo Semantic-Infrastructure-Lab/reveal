@@ -357,11 +357,13 @@ class TestPreservation:
             assert_equal_answer(answer, query(uri(project, controls)))
         assert query(uri(project, 'code_only=true'))['summary']['total_files'] == 10
 
-    def test_global_verbose_stays_an_unused_flag(self, project):
+    def test_global_verbose_is_detail_full_which_metrics_lacks(self, project):
+        # BACK-2654 rule 4: --verbose is --detail full; metrics' levels are normal and summary, so it exits 2
+        # naming them (it was an unused flag, exit 0).
         for args in (('metrics', str(project)), (uri(project),)):
-            result, answer = cli_json(*args, '--verbose')
-            assert result.returncode == 0
-            assert [w.get('fields') for w in unread(answer)] == [['--verbose']]
+            result = run(*args, '--verbose', '--format', 'json')
+            assert result.returncode == 2 and 'detail' in result.stderr
+            assert 'normal' in result.stderr and 'summary' in result.stderr
 
     def test_unused_top_without_ranking_is_disclosed(self, project):
         result, answer = cli_json(uri(project, 'top=3'))

@@ -162,7 +162,12 @@ def _reads_via_shared_seam(name, flag):
         from reveal.adapters.base import get_renderer_class
         # Declared nouns also reach the existing presentation owner, which
         # expands ACCEPTS_TOP renderers without widening their analysis.
-        if flag in ('all', 'verbose') and getattr(get_renderer_class(name), 'ACCEPTS_TOP', False) is True:
+        if flag == 'all' and getattr(get_renderer_class(name), 'ACCEPTS_TOP', False) is True:
+            return True
+        # The declared runner binds a flag whose FlagSpec has a declared binding from the noun's declarations
+        # (--verbose: its legacy word verbose, else detail=full, else exit 2; BACK-2654 rule 4).
+        from reveal.cli.routing.flag_specs import FLAG_SPECS
+        if any(spec.dest == flag and spec.declared_binding is not None for spec in FLAG_SPECS):
             return True
         # A declared parameter bound to the flag's dest is read where the adapter applies it.
         if any(_declared_spec_carries_flag(spec, flag) for spec in adapter_cls.PARAM_SPECS):

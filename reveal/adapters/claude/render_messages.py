@@ -5,7 +5,7 @@ from .match_terms import term_label
 
 
 def _full_output(result):
-    return bool(result.get('full') or result.get('_display', {}).get('verbose'))
+    return bool(result.get('full'))
 
 
 def _tool_summary(name: str, inp: dict) -> str:
@@ -346,7 +346,7 @@ def _render_claude_assistant_messages(result: dict) -> None:
     """Render assistant messages: text blocks only (skip thinking/tool_use)."""
     session = result.get('session', 'unknown')
     count = result.get('message_count', 0)
-    full = result.get('full', False) or result.get('_display', {}).get('verbose', False)
+    full = result.get('full', False)
 
     print(f"Assistant Messages: {session} ({count} total)")
     print()
@@ -474,7 +474,7 @@ def _render_claude_message_range(result: dict) -> None:
     session = result.get('session', 'unknown')
     displayed = result.get('displayed', len(result.get('messages', [])))
     filtered_from = result.get('filtered_from')
-    full = result.get('full', False) or result.get('_display', {}).get('verbose', False)
+    full = result.get('full', False)
 
     rng = result.get('_display', {}).get('range')
     if rng:
@@ -540,7 +540,7 @@ def _render_claude_messages(result: dict) -> None:
     search = term_label(result.get('search'))
 
     display = result.get('_display', {})
-    verbose = display.get('verbose', False) or result.get('full', False)
+    verbose = result.get('full', False)
     max_chars = display.get('max_snippet_chars', None)
     if verbose:
         truncate_at = None

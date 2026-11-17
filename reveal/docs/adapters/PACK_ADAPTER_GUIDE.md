@@ -15,7 +15,7 @@ exists only to satisfy V024 (every registered adapter must have a
 All query params, for V027 coherence (full docs in the guide linked above):
 
 ```
-reveal 'pack://src?budget=4000&focus=auth&exclude=spec/*,vendor/*&since=main&content=true&architecture=true&verbose'
+reveal 'pack://src?budget=4000&focus=auth&exclude=spec/*,vendor/*&since=main&content=true&architecture=true&detail=full'
 ```
 
-`verbose` — per-file token/line-count breakdown, same as the CLI `--verbose`.
+`detail=full` — per-file token/line-count breakdown (JSON `"verbose": true`), same as the CLI `--detail full`. It replaced `verbose` and the global `--verbose`, which still work with a note.

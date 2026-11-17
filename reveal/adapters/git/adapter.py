@@ -243,9 +243,7 @@ class GitAdapter(ResourceAdapter):
     CLI_QUERY_FLAGS = {
         'since': 'since={value}', 'until': 'until={value}',  # BACK-1192
         **param_cli_flags(PARAM_SPECS),  # legacy --all lifts the history cap (BACK-1379)
-        # BACK-1379: 'detail' is view-scoped to type=blame (_VIEW_SCOPED_PARAMS
-        # below) -- --verbose is a no-op on any other type=, same as detail= itself.
-        'verbose': 'detail=full',
+        # --verbose is the legacy word verbose of detail (rule 4, BACK-2654); detail is view-scoped to type=blame.
     }
 
     @classmethod

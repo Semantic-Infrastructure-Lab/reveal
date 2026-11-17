@@ -28,7 +28,7 @@ from ..utils.path_utils import (
     traversal_failed_warning,
     failure_of,
 )
-from ..utils.query_binding import bind_declared_params, boolean_value
+from ..utils.query_binding import bind_declared_params, boolean_value, verbose_legacy
 from ..utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSpec, exclude_param, param_schema,
                                   split_exclude_param)
 from ..utils.results import AnalysisCompleteness, ResultBuilder, result_execution_facts
@@ -811,8 +811,13 @@ _SINCE = ParamSpec('since', 'string', 'Git ref to diff against; changed files ra
 _CONTENT = ParamSpec('content', 'boolean', 'Include tiered file content (full/structure/name_only)',
                      False, _legacy_flag, ('content=true',), role='presentation',
                      cli=CliBinding(('--content',), action='store_true'))
-_VERBOSE = ParamSpec('verbose', 'boolean', 'Show the per-file token/line-count breakdown (the CLI --verbose fills it)',
-                     False, boolean_value, role='presentation')
+# Pack's verbose adds detail (the per-file breakdown): detail=full, keeping the JSON verbose key (COMMAND_MODEL
+# "Detail", BACK-2654 rule 4).
+_DETAIL = ParamSpec('detail', 'string', 'normal, or full: adds the per-file token/line-count breakdown (JSON '
+                    '"verbose": true). Legacy verbose and the global --verbose mean full', 'normal', str,
+                    ('detail=full',), choices=('normal', 'full'), role='presentation',
+                    legacy=(verbose_legacy('full', 'detail=full (--detail full)'),),
+                    cli=CliBinding(('--detail',), metavar='LEVEL'))
 _ARCHITECTURE = ParamSpec('architecture', 'boolean', 'Boost high fan-in files; include an architecture hint',
                           False, _legacy_flag, ('architecture=true',), role='analysis',
                           cli=CliBinding(('--architecture',), action='store_true'))
@@ -880,14 +885,13 @@ class PackAdapter(ResourceAdapter):
 
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
     RESOURCE_IS_PATH = True  # a nonexistent path is an error, not an empty result (BACK-1321)
-    # Carry URI verbose through the result; the renderer also accepts CLI options.
-    CLI_QUERY_FLAGS = {'verbose': 'verbose', 'respect_gitignore': 'respect_gitignore=false'}
+    CLI_QUERY_FLAGS = {'respect_gitignore': 'respect_gitignore=false'}
 
     RESULT_TYPE = 'pack'
     FINDINGS_POLICIES = ('none',)
     DEFAULT_FAIL_ON = 'none'
     RESOURCE_SPEC = ResourceSpec(cli_default=None, required=True, uri_codec='existing-path-first')
-    PARAM_SPECS = (_BUDGET, _FOCUS, _SINCE, _CONTENT, _ARCHITECTURE, _VERBOSE, exclude_param())
+    PARAM_SPECS = (_BUDGET, _FOCUS, _SINCE, _CONTENT, _ARCHITECTURE, _DETAIL, exclude_param())
 
     def __init__(self, resource: str, query: Optional[str] = None, *,
                  params: Optional[Dict[str, Any]] = None):
@@ -970,7 +974,6 @@ class PackAdapter(ResourceAdapter):
             'query_params': {
                 **param_schema(PackAdapter.PARAM_SPECS),
                 'exclude': {'type': 'string', 'description': 'Comma-separated patterns to drop from candidacy entirely (inverse of focus=)', 'examples': ['exclude=spec/*,vendor/*']},
-                'verbose': {'type': 'flag', 'description': 'Show per-file token/line-count breakdown. Same as the CLI --verbose', 'examples': ['pack://src?verbose']},
             },
             'elements': {},
             'supports_batch': False,
@@ -997,7 +1000,7 @@ class PackAdapter(ResourceAdapter):
             ],
         }
 
-    def get_structure(self, verbose: bool = False, **kwargs: Any) -> Dict[str, Any]:
+    def get_structure(self) -> Dict[str, Any]:
         path = Path(self.path)
         # BACK-1180: a bare budget=0 stays '0'; declared binding keeps the raw spelling.
         budget_str = _BUDGET.read(self.query_params)
@@ -1073,9 +1076,9 @@ class PackAdapter(ResourceAdapter):
         report.update(_pack_edge_rule(graphs))
         if emit_content:
             report['content'] = _collect_file_contents(selected)
-        # BACK-1379: carry ?verbose through the result dict since handle_uri
+        # BACK-1379: carry the breakdown through the result dict since handle_uri
         # doesn't forward a verbose= render kwarg for this renderer.
-        if verbose or 'verbose' in self.query_params:
+        if _DETAIL.read(self.query_params) == 'full':
             report['verbose'] = True
 
         return ResultBuilder.create(

@@ -5,6 +5,9 @@ without the flag (and the renderer itself advised "Run with --verbose"), while t
 spelling `&verbose` worked but made the validator warn that it was "ignored".
 Adapters now declare the fragment (`CLI_QUERY_FLAGS['verbose']`), the CLI injects it
 for `--verbose`, and the adapter's schema lists the param it has always honored.
+
+BACK-2654 rule 4: on a declared noun the fragment comes from the noun's declarations, never CLI_QUERY_FLAGS: the
+noun's legacy word ``verbose`` where it declares one (imports: detail=full), else ``detail=full``.
 """
 
 from argparse import Namespace
@@ -28,33 +31,51 @@ def test_default_declares_no_verbose_query():
 
 
 def test_imports_declares_verbose():
-    # BACK-2620: --verbose is imports' detail=full (the declared cli_flags of detail).
+    # imports declares the legacy word verbose on detail (detail=full); no CLI_QUERY_FLAGS binding.
     from reveal import adapters  # noqa: F401
-    assert adapters_base.get_adapter_class('imports').CLI_QUERY_FLAGS['verbose'] == 'detail=full'
+    imports = adapters_base.get_adapter_class('imports')
+    assert 'verbose' not in imports.CLI_QUERY_FLAGS
+    detail = next(spec for spec in imports.PARAM_SPECS if spec.name == 'detail')
+    assert detail.canonical_value('verbose', 'true') == 'full'
 
 
 def test_verbose_injects_fragment():
-    assert inject_query_flags('src?circular', 'imports', _args(verbose=True)) == 'src?circular&detail=full'
-    assert inject_query_flags('src', 'imports', _args(verbose=True)) == 'src?detail=full'
+    assert inject_query_flags('src?circular', 'imports', _args(verbose=True)) == 'src?circular&verbose=true'
+    assert inject_query_flags('src', 'imports', _args(verbose=True)) == 'src?verbose=true'
 
 
-def test_explicit_uri_value_wins():
-    assert inject_query_flags('src?circular&detail=full', 'imports', _args(verbose=True)) \
-        == 'src?circular&detail=full'
+def test_an_equal_uri_detail_binds_once():
+    from reveal.utils.query_binding import prepare_declared_params
+    resource = inject_query_flags('src?circular&detail=full', 'imports', _args(verbose=True))
+    assert resource == 'src?circular&detail=full&verbose=true'
+    imports = adapters_base.get_adapter_class('imports')
+    assert prepare_declared_params(imports.PARAM_SPECS, resource.partition('?')[2], 'uri').get('detail') == 'full'
 
 
 def test_key_match_is_exact_not_substring():
-    assert inject_query_flags('src?detailx=1', 'imports', _args(verbose=True)) \
-        == 'src?detailx=1&detail=full'
+    assert inject_query_flags('src?verbosex=1', 'imports', _args(verbose=True)) \
+        == 'src?verbosex=1&verbose=true'
 
 
 def test_without_verbose_flag_nothing_changes():
     assert inject_query_flags('src?circular', 'imports', _args()) == 'src?circular'
 
 
-@pytest.mark.parametrize('scheme', ['stats', 'hotspots', 'claude', 'nosuchscheme'])
+@pytest.mark.parametrize('scheme', ['env', 'nosuchscheme'])
 def test_adapters_without_declaration_untouched(scheme):
     assert inject_query_flags('src', scheme, _args(verbose=True)) == 'src'
+
+
+@pytest.mark.parametrize('scheme,resource', [('hotspots', 'src?verbose=true'), ('claude', 'src?detail=full'),
+                                             ('stats', 'src?detail=full')])
+def test_a_declared_noun_binds_verbose_from_its_declarations(scheme, resource):
+    assert inject_query_flags('src', scheme, _args(verbose=True)) == resource
+
+
+def test_a_declared_noun_without_detail_rejects_verbose():
+    from reveal.errors import RequestValidationError
+    with pytest.raises(RequestValidationError, match="--verbose is --detail full: unsupported control 'detail'"):
+        inject_query_flags('src', 'surface', _args(verbose=True))
 
 
 def test_overview_verbose_uses_its_declared_map_expansion_control():

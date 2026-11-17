@@ -29,7 +29,18 @@ def source(tmp_path, monkeypatch):
     monkeypatch.setattr(ClaudeAdapter, 'CONVERSATION_BASE', home / 'projects')
     path = tmp_path / 'sample.py'
     path.write_text(SOURCE, encoding='utf-8')
+    commit_sample(path)
     return path
+
+
+def commit_sample(path):
+    """Make the sample's directory a one-commit repository: the git rows answer on it."""
+    import pygit2
+    repo = pygit2.init_repository(str(path.parent))
+    repo.index.add(path.name)
+    repo.index.write()
+    signature = pygit2.Signature('Fixture', 'fixture@example.com', 1700000000, 0)
+    repo.create_commit('HEAD', signature, signature, 'sample', repo.index.write_tree(), [])
 
 
 def _retire(monkeypatch, key, old, replacement='NEW SPELLING', stage='note'):
@@ -213,6 +224,15 @@ PRODUCTION_CASES = {
     'param:imports.top': lambda f: [f'imports://{Path(f).parent}?sort=-fan-in&top=1'],
     'param:imports.verbose': lambda f: [f'imports://{Path(f).parent}?circular&verbose'],
     'param:imports.max_files': lambda f: [f'imports://{Path(f).parent}?sort=-fan-in&max_files=100'],
+    # Rule 4 (BACK-2654, note #17): the global --verbose is --detail full, or the noun's legacy word verbose.
+    'flag:--verbose': lambda f: [f'calls://{Path(f).parent}?callees=auth_gate', '--verbose'],
+    'param:git.verbose': lambda f: [f'git://{Path(f).parent}?verbose'],
+    'param:pack.verbose': lambda f: [f'pack://{Path(f).parent}?verbose'],
+    'param:overview.verbose': lambda f: [f'overview://{Path(f).parent}?verbose'],
+    'param:architecture.verbose': lambda f: [f'architecture://{Path(f).parent}?verbose'],
+    'param:hotspots.verbose': lambda f: [f'hotspots://{Path(f).parent}?verbose'],
+    'param:testability.verbose': lambda f: [f'testability://{Path(f).parent}?tests={Path(f).parent}&verbose'],
+    'param:deps.verbose': lambda f: [f'deps://{Path(f).parent}?verbose'],
     # Metrics vocabulary (BACK-2621): each legacy spelling alone, on the one source file.
     'param:metrics.hotspots': lambda f: [f'metrics://{f}?hotspots=true'],
     'param:metrics.top': lambda f: [f'metrics://{f}?view=hotspots&top=1'],
@@ -279,6 +299,8 @@ PRODUCTION_CASES = {
 }
 # The row a case notes beside its own: a parameter of a noun that is itself retired.
 ALSO_NOTED = {'param:hotspots.functions_only': 'scheme:hotspots', 'param:hotspots.files_only': 'subcommand:hotspots',
+              'param:architecture.verbose': 'scheme:architecture', 'param:hotspots.verbose': 'scheme:hotspots',
+              'param:testability.verbose': 'scheme:testability', 'param:deps.verbose': 'scheme:deps',
               'param:calls.type': 'param:calls.uncalled'}
 
 

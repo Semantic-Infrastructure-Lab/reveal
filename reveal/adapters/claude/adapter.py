@@ -1031,7 +1031,6 @@ class ClaudeAdapter(ResourceAdapter):
 
         result['_display'] = {
             'max_snippet_chars': getattr(args, 'max_snippet_chars', None),
-            'verbose': getattr(args, 'verbose', False),
             'head': getattr(args, 'head', None),
             'tail': getattr(args, 'tail', None),
             'range': getattr(args, 'range', None),

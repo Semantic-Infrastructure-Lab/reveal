@@ -31,10 +31,10 @@ from ..analyzers.imports.classify import classify_import, local_package_names, p
 from ..analyzers.imports.unused import describe_unused
 from ..conventions import family_for_path
 from ..analyzers.imports.layers import load_layer_config
-from ..utils.query_parser import (CliBinding, LegacySpelling, ParamSpec, ParamValueError, QueryParams, ResourceSpec, param_cli_flags,
+from ..utils.query_parser import (CliBinding, LegacySpelling, ParamSpec, ParamValueError, QueryParams, ResourceSpec,
                                   param_schema, peek_query_items, whole_number)
 from ..errors import RequestValidationError
-from ..utils.query_binding import bind_declared_params, boolean_value
+from ..utils.query_binding import bind_declared_params, boolean_value, verbose_legacy
 from ..analyzers.imports.views import ImportView, _unused_not_checked  # noqa: F401 -- checks.py imports _unused_not_checked from here (BACK-2255)
 from ..analyzers.imports import diagnostics as import_diagnostics
 from ..analyzers.imports.diagnostics import file_loss_warnings
@@ -287,15 +287,6 @@ def _detail_value(value: Any) -> str:
     return str(value)
 
 
-def _verbose_value(value: Any) -> Any:
-    """``verbose`` (and the global ``--verbose``) is ``detail=full`` under its retired name (D5)."""
-    try:
-        return 'full' if boolean_value(value) else 'normal'
-    except ValueError:
-        raise ParamValueError(f'verbose must be a valid boolean, got {value!r}: use detail=full '
-                              '(--detail full)') from None
-
-
 # The answer types detail=full expands (the renderers that take it).
 _VERBOSE_VIEWS = frozenset({'unused_imports', 'circular_dependencies', 'layer_violations',
                            'module_importers', 'importer_summary', 'external_packages'})
@@ -321,7 +312,7 @@ _DETAIL = ParamSpec('detail', 'string', 'How much of the answer: normal (a summa
                     'group plus its cycle edges, all unused imports, all violations, every package; JSON adds '
                     '"verbose": true). Legacy verbose and the global --verbose mean full', 'normal', _detail_value,
                     ('imports://src?circular&detail=full',), choices=_DETAIL_LEVELS, role='presentation',
-                    legacy=(LegacySpelling('verbose', codec=_verbose_value),), cli_flags=(('verbose', 'full'),),
+                    legacy=(verbose_legacy('full', 'detail=full (--detail full)'),),
                     cli=CliBinding(('--detail',), metavar='LEVEL'))
 _SORT = ParamSpec('sort', 'string', 'Rank files by fan-in, most imported first: the count of files that import each '
                   'file (higher = more central; 0 = entry point or dead code). One value: -fan-in (legacy rank=fan-in)',
@@ -1431,8 +1422,8 @@ class ImportsAdapter(ResourceAdapter):
     # bound on a corpus with hundreds of thousands of edges (swift), not a per-edge cap (BACK-2192).
     BUDGET_LIST_FIELD = 'entries'
     RESOURCE_IS_PATH = True  # a nonexistent path is an error, not an empty result (BACK-1321)
-    # --verbose is detail=full (its declared cli_flags); --limit binds limit, 0 exactly (zero_policy='all').
-    CLI_QUERY_FLAGS = {**param_cli_flags(PARAM_SPECS), 'limit': 'limit={value}',
+    # --verbose is the legacy word verbose of detail (rule 4); --limit binds limit, 0 exactly (zero_policy='all').
+    CLI_QUERY_FLAGS = {'limit': 'limit={value}',
                        'respect_gitignore': 'respect_gitignore=false'}
 
     # D6 (BACK-1054): imports is a declared command, so a usage error exits 2 and an incomplete

@@ -19,7 +19,7 @@ from reveal.utils.validation import require_path_exists
 
 from ...rendering.adapters.patches import PatchesRenderer
 from ...errors import NotApplicableError
-from ..testability import TestabilityAdapter, _report_error, testability_report
+from ..testability import PRESSURE_SPECS, TestabilityAdapter, _report_error, testability_report
 
 
 # The warning types a patch scan emits when it lost files it should have read.
@@ -66,7 +66,7 @@ _SUPPRESS = ParamSpec('suppress', 'boolean', 'Hide stdlib I/O noise (sys.stdout/
                       'Default: true. Raw totals always include them.', True, boolean_value, ('suppress=false',),
                       role='analysis', cli=CliBinding(('--no-suppress',), action='store_false'))
 # The pressure view's own parameters are testability's, declared once there.
-_PRESSURE_SPECS = TestabilityAdapter.PARAM_SPECS
+_PRESSURE_SPECS = PRESSURE_SPECS
 PARAM_SPECS = (_VIEW, _GROUP, _LIMIT, _MIN, _TARGET, _PRIVATE, _SUPPRESS, *_PRESSURE_SPECS)
 
 
@@ -209,7 +209,7 @@ class PatchesAdapter(ResourceAdapter):
 
     def get_structure(self, **kwargs: Any) -> Dict[str, Any]:
         if _VIEW.read(self.query_params) == 'pressure':
-            return testability_report(self.path, self.query_params, bool(kwargs.get('verbose')))
+            return testability_report(self.path, self.query_params)
         # BACK-1250: scan_patches() silently accepted a nonexistent path and
         # returned a clean, successful-looking empty result (total_uses: 0,
         # errors: [], source_type mislabeled 'file') -- indistinguishable

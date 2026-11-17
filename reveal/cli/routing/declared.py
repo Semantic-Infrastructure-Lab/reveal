@@ -163,7 +163,7 @@ def run_declared_command(name: str, args, *, answer_consumer=None) -> None:
     for spec in adapter.PARAM_SPECS:
         if spec.cli is None:
             # A boolean with no flag of its own is carried by the global flag of its name
-            # (`--verbose` is `&verbose`), supplied only when set, as the URI spells it.
+            # (`--all` is `&all`), supplied only when set, as the URI spells it.
             if spec.type == 'boolean' and peek(args, spec.name, False) is True:
                 source[spec.name] = True
             continue
@@ -191,23 +191,32 @@ def run_declared_uri(uri: str, element: str | None, args, consumed=(), *, answer
 
 
 def _bind_legacy_cli_values(name, adapter, args, source):
-    """Apply opted-in global flag values through the same declaration as URI forwarding. A global
-    flag that is one of the parameter's aliases (``--verbose`` for ``detail``) is that retired
-    spelling: it binds under the alias, so the binder's alias check normalizes it and rejects a
-    conflicting canonical value (``--verbose --detail normal``), and it is noted under the same
-    ``param:<name>.<alias>`` row as the URI key."""
-    from ..invocation import retirement_note
+    """Apply opted-in global flag values (``--all`` lifting a declared cap) through the same declaration as URI
+    forwarding."""
     for spec in adapter.PARAM_SPECS:
         for flag, value in spec.cli_flags:
-            if peek(args, flag, False) is not True:
-                continue
-            if flag in spec.spellings[1:]:
-                source[flag] = True
-                delegate(args, flag, spec.name)
-                retirement_note(f'param:{name}.{flag}')
-            elif spec.name not in source:
+            if peek(args, flag, False) is True and spec.name not in source:
                 source[spec.name] = value
                 delegate(args, flag, spec.name)
+
+
+def _bind_global_verbose(name, adapter, args, source) -> None:
+    """The subcommand's global ``--verbose`` through the declarations, as the URI route binds it (rule 4, BACK-2654
+    note #17): the noun's own legacy word ``verbose`` (the binder translates it and rejects a conflicting canonical
+    value; noted under its ``param:`` row) or ``detail=full`` (noted under ``flag:--verbose``)."""
+    if peek(args, 'verbose', False) is not True:
+        return
+    from ..invocation import retirement_note
+    from ...errors import RequestValidationError
+    from ...utils.query_binding import verbose_binding
+    key, value = verbose_binding(adapter.PARAM_SPECS)
+    given = source.get(key)
+    if key == 'detail' and given is not None and given != value:
+        raise RequestValidationError(f'--verbose conflicts with --detail {given}: --verbose is --detail full; give one')
+    source[key] = value
+    owner = next(spec.name for spec in adapter.PARAM_SPECS if key in spec.spellings)
+    delegate(args, 'verbose', owner)  # unread when the answer does not read the control it stands for
+    retirement_note('flag:--verbose' if key == 'detail' else f'param:{name}.verbose')
 
 
 def _delegate_typed_parameters(name, adapter, args, source, transport: str) -> None:
@@ -321,6 +330,11 @@ def _flagged_query(adapter, name, path, source, transport: str, args, consume) -
     URI's own value as an invalid request (BACK-2654)."""
     query_resource: str = '?' + source if transport == 'uri' else ''
     if transport != 'uri':
+        try:
+            _bind_global_verbose(name, adapter, args, source)
+        except ValueError as exc:
+            consume(_invalid_prepared_answer(adapter, name, path, query_resource, str(exc), args))
+            return None
         return query_resource
     from .flag_specs import inject_query_flags
     try:

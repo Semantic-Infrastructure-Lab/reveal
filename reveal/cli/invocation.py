@@ -276,6 +276,9 @@ RETIREMENTS: Dict[str, Retirement] = {
     'flag:--check': Retirement('file --check/--lint', 'reveal check <path>'),
     # --also-json is the one JSON file sink of --output FORMAT[=PATH] (BACK-2089 slice 5a); it answers until the cut.
     'flag:--also-json': Retirement('--also-json PATH', '--output json=PATH'),
+    # Rule 4 (COMMAND_MODEL "Detail", BACK-2654): the global --verbose on a declared noun is --detail full; a noun whose
+    # verbose lifts its caps declares it as a legacy word of the uncapping control instead (param:<noun>.verbose rows).
+    'flag:--verbose': Retirement('--verbose', '--detail full (?detail=full)'),
     # review folded into check --changed plus the diff:// adapter (D3, BACK-2068 slice 3b): it answers as before until the
     # cut. Its hotspots and complexity sections have no new home until stats becomes metrics (BACK-2069);
     # the MCP tool reveal_review keeps its name until Phase 7.
@@ -303,6 +306,18 @@ RETIREMENTS: Dict[str, Retirement] = {
                                         '?detail=full (--detail full); JSON keeps "verbose": true'),
     'param:imports.max_files': Retirement('imports ?max_files=N (--max-files N)',
                                           '?scan-limit=N (--scan-limit N), the same input budget'),
+    # verbose where it adds detail (BACK-2654 rule 4) or only lifts caps (note #17): translated, the same answer.
+    'param:git.verbose': Retirement('git ?verbose (--verbose)', '?detail=full (--detail full)'),
+    'param:pack.verbose': Retirement('pack ?verbose (--verbose)',
+                                     '?detail=full (--detail full); JSON keeps "verbose": true'),
+    'param:overview.verbose': Retirement('overview ?verbose (--verbose)', '?all=true (--all), the same uncapped map'),
+    'param:architecture.verbose': Retirement('architecture ?verbose (--verbose)',
+                                             'overview://<path>?all=true (--all), the same uncapped map'),
+    'param:hotspots.verbose': Retirement('hotspots ?verbose (--verbose)', '?top=0 (--top 0), both rankings uncapped'),
+    'param:testability.verbose': Retirement('testability ?verbose (--verbose)',
+                                            'patches://<path>?view=pressure&top=0 (--top 0), every group'),
+    'param:deps.verbose': Retirement('deps ?verbose (--verbose)',
+                                     '?top=N (--top N) with N at least the longest text section; JSON is uncapped'),
     # Metrics' vocabulary (BACK-2621, Scott 2026-11-15): the hotspot ranking is a view whose rows limit caps,
     # filters are where (the complexity pair is the file average, avg_complexity), switches take on|off.
     # The row names the parameter, not one value: ?hotspots=false is noted too (it answers as if omitted).

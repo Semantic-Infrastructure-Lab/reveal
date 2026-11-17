@@ -2,7 +2,7 @@
 from dataclasses import dataclass
 from typing import Any
 
-from ...utils.query_binding import boolean_value
+from ...utils.query_binding import boolean_value, verbose_legacy
 from ...utils.query_parser import CliBinding, LegacySpelling, ParamSpec, ParamValueError, nonempty_scalar, nonnegative_display_limit
 
 
@@ -64,10 +64,10 @@ WHERE = ParamSpec('where', 'array', 'Existing commit predicates; repeat to AND (
                   [], predicates, role='filter-expression', repeatable=True, cli=CliBinding(('--where',)),
                   fields=('author', 'email', 'date', 'hash', 'message', 'timestamp', 'content'))
 DETAIL = ParamSpec('detail', 'string', 'normal, full blame, or raw historical file content', None, detail,
-                   choices=('normal', 'full', 'raw'), cli=CliBinding(('--detail',)))
+                   choices=('normal', 'full', 'raw'), cli=CliBinding(('--detail',)),
+                   legacy=(verbose_legacy('full', 'detail=full (--detail full)'),))
 MERGES = ParamSpec('merges', 'boolean', 'Include or exclude merge commits; omitted preserves each view default',
                    None, merge_policy, cli=CliBinding(('--merges',)))
-VERBOSE = ParamSpec('verbose', 'boolean', 'Legacy full blame detail', False, boolean_value)
 NO_MERGES = ParamSpec('no_merges', 'boolean', 'Legacy exclusion of merge commits in history', None, boolean_value)
 RAW = ParamSpec('raw', 'boolean', 'Legacy raw historical file content', None, boolean_value)
 SORT = string('sort', 'Commit field; prefix - for descending')
@@ -84,7 +84,7 @@ OFFSET = ParamSpec('offset', 'integer', 'Rows skipped after sorting', 0,
 CONTEXT = ParamSpec('context', 'integer', 'Context lines for a diff', None,
                     lambda v: nonnegative_display_limit(v, name='context'), minimum=0,
                     cli=CliBinding(('--context',)))
-PARAM_SPECS = (VIEW, WHERE, DETAIL, VERBOSE, MERGES, NO_MERGES, RAW, SORT, LIMIT, SCAN_LIMIT, OFFSET, CONTEXT,
+PARAM_SPECS = (VIEW, WHERE, DETAIL, MERGES, NO_MERGES, RAW, SORT, LIMIT, SCAN_LIMIT, OFFSET, CONTEXT,
                *(string(name, description) for name, description in (
                    ('ref', 'Starting branch, tag or commit'), ('element', 'Semantic element name'),
                    ('bucket', 'Timeline period: week or month'), ('ignore', 'Blame commit hash prefixes to suppress'))),
@@ -102,7 +102,7 @@ def runtime_query(params):
     values, aggregate_control = _aggregate_controls(params, dict(peek_query_items(params)))
     query = QueryParams({key: value for key, value in values.items()
                          if value is not None and value != []
-                         and key not in ('where', 'view', 'detail', 'verbose', 'raw', 'merges', 'no_merges', 'scan-limit')})
+                         and key not in ('where', 'view', 'detail', 'raw', 'merges', 'no_merges', 'scan-limit')})
     view = VIEW.read(params)
     if view is not None:
         query['type'] = 'history' if view == 'log' else view
@@ -199,8 +199,6 @@ def apply_aggregate_rows(result: dict, control) -> dict:
 
 def _runtime_detail(params, query):
     level = DETAIL.read(params)
-    if VERBOSE.read(params) and level is None:
-        level = 'full'
     raw = RAW.read(params)
     if level == 'raw':
         query['raw'] = '1'
