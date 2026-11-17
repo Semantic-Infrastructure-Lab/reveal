@@ -82,7 +82,7 @@ def note_config_warning(entry: Dict[str, Any], level: int, log_format: str, *log
     _config_note(entry, level, log_format, *log_args)
 
 
-def _load_failed_warning(path: Path, why: str) -> Dict[str, Any]:
+def config_load_failed_warning(path: Path, why: str) -> Dict[str, Any]:
     return config_warning('config_load_failed',
                           f"config {to_posix(path)} could not be loaded ({why}): its settings were not applied, "
                           "so this run used the defaults for them", to_posix(path), reason=why)
@@ -827,7 +827,7 @@ class RevealConfig:
             return section
         except (OSError, ValueError) as e:  # unreadable, or tomllib.TOMLDecodeError / UnicodeDecodeError
             cause = failure_of(e).cause
-            _config_note(_load_failed_warning(pyproject, cause), logging.DEBUG, "Failed to load %s: %s", pyproject, e)
+            _config_note(config_load_failed_warning(pyproject, cause), logging.DEBUG, "Failed to load %s: %s", pyproject, e)
             if failures is not None:
                 failures.append((str(pyproject), cause))
             return None
@@ -939,7 +939,7 @@ class RevealConfig:
             return None, None
         if not yaml:
             why = 'PyYAML is not installed'
-            _config_note(_load_failed_warning(path, why), logging.WARNING, "PyYAML not installed, cannot load %s", path)
+            _config_note(config_load_failed_warning(path, why), logging.WARNING, "PyYAML not installed, cannot load %s", path)
         else:
             try:
                 with open(path, encoding='utf-8') as f:
@@ -955,7 +955,7 @@ class RevealConfig:
             except (OSError, ValueError, yaml.YAMLError) as e:  # unreadable, not UTF-8, or not YAML
                 first_line = str(e).split('\n', 1)[0]
                 why = f"{type(e).__name__}: {first_line}".rstrip(': ')
-                _config_note(_load_failed_warning(path, why), logging.ERROR, "Failed to load config %s: %s", path, e)
+                _config_note(config_load_failed_warning(path, why), logging.ERROR, "Failed to load config %s: %s", path, e)
         if failures is not None:
             failures.append((str(path), why))
         return None, why
