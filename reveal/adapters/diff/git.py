@@ -8,6 +8,7 @@ from typing import Dict, Any, Optional, cast
 
 from ...diff.structure_diff import element_categories
 from ...registry import get_analyzer
+from ...utils.invocation_log import json_answer_running
 from ...utils.lines import normalize_newlines
 
 logger = logging.getLogger(__name__)
@@ -314,7 +315,10 @@ def resolve_git_directory(git_ref: str, dir_path: str) -> Dict[str, Any]:
         try:
             struct = _fetch_and_analyze_git_file(git_ref, file_path)
         except Exception as e:  # boundary-ok: broad-except -- one blob that the analyzer (arbitrary per-language parser code) or the blob read cannot handle must not end a whole-tree comparison; logged at warning naming the file and ref
-            logger.warning(f"Skipping {file_path}@{git_ref} in directory scan: {e}")
+            # The answer's analysis_failed warning names the file and this reason (``failures``), so beside a
+            # JSON answer the line would only repeat it (BACK-2659).
+            logger.log(logging.DEBUG if json_answer_running() else logging.WARNING,
+                       "Skipping %s@%s in directory scan: %s", file_path, git_ref, e)
             skipped[file_path] = f"{type(e).__name__}: {e}"
             continue
         if not struct:
