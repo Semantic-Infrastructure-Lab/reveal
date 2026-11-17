@@ -22,7 +22,7 @@ from ...errors import RequestValidationError
 from ...utils.results import ResultBuilder, note_warning
 from .params import PARAM_SPECS, bind_query, bind_request
 from .workflow_selection import select_workflow_result, remember_workflow_selection, MATCH_RULE
-from .match_terms import holds_all, match_terms, term_echo
+from .match_terms import holds_all, match_terms
 from .discovery import ConversationDiscovery, TranscriptNotFoundError, first_timestamp as _first_timestamp
 from .handlers.sessions import (
     list_sessions as _h_list_sessions,

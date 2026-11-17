@@ -1989,8 +1989,14 @@ helper rather than tool-result text. On session catalogs it searches
 cross-session content; plan/agent/memory listings and history match their own
 text. For example, `claude://session/my-session/messages?match=Fixed` is a
 narrative filter, while `claude://session/my-session?match=Fixed` searches all
-message content. Raw records and views without an existing text matcher reject
-`match` with exit 2. Conflicting legacy `search`/`contains` controls also reject;
+message content. A repeated `match` ANDs its terms per row of the answer (per
+message in a session search, per session across sessions, per turn, tool
+result, history entry, plan, agent, memory or workflow row):
+`claude://history?match=fix&match=auth` keeps the entries holding both. JSON
+echoes the terms as a list, one term included (`term`, `search`, the composite
+`query` receipt's `contains`, `meta.workflow_selection.match`); text prints one
+term as itself and several joined by `AND`. Raw records and views without an
+existing text matcher reject `match` with exit 2. Conflicting legacy `search`/`contains` controls also reject;
 equal controls for the same population coalesce. URI `match` values percent-decode
 once, preserving literal plus signs; API values remain literal,
 and original URI conflicts validate before API overrides. Legacy names retain

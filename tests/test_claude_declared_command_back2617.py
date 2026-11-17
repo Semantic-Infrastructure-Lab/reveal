@@ -89,4 +89,4 @@ def test_stats_rejects_non_listing_scope(transcript, command_home, form):
 def test_composite_receipt_reports_applied_api_overlay_values(transcript):
     from reveal.api import query
     result = query('claude://session/my-session?tools=Read&contains=failed', tools='Bash')
-    assert json.loads(result['query']) == {'tools': 'Bash', 'contains': 'failed'}
+    assert json.loads(result['query']) == {'tools': 'Bash', 'contains': ['failed']}

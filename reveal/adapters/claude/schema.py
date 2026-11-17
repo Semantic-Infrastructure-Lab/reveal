@@ -117,6 +117,11 @@ _SCHEMA_ELEMENTS = {
 }
 
 
+# Every claude reader echoes its match terms as a list, one term included (rule 19, BACK-2654 note #13).
+_MATCH_ECHO = {'type': 'array', 'items': {'type': 'string'},
+               'description': 'The match terms, a list even for one term; a row holds every term'}
+
+
 def _make_output_type(type_name: str, description: str, extra_props: dict) -> dict:
     """Build a standard claude output_type schema entry."""
     props = {
@@ -201,10 +206,10 @@ _SCHEMA_OUTPUT_TYPES = [
         'total_messages': {'type': 'integer'}, 'messages': {'type': 'array'},
     }),
     _make_output_type('claude_search_results', 'Search results across all session content (text, thinking, tool inputs, tool results)', {
-        'query': {'type': 'string'}, 'matches': {'type': 'array'}, 'total': {'type': 'integer'}
+        'term': _MATCH_ECHO, 'match_count': {'type': 'integer'}, 'matches': {'type': 'array'},
     }),
     _make_output_type('claude_cross_session_search', 'Cross-session content search results (one snippet per matching session)', {
-        'term': {'type': 'string'},
+        'term': _MATCH_ECHO,
         'since': {'type': 'string'},
         'sessions_scanned': {'type': 'integer'},
         'match_count': {'type': 'integer'},

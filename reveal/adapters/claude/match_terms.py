@@ -15,14 +15,14 @@ def holds_all(text: str, terms: Sequence[str]) -> bool:
     return all(term.lower() in lowered for term in terms)
 
 
-def term_echo(terms: Sequence[str]) -> Union[str, List[str]]:
-    """How an answer echoes its match terms: the one seam for the JSON shape. One term is the string it always was.
-    The shape for several terms is pending a decision (BACK-2654 Step 4); today it is the list of terms."""
-    return terms[0] if len(terms) == 1 else list(terms)
+def term_echo(terms: Sequence[str]) -> List[str]:
+    """How an answer echoes its match terms: the one seam for the JSON shape. Always the list of terms, one term
+    included, so each echo field has one type (Scott 2026-11-16, BACK-2654 note #13)."""
+    return list(terms)
 
 
 def term_label(echo: Union[str, Sequence[str], None]) -> str:
-    """The echoed terms as text renderers print them."""
+    """The echoed terms as text renderers print them: one term as itself, several joined by AND."""
     if echo is None or isinstance(echo, str):
         return echo or ''
     return ' AND '.join(echo)

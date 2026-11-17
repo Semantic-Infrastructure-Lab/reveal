@@ -225,7 +225,7 @@ class TestCrossSessionSearchRouting:
             adapter = ClaudeAdapter('', query='search=payments')
             result = adapter.get_structure()
         assert result['type'] == 'claude_cross_session_search'
-        assert result['term'] == 'payments'
+        assert result['term'] == ['payments']
 
     def test_no_search_param_routes_to_list(self, tmp_path):
         """claude:// without ?search= should remain a session listing."""

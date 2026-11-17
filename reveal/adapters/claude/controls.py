@@ -121,7 +121,7 @@ def composite_query_receipt(params):
     """Describe the filters actually applied, including literal API overlays."""
     from .match_terms import match_terms, term_echo
     values = {name: params[name] for name in ('tools', 'errors', 'contains') if name in params}
-    if 'contains' in values and not isinstance(values['contains'], str):  # repeated terms (rule 19)
+    if 'contains' in values:  # the terms as every claude echo shows them (rule 19)
         values['contains'] = term_echo(match_terms(values['contains']))
     return json.dumps(values, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
 

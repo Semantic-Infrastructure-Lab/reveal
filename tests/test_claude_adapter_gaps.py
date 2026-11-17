@@ -475,7 +475,7 @@ class TestSearchSessions:
             adapter = ClaudeAdapter('', query='search=target')
             result = adapter._search_sessions()
         assert result['type'] == 'claude_cross_session_search'
-        assert result['term'] == 'target'
+        assert result['term'] == ['target']
 
     def test_no_results_returns_empty_matches(self, tmp_path):
         _write_session(tmp_path, 'sess-1', [_user_msg('hello world')])

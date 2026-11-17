@@ -651,7 +651,7 @@ class TestSearchSubcommand:
             result = adapter.get_structure()
 
         assert result['type'] == 'claude_cross_session_search'
-        assert result['term'] == 'payments'
+        assert result['term'] == ['payments']
 
 
 class TestFindConversationAgentFilter:

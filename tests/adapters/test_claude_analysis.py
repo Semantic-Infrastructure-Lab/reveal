@@ -293,7 +293,7 @@ class TestSearchMessages:
 
     def test_result_includes_term(self):
         result = search_messages([], 'myterm', 'session', _contract_base())
-        assert result['term'] == 'myterm'
+        assert result['term'] == ['myterm']
 
     def test_result_includes_session(self):
         result = search_messages([], 'x', 'my-session', _contract_base())

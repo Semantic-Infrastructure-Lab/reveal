@@ -10,7 +10,7 @@ MATCH_RULE = 'Case-insensitive literal substring of workflow tool name or operat
 
 
 def _match_echo(value):
-    return value if value is None or isinstance(value, str) else term_echo(match_terms(value))
+    return None if value is None else term_echo(match_terms(value))
 
 
 def workflow_selection_requested(params):

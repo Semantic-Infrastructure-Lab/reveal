@@ -333,7 +333,7 @@ def search_sessions(conversation_base: Path, query_params: Dict[str, Any]) -> Di
         source_type='directory',
         contract_version=CONTRACT_VERSION,
         data={
-            'term': term if isinstance(term, str) else term_echo(match_terms(term)),
+            'term': term_echo(match_terms(term)),
             'since': since or None,
             'until': until or None,
             'whole_word': whole_word,
