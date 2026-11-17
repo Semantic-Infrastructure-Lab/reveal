@@ -376,7 +376,9 @@ class TestPreservation:
             result, answer = cli_json(address)
             assert result.returncode == 0
             assert any(f'{old}://' in m and new in m for m in notes(answer)), notes(answer)
-            assert f'{old}:// is deprecated' in result.stderr
+            # Said once, in the JSON answer's meta.warnings, not also on stderr beside it (BACK-2659).
+            assert f'{old}:// is deprecated' not in result.stderr
+            assert any(f'{old}:// is deprecated' in m for m in notes(answer)), notes(answer)
             assert_equal_answer(answer, query(uri(project, expected_controls)))
         result, answer = cli_json('hotspots', str(project))
         assert result.returncode == 0
@@ -520,7 +522,8 @@ class TestProposedChanges:
         if transport == 'cli':
             result, answer = cli_json('metrics', str(many), '--view', 'hotspots', '--top', '2')
             assert result.returncode == 0, result.stderr[-300:]
-            assert 'deprecated' in result.stderr
+            assert 'deprecated' not in result.stderr  # said once, in meta.warnings (BACK-2659)
+            assert any('deprecated' in m for m in notes(answer)), notes(answer)
         elif transport == 'uri':
             result, answer = cli_json(uri(many, 'view=hotspots&top=2'))
             assert result.returncode == 0, result.stderr[-300:]
@@ -557,7 +560,8 @@ class TestProposedChanges:
         assert result.returncode == 0, result.stderr[-300:]
         assert_equal_answer(answer, expected)
         assert _first_note_with(answer, 'hotspots', 'view'), notes(answer)
-        assert 'deprecated' in result.stderr
+        assert 'deprecated' not in result.stderr  # said once, in meta.warnings (BACK-2659)
+        assert any('deprecated' in m for m in notes(answer)), notes(answer)
 
     def test_the_view_and_the_legacy_flag_are_two_answers(self, project):
         """BACK-2654 rule 17 (Scott 2026-11-16): --hotspots answers files plus the ranking, --view hotspots the ranked
@@ -571,7 +575,9 @@ class TestProposedChanges:
         result, answer = cli_json(uri(project, 'view=hotspots&hotspots=false'))
         assert result.returncode == 0, result.stderr[-300:]
         assert_equal_answer(answer, query(uri(project, 'view=hotspots')))
-        assert 'hotspots=true' not in result.stderr and 'deprecated' in result.stderr, result.stderr
+        # The note is said once, in meta.warnings, not also on stderr beside the JSON (BACK-2659).
+        assert 'hotspots=true' not in result.stderr and 'deprecated' not in result.stderr, result.stderr
+        assert any('deprecated' in m for m in notes(answer)), notes(answer)
         assert not [m for m in notes(answer) if 'hotspots=true' in m], notes(answer)
 
     @pytest.mark.parametrize('args', [
