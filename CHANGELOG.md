@@ -34,6 +34,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 - `reveal claude` is generated from the same declarations as `claude://`: canonical view/detail/match/where and answer-row pagination use existing readers, preserve source-loss outcomes, and keep base-path configuration and optional session statistics. Composite query receipts describe applied bound filters, including API overlays (BACK-2617).
 
+- A warning that names five files and counts the rest (`analysis_failed`, `analysis_incomplete`, `parse_degraded`, `worker_lost` and their siblings) also carries `failures`: every file with its cause class and full reason, so a `--format json` answer says which files failed and why, which only the text answer's per-file stderr lines said before (BACK-2659).
+
 ### Fixed
 
 - A config problem is now part of the answer: a missing `REVEAL_CONFIG` file, a config file (or `.reveal/stats-quality.yaml`) that cannot be loaded, a value that fails the schema, a non-integer `REVEAL_C901_THRESHOLD`/`REVEAL_E501_MAX_LENGTH` or an unknown rule setting is a `config_warning` entry in `meta.warnings` of every `--format json`, `reveal.api.query` and MCP answer (MCP returns one block again), and one `warning:` line on stderr after a text answer, instead of a log line per config read that JSON never carried; `check` no longer adds its own "config ... could not be loaded" note beside it, and `reveal health` no longer calls such a check incomplete (BACK-2659).

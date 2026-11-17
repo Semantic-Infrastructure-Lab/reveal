@@ -457,9 +457,32 @@ A `--format json` answer is the whole answer: nothing is printed on stderr besid
 failures are in the JSON (`analysis_failed`, `parse_degraded`, a rule's `unavailable` outcome, a
 file's `check_rules_failed`), so the per-file lines a text answer prints (`Warning: Failed to analyze
 <file>: <cause>`, `AST parse failed ... for <file>`, I003's `layer config ... could not be used`,
-`Check rules failed for <file>`) are not printed in JSON mode, by pool workers either. Where the JSON
-caps a file list (`analysis_failed` names five files, counts the rest and gives the cause classes), the
-text answer's lines remain the place for every file and the full cause text.
+`Check rules failed for <file>`) are not printed in JSON mode, by pool workers either. Where a warning
+caps its file list, nothing is lost either: see the next section.
+
+### Every failed subject (`failures`)
+
+A warning that names up to five subjects in `files` (or `directories`) and `message` and counts the
+rest also carries `failures`: every subject it counts, uncapped, each as
+`{"path": ..., "cause": ..., "reason": ...}` (BACK-2659). `files` and `message` stay short and unchanged;
+`failures` is where every file name and the full per-file reason reach a JSON answer, including the
+text the text answer's per-file lines print.
+
+- `path`: spelled as the warning's `files` spells it (POSIX; relative where `files` is relative);
+  `null` for an `analysis_incomplete` enumeration error that named no directory. A raw spelling of the
+  path inside `reason` is replaced by this one, so an absolute path does not leak through an error text.
+- `cause`: the class of the reason, the text before its first colon (`PermissionError`,
+  `invalid Python source`); for a warning whose subjects share one cause and record no per-file text it
+  is the warning's kind (`worker_lost`, `partial_parse`, `parse_recovered`, `check_rules_failed`;
+  `parse_degraded` also carries the parse error's line as its reason).
+- `reason`: the full per-subject text (`PermissionError: Permission denied`), present when one was
+  recorded.
+
+The warnings that carry it: `analysis_failed`, `analysis_incomplete` (one entry per directory and
+cause, plus each unlocated event), `worker_lost`, `partial_parse`, `parse_recovered`, `parse_degraded`,
+`check_rules_failed`, `unreadable_files`, `entries_skipped` (entry names), `sheets_unsearched` (sheet
+names) and `file_measurement_failed` (the operation in parentheses after the reason). Entries are sorted
+by `path`. The field is additive: no exit code, count or completeness changes.
 
 ---
 
