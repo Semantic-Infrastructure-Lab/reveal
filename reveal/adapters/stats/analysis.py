@@ -113,6 +113,13 @@ def analyze_file(file_path: Path, calculate_file_stats_func) -> Optional[Dict[st
             position = locate() if callable(locate) else None
             if position is not None:
                 stats['parse_error_line'] = position[0]
+        if file_path.suffix == '.py':
+            # What Python's parser said when the rules read the file (their shared cache, so no second
+            # parse): the text answer's log line, which beside a JSON answer only this row carries (BACK-2659).
+            from ...rules.base_mixins import python_parse_failure
+            failure = python_parse_failure(analyzer.content, str(file_path))
+            if failure:
+                stats['parse_error'] = failure
 
         # Release large buffers immediately; don't wait for GC.
         # During directory scans (stats://, overview) hundreds of analyzers are

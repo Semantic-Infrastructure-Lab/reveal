@@ -717,7 +717,8 @@ class MetricsAdapter(ResourceAdapter):
         places = [f"{name} (line {s['parse_error_line']})" if s.get('parse_error_line') else name
                   for name, s in zip(shown, degraded)]
         more = f" and {len(degraded) - len(shown)} more" if len(degraded) > len(shown) else ''
-        lines = [(s['file'], f"parse error at line {s['parse_error_line']}" if s.get('parse_error_line') else None)
+        lines = [(s['file'], s.get('parse_error') or (f"parse error at line {s['parse_error_line']}"
+                                                       if s.get('parse_error_line') else None))
                  for s in degraded]
         return {'type': 'parse_degraded', 'count': len(degraded), 'files': shown,
                 'failures': failure_records(lines, self.path, cause='parse_degraded'),
