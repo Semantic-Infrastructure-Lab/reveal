@@ -127,8 +127,8 @@ through here — write `?limit=N`, `?sort=field`/`?sort=-field`, and
 `json://`, `git://` and `metrics://` (`stats://` is a deprecated alias) apply these
 (`metrics://?view=hotspots` pages its ranked rows with them); `patches://?view=pressure` caps with
 `?top=N`; `calls://` and `imports://?sort=-fan-in` (which replaces the deprecated `depends://`) cap with
-`?limit=N`; other adapters
-answer `Unknown query param ... ignored`. Everything else is each
+`?limit=N`; a declared noun that does not take one of them answers an invalid request naming
+its controls (exit 2), and other adapters answer `Unknown query param ... ignored`. Everything else is each
 adapter's own `?key=value` vocabulary — check `reveal_query('help://schemas/
 <adapter>')` for what a given scheme accepts, or use a dedicated typed tool
 (`reveal_check` has `severity`/`select`/`ignore`).

@@ -758,7 +758,7 @@ reveal 'claude://session/<session-name>/messages?detail=raw'   # + disable 600-c
 reveal claude://session/infernal-earth-0118/messages
 ```
 
-**Output**: Each narrative turn's text, with `turn`/`message_index`/`timestamp`/`char_count`. Text output cuts each turn at 600 characters (`--verbose` or `--max-snippet-chars N` lifts it; `?full` has no effect on plain `/messages`); JSON always carries the full text. This is the best resource for reading what the assistant concluded — lighter and cleaner than a raw dump because tool-call-only turns are skipped entirely rather than shown as one-line summaries.
+**Output**: Each narrative turn's text, with `turn`/`message_index`/`timestamp`/`char_count`. Text output cuts each turn at 600 characters (`?detail=full`, `--max-snippet-chars N` or, on the subcommand, `--detail full` lifts it; the legacy `--verbose` answers as `--detail full` with a note, and the legacy `?full` does not lift the text on plain `/messages`); JSON always carries the full text. This is the best resource for reading what the assistant concluded — lighter and cleaner than a raw dump because tool-call-only turns are skipped entirely rather than shown as one-line summaries.
 
 **`?raw`**: add `?raw` to get every raw role=assistant record unfiltered instead — text, thinking, tool_use, and tool_result blocks all present for every turn, none skipped. This is a bulk forensic scan (e.g. reading every tool_use's exact arguments across a session at once, or every tool_result's exact output), not narrative reading; prefer plain `/messages` unless you specifically need that. Add `&full` to also disable the 600-char per-message truncation.
 
@@ -768,7 +768,7 @@ reveal claude://session/infernal-earth-0118/messages
 
 ### 10. message/\<n\>
 
-**Description**: Read a single message by index: text in full, tool_use name and key params (a Write's `content` is shown as a size only), tool_result first 500 chars (`--verbose` for all). Use `--format json` to see exactly what a Write or Edit sent
+**Description**: Read a single message by index: text in full, tool_use name and key params (a Write's `content` is shown as a size only), tool_result first 500 chars (`?detail=full` for all; the legacy `--verbose` is the same, with a note). Use `--format json` to see exactly what a Write or Edit sent
 
 **Syntax**:
 ```bash
@@ -808,13 +808,13 @@ reveal 'claude://session/<session-name>/message' --range 300-    # open-ended: 3
 reveal claude://session/infernal-earth-0118/message --range 5-15
 ```
 
-**Output**: Interleaved user + assistant turns with role, timestamp, and content. Default truncation at 600 chars; add `?full` or `--verbose` to disable. Each turn shows its raw `message_index` so you can drill in with `/message/N`. Tool-only assistant turns show one-line summaries (`Read → file.py`, `Bash → git status`).
+**Output**: Interleaved user + assistant turns with role, timestamp, and content. Default truncation at 600 chars; add `?detail=full` to disable (the legacy `?full` and `--verbose` still do, with a note naming `detail=full`). Each turn shows its raw `message_index` so you can drill in with `/message/N`. Tool-only assistant turns show one-line summaries (`Read → file.py`, `Bash → git status`).
 
 **Notes**:
 - Range is 1-indexed over conversation messages (user + assistant only; metadata records excluded)
 - Raw `message_index` shown per turn for cross-reference with `/message/N` (0-indexed over decoded object records, including metadata).
 - Open-ended `--range 300-` supported: returns all messages from turn 300 to end
-- `?full` and `--verbose` are equivalent — both disable the 600-char truncation
+- `?detail=full` disables the 600-char truncation; the legacy `?full` and `--verbose` are the same, with a note
 
 **Use when**: Navigate a specific region of a long conversation, review a troubleshooting exchange, inspect what happened between two known points
 

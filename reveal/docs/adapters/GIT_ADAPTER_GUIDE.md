@@ -757,11 +757,11 @@ repeats, two instants print the same local time, in the commit dates and in a co
 alike. Zoned fractional seconds use microsecond precision on all supported Python
 versions: short fractions are padded and digits beyond six are truncated.
 
-**A filter field no commit has warns.** The fields of a commit are `hash`, `author`, `email`,
-`date`, `timestamp` and `message`. A filter written with an operator on any other field
-(`authr~=Scott`) compares a missing value on every commit; the answer carries an
-`unknown_filter_field` entry in `meta.warnings`, printed under the text output. A bare unknown
-key (`?authr`, `?authr=Scott`) gets the stderr warning "Unknown query param" instead.
+**A filter field no commit has exits 2.** The fields of a commit are `hash`, `author`, `email`,
+`date`, `timestamp`, `message` and `content`. A filter on any other field (`authr~=Scott`,
+`?authr=Scott`, `where=authr~=Scott`) and any other unknown key are an invalid request: exit 2,
+naming the supported controls and these fields. Earlier versions warned (`unknown_filter_field`,
+or "Unknown query param" on stderr) and answered with exit 0.
 
 ### Result Control Parameters
 

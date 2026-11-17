@@ -107,7 +107,7 @@ reveal 'surface://.?type=env' --format json
 | `source_only` | `true`, `false` (default) | Exclude test/support files using conventional names and project `test_layout.additional_paths` (`test_*.py`, `*_test.py`, `conftest.py`, `tests/`, `__tests__/`, `*.test.ts`, `*.spec.ts`, etc.). |
 | `by` | `dir` | Add a per-directory rollup (see below). |
 | `depth` | integer >= 0 (default `0`) | With `by=dir`: keep only the first N path segments of each directory, so `depth=2` folds `app/api/util` into `app/api`. `0` keeps the full directory. |
-| `top` | nonnegative integer (default: all) | Text entries per category or directories; `0` shows none. JSON stays complete. |
+| `top` | nonnegative integer (default: all) | Text entries per category or directories; `0` shows every entry, as when omitted (it used to show none). JSON stays complete. |
 
 The subcommand and URI forms share parameter declarations, validation, result identity
 (`surface_scan`) and output handling. `--top N` and `?top=N` both affect text only.
@@ -161,8 +161,8 @@ Explicit keywords override valid URI values, including `False`, zero and empty
 strings. `None` selects the declared default; an omitted keyword leaves the URI
 value intact. The URI is validated first, so `depth=-1` still rejects when a typed
 override supplies `depth=0`. Invalid typed values raise `ValueError` before scanning,
-and unsupported API keywords raise `TypeError`. Unknown URI keys retain their warning
-behavior. `top=0` leaves raw API and JSON analysis complete; it limits text entries.
+and unsupported API keywords raise `UnsupportedOverrideError` (a `TypeError`). An unknown URI key exits 2
+naming the supported controls. `top` leaves raw API and JSON analysis complete; it limits text entries.
 
 Direct adapter calls bind controls during construction:
 

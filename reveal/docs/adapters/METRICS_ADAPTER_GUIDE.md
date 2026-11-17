@@ -359,13 +359,14 @@ it is an unknown parameter, warned and ignored.
 | `classes` | `elements.classes` | `classes!=0` |
 | `quality` | `quality.score` | `quality<70` |
 
-A dotted path into a file's record (`lines.total`, `quality.avg_function_length`) filters too. When
-nothing matches and a filter names a field no scanned file has (`complxity>5`, `complxity=5..15`),
-the answer carries an `unknown_filter_field` warning naming it: the zero is likely a typo.
+A dotted path into a file's record (`lines.total`, `quality.avg_function_length`) filters too. A filter
+on a field that is not in this list or under one of those record sections (`complxity>5`,
+`complxity=5..15`, bare or in `where=`) is an invalid request: exit 2, naming the supported controls and
+fields. Earlier versions answered with an `unknown_filter_field` warning and exit 0.
 
 A single file is filtered the same way: `metrics://src/app.py?lines>99999` answers 0 files (the
-file does not pass), and `metrics://src/app.py?complxity>5` adds the `unknown_filter_field`
-warning. Earlier versions returned the file whatever the filters said.
+file does not pass), and `metrics://src/app.py?complxity>5` exits 2. Earlier versions returned the
+file whatever the filters said.
 
 ### Combining Filters
 

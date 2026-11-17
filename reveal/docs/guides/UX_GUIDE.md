@@ -172,18 +172,19 @@ reveal 'ast://src?complexity>10&limit=5'  # Top 5 complex functions (filtered fi
 
 ---
 
-## `--sort` and `?sort=` Precedence
+## `--sort` and `?sort=` Together
 
-If you use both `--sort` and `?sort=` in the URI, the URI wins:
+A flag and its URI key are one setting given twice. The same value is one request; different values are an invalid
+request (exit 2) naming both, on every noun and for every setting (`--limit`, `--sort`, `--format`, ...):
 
 ```bash
-# URI ?sort= takes precedence — --sort is ignored
+# Different values: exit 2, nothing is guessed
 reveal 'ast://src?sort=name' --sort complexity
-# → sorts by name (URI wins)
+# → Error (ast://): --sort conflicts with sort=name in the URI: sort is set twice with different values; give it once
 
-# --sort injects only when URI has no sort=
+# The same value, or the flag alone, is one request
 reveal 'ast://src?complexity>10' --sort=-lines
-# → ?sort=-lines appended to URI
+# → the same answer as 'ast://src?complexity>10&sort=-lines'
 ```
 
 ---

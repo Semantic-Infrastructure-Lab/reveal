@@ -40,8 +40,11 @@ Query parameters allow filtering, formatting, and modifying adapter behavior usi
 | **reveal://** | none | N/A |
 
 `sort`, `limit` and `offset` are applied by `ast://`, `markdown://`, `json://`, `git://` and
-`metrics://`; `imports://` takes `sort=-fan-in` and `limit=N` for its ranking and rejects `offset`. `metrics://?hotspots=true` (its hotspot ranking), the retired `hotspots://`, `calls://`, `depends://` and `patches://?view=pressure` cap with `top=N`
-(the `--limit N` flag maps to it), and other adapters answer `Unknown query param ... ignored`.
+`metrics://`; `imports://` (`sort=-fan-in`) and `calls://` (`sort=-callers`; `limit` also caps `?uncalled`) take `sort`
+and `limit=N` for their ranking and reject `offset` (`top` is calls' legacy spelling of `limit`, with a note). The legacy
+`metrics://?hotspots=true` ranking, the retired `hotspots://` and `depends://`, and `patches://?view=pressure` cap with
+`top=N` (on `hotspots://` and `depends://` the `--limit N` flag maps to it). A declared noun rejects a key it does not
+take (exit 2, naming its controls); other adapters answer `Unknown query param ... ignored`.
 Every adapter that walks a directory also takes `respect_gitignore=false` (the same as `--no-gitignore`).
 
 ## Detailed Documentation
@@ -184,9 +187,9 @@ reveal 'imports://src?circular&detail=full'   # Cycle paths
 
 - **`timestamp`** - Filter commits by commit time in epoch seconds: `timestamp>1767225600`
 
-- A filter written with an operator on a field a commit does not have (`authr~=Scott`)
-  compares a missing value on every commit; the answer carries an `unknown_filter_field`
-  warning in `meta.warnings` naming it, as on metrics:// and json://.
+- A filter on a field a commit does not have (`authr~=Scott`, bare or in `where=`) exits 2,
+  naming the supported controls and the commit fields, as on metrics:// (fixed field lists);
+  json:// and markdown://, whose fields come from the data, warn with `unknown_filter_field` instead.
 
 - **`ref`** - Override the starting ref (alias for `@ref` in the URI)
   - **Example**:

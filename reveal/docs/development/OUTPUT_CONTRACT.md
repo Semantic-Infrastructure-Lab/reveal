@@ -377,11 +377,12 @@ Adapters MAY include additional fields beyond the contract. These fields:
 ### Ignored inputs
 
 For a URI/declared dispatch using the shared JSON writer, ignored query inputs and
-flags are included in `meta.warnings` before serialization. The parser owns unknown
-keys; the flag ledger owns inputs that were accepted but not used by this operation.
-Each entry has a `type` and `code` (`unknown_query_param`, `unused_query_param`, or
-`unused_flag`), a human-readable `message`, and `fields`: the query keys or flag
-spellings concerned. Existing warnings remain in the answer.
+flags are included in `meta.warnings` before serialization. On an adapter without declared
+parameters the parser owns unknown keys (`unknown_query_param`); on a declared noun an unknown
+key is an invalid request instead (next section). The flag ledger owns inputs that were accepted
+but not used by this operation. Each entry has a `type` and `code` (`unknown_query_param`,
+`unused_query_param`, or `unused_flag`), a human-readable `message`, and `fields`: the query keys
+or flag spellings concerned. Existing warnings remain in the answer.
 
 These are informational diagnostics and do not make a usable answer fail. An
 operation rejected before it could run does not gain an unused-input warning;
@@ -395,6 +396,27 @@ MCP provenance queries receive the warnings inside the JSON document instead of
 an appended stderr suffix. Unrelated stderr retains its existing behavior; this
 does not convert arbitrary printed diagnostics into structured warnings.
 
+### Invalid requests (`invalid_request`)
+
+A request a declared noun cannot answer as written exits 2 before any analysis: an unknown URI key,
+subcommand flag or filter field (on a noun with a fixed field list), a shared control the noun does not
+take, a value outside a control's choices, one setting given twice with different values, or two
+controls that select different answers (BACK-2654). The message names what was typed and, for an
+unknown name, the supported controls and fields. In text mode it is one `Error (NOUN://): ...` line on
+stderr and stdout is empty. With `--format json` (or `--output json=PATH`) stdout is the invalid-request
+document, on the subcommand and the URI form alike and for the argument parser's own usage errors too
+(an unknown flag, a missing value, an extra argument); the message is also on stderr:
+
+```json
+{"contract_version": "1.1", "type": "<the noun's result type>", "source": "<target>", "source_type": "unknown",
+ "meta": {"warnings": [], "errors": [{"code": "invalid_request", "message": "<message>"}]},
+ "error": "<message>"}
+```
+
+A malformed `--output` spec writes no file. A file path or a scheme without declared parameters keeps
+the parser's text usage error. `reveal.api.query` raises the same message as `UnsupportedOverrideError`
+for an unknown typed keyword ("Declared parameter bindings").
+
 ### Retired spellings (`retired_spelling`)
 
 A spelling the surface program has retired (a flag, subcommand, URI scheme, query parameter
@@ -406,8 +428,9 @@ is printed on stderr beside it (BACK-2659):
 `{"type": "retired_spelling", "code": "retired_spelling", "message": ..., "field": "<table key>", "old": ..., "replacement": ..., "stage": "note"}`.
 Any other answer prints one stderr line after the answer: `note: <old> is deprecated; use <replacement>.`
 `field` is the table key (`flag:--search`, `param:calls.root`, ...), so two retired spellings are
-two entries. The MCP server never writes the note to stderr: a JSON result carries the same
-entry, and a text result ends with a `[note: ...]` line. At the `error` stage (the cut release) the
+two entries. `reveal.api.query` returns the same entry in the answer's `meta.warnings` on every declared noun
+(BACK-2654; earlier versions omitted it on most nouns). The MCP server never writes the note to stderr: a JSON
+result carries the same entry, and a text result ends with a `[note: ...]` line. At the `error` stage (the cut release) the
 same text is an error and the exit code is 2. A spelling deleted outright rather than renamed is a
 `removed` row: it is at the `error` stage from the start and prints
 `error: <old> was removed; use <replacement>.` (`python://`, BACK-2225). A `phase7` row is recorded
@@ -476,7 +499,9 @@ text the text answer's per-file lines print.
   `invalid Python source`); for a warning whose subjects share one cause and record no per-file text it
   is the warning's kind (`worker_lost`, `partial_parse`, `parse_recovered`, `check_rules_failed`;
   `parse_degraded`'s reason is Python's parse message and line for a `.py` file, as in
-  `invalid syntax (line 4)`, else the line of the parse error).
+  `invalid syntax (line 4)`, else the line of the parse error). Metrics also puts that text on the
+  file's own row as `parse_error` (a string), including on a file tree-sitter still reads, where it is
+  the only trace and the exit code does not change.
 - `reason`: the full per-subject text (`PermissionError: Permission denied`), present when one was
   recorded.
 
@@ -865,7 +890,7 @@ presentation controls: top never shrinks JSON, and summary-only applies solely t
 primary JSON after execution facts exist. Text and human-primary artifacts retain
 the full map. Both spellings return `deps_scan`; `--fail-on findings` restores the
 previous text-mode findings gate. Whole-valued `top=3.0` and `top=1e2` are valid;
-CLI `--all` remains rejected, URI `--all` and both `--verbose` expand text only.
+`--all` (subcommand and URI alike) and both `--verbose` expand text only.
 Both deps spellings are retired (BACK-1054): each adds a `retired_spelling` warning and
 otherwise keeps this shape and these exit codes; the three components are views of one
 imports graph build. Imports declares default `none` and supports `findings`: exit 1 when
@@ -1082,7 +1107,11 @@ query before applying explicit typed keyword overrides by canonical declaration 
 This includes required URI selectors: Trace still requires a valid URI `from` before
 an override can replace it. API overrides use `from` (via dictionary expansion), while
 plain constructor `params=` retains its CLI destination name `root`.
-Unknown API keys raise `TypeError`; False, zero and empty values participate, and
+Unknown API keys raise `reveal.errors.UnsupportedOverrideError`, a `RequestValidationError` that is also a
+`TypeError` (so existing `except TypeError` callers still catch it), with the same "unsupported control ...;
+supported controls: ..." message the CLI prints; this holds on every declared noun, including deps, hotspots, pack,
+patches and testability, which used to ignore the key or raise Python's unexpected-keyword `TypeError`
+(BACK-2654). False, zero and empty values participate, and
 None follows the declaration's default policy. Typed values validate once without
 URI serialization or decoding. Fresh bound parameters preserve normalization and
 non-consuming validation; actual reads establish use. Raw analysis leaves presentation

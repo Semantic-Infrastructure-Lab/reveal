@@ -1748,8 +1748,8 @@ reveal env://                            # Environment variables
 | `name=` | `name=test_*` | Wildcard matching |
 | `complexity>` | `complexity>10` | Cyclomatic complexity |
 | `lines>` | `lines>50` | Function line count |
-| `type=` | `type=class` | Element type |
-| `depth>` | `depth>4` | Nesting depth |
+| `kind=` | `kind=class` | Element kind (`type=` is its legacy spelling, with a note) |
+| `where=depth>` | `where=depth>4` | Nesting depth (a bare `depth` is the shared depth control; bare `depth>4` is legacy, with a note) |
 | `decorator=` | `decorator=property` | Decorator filter |
 | `&` | `complexity>10&lines>50` | AND logic |
 

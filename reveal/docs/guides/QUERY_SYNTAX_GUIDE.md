@@ -399,9 +399,10 @@ and a range `date=P1..P2` include all of P, so `date>2026-01` starts in February
 written in the local time of the machine running reveal, without a zone; a bound with a zone
 (`Z`, `+02:00`) is converted to that local time first, and `+` is written as itself.
 
-A filter written with an operator on a field no commit has (`git://.?authr~=Scott`) carries an
-`unknown_filter_field` warning, as on metrics:// and json://. The commit fields are `hash`,
-`author`, `email`, `date`, `timestamp` and `message`.
+A filter on a field no commit has (`git://.?authr~=Scott`, bare or in `where=`) is an invalid request: exit 2,
+naming the supported controls and the commit fields (`hash`, `author`, `email`, `date`, `timestamp`, `message` and
+`content`), as on metrics://. Git and Metrics have a fixed field list; json:// and markdown://, whose fields come from
+the data, answer instead with an `unknown_filter_field` warning (exit 0).
 
 **File history**:
 ```bash
