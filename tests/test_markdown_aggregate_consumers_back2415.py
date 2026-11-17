@@ -59,7 +59,7 @@ def test_markdown_api_preserves_requested_relative_source_spelling(tmp_path, mon
     (b'plain\n', None, '', (1, 1, 0, 0), 1, 1, {}, 0),
     (b'---\nkind: [\n---\n', None, '', (1, 1, 0, 0), 1, 1, {}, 0),
     (None, None, '', (0, 0, 0, 0), 0, 0, {}, 0),
-    (b'---\nkind: guide\n---\n', b'caf\xe9\n', '&kind=hidden', (2, 1, 1, 0), 0, 0, {}, 3),
+    (b'---\nkind: guide\n---\n', b'caf\xe9\n', '&where=kind=hidden', (2, 1, 1, 0), 0, 0, {}, 3),
     (b'other\n', b'caf\xe9\n', '&body-contains=needle', (2, 1, 1, 0), 0, 0, {}, 3),
     (b'---\nkind: [guide, reference]\n---\nneedle\n', None, '&body-contains=needle',
      (1, 1, 0, 0), 1, 0, {'guide': 1, 'reference': 1}, 0),
@@ -254,7 +254,7 @@ def test_registered_sdk_partial_failed_empty_and_fresh_repair(tmp_path, provenan
             answer, _ = json.JSONDecoder().raw_decode(_text(partial))
             _counts(answer, (2, 1, 1, 0))
             assert answer['files_missing_field'] == 0
-        no_match = await request('&kind=hidden')
+        no_match = await request('&where=kind=hidden')
         assert not no_match.is_error and 'incomplete' in _text(no_match).lower()
         good.unlink()
         failed = await request()

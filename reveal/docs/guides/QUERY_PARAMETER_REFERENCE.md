@@ -329,9 +329,9 @@ reveal 'metrics://.?view=hotspots&code-only=true'
   reveal 'ast://src?lines=20..50'        # functions that are 20–50 lines long
   ```
 
-- **`depth>`** - Filter by nesting depth
+- **`depth>`** - Filter by nesting depth, in `where` (a bare `depth` is the shared depth control, never a field)
   ```bash
-  reveal 'ast://src?depth>3'             # deeply nested code
+  reveal 'ast://src?where=depth>3'       # deeply nested code
   ```
 
 - **`decorator`** - Filter by decorator, annotation or attribute name

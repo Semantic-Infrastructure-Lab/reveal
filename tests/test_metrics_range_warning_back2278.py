@@ -45,19 +45,18 @@ def test_equality_filter_applied_beside_an_operator_does_not_warn(tree, monkeypa
     assert not [w for w in warnings if w['type'] == 'unknown_query_param']
 
 
-def test_a_key_nothing_reads_still_warns(tree, monkeypatch):
-    # Negative controls: no filter is parsed, so the key really is ignored and says so.
+def test_a_bare_declared_field_alone_is_the_where_filter(tree, monkeypatch):
+    # BACK-2654 rule 8: lines=1 alone is the where filter lines=1 (it was warned "unknown" and ignored).
     names, stderr, warnings = _run(tree, monkeypatch, 'lines=1')
-    assert names == ['big.py', 'small.py']
-    assert [(w['type'], w['code'], w['fields']) for w in warnings] == [
-        ('unknown_query_param', 'unknown_query_param', ['lines'])]
-    assert "Unknown query param 'lines'" not in stderr
+    assert names == ['small.py'] == _run(tree, monkeypatch, 'where=lines=1')[0]
+    assert not [w for w in warnings if w['type'] == 'unknown_query_param']
+    assert 'Unknown query param' not in stderr
     # bogus is no declared field: exit 2 naming the supported fields (BACK-2654 rule 3, note #15; it was warned).
     rejected = _run_reveal_direct('metrics://.?bogus=1', '--format', 'json')
     assert rejected.returncode == 2 and "unsupported control 'bogus'" in rejected.stderr and 'lines' in rejected.stderr
     text = _run_reveal_direct('metrics://.?lines=1')
     assert text.returncode == 0, text.stderr
-    assert text.stderr.count("Unknown query param 'lines'") == 1
+    assert 'Unknown query param' not in text.stderr
 
 
 def test_direct_adapter_construction_agrees(tree, capsys):

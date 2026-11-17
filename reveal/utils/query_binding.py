@@ -8,8 +8,8 @@ from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Union
 from urllib.parse import quote, unquote
 
 from ..errors import RequestValidationError
-from .query_parser import (LegacySpelling, ParamSpec, ParamValueError, QueryParams, ResourceSpec, parse_query_params,
-                           peek_query_items, query_key)
+from .query_parser import (SHARED_CONTROL_NAMES, LegacySpelling, ParamSpec, ParamValueError, QueryParams, ResourceSpec,
+                           parse_query_params, peek_query_items, query_key)
 
 
 def boolean_value(value: Any) -> bool:
@@ -190,9 +190,12 @@ def _prepare_legacy_selectors(declarations: tuple[ParamSpec, ...], source: str, 
 
 
 def _prepare_expression_params(declarations, source, params, selectors, expression) -> tuple:
-    """Fold explicit where= values and bare field keys into the expression list; return the folded keys."""
+    """Fold explicit where= values and bare field keys into the expression list; return the folded keys and the
+    bare keys that spell a shared control the noun does not declare. Such a key is that control, never a field (rule 8,
+    BACK-2654), so the binder rejects it; a declared spelling folds as before (AST ``kind!=X``, and ``depth OP N``, the
+    legacy word of where whose translation is the same term)."""
     known = {name for spec in declarations for name in spec.spellings}
-    terms, folded = [], []
+    terms, folded, shared = [], [], []
     for index, part in enumerate(source.split('&')):
         if index == 0 and selectors:
             continue
@@ -200,12 +203,16 @@ def _prepare_expression_params(declarations, source, params, selectors, expressi
         if key == expression.name and separator:
             terms.append(unquote(value, encoding='utf-8', errors='strict'))
         elif key and key not in known:
-            terms.append(part.strip())
-            folded.append(query_key(part))
             dict.pop(params, key, None)
+            field = query_key(part)
+            if field in SHARED_CONTROL_NAMES and field not in known:  # a declared one (AST kind!=X) folds as before
+                shared.append(field)
+                continue
+            terms.append(part.strip())
+            folded.append(field)
     if terms:
         params[expression.name] = terms
-    return tuple(folded)
+    return tuple(folded), tuple(shared)
 
 
 def _fields_clause(declarations: tuple[ParamSpec, ...]) -> str:
@@ -222,6 +229,16 @@ def _symbol_clause(declarations: tuple[ParamSpec, ...]) -> str:
     return f'. Use {symbol.name}=NAME{flag} for a supported per-symbol lookup; no equivalent filter is implied'
 
 
+def _shared_name_clause(declarations: tuple[ParamSpec, ...], unknown: list) -> str:
+    """A shared control name is never a bare field (rule 8): name the where spelling of a field so called."""
+    expression = next((spec for spec in declarations if spec.role == 'filter-expression'), None)
+    shared = [key for key in unknown if key in SHARED_CONTROL_NAMES]
+    if expression is None or not shared:
+        return ''
+    return (f"; a shared control name is never a bare field: filter on a field so named with "
+            f"{', '.join(f'{expression.name}={key}' for key in shared)} OP VALUE")
+
+
 def unsupported_controls_message(declarations: Iterable[ParamSpec], unknown: Iterable[str]) -> str:
     """Rule 3's teaching (COMMAND_MODEL "Unsupported controls", BACK-2654): the keys a request named that the noun
     does not declare, then every control it does declare, its where fields and its per-symbol lookup."""
@@ -229,7 +246,8 @@ def unsupported_controls_message(declarations: Iterable[ParamSpec], unknown: Ite
     unknown = list(dict.fromkeys(unknown))
     controls = ', '.join(spec.name for spec in declarations if spec.role != 'unsupported') or '(none)'
     return (f"unsupported control{'s' if len(unknown) > 1 else ''} {', '.join(repr(key) for key in unknown)}; "
-            f"supported controls: {controls}{_fields_clause(declarations)}{_symbol_clause(declarations)}")
+            f"supported controls: {controls}{_fields_clause(declarations)}{_symbol_clause(declarations)}"
+            f"{_shared_name_clause(declarations, unknown)}")
 
 
 def _declared_keys(declarations: tuple[ParamSpec, ...]) -> set:
@@ -258,12 +276,12 @@ def _where_fields(params: QueryParams, expression: ParamSpec) -> list:
     return [field for field in fields if field]
 
 
-def _reject_unknown_keys(declarations: tuple[ParamSpec, ...], params: QueryParams, folded: tuple,
+def _reject_unknown_keys(declarations: tuple[ParamSpec, ...], params: QueryParams, shared: tuple,
                          expression: Optional[ParamSpec]) -> None:
-    """The one unknown-key check (rule 3): a key that is neither a declared control nor a declared field exits 2.
-    A where noun whose fields are not declared yet keeps folding every bare key into where (rule 8 owns them)."""
+    """The one unknown-key check (rule 3): a key that is neither a declared control nor a declared field exits 2, and
+    so does a bare key spelling a shared control the noun does not declare (rule 8; *shared*, never folded)."""
     known = _declared_keys(declarations) | _TRANSPORT_KEYS
-    unknown = [key for key in dict.keys(params) if key not in known]
+    unknown = [*shared, *(key for key in dict.keys(params) if key not in known)]
     if expression is not None and expression.fields and not expression.open_fields:
         unknown += [key for key in _where_fields(params, expression) if not _declared_field(key, expression.fields)]
     if unknown:
@@ -280,8 +298,9 @@ def _prepare_uri_params(declarations: tuple[ParamSpec, ...], source: str) -> Que
     _prepare_repeated_params(declarations, source, params)
     selectors = _prepare_legacy_selectors(declarations, source, params)
     expression = next((spec for spec in declarations if spec.role == 'filter-expression'), None)
-    folded = _prepare_expression_params(declarations, source, params, selectors, expression) if expression else ()
-    _reject_unknown_keys(declarations, params, folded, expression)
+    folded, shared = _prepare_expression_params(declarations, source, params, selectors, expression) \
+        if expression else ((), ())
+    _reject_unknown_keys(declarations, params, shared, expression)
     prepared = QueryParams(_normalize_aliases(declarations, params))
     prepared._aliases = {spec.name: spec.spellings[1:] for spec in declarations}
     prepared._folded = folded  # the bare field keys folded into where (a noun reading where reads them)

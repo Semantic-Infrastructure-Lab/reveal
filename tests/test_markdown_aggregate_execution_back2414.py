@@ -43,7 +43,7 @@ def assert_analysis(answer, state, candidates, analyzed, failed, discovery=0):
 
 
 @pytest.mark.parametrize('query', ['aggregate=kind', 'aggregate=kind&body-contains=needle',
-                                  'aggregate=kind&kind=absent', 'aggregate=kind&body-contains=other'])
+                                  'aggregate=kind&where=kind=absent', 'aggregate=kind&body-contains=other'])
 def test_decode_loss_is_not_missing_field_or_completed_zero(tmp_path, query):
     document(tmp_path)
     document(tmp_path, 'bad.md', b'---\nkind: hidden\n---\nneedle\xff\n')
@@ -153,7 +153,7 @@ def test_content_is_read_once_for_frontmatter_filter_and_body(tmp_path, monkeypa
         return read(source, *args, **kwargs)
 
     monkeypatch.setattr(Path, 'read_text', read_text)
-    answer = resolved(tmp_path, 'aggregate=kind&kind=useful&body-contains=needle')
+    answer = resolved(tmp_path, 'aggregate=kind&where=kind=useful&body-contains=needle')
     assert_analysis(answer, AnalysisCompleteness.COMPLETE, 1, 1, 0)
     assert reads == [path]
     assert answer.result['aggregate'] == [{'value': 'useful', 'count': 1}]
@@ -262,7 +262,7 @@ def test_failed_frontmatter_read_is_not_a_negative_filter_decision(tmp_path, mon
         return read(source, *args, **kwargs)
 
     monkeypatch.setattr(Path, 'read_text', read_text)
-    answer = api.query(uri(tmp_path, 'aggregate=kind&kind=useful'))
+    answer = api.query(uri(tmp_path, 'aggregate=kind&where=kind=useful'))
     assert any(w['type'] == 'unreadable_files' for w in answer.get('meta', {}).get('warnings', []))
     assert answer['aggregate'] == []
 

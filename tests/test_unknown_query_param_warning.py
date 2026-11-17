@@ -43,13 +43,15 @@ def _warns(fn):
 # ── The reported repro ────────────────────────────────────────────────────────
 
 class TestStatsRepro:
-    def test_unknown_stats_param_warns(self, tmp_path):
+    def test_a_bare_declared_field_is_the_where_filter(self, tmp_path):
+        # BACK-2654 rule 8: a declared field written FIELD=VALUE is the where filter (it was warned and ignored).
         (tmp_path / 'a.py').write_text('def f():\n    pass\n')
         result = _run_reveal_direct(f'stats://{tmp_path}?complexity=true')
-        assert "Unknown query param 'complexity'" in result.stderr
-        # Warning, not error: the result is still produced and exit code is clean.
-        assert result.returncode == 0
+        where = _run_reveal_direct(f'stats://{tmp_path}?where=complexity=true')
+        assert 'Unknown query param' not in result.stderr
+        assert result.returncode == where.returncode == 0
         assert 'Statistics' in result.stdout or 'Files' in result.stdout
+        assert result.stdout == where.stdout
 
     def test_valid_stats_param_silent(self, tmp_path):
         (tmp_path / 'a.py').write_text('def f():\n    pass\n')

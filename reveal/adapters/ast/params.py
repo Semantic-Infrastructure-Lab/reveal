@@ -6,7 +6,15 @@ from ...utils.query_control import declared_result_control as result_control
 from .queries import ALL_OP, parse_query, validate_filter_values, _condition
 
 
+def _legacy_depth(value: object) -> str:
+    """Bare ``depth=N`` is the where term on the element's nesting-depth field (``?depth>4`` folds unchanged)."""
+    return 'depth' if value is True else f'depth={value}'
+
+
+# depth is a shared control name (graph hops): bare, it is never a field (rule 8); AST's legacy meaning, the nesting
+# depth filter, is a legacy word of where with the same term, identical by construction (rule 16, BACK-2654)
 WHERE = where_param('Filter expressions, ANDed; repeat --where for multiple bounds',
+                    legacy=(LegacySpelling('depth', codec=_legacy_depth),),
                     open_fields='any element key the analyzer emits (name, complexity, line_count, ...), plus type, lines, '
                                 'decorator, calls, callee_of, param_type, return_type, has_annotations, callers')
 KIND = ParamSpec('kind', 'string', 'Element kind (function, method, class, struct, import, interface, ...)',

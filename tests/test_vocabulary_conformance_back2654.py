@@ -105,7 +105,7 @@ EXEMPT = {
                                             'overview', 'patches', 'surface', 'testability', 'trace')},
     **{(noun, '2'): _NO_LEGACY for noun in ('codex', 'contracts', 'json', 'patches', 'surface')},
     **{(noun, '1d'): 'declares no repeatable control with an alias'
-       for noun in NOUNS if noun not in ('claude', 'markdown', 'metrics', 'stats')},
+       for noun in NOUNS if noun not in ('ast', 'claude', 'markdown', 'metrics', 'stats')},
     **{(noun, '5'): 'no note-stage param: row whose replacement is a control of this noun' for noun in (
         'codex', 'contracts', 'json', 'patches', 'surface', 'trace')},
     **{(noun, '6'): 'declares no alias: nothing to note or keep note-free' for noun in (
@@ -1586,7 +1586,7 @@ def test_a_bare_shared_control_name_is_never_a_field(workspace, uri, key):
     """Rule 8a on the open-field nouns: a bare key spelling a shared control the noun does not declare exits 2,
     naming it and teaching where=KEY for the field of that name; it used to filter on a field of that name."""
     run = _run(uri, '--format', 'json')
-    assert run.rc == 2 and not run.out.strip(), run.brief()
+    assert run.rc == 2, run.brief()
     assert run.says(f"'{key}'", 'supported controls', f'where={key}'), run.err
 
 

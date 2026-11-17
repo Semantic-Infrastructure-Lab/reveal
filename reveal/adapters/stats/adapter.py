@@ -23,7 +23,7 @@ from ...utils.query import (
 from ...utils.query_control import sort_failed_warning, sort_nulls_last
 from ...utils.query_eval import find_unknown_filter_fields
 from ...utils.query_parser import (
-    CliBinding, LegacySpelling, ParamSpec, ParamValueError, QueryParams, ResourceSpec, filter_expression, mark_query_keys, param_schema,
+    CliBinding, LegacySpelling, ParamSpec, ParamValueError, QueryParams, ResourceSpec, filter_expression, param_schema,
     exclude_param, peek_query_items, split_exclude_param, where_param, whole_number,
 )
 from ...utils.query_binding import bind_declared_params, boolean_value
@@ -90,9 +90,6 @@ DETAIL_LEVELS = ('normal', 'summary')
 HOTSPOT_VIEW_LIMIT = 10
 # Shared controls of the one vocabulary that metrics does not take (D18): rejected, never folded into where.
 UNSUPPORTED_SHARED = ('match', 'kind', 'depth', 'until')
-# Operators that make a bare URI key a filter expression (``lines>5``, ``lines=1..5``); a bare ``key=value``
-# is a filter only beside one of them, as before where was declared (BACK-2278).
-_FILTER_OPERATORS = ('>', '<', '!=', '~=', '!~', '..')
 
 
 def _count(name: str):
@@ -277,43 +274,6 @@ def _validate_request(params: Any) -> None:
         message = conflict(supplied)
         if message:
             raise RequestValidationError(message)
-
-
-def _explicit_where(params: Any, terms: List[str]) -> List[str]:
-    """The terms given as where (``where=``, ``--where`` or a keyword), as opposed to the bare URI keys
-    the binder folded in: on a URI source they are the ``where=`` parts; on a typed one every term."""
-    source = getattr(params, '_source_query', None)
-    if source is None:
-        return list(terms)
-    from urllib.parse import unquote
-    explicit = []
-    for part in source.split('&'):
-        key, separator, value = part.strip().partition('=')
-        if key == _WHERE.name and separator:
-            explicit.append(unquote(value))
-    return explicit
-
-
-def _filter_terms(params: Any) -> tuple:
-    """The filter expressions of a bound request, and the bare keys that are no filter.
-
-    where's explicit terms always filter; a bare URI key does when any bare key carries an operator
-    (``lines=1`` beside ``functions>=0``), else it is an unrecognized param (BACK-2278). Each legacy
-    threshold is its where term (min_lines=N is lines>=N; the complexity pair is the file average,
-    avg_complexity, never the highest-function max_complexity field).
-    """
-    terms = list(_WHERE.read(params))
-    explicit = _explicit_where(params, terms)
-    bare = list(terms)
-    for term in explicit:
-        if term in bare:
-            bare.remove(term)
-    ignored = []
-    if bare and not explicit and not any(op in term for term in bare for op in _FILTER_OPERATORS):
-        ignored = [(key, value if separator else True)
-                   for key, separator, value in (term.partition('=') for term in bare)]
-        terms = explicit
-    return terms, ignored
 
 
 # The warning types _disclose_failures emits that say the answer lacks files it should have counted.
@@ -565,17 +525,13 @@ class MetricsAdapter(ResourceAdapter):
         # where's terms, the legacy thresholds translated into it. No fallback to "no filters": that
         # would answer an unfiltered query as if it were the filtered one (BACK-1059); a ValueError
         # here fails the query.
-        terms, ignored = _filter_terms(params)
+        # A bare declared field written FIELD=VALUE (?lines=5) is that where term too (rule 8, BACK-2654).
+        terms = list(_WHERE.read(params))
         self.query_filters = parse_query_filters('&'.join(terms)) if terms else []
 
         # Load quality scoring config (with defaults)
         self._quality_config = get_quality_config(self.path)
 
-        # BACK-507: a bare key that is no filter (no operator in any bare key: ?complexity=true, ?lines=1)
-        # is an unrecognized param, warned and ignored; beside an operator it is a filter (BACK-2278).
-        if ignored:
-            self._warn_unknown_query_params(dict(ignored))
-            mark_query_keys(params, *(key for key, _value in ignored))  # named once, not again as unused
         self._analysis_failures: list = []
         self._population_findings = False
         self._analyzed_count = 0

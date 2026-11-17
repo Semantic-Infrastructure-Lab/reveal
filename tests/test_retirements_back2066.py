@@ -262,6 +262,7 @@ PRODUCTION_CASES = {
     'param:ast.calls': lambda f: [f'ast://{f}?calls=auth_gate'],
     # BACK-2654: different-word aliases became legacy entries with rows.
     'param:ast.type': lambda f: [f'ast://{f}?type=function'],
+    'param:ast.depth': lambda f: [f'ast://{f}?depth=0'],
     'param:markdown.body-contains': lambda f: [f'markdown://{Path(f).parent}?body-contains=auth'],
     'param:markdown.fields': lambda f: [f'markdown://{Path(f).parent}?fields=title'],
     'param:ast.callee_of': lambda f: [f'ast://{f}?callee_of=auth_gate'],

@@ -31,12 +31,12 @@ def test_retirement_inventory_matches_the_shipped_migrations():
     BACK-2461 adds the three effects replacement notes. BACK-2225 adds python://, removed outright.
     BACK-2149 adds the hotspots noun and its two only-flags. BACK-2620 adds the four Imports aliases.
     BACK-2621 adds the ten Metrics legacy spellings. BACK-2654 adds the different words AST type and Markdown
-    body-contains and fields.
+    body-contains and fields, and AST's bare depth (rule 8).
     """
     assert sorted(RETIREMENTS) == ['flag:--also-json', 'flag:--calls', 'flag:--catchmap', 'flag:--check', 'flag:--deps',
                                    'flag:--fanout', 'flag:--flowto', 'flag:--ifmap', 'flag:--loopmap', 'flag:--mutations',
                                    'flag:--returns', 'flag:--search', 'flag:--sideeffects', 'flag:--statewrites',
-                                   'flag:--verbose', 'flag:--writes', 'param:architecture.verbose', 'param:ast.callee_of', 'param:ast.calls', 'param:ast.type',
+                                   'flag:--verbose', 'flag:--writes', 'param:architecture.verbose', 'param:ast.callee_of', 'param:ast.calls', 'param:ast.depth', 'param:ast.type',
                                    'param:calls.external', 'param:calls.modules', 'param:calls.rank', 'param:calls.root', 'param:calls.target', 'param:calls.top', 'param:calls.type', 'param:calls.uncalled',
                                    'param:claude.contains', 'param:claude.filter', 'param:claude.full', 'param:claude.last', 'param:claude.raw', 'param:claude.search', 'param:claude.summary', 'param:claude.tail',
                                    'param:deps.verbose', 'param:git.verbose',

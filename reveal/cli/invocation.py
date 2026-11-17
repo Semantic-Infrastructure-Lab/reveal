@@ -380,6 +380,9 @@ RETIREMENTS: Dict[str, Retirement] = {
     # Different words for one control are legacy spellings with a note (COMMAND_MODEL "Different words", BACK-2654);
     # AST show and Git type are D18-deferred and stay note-free.
     'param:ast.type': Retirement('ast ?type=KIND (--type KIND)', '?kind=KIND (--kind KIND), the same element kind'),
+    # A bare shared control name is never a field (BACK-2654 rule 8): AST's bare depth is its where term.
+    'param:ast.depth': Retirement('ast ?depth OP N (bare)', "?where=depth OP N (--where 'depth OP N'), the same "
+                                                            'nesting-depth filter'),
     'param:markdown.body-contains': Retirement('markdown ?body-contains=TEXT (--body-contains TEXT)',
                                                '?match=TEXT (--match TEXT), the same body match; repeats AND'),
     'param:markdown.fields': Retirement('markdown ?fields=A,B', '?columns=A,B (--columns A,B), the same frontmatter columns'),
