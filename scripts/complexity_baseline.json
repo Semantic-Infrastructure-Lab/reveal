@@ -77,7 +77,7 @@
   "reveal/adapters/hotspots.py::HotspotsAdapter.get_structure": 17,
   "reveal/adapters/hotspots.py::_build_test_name_index": 19,
   "reveal/adapters/imports.py::ImportsRenderer._render_circular_dependencies": 17,
-  "reveal/adapters/pack.py::PackAdapter.get_structure": 17,
+  "reveal/adapters/pack.py::PackAdapter.get_structure": 16,
   "reveal/adapters/pack.py::_compute_graph_relevance": 18,
   "reveal/adapters/pack.py::_compute_priority": 27,
   "reveal/adapters/ssl/adapter.py::SSLAdapter.get_structure": 16,
