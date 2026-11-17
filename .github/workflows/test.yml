@@ -2,7 +2,9 @@ name: Tests
 
 on:
   push:
-    branches: [ master, main ]
+    # ci/** is the pre-master publication branch: a change reaches master only by fast-forward
+    # once all jobs are green there (BACK-2590 option A).
+    branches: [ master, main, 'ci/**' ]
   pull_request:
     branches: [ master, main ]
   workflow_call:  # Allow this workflow to be called by other workflows
