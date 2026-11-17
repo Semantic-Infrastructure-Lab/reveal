@@ -339,6 +339,8 @@ VALUE_CASES = [
     ['--max-items', '0'], ['--max-items', '1'], ['--max-items', '-1'], ['--max-items', 'abc'],
     ['--max-snippet-chars', '0'], ['--max-snippet-chars', '-3'], ['--fields', 'nope'], ['--verbose'],
     ['--format', 'json', '--max-items', '0'], ['--format', 'json', '--fields', 'type'], ['--format', 'bogus'],
+    # the global --all reaches a noun's subcommand as it reaches its URI (BACK-2654 item 1c)
+    ['--all'], ['--format', 'json', '--all'],
 ]
 
 
@@ -370,6 +372,43 @@ def test_option_values_are_read_alike(project, noun, flags):
         if noun == 'architecture':
             parity_stderr(noun, a.stderr, 'cli', stdout=a.stdout)
             parity_stderr(noun, b.stderr, 'uri', stdout=b.stdout)
+
+
+# (noun, CLI argv, URI suffix) where --all lifts a cap the wider tree exceeds (default 10 ranked files/functions)
+ALL_LIFTS = [('metrics', ['--hotspots'], '?hotspots=true'), ('metrics', ['--view', 'hotspots'], '?view=hotspots'),
+             ('hotspots', [], '')]
+
+
+@pytest.mark.parametrize('noun, cli, query', ALL_LIFTS, ids=['metrics-legacy-hotspots', 'metrics-view', 'hotspots'])
+def test_all_lifts_the_same_cap_on_both_forms(project, noun, cli, query):
+    """BACK-2654 item 1c: `reveal NOUN PATH --all` answers as `NOUN://PATH --all` (the subcommand used to exit 2
+    "unsupported control '--all'"), and the cap it lifts is the one the selected answer reads."""
+    branches = ''.join(f'    if x == {i}:\n        return {i}\n' for i in range(12))
+    for n in range(14):
+        (project / f'hot_{n}.py').write_text(f'def hot_{n}(x):\n{branches}    return -1\n', encoding='utf-8')
+
+    def answer(*flags):
+        a = _run_reveal_direct(noun, 'proj', *cli, '--no-gitignore', '--format', 'json', *flags)
+        b = _run_reveal_direct(f'{noun}://proj{query}', '--no-gitignore', '--format', 'json', *flags)
+        assert a.returncode == b.returncode == 0, (a.stderr, b.stderr)
+        left, right = json.loads(a.stdout), json.loads(b.stdout)
+        assert_equal_answers(noun, left, right)
+        return left
+
+    def ranked(result):
+        return len(result.get('hotspots') or result.get('file_hotspots') or [])
+
+    capped, lifted = answer(), answer('--all')
+    assert ranked(capped) == 10 and ranked(lifted) > 10, (ranked(capped), ranked(lifted))
+
+
+@pytest.mark.parametrize('noun', ['ast', 'calls', 'git', 'metrics'])
+def test_all_beside_a_different_limit_is_one_invalid_request_on_both_forms(project, noun):
+    """--all sets the noun's limit, so beside --limit 1 it names both flags and exits 2 on both forms (rule 1)."""
+    a, b = run(noun, 'cli', '--all', '--limit', '1'), run(noun, 'uri', '--all', '--limit', '1')
+    assert a.returncode == b.returncode == 2, (a.stderr, b.stderr)
+    assert rejection(a.stderr) == rejection(b.stderr) == [
+        f'Error ({noun}://): --limit conflicts with --all: both set limit with different values; give one']
 
 
 @pytest.mark.parametrize('noun', NOUNS)
