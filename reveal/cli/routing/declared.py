@@ -14,6 +14,7 @@ from .ledger import FlagLedger, complete, delegate, ledger_of, mark, peek
 from ...utils.severity import CHECK_GATES
 from ...utils.path_utils import to_posix
 from ...utils.query_parser import ParamSpec
+from ..invocation import typed_spelling
 
 
 def declared_adapter_class(name: str):
@@ -327,7 +328,7 @@ def run_declared_command(name: str, args, *, answer_consumer=None) -> None:
         dest = spec.cli.dest or spec.name
         if dest in vars(args):
             source[dest] = peek(args, dest)
-            spelled[dest] = flags.get(dest, dest)
+            spelled[dest] = typed_spelling(dest, flags.get(dest, dest))
         for legacy in legacy_flag_dests(spec):  # an old flag keeps its legacy name; the binder translates it
             if legacy in vars(args):
                 source[legacy], spelled[legacy] = peek(args, legacy), flags[legacy]
@@ -410,10 +411,11 @@ def _bind_global_verbose(name, adapter, args, source, spelled=None) -> None:
     key, value = verbose_binding(adapter.PARAM_SPECS)
     given = source.get(key)
     if key == 'detail' and given is not None and given != value:
-        raise RequestValidationError(f'--verbose conflicts with --detail {given}: --verbose is --detail full; give one')
+        typed = typed_spelling('verbose', '--verbose')
+        raise RequestValidationError(f'{typed} conflicts with --detail {given}: {typed} is --detail full; give one')
     source[key] = value
     if spelled is not None:
-        spelled[key] = '--verbose'
+        spelled[key] = typed_spelling('verbose', '--verbose')
     owner = next(spec.name for spec in adapter.PARAM_SPECS if key in spec.spellings)
     delegate(args, 'verbose', owner)  # unread when the answer does not read the control it stands for
     retirement_note('flag:--verbose' if key == 'detail' else f'param:{name}.verbose')
@@ -440,9 +442,8 @@ def _validate_walk_policy(adapter, args, query_policy) -> None:
     if peek(args, 'exclude'):
         raise ValueError('--exclude requires a directory-walking operation')
     if query_policy is not None or peek(args, 'respect_gitignore', True) is False:
-        from ..invocation import typed_spelling
-        raise ValueError(f"{typed_spelling('respect_gitignore', '--respect-gitignore')} / ?respect-gitignore requires a "
-                         'directory-walking operation')
+        typed = typed_spelling('respect_gitignore', '--respect-gitignore')
+        raise ValueError(f'{typed} / ?respect-gitignore requires a directory-walking operation')
 
 
 

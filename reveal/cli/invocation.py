@@ -25,7 +25,7 @@ from argparse import ArgumentParser, Namespace
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from typing import Callable, Dict, Iterator, NamedTuple, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, Iterator, NamedTuple, Optional, Sequence, Tuple
 
 from ..utils.invocation_log import current_log, log_scope, noted_for_json
 
@@ -605,6 +605,55 @@ def record_spelling(dest: str, option: str) -> None:
     typed = _TYPED.get()
     if typed is not None:
         typed.setdefault(dest, option)
+
+
+def _long_option(token: str, actions: Dict[str, Any], allow_abbrev: bool) -> list:
+    name, eq, _ = token.partition('=')
+    if name not in actions and allow_abbrev:
+        matches = [option for option in actions if option.startswith('--') and option.startswith(name)]
+        name = matches[0] if len(matches) == 1 else name
+    return [(name, bool(eq))] if name in actions else []
+
+
+def _typed_options(token: str, actions: Dict[str, Any], allow_abbrev: bool) -> list:
+    """The (option string, value attached) pairs *token* spells, as argparse resolves it: an exact option, ``--x=v``,
+    a unique long prefix, or a cluster of short options (``-ic``; a value-taking short option ends it)."""
+    if not token.startswith('-') or token == '-':
+        return []
+    if token.startswith('--'):
+        return _long_option(token, actions, allow_abbrev)
+    if token in actions:
+        return [(token, False)]
+    found, rest = [], token[1:]
+    while rest and f'-{rest[0]}' in actions:
+        option, rest = f'-{rest[0]}', rest[1:]
+        takes_value = getattr(actions[option], 'nargs', None) != 0
+        found.append((option, takes_value and bool(rest)))
+        if takes_value:
+            break
+    return found
+
+
+def record_typed_spellings(parser: ArgumentParser, argv: Sequence[str]) -> None:
+    """After a parse: for each flag *parser* spells more than one way (a switch's --NAME, its legacy off flag and -q;
+    --check/--lint; --top/--limit; -i/--ignore-case), record the spelling *argv* typed, so notes and errors name it
+    (BACK-2654 item D3). The spellings come from the parser's own actions; a flag's value is never read as a flag."""
+    actions = parser._option_string_actions
+    count: Dict[str, int] = {}
+    for action in parser._actions:
+        count[action.dest] = count.get(action.dest, 0) + len(action.option_strings)
+    expect_value = False
+    for token in argv:
+        if token == '--':
+            break
+        if expect_value:
+            expect_value = False
+            continue
+        for option, attached in _typed_options(token, actions, parser.allow_abbrev):
+            action = actions[option]
+            if count.get(action.dest, 0) > 1:
+                record_spelling(action.dest, option)
+            expect_value = action.nargs not in (0, '?', '*') and not attached
 
 
 def typed_spelling(dest: str, default: str) -> str:

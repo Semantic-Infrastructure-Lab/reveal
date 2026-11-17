@@ -629,7 +629,8 @@ def _reject_unread_element(path: Path, path_str: str, element: Optional[str], ar
         print(f"Hint: name a file (reveal {path_str.rstrip('/')}/FILE {element}) or filter by name "
               f"(reveal {path_str} --name {element})", file=sys.stderr)
         sys.exit(2)
-    flag = next((spelling for dest, spelling in _WHOLE_FILE_FLAGS if getattr(args, dest, None)), None)
+    flag = next((typed_spelling(dest, spelling) for dest, spelling in _WHOLE_FILE_FLAGS
+                 if getattr(args, dest, None)), None)
     if flag:
         print(f"Error: {flag} answers for the whole of {path_str}; it does not select '{element}'",
               file=sys.stderr)

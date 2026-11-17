@@ -18,7 +18,7 @@ from ..utils.gitignore import set_gitignore_enabled
 from ..utils.invocation_log import answer_is_json
 from ..utils.json_utils import set_provenance_enabled
 from ..utils.query_binding import ScalarOnceAction, switch_value
-from .invocation import SWITCHES, record_spelling, retirement_note
+from .invocation import SWITCHES, retirement_note
 
 
 # Flags in effect for every command once parsed: applied by apply_global_flags below, or, for
@@ -53,7 +53,6 @@ class _SwitchAction(ScalarOnceAction):
         typed = 'off' if self.nargs == 0 else values
         self._store(namespace, typed, option_string)
         setattr(namespace, self.dest, switch_value(typed))
-        record_spelling(self.dest, option_string)
         if self.nargs == 0 and option_string.startswith('--'):  # the legacy off flag; a short spelling has no row
             retirement_note('flag:' + option_string)
 

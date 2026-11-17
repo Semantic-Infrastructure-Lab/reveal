@@ -24,7 +24,7 @@ from .utils import copy_to_clipboard, check_for_updates
 from .cli.global_flags import apply_global_flags
 from .cli.routing.formats import OutputSinkError, apply_output_sinks, drop_file_sinks, exit_on_sink_error
 from .cli.invocation import (COMMANDS, Invocation, RetiredSpellingError, invocation_scope,
-                             retirement_note)
+                             record_typed_spellings, retirement_note)
 from .config import disable_breadcrumbs_permanently
 
 
@@ -325,6 +325,7 @@ def _prepare(invocation: Invocation) -> Tuple[Namespace, Callable[[], None]]:
         _check_ghost_flags(invocation)
         parser = create_argument_parser(__version__, full_help=invocation.typed('--help-all'))
         args = parser.parse_args(invocation.argv)
+        record_typed_spellings(parser, invocation.argv)
         if invocation.typed('--search'):
             retirement_note('flag:--search')
         validate_navigation_args(args)
@@ -338,6 +339,7 @@ def _prepare(invocation: Invocation) -> Tuple[Namespace, Callable[[], None]]:
     _show_subcommand_formats(sub_parser, formats)
     _show_subcommand_options(sub_parser, name)
     sub_args = sub_parser.parse_args(invocation.command_argv)
+    record_typed_spellings(sub_parser, invocation.command_argv)
     _apply_output_sinks(sub_parser, sub_args, invocation)
     _require_subcommand_format(name, sub_args, formats)
     # BACK-1539: the flag ledger and the REVEAL_IGNORE/--exclude walk scope, once for all.
