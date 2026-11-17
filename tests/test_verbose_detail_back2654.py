@@ -131,6 +131,31 @@ def test_deps_verbose_and_an_equal_top_answer_once(capped):
     assert conflict.returncode == 2 and 'top' in conflict.stderr and 'verbose' in conflict.stderr
 
 
+@pytest.fixture
+def surfaced(tmp_path, monkeypatch):
+    """Three environment-variable reads in three directories: more entries and directories than a one-row cap."""
+    monkeypatch.chdir(tmp_path)
+    for i in range(3):
+        (tmp_path / 'sproj' / f'd{i}').mkdir(parents=True)
+        (tmp_path / 'sproj' / f'd{i}' / f'm{i}.py').write_text(f'import os\n\n\ndef f{i}():\n    return os.getenv("VAR_{i}")\n',
+                                                    encoding='utf-8')
+    return 'sproj'
+
+
+@pytest.mark.parametrize('by', ['', 'by=dir&'])
+@pytest.mark.parametrize('form', ['URI', 'subcommand'])
+def test_surface_top_zero_is_uncapped(surfaced, by, form):
+    """surface's ``top=0`` is the uncapped answer, its default (it used to show no text entries)."""
+    default = [f'surface://{surfaced}?{by}'.rstrip('?&')]
+    zero = {'URI': [f'surface://{surfaced}?{by}top=0'],
+            'subcommand': ['surface', surfaced, *(['--by', 'dir'] if by else []), '--top', '0']}[form]
+    capped = _text(f'surface://{surfaced}?{by}top=1')
+    assert capped != _text(*default) and '2 more' in capped[1], 'positive control: a cap must bind here'
+    assert _json(*zero) == _json(*default)
+    assert _text(*zero) == _text(*default)
+    top = next(spec for spec in _adapter('surface').PARAM_SPECS if spec.name == 'top')
+    assert top.zero_policy == 'all', 'the declaration says what zero means; the schema shows it'
+
 # --- Pack: detail=full is its per-file breakdown, keeping the JSON verbose key ------------------------------------
 
 def test_pack_detail_full_is_its_breakdown(capped):
