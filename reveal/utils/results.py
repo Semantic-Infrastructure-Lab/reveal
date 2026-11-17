@@ -44,7 +44,7 @@ recorded with ``note_truncation``, and the router prints it; a renderer does not
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path, PurePath
-from typing import Dict, Any, Optional, List, Literal, Sequence, Union
+from typing import Dict, Any, Optional, List, Literal, Sequence, Tuple, Union
 
 from reveal.reveal_types import CONTRACT_VERSION, ErrorEntry, RevealMeta, RevealResult, WarningEntry
 
@@ -261,7 +261,9 @@ def note_truncation(result: Any, field: str, shown: int, total: int,
 
     A second cut of the same field updates its entry: the adapter's own ``?limit``, then
     the router's ``--max-items``, is one disclosure of the smaller ``shown`` against the
-    larger ``total``. Nothing is recorded when nothing was cut.
+    larger ``total``. Nothing is recorded when nothing was cut. ``cause`` stays the cut that
+    set ``shown`` (the binding one); a merged entry adds ``causes``, every cut once with the
+    binding one first, and its message names each cut's hint in that order (BACK-2653).
 
     ``exact=False``: the reader stopped once it had enough, so ``total`` is a lower bound
     (BACK-1547). git:// walks history until it holds one commit past ``?limit``; it knows
@@ -280,19 +282,38 @@ def note_truncation(result: Any, field: str, shown: int, total: int,
         meta['warnings'] = []
     entry = next((w for w in meta['warnings']
                   if w.get('type') == 'truncated' and w.get('field') == field), None)
+    hint_text = _TRUNCATION_HINTS.get(cause, '') if hint is None else hint
+    label = label or (entry or {}).get('label')
     if entry is None:
         entry = {'type': 'truncated', 'field': field}
         meta['warnings'].append(entry)
     else:
-        shown = min(shown, entry['shown'])
+        shown, cause, hint_text = _merge_cut(entry, label or field, shown, cause, hint_text)
         total, exact = max((total, exact), (entry['total'], entry.get('exact', True)))
-    if hint is None:
-        hint = _TRUNCATION_HINTS.get(cause, '')
-    label = label or entry.get('label')
     if label:
         entry['label'] = label
     entry.update(shown=shown, total=total, exact=exact, cause=cause,
-                 message=_truncation_message(label or field, shown, total, hint, exact))
+                 message=_truncation_message(label or field, shown, total, hint_text, exact))
+
+
+def _merge_cut(entry: Dict[str, Any], name: str, shown: int, cause: str, hint: str) -> Tuple[int, str, str]:
+    """``(shown, cause, hint)`` once a second cut joins *entry*: the binding cut (the smaller
+    ``shown``; on a tie the earlier) stays the cause and leads ``causes`` and the hints."""
+    prior_causes = entry.get('causes') or [entry['cause']]
+    prior_hint = _hint_of(entry, name)
+    if shown < entry['shown']:
+        causes, hints = [cause, *prior_causes], [hint, prior_hint]
+    else:
+        shown, causes, hints = entry['shown'], [*prior_causes, cause], [prior_hint, hint]
+    entry['causes'] = list(dict.fromkeys(causes))
+    return shown, entry['causes'][0], '; '.join(dict.fromkeys(h for h in hints if h))
+
+
+def _hint_of(entry: Dict[str, Any], name: str) -> str:
+    """The hint *entry*'s message carries after its "showing N of M" prefix ('' when none)."""
+    prefix = _truncation_message(name, entry['shown'], entry['total'], '', entry.get('exact', True))
+    message = str(entry.get('message', ''))
+    return message[len(prefix) + len(' — '):] if message.startswith(prefix + ' — ') else ''
 
 
 def restate_shown_counts(result: Any, paths: Sequence[str], shown: int) -> None:

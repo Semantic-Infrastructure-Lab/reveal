@@ -102,7 +102,9 @@ def test_a_second_cut_of_one_field_updates_its_entry():
     note_truncation(result, 'results', 3, 10, 'max_items')
     [cut] = truncations_of(result)
     assert (cut['shown'], cut['total'], cut['cause']) == (3, 45, 'max_items')
-    assert cut['message'] == 'results: showing 3 of 45 — raise --max-items'
+    # Both cuts are named, the binding one first (BACK-2653): raising --max-items alone reaches 10.
+    assert cut['causes'] == ['max_items', 'limit']
+    assert cut['message'] == 'results: showing 3 of 45 — raise --max-items; raise ?limit=N or page with ?offset=N'
 
 
 def test_cuts_of_different_fields_are_separate():

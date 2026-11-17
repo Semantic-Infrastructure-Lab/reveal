@@ -429,9 +429,17 @@ apply after this legacy outcome handling:
 |---|---|---|---|
 | `failed` | a non-empty top-level `error` string | 1 | `ResultBuilder.create_error(...)` |
 | `not_applicable` | `applicable: false` plus a `reason` | 0 | `raise NotApplicableError(reason)` |
-| `truncated` | a `meta.warnings` entry `{"type": "truncated", "field", "shown", "total", "exact", "cause", "message"}` (plus `label` when named in reader terms) per cut list | 0 | `note_truncation(result, field, shown, total, cause)` |
+| `truncated` | a `meta.warnings` entry `{"type": "truncated", "field", "shown", "total", "exact", "cause", "message"}` (plus `label` when named in reader terms, and `causes` when more than one cut shaped the list) per cut list | 0 | `note_truncation(result, field, shown, total, cause)` |
 | `ok` | none of these; an empty answer is still `ok` | 0 | `ResultBuilder.create(...)` |
 
+- **One entry per list, however many cuts.** When the adapter's own cut (`?limit`, `?top`) and the
+  router's (`--max-items`, `--head/--tail/--range`) both shorten one list, the entry keeps the smaller
+  `shown` and the larger `total`; `cause` is the cut that set `shown`, `causes` lists every cut once
+  with that one first (`["max_items", "limit"]`), and `message` names each cut's hint in the same
+  order (`results: showing 1 of 24 — raise --max-items; raise ?limit=N or page with ?offset=N`). A
+  list cut once has no `causes` key (BACK-2653). The router also restates the noun's rows-shown counts
+  (declared in `BUDGET_COUNT_FIELDS`, e.g. Metrics `population.displayed_files`) to the rows left;
+  population totals stay uncut.
 - **Return the error; don't exit or print it.** The router prints `Error (<scheme>://): <error>`
   on stderr before rendering and exits 1 after, so `--format json` still gets the whole
   envelope. A renderer adds only detail for an error result (an example, the valid names)
