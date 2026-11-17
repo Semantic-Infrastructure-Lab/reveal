@@ -37,7 +37,7 @@ def test_one_declared_path_carries_the_global_verbose():
 # (noun, the control declaring the legacy word verbose, what verbose=true translates to)
 OWNERS = [('imports', 'detail', 'full'), ('git', 'detail', 'full'), ('pack', 'detail', 'full'),
           ('overview', 'all', True), ('architecture', 'all', True),
-          ('hotspots', 'top', 0), ('testability', 'top', 0), ('deps', 'top', UNLIMITED_TOP)]
+          ('hotspots', 'top', 0), ('testability', 'top', 0), ('deps', 'top', 0)]
 
 
 @pytest.mark.parametrize('noun,owner,value', OWNERS)
@@ -86,7 +86,7 @@ def _text(*argv):
 
 
 CANONICAL = {'overview': '?all=true', 'architecture': '?all=true', 'hotspots': '?top=0', 'testability': '?top=0',
-             'deps': f'?top={UNLIMITED_TOP}'}
+             'deps': '?top=0'}
 
 
 @pytest.mark.parametrize('noun', sorted(CANONICAL))
@@ -104,6 +104,31 @@ def test_a_capping_nouns_verbose_answers_as_its_uncapping_control(capped, noun, 
 def test_verbose_and_a_different_cap_conflict(capped):
     result = _run_reveal_direct(f'hotspots://{capped}?top=3', '--verbose')
     assert result.returncode == 2 and 'verbose' in result.stderr and 'top' in result.stderr
+
+
+# --- Caps row: 0 is uncapped on every noun (manager ruling at the L1b hand-over, epic-sorcerer-1116) -------------
+
+@pytest.mark.parametrize('zero', [['deps://{}?top=0'], ['deps', '{}', '--top', '0']], ids=['URI', 'subcommand'])
+def test_deps_top_zero_is_uncapped(capped, zero):
+    """deps' ``top=0`` is the uncapped answer (it used to show no text entries), the same as a top above every
+    section and as ``--all``; the default cap binds on this fixture."""
+    zero = [part.format(capped) for part in zero]
+    uncapped = [f'deps://{capped}?top={UNLIMITED_TOP}']
+    assert _text(*uncapped) != _text(f'deps://{capped}'), 'positive control: the default cap must bind here'
+    assert _text(f'deps://{capped}', '--all') == _text(*uncapped)
+    assert _json(*zero) == _json(*uncapped)
+    assert _text(*zero) == _text(*uncapped)
+    top = next(spec for spec in _adapter('deps').PARAM_SPECS if spec.name == 'top')
+    assert top.zero_policy == 'all', 'the declaration says what zero means; the schema shows it'
+
+
+def test_deps_verbose_and_an_equal_top_answer_once(capped):
+    """verbose is top=0 on deps: beside --top 0 it is one value, beside another top it conflicts (rule 1)."""
+    once = _run_reveal_direct('deps', capped, '--top', '0', '--verbose')
+    assert once.returncode == 0, once.stderr
+    assert once.stdout == _text(f'deps://{capped}?top=0')[1]
+    conflict = _run_reveal_direct('deps', capped, '--top', '3', '--verbose')
+    assert conflict.returncode == 2 and 'top' in conflict.stderr and 'verbose' in conflict.stderr
 
 
 # --- Pack: detail=full is its per-file breakdown, keeping the JSON verbose key ------------------------------------

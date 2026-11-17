@@ -280,7 +280,7 @@ def test_existing_presentation_boundaries_and_sibling_surface(project):
     uri_verbose = run('deps://proj', '--verbose')
     assert full.returncode == verbose.returncode == uri_verbose.returncode == 0
     assert full.stdout == verbose.stdout == uri_verbose.stdout
-    for conflict in (run('deps', 'proj', '--top', '0', '--verbose'), run('deps://proj?top=0', '--verbose')):
+    for conflict in (run('deps', 'proj', '--top', '3', '--verbose'), run('deps://proj?top=3', '--verbose')):
         assert conflict.returncode == 2 and 'top' in conflict.stderr and 'verbose' in conflict.stderr
     assert 'os' in full.stdout and 'sys' in full.stdout
     assert run('surface', 'proj', '--top', '0', '--format', 'json').returncode == 0
