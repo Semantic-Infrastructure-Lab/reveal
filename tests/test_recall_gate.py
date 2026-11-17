@@ -981,6 +981,45 @@ def test_a_cut_calls_answer_is_a_failure_not_a_smaller_answer(tmp_path, monkeypa
         gate.measure_calls(entry, root)
 
 
+# --- BACK-2658: calls:// exits 3 for a file tree-sitter read only through error recovery. The calls gate
+# counts it as partial_files, as imports does, instead of refusing to measure; any other exit 3 still fails. ---
+
+def test_a_recovered_file_beside_the_population_is_counted_not_refused(tmp_path):
+    root, entry = _call_corpus(tmp_path)
+    # Untracked, so outside the oracle's population, but under the scan root calls:// reads.
+    scratch = root / 'pkg/scratch.py'
+    scratch.write_text('def broken(:\n    pass\n', encoding='utf-8')
+    measured = gate.measure_calls(entry, root)  # exit 3 on every target: refused before BACK-2658
+    assert measured['partial_files'] == 1
+    scratch.unlink()
+    clean = gate.measure_calls(entry, root)
+    assert clean['partial_files'] == 0
+    assert {k: v for k, v in measured.items() if k != 'partial_files'} == {
+        k: v for k, v in clean.items() if k != 'partial_files'}
+    assert any('partial_files rose 0 -> 1' in failure
+               for failure in gate.regressions({'calls': measured}, {'calls': clean}))
+
+
+@pytest.mark.parametrize('warnings, expected', [
+    ([], 0),
+    ([{'type': 'parse_recovered', 'count': 7, 'files': ['a.c']}, {'type': 'analysis_incomplete', 'message': 'x'}], 7),
+])
+def test_exit_3_for_recovered_files_alone_is_qualified(warnings, expected):
+    code = 3 if expected else 0
+    assert gate._calls_partial_files({'meta': {'warnings': warnings}}, code, 't') == expected
+
+
+@pytest.mark.parametrize('warnings', [
+    [{'type': 'parse_recovered', 'count': 1}, {'type': 'analysis_failed', 'count': 1}],  # an unreadable file too
+    [{'type': 'parse_recovered', 'count': 1}, {'type': 'worker_lost'}],
+    [{'type': 'analysis_incomplete', 'count': 2, 'unit': 'directories'}],  # lost directories
+    [{'type': 'analysis_incomplete', 'message': 'Required analysis is incomplete'}],  # incomplete, no recovered file
+])
+def test_exit_3_for_any_other_loss_still_refuses_the_measurement(warnings):
+    with pytest.raises(RuntimeError, match='measurement unavailable'):
+        gate._calls_partial_files({'meta': {'warnings': warnings}}, 3, 't')
+
+
 def test_swapped_extra_and_improvement_require_reviewed_baseline():
     baseline = {'oracle': 'fixture', 'sha': 'pin', 'targets': 1, 'oracle_edges': 2,
                 'coverage': {}, 'extra_edges': 1, 'recall': 1, 'precision': 2 / 3,
