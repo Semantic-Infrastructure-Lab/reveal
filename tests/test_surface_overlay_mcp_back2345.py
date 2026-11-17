@@ -37,15 +37,15 @@ def test_surface_uri_budget_partial_repair_and_ast_siblings_through_stdio(tmp_pa
             assert answer['type'] == 'surface_scan'
             assert answer['surfaces'] == expected['surfaces']
             assert answer['total'] == expected['total'] == 1
-        budget = await query('type=env&top=0')
+        budget = await query('type=env&top=1')  # a one-row text cap; top=0 is uncapped (BACK-2654 Caps row)
         assert not budget.is_error
         if provenance:
             answer = json.loads(_text(budget))
             assert answer['type'] == 'surface_scan' and answer['total'] == 2
             assert len(answer['surfaces']['env']) == 2
         else:
-            assert 'Showing top 0' in _text(budget) and '2 more' in _text(budget)
-            assert 'PRODUCTION_VAR' not in _text(budget) and 'TEST_VAR' not in _text(budget)
+            assert 'Showing top 1' in _text(budget) and '1 more' in _text(budget)
+            assert ('PRODUCTION_VAR' in _text(budget)) != ('TEST_VAR' in _text(budget))
         for path, query_string in ((root / 'absent', 'type=env'), (root, 'depth=-1')):
             failed = await query(query_string, path)
             assert failed.is_error and _text(failed).strip()

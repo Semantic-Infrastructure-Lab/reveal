@@ -447,10 +447,10 @@ class SurfaceAdapter(ResourceAdapter):
                   lambda value: _surface_limit(value, 'depth'), minimum=0,
                   examples=('depth=2',),
                   zero_policy='full directory', role='analysis', cli=CliBinding(('--depth',), metavar='N')),
-        ParamSpec('top', 'integer', 'Text entries per category (omitted = all; JSON stays complete)', None,
+        ParamSpec('top', 'integer', 'Text entries per category (omitted or 0 = all; JSON stays complete)', None,
                   lambda value: _surface_limit(value, 'top'), minimum=0,
                   examples=('top=20', 'top=0'),
-                  zero_policy='no text entries', role='presentation', cli=CliBinding(('--top',), metavar='N')),
+                  zero_policy='all', role='presentation', cli=CliBinding(('--top',), metavar='N')),
     )
 
     def __init__(self, resource: str, query: Optional[str] = None, *,

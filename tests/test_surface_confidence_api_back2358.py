@@ -105,10 +105,11 @@ def test_cli_json_text_and_artifact_preserve_requested_rows(tmp_path, spelling):
     assert result['total'] == 2
     _absent(result)
     artifact = tmp_path / 'answer.json'
-    text_args = [*args, '--top', '0'] if spelling == 'noun' else [args[0] + '&top=0']
+    # a one-row text cap (top=0 is uncapped, BACK-2654 Caps row); the artifact keeps every row
+    text_args = [*args, '--top', '1'] if spelling == 'noun' else [args[0] + '&top=1']
     text = run(*text_args, '--also-json', str(artifact), '--no-gitignore')
     assert text.returncode == 0
-    assert '2 more' in text.stdout
+    assert '1 more' in text.stdout
     saved = json.loads(artifact.read_text(encoding='utf-8'))
     assert saved['surfaces'] == result['surfaces']
     _absent(saved)
