@@ -13,8 +13,9 @@ scheme). Each probe is generated from the declarations (``PARAM_SPECS``, ``CLI_Q
       CLI text, CLI JSON, ``api.query`` and the MCP query tool.
   3   unsupported controls: a shared control the noun does not declare exits 2 naming the noun's supported
       controls, as a URI key, a subcommand flag and a global flag reaching the URI.
-  4   detail: global ``--verbose`` is ``--detail full``; where the request has no full level it exits 2 naming
-      the levels.
+  4   detail: global ``--verbose`` is ``--detail full`` with its note; where the request has no full level it exits 2
+      naming the levels (no detail at all: naming detail). A noun that declares ``verbose`` as a legacy word of the
+      cap it lifts (note #17) answers it as ``?verbose=true``, with that word's note.
 
 Columns added with Scott's 2026-11-16 rulings (the table's rows "Conflicting values" through "Detail"):
 
@@ -176,26 +177,6 @@ NOT_YET = {
                    'argparse error; global --since, --until on the URI: exit 0',
     ('markdown', '3'): 'URI detail, kind, depth, tests, since, until, against: exit 0; subcommand the same seven: '
                        'argparse error; global --since, --until on the URI: exit 0',
-    ('architecture', '4'): 'no detail declaration; --verbose is its own verbose control (expanded sections), exit 0',
-    ('ast', '4'): 'no detail declaration; --verbose: "has no effect" note, exit 0',
-    ('calls', '4'): 'the callers view rejects detail=full (exit 2) but --verbose answers with a "has no effect" '
-                    'note, exit 0',
-    ('claude', '4'): 'the sessions listing rejects detail=full (exit 2) but --verbose answers silently, exit 0',
-    ('codex', '4'): 'no detail declaration; --verbose: "has no effect" note, exit 0',
-    ('contracts', '4'): 'no detail declaration; --verbose: "has no effect" note, exit 0',
-    ('deps', '4'): 'no detail declaration; --verbose accepted silently, exit 0',
-    ('hotspots', '4'): 'no detail declaration; --verbose accepted silently, exit 0',
-    ('json', '4'): 'the default view rejects detail=full (flatten only, exit 2) but --verbose answers with a "has '
-                   'no effect" note, exit 0',
-    ('markdown', '4'): 'no detail declaration; --verbose: "has no effect" note, exit 0',
-    ('metrics', '4'): 'levels normal|summary; --verbose: "has no effect" note, exit 0 (kept by BACK-2621 for this '
-                      'package)',
-    ('overview', '4'): 'no detail declaration; --verbose is its own verbose control (expanded sections), exit 0',
-    ('pack', '4'): 'no detail declaration; --verbose is its own verbose control, exit 0',
-    ('patches', '4'): 'no detail declaration; --verbose: "has no effect" note, exit 0',
-    ('surface', '4'): 'no detail declaration; --verbose: "has no effect" note, exit 0',
-    ('testability', '4'): 'no detail declaration; --verbose accepted silently, exit 0',
-    ('trace', '4'): 'no detail declaration; --verbose: "has no effect" note, exit 0',
     ('ast', '8a'): 'bare match, detail, depth, tests, since, until, against are read as where fields, exit 0 (depth '
                    'is nesting depth, with no note)',
     ('json', '8a'): 'bare match, kind, depth, tests, since, until, against: exit 0',
@@ -212,7 +193,7 @@ NOT_YET = {
                        'include_unresolved',
 }
 
-NOT_YET_BASELINE = {'1a': 0, '1b': 0, '1c': 0, '1d': 0, '2': 0, '3': 3, '3b': 0, '4': 17, '5': 0, '6': 0,
+NOT_YET_BASELINE = {'1a': 0, '1b': 0, '1c': 0, '1d': 0, '2': 0, '3': 3, '3b': 0, '4': 0, '5': 0, '6': 0,
                     '8a': 3, '8b': 1, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 6}
 
 
@@ -774,26 +755,67 @@ def _mentions(run, option):
     return any(option in line for line in run.err.splitlines() if not line.startswith('note:'))
 
 
-def probe_verbose_is_detail_full(noun):
-    levels = _levels(noun)
-    forms = {'URI': (lambda *pairs: [_uri(noun, *pairs)], 'detail=full')}
+VERBOSE_NOTE = 'flag:--verbose'
+
+
+def _verbose_owner(noun):
+    """The control that declares the spelling ``verbose`` (BACK-2654 note #17): a legacy word of the control it stands
+    for (Imports/Pack/Git ``detail``; Overview/Architecture ``all``; Hotspots/Testability/Deps ``top``)."""
+    return next((spec for spec in _specs(noun) if 'verbose' in spec.spellings), None)
+
+
+def _verbose_forms(noun):
+    """{form: argv without --verbose}: the noun's default URI and, where it has one, its subcommand."""
+    forms = {'URI': [_uri(noun)]}
     if _sub(noun) is not None:
-        forms['subcommand'] = (lambda *pairs: _sub(noun, *(['--detail', 'full'] if pairs else [])), None)
+        forms['subcommand'] = _sub(noun)
+    return forms
+
+
+def _verbose_as_declared(noun, owner):
+    """The global --verbose is the noun's declared spelling ``verbose``: the same answer as ``?verbose=true``, with
+    that spelling's own note (its RETIREMENTS row) on CLI JSON."""
+    key = f'param:{noun}.verbose'
+    declared = _run(_uri(noun, 'verbose=true'), '--format', 'json')
+    cases = [Case(f'{key} row', key in RETIREMENTS, f'no RETIREMENTS row {key} for the legacy word verbose')]
+    for form, argv in _verbose_forms(noun).items():
+        verbose = _run(*argv, '--verbose', '--format', 'json')
+        doc = json.loads(verbose.out) if verbose.out.strip().startswith('{') else None
+        ok = (verbose.rc != 2 and _answer(verbose, noun) == _answer(declared, noun) and key in _retired_fields(doc)
+              and not _mentions(verbose, '--verbose'))
+        cases.append(Case(f'{form} --verbose is ?verbose ({owner.name})', ok,
+                          f'{verbose.brief()} vs {declared.brief()}: retired fields {_retired_fields(doc)} '
+                          f'(wants the same answer and the {key} note)'))
+    return cases
+
+
+def probe_verbose_is_detail_full(noun):
+    """Rule 4: global --verbose is --detail full with its replaced-by note; a level the request lacks exits 2 naming
+    the levels, and a noun without detail exits 2 naming detail. Amended (note #17): a noun that declares the spelling
+    ``verbose`` as a legacy word of another control (a cap it lifts) answers --verbose as that word."""
+    owner = _verbose_owner(noun)
+    if owner is not None:
+        return _verbose_as_declared(noun, owner)
+    levels = _levels(noun)
     cases = []
-    for form, (request, full_pair) in forms.items():
-        verbose = _run(*request(), '--verbose', '--format', 'json')
+    for form, argv in _verbose_forms(noun).items():
+        verbose = _run(*argv, '--verbose', '--format', 'json')
         if 'full' not in levels:
             ok = verbose.rc == 2 and verbose.says('detail', *levels)
-            wants = f'wants exit 2 naming its levels {levels}' if levels else 'wants exit 2: no detail levels'
+            wants = f'wants exit 2 naming its levels {levels}' if levels else 'wants exit 2 naming detail'
             cases.append(Case(f'{form} --verbose', ok, f'{verbose.brief()} ({wants})'))
             continue
-        full = _run(*request(full_pair or 'detail=full'), '--format', 'json')
+        full_argv = [_uri(noun, 'detail=full')] if form == 'URI' else [*argv, '--detail', 'full']
+        full = _run(*full_argv, '--format', 'json')
         if full.rc == 2:  # this request's view has no full level: --verbose must reject as --detail full does
             cases.append(Case(f'{form} --verbose', verbose.rc == 2 and verbose.says('detail'),
                               f'{verbose.brief()} (the view rejects detail=full: {full.brief()})'))
-        else:
-            ok = _answer(verbose, noun) == _answer(full, noun) and not _mentions(verbose, '--verbose')
-            cases.append(Case(f'{form} --verbose', ok, f'{verbose.brief()} vs {full.brief()} (wants the same answer)'))
+            continue
+        doc = json.loads(verbose.out) if verbose.out.strip().startswith('{') else None
+        ok = (_answer(verbose, noun) == _answer(full, noun) and not _mentions(verbose, '--verbose')
+              and VERBOSE_NOTE in _retired_fields(doc))
+        cases.append(Case(f'{form} --verbose', ok, f'{verbose.brief()} vs {full.brief()}: retired fields '
+                                                   f'{_retired_fields(doc)} (wants the same answer and the note)'))
     return cases
 
 
