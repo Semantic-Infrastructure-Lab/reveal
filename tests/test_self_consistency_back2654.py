@@ -37,7 +37,7 @@ from claude_session_fixture import SESSION_NAMES
 from reveal.adapters.base import get_adapter_class, list_supported_schemes
 from reveal.adapters.factory import uses_bound_query_call
 from reveal.adapters.help import _EXAMPLE_RECIPES
-from reveal.cli.invocation import COMMANDS, RETIREMENTS
+from reveal.cli.invocation import COMMANDS, RETIREMENTS, SWITCHES
 from reveal.cli.routing.declared import declared_adapter_class
 
 pytestmark = pytest.mark.contract
@@ -480,8 +480,9 @@ _RETIREMENT_CONTEXT = re.compile(r'retired|retiring|deprecated|replaced|replaces
 
 def _retired_spellings(noun):
     """{pattern: spelling} for the noun's note-stage RETIREMENTS rows: each CLI flag, each bare query key in a hint
-    ("add ?full"), and the global ``--verbose`` (rule 4)."""
-    spellings = {'--verbose'}
+    ("add ?full"), the global ``--verbose`` (rule 4), and each switch's legacy flag (rule 15: a hint teaches
+    ``--group off``, never ``--no-group``; the rows are generated from SWITCHES)."""
+    spellings = {'--verbose', *(switch.legacy_flag for switch in SWITCHES.values())}
     for key, row in RETIREMENTS.items():
         if key.startswith(f'param:{noun}.') and row.stage == 'note':
             spellings.update(re.findall(r'(?<![\w-])--[\w-]+', row.old))
