@@ -570,6 +570,20 @@ def _shared_name_retirement(key: str) -> Optional[Retirement]:
                       f"?where={name} OP VALUE (--where '{name} OP VALUE'), the same field filter")
 
 
+def generated_retirements() -> Dict[str, Retirement]:
+    """Every row of the generated family, by key, for the teaching-surface checks: RETIREMENTS does not hold them, so
+    a scan of its keys alone never sees a doc that teaches ``markdown://docs?kind=guide``."""
+    from ..adapters.registry import list_supported_schemes
+    from ..utils.query_parser import SHARED_CONTROL_NAMES
+    rows = {}
+    for scheme in sorted(list_supported_schemes()):
+        for name in SHARED_CONTROL_NAMES:
+            row = _shared_name_retirement(f'param:{scheme}.{name}')
+            if row is not None:
+                rows[f'param:{scheme}.{name}'] = row
+    return rows
+
+
 def retirement_note(key: str) -> Optional[Retirement]:
     """The one hook: consulted where each kind of spelling is parsed. Returns the table row for
     *key*, or None when it is not retired (nothing printed). A ``note`` row joins the invocation's

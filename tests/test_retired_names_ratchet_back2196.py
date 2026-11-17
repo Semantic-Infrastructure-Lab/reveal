@@ -51,6 +51,21 @@ def test_each_row_is_spared_in_a_replaced_by_sentence(key):
     assert scan(f'`{_sample(key)}` is retired.\nUse something else.') == []
 
 
+def test_the_generated_bare_shared_name_rows_are_scanned():
+    """The generated family (BACK-2654 rule 8) is not in RETIREMENTS: a doc teaching ``markdown://docs?kind=guide``
+    (now noted ``where=kind=guide``) was invisible to a scan of the table's keys."""
+    from reveal.cli.invocation import generated_retirements
+    rows = generated_retirements()
+    assert 'param:markdown.kind' in rows and 'param:json.match' in rows
+    assert 'param:ast.kind' not in rows and 'param:markdown.match' not in rows  # declared controls: no family row
+    assert not set(rows) & set(RETIREMENTS)
+    assert [hit[1] for hit in scan("reveal 'markdown://docs/?kind=guide'")] == ['param:markdown.kind']
+    assert [hit[1] for hit in scan("reveal 'json://data.json?match=a'")] == ['param:json.match']
+    assert scan("reveal 'markdown://docs/?where=kind=guide'") == []
+    assert scan("reveal 'ast://src/?kind=function'") == []
+    assert scan('`markdown://docs/?kind=guide` is deprecated: use where=kind=guide') == []
+
+
 def test_a_list_item_is_judged_without_its_neighbours():
     text = '- `review` 0 pass, 1 findings\n- `deps` is retired, use imports'
     assert [hit[1] for hit in scan(text)] == ['subcommand:review']

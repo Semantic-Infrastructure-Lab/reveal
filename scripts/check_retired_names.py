@@ -11,7 +11,8 @@ when a teaching surface names a retired spelling outside a sentence that says it
 
 A new ``RETIREMENTS`` row is covered the day it lands: the patterns are derived from the key's kind
 (``subcommand:``, ``scheme:``, ``param:``, ``value:``, ``flag:``, ``target:``); the hotspots rows joined that
-way (BACK-2149). tests/test_retired_names_ratchet_back2196.py holds the positive controls.
+way (BACK-2149). The generated ``param:NOUN.NAME`` family (a bare shared-control key on an open-field noun,
+BACK-2654 rule 8) is scanned too, though RETIREMENTS does not hold it (``invocation.generated_retirements``). tests/test_retired_names_ratchet_back2196.py holds the positive controls.
 
 Code-element outline examples are classified with the real argument parser. The
 static check covers explicit element positionals; inline ``file.py:2`` binding
@@ -197,9 +198,23 @@ def _units(text):
     return out
 
 
+def generated_rows():
+    """The generated row family (BACK-2654 rule 8): ``param:NOUN.NAME`` for a bare key named like a shared control on
+    an open-field noun that does not declare it (``markdown://docs?kind=guide`` notes ``?where=kind=guide``). The rows
+    are not in RETIREMENTS (``invocation.retirement_note`` builds them from the noun's declarations), so a table scan
+    would never see a doc teaching one."""
+    from reveal.cli.invocation import generated_retirements
+    return generated_retirements()
+
+
+def teaching_table():
+    """Every retired spelling a teaching surface must not name: the RETIREMENTS rows and the generated family."""
+    return {**RETIREMENTS, **generated_rows()}
+
+
 def scan(text, table=None):
     """Every (line number, key, line) where *text* teaches a retired spelling."""
-    table = RETIREMENTS if table is None else table
+    table = teaching_table() if table is None else table
     hits = []
     for number, unit, line in _units(text):
         if REPLACED_BY_CONTEXT.search(unit):
@@ -340,7 +355,7 @@ def main(argv=None):
         print(f'\n{failed + len(over)} problem(s): name a retired spelling only in a "replaced by" sentence '
               '(or use its replacement). See scripts/check_retired_names.py.')
         return 1
-    print(f'retired-names ratchet OK ({len(RETIREMENTS)} retired spellings, {len(SURFACES)} surfaces, '
+    print(f'retired-names ratchet OK ({len(teaching_table())} retired spellings, {len(SURFACES)} surfaces, '
           f'{len(shipped_docs())} shipped docs: {sum(counts.values())} baselined line(s) in {len(counts)} doc(s))')
     return 0
 
