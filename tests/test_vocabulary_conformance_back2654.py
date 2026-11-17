@@ -44,10 +44,11 @@ control whatever its value type; 1b, 1d and 6 read every spelling (aliases and n
       naming both; every ``view`` is such a control.
   18  every scalar global flag repeated with different values exits 2 (presentation flags included); equal is one.
   20  applicability (BACK-2656, measured only): a declared control the selected answer does not read exits 2.
-  21j transports, JSON mode (manager ruling, BACK-2654 note #23 (A)): an invalid subcommand request in ``--format
-      json`` (an unknown flag, a flag missing its value, a value outside its choices, an extra argument) answers with
-      the invalid-request JSON document on stdout, exit 2, naming the problem in the document and on stderr, as an
-      invalid value already does; in text mode stdout stays empty.
+  21j transports, JSON mode (manager ruling, BACK-2654 note #23 (A)): an invalid request in ``--format json`` or
+      ``--output json`` (an unknown flag, a flag missing its value, a value outside its choices, an extra argument, a
+      malformed ``--output`` spec), on the URI and on the subcommand, answers with the invalid-request JSON document
+      on stdout, exit 2, naming the problem in the document and on stderr, as an invalid value already does, for the
+      typed target; in text mode stdout stays empty.
   12  repeatability is declared once (``ParamSpec.repeatable``): the CLI appends exactly when it is set, settings
       (limit, offset, sort, depth, detail, view, since, until, format, columns) are scalar, where/match/exclude repeat.
 
@@ -129,7 +130,6 @@ EXEMPT = {
     **{(noun, '17'): 'one control at most selects the answer: no two selections to give' for noun in (
         'architecture', 'codex', 'contracts', 'deps', 'hotspots', 'overview', 'pack', 'surface', 'testability',
         'trace')},
-    ('codex', '21j'): 'no subcommand: codex is URI-only, so there is no declared parser to reject a flag',
     **{(noun, '20'): 'no declared control goes unread by the default answer' for noun in (
         'architecture', 'ast', 'claude', 'contracts', 'deps', 'git', 'hotspots', 'markdown', 'overview', 'pack',
         'surface', 'testability', 'trace')},
@@ -1161,7 +1161,7 @@ def probe_applicability(noun):
     return cases
 
 
-# --- rule 21 (Transports), JSON mode: an invalid subcommand request answers with its JSON document ---------
+# --- rule 21 (Transports), JSON mode: an invalid request answers with its JSON document ------------------
 
 def _value_flag(noun):
     """A declared control's flag that takes one value (given last, it is missing that value)."""
@@ -1172,35 +1172,52 @@ def _value_flag(noun):
     return None
 
 
-def _invalid_document(run, *names):
-    """Exit 2 with the invalid-request JSON document on stdout, naming each of *names* there and on stderr."""
+def _invalid_document(run, *names, source=None):
+    """Exit 2 with the invalid-request JSON document on stdout, naming each of *names* there and on stderr (and,
+    given *source*, answering for that typed target)."""
     try:
         doc = json.loads(run.out)
     except ValueError:
         return False
     errors = (doc.get('meta') or {}).get('errors') or [] if isinstance(doc, dict) else []
     return (run.rc == 2 and 'contract_version' in doc and [e.get('code') for e in errors] == ['invalid_request']
-            and all(name in doc.get('error', '') and name in run.err for name in names))
+            and all(name in doc.get('error', '') and name in run.err for name in names)
+            and (source is None or doc.get('source') == source))
+
+
+_INVALID_REQUESTS = {'unknown flag --zz-unknown': (('--zz-unknown', '1'), ('--zz-unknown',)),
+                     'value outside --fail-on choices': (('--fail-on', 'zz-choice'), ('--fail-on', 'zz-choice')),
+                     'extra argument': (('zz-extra', 'zz-more'), ('zz-more',)),
+                     'malformed --output spec': (('--output', 'zz-sink'), ('--output', 'zz-sink'))}
 
 
 def probe_invalid_requests_answer_json(noun):
-    if _sub(noun) is None:
-        return []
+    """Every form of an invalid request in JSON mode, on the URI (the main parser) and the subcommand (the noun's
+    declared parser): the document on stdout; in text mode stdout stays empty."""
+    target = TARGETS.get(noun, 'proj')
+    forms = {'URI': ([_uri(noun)], '--max-items')}
+    if _sub(noun) is not None:
+        forms['subcommand'] = (_sub(noun), _value_flag(noun))
     wants = 'wants exit 2 with the invalid-request JSON document naming it'
-    requests = {'unknown flag --zz-unknown': (('--zz-unknown', '1'), ('--zz-unknown',)),
-                'value outside --fail-on choices': (('--fail-on', 'zz-choice'), ('--fail-on', 'zz-choice')),
-                'extra argument': (('zz-extra', 'zz-more'), ('zz-more',))}
     cases = []
-    for label, (extra, names) in requests.items():
-        run = _run(*_sub(noun, *extra), '--format', 'json')
-        cases.append(Case(label, _invalid_document(run, *names), f'{run.brief()} ({wants})'))
-    flag = _value_flag(noun)
-    if flag is not None:
-        run = _run(*_sub(noun), '--format', 'json', flag)
-        cases.append(Case(f'{flag} missing its value', _invalid_document(run, flag), f'{run.brief()} ({wants})'))
-    text = _run(*_sub(noun, '--zz-unknown', '1'))
-    cases.append(Case('text mode: unknown flag', text.rc == 2 and not text.out.strip() and text.says('--zz-unknown'),
-                      f'{text.brief()} (wants exit 2, empty stdout, the flag named on stderr)'))
+    for form, (request, value_flag) in forms.items():
+        for label, (extra, names) in _INVALID_REQUESTS.items():
+            run = _run(*request, *extra, '--format', 'json')
+            cases.append(Case(f'{form} {label}', _invalid_document(run, *names), f'{run.brief()} ({wants})'))
+        run = _run(*request, '--output', 'json', '--zz-unknown', '1')
+        cases.append(Case(f'{form} --output json: unknown flag', _invalid_document(run, '--zz-unknown'),
+                          f'{run.brief()} ({wants})'))
+        for sink in (('--format', 'json'), ('--output', 'json')):
+            if value_flag is not None:  # the error stops the tolerant re-read: the typed words still name the target
+                run = _run(*request, *sink, value_flag)
+                cases.append(Case(f'{form} {value_flag} missing its value ({" ".join(sink)})',
+                                  _invalid_document(run, value_flag, source=target),
+                                  f'{run.brief()} ({wants}, for the typed target {target!r})'))
+        for label, extra, names in (('unknown flag', ('--zz-unknown', '1'), ('--zz-unknown',)),
+                                    ('malformed --output spec', ('--output', 'zz-sink'), ('--output', 'zz-sink'))):
+            text = _run(*request, *extra)
+            cases.append(Case(f'{form} text mode: {label}', text.rc == 2 and not text.out.strip() and text.says(*names),
+                              f'{text.brief()} (wants exit 2, empty stdout, named on stderr)'))
     return cases
 
 
