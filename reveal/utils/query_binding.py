@@ -421,6 +421,20 @@ def _selects(spec: ParamSpec, value: Any) -> bool:
         return True
 
 
+def selected_cap(declarations: Iterable[ParamSpec], query: str) -> Optional[str]:
+    """The cap of the answer *query* selects: the ``cap`` its answer selector declares, or None when the selected
+    answer declares none (the noun's own ``--all`` declaration applies). Reading the query here is not using it."""
+    supplied: Dict[str, Any] = {}
+    for part in filter(None, query.split('&')):
+        key, sep, value = part.partition('=')
+        supplied.setdefault(unquote(key), unquote(value) if sep else True)
+    for spec in declarations:
+        if spec.role == 'operation' and spec.cap:
+            if any(_selects(spec, supplied[name]) for name in spec.spellings if name in supplied):
+                return spec.cap
+    return None
+
+
 def reject_two_answers(declarations: Iterable[ParamSpec], params: Mapping[str, Any],
                        spelled: Iterable[str] = ()) -> None:
     """One answer per request (COMMAND_MODEL "One answer per request", BACK-2654): two controls that select the

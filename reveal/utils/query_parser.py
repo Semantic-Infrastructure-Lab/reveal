@@ -393,6 +393,9 @@ class ParamSpec:
     # data defines (Markdown frontmatter keys, JSON row keys; BACK-2654 note #14): every bare key there is a field.
     fields: Tuple[str, ...] = ()
     open_fields: str = ''
+    # On an answer selector (role='operation'): the control that caps the rows of the answer it selects, which the
+    # global --all lifts (Metrics' legacy hotspots ranking reads top). None: the noun's own --all declaration.
+    cap: Optional[str] = None
 
     def __post_init__(self) -> None:
         from dataclasses import replace
