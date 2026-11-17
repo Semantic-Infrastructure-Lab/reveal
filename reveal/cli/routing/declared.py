@@ -32,19 +32,75 @@ def declared_adapter_class(name: str):
     return adapter
 
 
+class _LenientParseFailed(Exception):
+    """A re-parse that only recovers the request's format and target met a usage error of its own."""
+
+
 class _DeclaredParser(argparse.ArgumentParser):
     """A noun's parser: an unknown flag gets rule 3's teaching (the supported controls and fields, exit 2), the
-    same message the URI gives, not argparse's bare usage error (COMMAND_MODEL "Unsupported controls")."""
+    same message the URI gives, not argparse's bare usage error (COMMAND_MODEL "Unsupported controls"). In JSON
+    mode every usage error answers with the invalid-request JSON document the declared route builds for an invalid
+    value (COMMAND_MODEL "Transports"), on every noun."""
     declarations: tuple = ()
+    noun: str = ''
+    _argv: list | None = None
+    _lenient: bool = False
+
+    def parse_known_args(self, args=None, namespace=None):
+        if not self._lenient:  # the request as typed (main passes it), for error() to recover format and target
+            self._argv = None if args is None else list(args)
+        return super().parse_known_args(args, namespace)
 
     def error(self, message: str):
+        if self._lenient:
+            raise _LenientParseFailed(message)
         flags = [token for token in message.partition(':')[2].split() if token.startswith('-')]
         if message.startswith('unrecognized arguments:') and flags:
             from ...utils.query_binding import unsupported_controls_message
-            self._print_message(f'{self.prog}: error: {unsupported_controls_message(self.declarations, flags)}\n',
-                                sys.stderr)
-            self.exit(2)
-        super().error(message)
+            message = unsupported_controls_message(self.declarations, flags)
+            json_args = self._json_request()
+            if json_args is None:
+                self._print_message(f'{self.prog}: error: {message}\n', sys.stderr)
+                self.exit(2)
+        else:
+            json_args = self._json_request()
+            if json_args is None:
+                super().error(message)
+        adapter = declared_adapter_class(self.noun)
+        path = getattr(json_args, adapter.RESOURCE_SPEC.name, None) or '.'
+        _invalid_answer(adapter, self.noun, path, message, json_args).emit()
+        self.exit(2)  # emit exits with the answer's outcome; this is the usage exit if it did not
+
+    def _json_request(self):
+        """The request's arguments when it asks for JSON (``--format json`` or the ``--output json`` stdout sink),
+        else None. The typed request is parsed again, leniently; one whose own error stops that parse (a flag
+        missing its value, a value outside its choices) keeps the parser's defaults with the format it typed."""
+        from ..invocation import current_invocation
+        from .formats import apply_output_sinks
+        self._lenient = True
+        try:
+            args, _unknown = self.parse_known_args(self._argv or [])
+        except _LenientParseFailed:
+            defaults = {action.dest: action.default for action in self._actions if action.dest != argparse.SUPPRESS}
+            args = argparse.Namespace(**{**defaults, **self._defaults})
+            args.format = _typed_format(self._argv or [])
+        finally:
+            self._lenient = False
+        invocation = current_invocation()
+        if invocation is not None:
+            apply_output_sinks(args, invocation)
+        return args if getattr(args, 'format', None) == 'json' else None
+
+
+def _typed_format(argv: list) -> str | None:
+    """The ``--format`` value as typed (last spelling wins here: this only decides how a usage error is shown)."""
+    found = None
+    for index, token in enumerate(argv):
+        if token == '--format' and index + 1 < len(argv):
+            found = argv[index + 1]
+        elif token.startswith('--format='):
+            found = token.partition('=')[2]
+    return found
 
 
 def create_declared_parser(name: str) -> argparse.ArgumentParser:
@@ -62,6 +118,7 @@ def create_declared_parser(name: str) -> argparse.ArgumentParser:
         description=help_info['description'], epilog=epilog,
         formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.declarations = tuple(adapter.PARAM_SPECS)
+    parser.noun = name
     scalar_settings(parser)
     _describe_fail_on(parser, tuple(getattr(adapter, 'FINDINGS_POLICIES', ('none',))))
     add_declared_arguments(parser, adapter.PARAM_SPECS, adapter.RESOURCE_SPEC)
