@@ -661,7 +661,7 @@ reveal check src/
 2. Verify YAML syntax: `python -c "import yaml; yaml.safe_load(open('.reveal.yaml'))"`
 3. Check for `root: true` in parent directory stopping discovery
 4. Use `reveal reveal://config` (or the shorter `reveal dev inspect-config`) to see which config files were read; a file that exists but could not be loaded is listed under `Could Not Load` with the parse error
-5. Read the answer's own warnings: a config file that could not be loaded, a missing `REVEAL_CONFIG` file, a value that fails the schema (it is ignored and its default used), a non-integer `REVEAL_*` threshold or an unknown rule setting is a `config_warning` entry in `meta.warnings` with `--format json`, and one `warning:` line on stderr after any other answer
+5. Read the answer's own warnings: a config file (or `.reveal/stats-quality.yaml`) that could not be loaded, a missing `REVEAL_CONFIG` file, a value that fails the schema (it is ignored and its default used), a non-integer `REVEAL_*` threshold or an unknown rule setting is a `config_warning` entry in `meta.warnings` with `--format json`, and one `warning:` line on stderr after any other answer
 
 ### Rule Still Running After Disable
 
