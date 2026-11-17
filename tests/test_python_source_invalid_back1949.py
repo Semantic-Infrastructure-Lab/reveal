@@ -203,7 +203,10 @@ def test_ast_query_discloses_repeated_bom_as_failure_not_recovery(tmp_path, quer
     assert warning['count'] == 1
     assert warning['files'] == [path.as_posix()]
     assert not [w for w in warnings if w['type'] == 'parse_recovered']
-    assert REASON in result.stderr
+    # The JSON states the failure by class; its full reason is the text answer's per-file line, which
+    # is not printed beside a JSON answer (BACK-2659).
+    assert REASON not in result.stderr
+    assert REASON in _run_reveal_direct(f'ast://{tmp_path}{query}').stderr
 
 
 def test_explicit_xml_failure_is_not_flattened_as_recovery(tmp_path):

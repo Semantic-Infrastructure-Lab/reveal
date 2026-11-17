@@ -137,7 +137,11 @@ def test_only_the_leading_bom_is_an_encoding_mark(tmp_path):
 @pytest.mark.parametrize('prefix', SPELLINGS)
 def test_a_broken_file_still_reports_its_parse_failure(tmp_path, prefix):
     _write(tmp_path, 'broken.py', prefix, BROKEN)
-    proc = _reveal(tmp_path, 'stats://broken.py', '--format', 'json')
+    # A JSON answer names the file and prints nothing beside it (BACK-2659); the text answer prints the
+    # parse failure's own line.
+    document = json.loads(_reveal(tmp_path, 'stats://broken.py', '--format', 'json').stdout)
+    assert [w['files'] for w in document['meta']['warnings'] if w['type'] == 'parse_degraded'] == [['broken.py']]
+    proc = _reveal(tmp_path, 'stats://broken.py')
     assert PARSE_FAILED in proc.stderr
     assert 'U+FEFF' not in proc.stderr, 'the failure is the real syntax error, not the BOM'
 
