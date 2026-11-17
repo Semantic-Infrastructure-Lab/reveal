@@ -267,3 +267,70 @@ def test_the_legacy_gitignore_note_reaches_the_directory_json_answers(project, v
     warnings = json.loads(result.stdout).get('meta', {}).get('warnings', [])
     assert result.returncode == 0 and [w.get('field') for w in warnings if w.get('code') == 'retired_spelling'] == [
         'flag:--no-gitignore'], result.stdout
+
+
+# --- item D3: every flag with several spellings is named as typed ------------------------------------------
+
+def _every_parser():
+    from reveal.cli.invocation import COMMANDS
+    from reveal.cli.parser import create_argument_parser
+    yield 'main', create_argument_parser('0')
+    for name, spec in sorted(COMMANDS.items()):
+        yield name, spec.load()[0]
+
+
+def _spellings_of(parser):
+    """dest -> every option string spelling it, from the parser's actions (several actions may share a dest)."""
+    spellings = {}
+    for action in parser._actions:
+        if action.dest != 'help':
+            spellings.setdefault(action.dest, []).extend(action.option_strings)
+    return {dest: options for dest, options in spellings.items() if len(options) > 1}
+
+
+def _typed_case(parser, option):
+    action = parser._option_string_actions[option]
+    return [option, 'X'] if action.nargs not in (0, '?') else [option]
+
+
+def test_every_spelling_of_every_aliased_flag_is_recorded_as_typed():
+    """Generated from the parsers: for each flag with more than one spelling (--check/--lint, --top/--limit, -i, ...),
+    the spelling the command line typed is the one notes and errors name."""
+    from reveal.cli.invocation import Invocation, invocation_scope, record_typed_spellings, typed_spelling
+    checked = 0
+    for name, parser in _every_parser():
+        for dest, options in _spellings_of(parser).items():
+            for option in options:
+                argv = _typed_case(parser, option)
+                with invocation_scope(Invocation.parse(['reveal', *argv])):
+                    record_typed_spellings(parser, argv)
+                    assert typed_spelling(dest, '<none>') == option, (name, dest, option)
+                checked += 1
+    assert checked > 100, checked
+
+
+def test_typed_spellings_skip_a_value_and_read_attached_and_clustered_forms():
+    from reveal.cli.invocation import Invocation, invocation_scope, record_typed_spellings, typed_spellings
+    from reveal.cli.parser import create_argument_parser
+    parser = create_argument_parser('0')
+    argv = ['a.py', '--name', '-v', '--search=x', '-ic', '--lint']  # '-v' is --name's value, not --verbose
+    with invocation_scope(Invocation.parse(['reveal', *argv])):
+        record_typed_spellings(parser, argv)
+        typed = typed_spellings()
+    assert typed.get('name') == '--name' and 'verbose' not in typed, typed
+    assert typed.get('ignore_case') == '-i' and typed.get('copy') == '-c' and typed.get('check') == '--lint', typed
+
+
+@pytest.mark.parametrize('argv, says', [
+    (['a.py', 'f', '-i'], 'Note: -i has no effect on the file view'),
+    (['a.py', 'f', '-r'], 'Note: -r has no effect on the file view'),
+    (['a.py', 'f', '-v'], 'Note: -v has no effect on the file view'),
+    (['env://', '-v'], 'Note: -v has no effect on env:// queries'),
+    (['a.py', 'long.py', '--search', 'f'], "Error: --search answers for the whole of a.py"),
+    (['a.py', 'f', '--lint'], 'Error: --lint reads no element'),
+    (['a.py', 'f', '--ignore-case'], 'Note: --ignore-case has no effect on the file view'),  # control: first spelling
+])
+def test_notes_and_refusals_name_an_aliased_flag_as_typed(project, argv, says):
+    from conftest import _run_reveal_direct
+    err = _run_reveal_direct(*argv).stderr
+    assert says in err, err
