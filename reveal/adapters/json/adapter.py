@@ -20,6 +20,7 @@ from ...utils.query import (
 from .renderer import JsonRenderer
 from .help import get_help, get_schema
 from .parsing import parse_path, split_path, load_json
+from ...utils.query_eval import unknown_filter_field_warning
 from .queries import (
     get_field_value,
     compare,
@@ -377,16 +378,9 @@ class JsonAdapter(ResourceAdapter):
                 unknown_fields = find_unknown_filter_fields(
                     original, self.query_filters, get_field_value
                 )
-                if unknown_fields:
-                    fields_str = ', '.join(f"'{f}'" for f in unknown_fields)
-                    metadata['warnings'] = [{
-                        'type': 'unknown_filter_field',
-                        'message': (
-                            f"Filter field(s) {fields_str} never appear on any scanned item — "
-                            f"this may be a typo rather than a genuine zero-match. "
-                            f"See: reveal help://json"
-                        )
-                    }]
+                warning = unknown_filter_field_warning(unknown_fields, 'item', 'json')
+                if warning:
+                    metadata['warnings'] = [warning]
 
         # Apply result control (sort, limit, offset)
         if has_result_control:

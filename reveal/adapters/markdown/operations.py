@@ -11,6 +11,7 @@ from . import files, filtering, results
 from ...core import disk_cache
 from ...utils.parallel import grep_files, worker_lost_warning
 from ...utils.query import unknown_sort_field_warning
+from ...utils.query_eval import unknown_filter_field_warning
 from ...utils.results import note_warning
 from ...utils.path_utils import (failure_of, to_posix, traversal_failed_warning,
                                  named_path_candidates, to_relative_display)
@@ -162,9 +163,10 @@ def get_structure(
     # Add hint when filter matches very few files (likely front matter mismatch)
     results.add_low_match_rate_hint(response, len(all_files), total_matches, filters)
 
-    # Disclose when a zero-match result traces to a filter field that never
-    # appeared in any scanned file's frontmatter — typo vs. genuine zero (BACK-1111)
-    results.add_unknown_filter_field_hint(response, total_matches, collected.seen_fields, filters, query_filters)
+    # Disclose when a zero-match result traces to a filter field that no scanned file's front matter has: typo vs.
+    # genuine zero (BACK-1111), the shared warning of the open-field nouns (BACK-2654 note #14)
+    unknown = results.unknown_filter_fields(total_matches, collected.seen_fields, filters, query_filters)
+    note_warning(response, unknown_filter_field_warning(unknown, "file's front matter", 'markdown'))
 
     return response
 

@@ -397,16 +397,17 @@ class TestUnknownFilterFieldDisclosure:
     """BACK-1111: a typo'd filter field and a genuine zero-match both render
     as 'matched_files: 0' with no other signal -- disclosure must
     distinguish them by checking whether the field ever appears in the
-    scanned corpus's front matter at all."""
+    scanned corpus's front matter at all. Since BACK-2654 note #14 it is the shared meta.warnings entry of the
+    open-field nouns (it was a hint)."""
 
     def test_unknown_field_legacy_syntax_warns(self, sample_docs):
         adapter = MarkdownQueryAdapter(str(sample_docs), query='bogusparam=5')
         result = adapter.get_structure()
         assert result['matched_files'] == 0
-        hint_types = [h['type'] for h in result.get('hints', [])]
+        hint_types = [w['type'] for w in result.get('meta', {}).get('warnings', [])]
         assert 'unknown_filter_field' in hint_types
-        message = next(h['message'] for h in result['hints']
-                        if h['type'] == 'unknown_filter_field')
+        message = next(w['message'] for w in result['meta']['warnings']
+                        if w['type'] == 'unknown_filter_field')
         assert 'bogusparam' in message
 
     def test_unknown_field_new_syntax_warns(self, sample_docs):
@@ -414,7 +415,7 @@ class TestUnknownFilterFieldDisclosure:
         adapter = MarkdownQueryAdapter(str(sample_docs), query='nonexistent>10')
         result = adapter.get_structure()
         assert result['matched_files'] == 0
-        hint_types = [h['type'] for h in result.get('hints', [])]
+        hint_types = [w['type'] for w in result.get('meta', {}).get('warnings', [])]
         assert 'unknown_filter_field' in hint_types
 
     def test_genuine_zero_on_real_field_no_warning(self, sample_docs):
@@ -423,7 +424,7 @@ class TestUnknownFilterFieldDisclosure:
         adapter = MarkdownQueryAdapter(str(sample_docs), query='status=archived')
         result = adapter.get_structure()
         assert result['matched_files'] == 0
-        hint_types = [h['type'] for h in result.get('hints', [])]
+        hint_types = [w['type'] for w in result.get('meta', {}).get('warnings', [])]
         assert 'unknown_filter_field' not in hint_types
 
     def test_missing_field_operator_no_false_positive(self, sample_docs):
@@ -431,7 +432,7 @@ class TestUnknownFilterFieldDisclosure:
         # was present everywhere -- unrelated to the unknown-field case.
         adapter = MarkdownQueryAdapter(str(sample_docs), query='!title')
         result = adapter.get_structure()
-        hint_types = [h['type'] for h in result.get('hints', [])]
+        hint_types = [w['type'] for w in result.get('meta', {}).get('warnings', [])]
         assert 'unknown_filter_field' not in hint_types
 
     def test_nonzero_results_no_warning(self, sample_docs):

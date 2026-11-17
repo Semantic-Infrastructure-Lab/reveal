@@ -27,6 +27,7 @@ from ...utils.query import (
     unknown_sort_field_warning,
     ResultControl
 )
+from ...utils.query_eval import unknown_filter_field_warning
 from ...utils.results import ResultBuilder, note_truncation
 from ...errors import RequestValidationError
 from ...utils.path_utils import failure_of
@@ -157,18 +158,7 @@ def _unknown_filter_key_warning(structures: List[Dict[str, Any]], filtered: List
     a typo, not a genuine zero (BACK-1111)."""
     if filtered or not query:
         return None
-    unknown_keys = find_unknown_filter_keys(structures, query)
-    if not unknown_keys:
-        return None
-    keys_str = ', '.join(f"'{k}'" for k in unknown_keys)
-    return {
-        'type': 'unknown_filter_key',
-        'message': (
-            f"Filter key(s) {keys_str} never appear on any scanned element — "
-            f"this may be a typo rather than a genuine zero-match. "
-            f"See: reveal help://ast"
-        )
-    }
+    return unknown_filter_field_warning(find_unknown_filter_keys(structures, query), 'element', 'ast')
 
 
 # Languages with decorator or attribute syntax whose analyzers leave it out of `decorators`

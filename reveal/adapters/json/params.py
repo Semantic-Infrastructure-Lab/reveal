@@ -36,7 +36,8 @@ VIEW = ParamSpec('view', 'string', 'Answer view: value, schema, flatten, type, k
                  legacy=tuple(LegacySpelling(selector, first=True) for selector in LEGACY_SELECTORS), role='operation',
                  cli=CliBinding(('--view',)))
 WHERE = ParamSpec('where', 'array', 'Array-element predicates, ANDed; repeat for multiple constraints',
-                  [], expressions, role='filter-expression', repeatable=True, cli=CliBinding(('--where',)))
+                  [], expressions, role='filter-expression', repeatable=True, cli=CliBinding(('--where',)),
+                  open_fields='any key of the array elements')
 DETAIL = ParamSpec('detail', 'string', 'Flatten text detail: full (default) or raw lines',
                    'full', str, choices=('full', 'raw'), cli=CliBinding(('--detail',)))
 SORT = ParamSpec('sort', 'string', 'Array field; prefix - for descending', None, str,

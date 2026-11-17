@@ -22,7 +22,8 @@ def fields(value: Any) -> list[str]:
 
 
 WHERE = ParamSpec('where', 'array', 'Frontmatter expressions, ANDed; repeat for multiple constraints',
-                  [], strings, role='filter-expression', repeatable=True, cli=CliBinding(('--where',)))
+                  [], strings, role='filter-expression', repeatable=True, cli=CliBinding(('--where',)),
+                  open_fields='any front matter key')
 MATCH = ParamSpec('match', 'array', 'Body terms, ANDed; repeat to require multiple terms',
                   [], strings, legacy=(LegacySpelling('body-contains', flag='--body-contains'),), uri_codec='percent',
                   repeatable=True, cli=CliBinding(('--match',)))

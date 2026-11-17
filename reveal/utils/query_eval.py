@@ -2,7 +2,7 @@
 
 import re
 from datetime import date, datetime
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, Iterable, List, Optional, Set
 
 from .query_parser import REGEX_MAX_LEN as _REGEX_MAX_LEN, QueryFilter
 
@@ -230,3 +230,15 @@ def find_unknown_filter_fields(
             return []
 
     return sorted(remaining)
+
+
+def unknown_filter_field_warning(unknown: Iterable[str], population: str, topic: str) -> Optional[Dict[str, Any]]:
+    """The one typo-vs-genuine-zero disclosure of the nouns whose fields come from the data (Markdown front matter,
+    JSON rows, AST elements; BACK-2654 notes #14, #15): the filter fields no scanned *population* has, or None."""
+    fields = sorted(set(unknown))
+    if not fields:
+        return None
+    named = ', '.join(f"'{field}'" for field in fields)
+    return {'type': 'unknown_filter_field',
+            'message': (f"Filter field(s) {named} never appear on any scanned {population} — this may be a typo "
+                        f"rather than a genuine zero-match. See: reveal help://{topic}")}

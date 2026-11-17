@@ -1548,4 +1548,4 @@ def test_the_typo_warning_has_one_builder():
         package = inspect.getmodule(_adapter(noun)).__name__.rpartition('.')[0]
         for module in __import__('pkgutil').walk_packages(__import__(package, fromlist=['_']).__path__, package + '.'):
             source = inspect.getsource(__import__(module.name, fromlist=['_']))
-            assert 'never appear' not in source, f'{module.name} builds its own typo warning'
+            assert 'this may be a typo' not in source, f'{module.name} builds its own typo warning'

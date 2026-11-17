@@ -6,7 +6,9 @@ from ...utils.query_control import declared_result_control as result_control
 from .queries import ALL_OP, parse_query, validate_filter_values, _condition
 
 
-WHERE = where_param('Filter expressions, ANDed; repeat --where for multiple bounds')
+WHERE = where_param('Filter expressions, ANDed; repeat --where for multiple bounds',
+                    open_fields='any element key the analyzer emits (name, complexity, line_count, ...), plus type, lines, '
+                                'decorator, calls, callee_of, param_type, return_type, has_annotations, callers')
 KIND = ParamSpec('kind', 'string', 'Element kind (function, method, class, struct, import, interface, ...)',
                  None, str, legacy=(LegacySpelling('type', flag='--type'),), cli=CliBinding(('--kind',)))
 VIEW = ParamSpec('view', 'string', 'Answer view: calls, dict-heatmap or dict-schemas (Python evidence)',

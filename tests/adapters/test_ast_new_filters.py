@@ -294,9 +294,9 @@ class TestUnknownFilterKeyDisclosure(unittest.TestCase):
         s = self._structure('bogusparam=5')
         self.assertEqual(s['total_results'], 0)
         warning_types = [w['type'] for w in s['meta']['warnings']]
-        self.assertIn('unknown_filter_key', warning_types)
+        self.assertIn('unknown_filter_field', warning_types)
         message = next(w['message'] for w in s['meta']['warnings']
-                        if w['type'] == 'unknown_filter_key')
+                        if w['type'] == 'unknown_filter_field')
         self.assertIn('bogusparam', message)
 
     def test_known_passthrough_field_genuine_zero_no_warning(self):
@@ -323,7 +323,7 @@ class TestUnknownFilterKeyDisclosure(unittest.TestCase):
         s = self._structure('type=function&bogusparam=5')
         self.assertEqual(s['total_results'], 0)
         message = next(w['message'] for w in s['meta']['warnings']
-                        if w['type'] == 'unknown_filter_key')
+                        if w['type'] == 'unknown_filter_field')
         self.assertIn('bogusparam', message)
         self.assertNotIn("'type'", message)
 

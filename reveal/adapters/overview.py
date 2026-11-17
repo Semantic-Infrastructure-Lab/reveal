@@ -45,7 +45,7 @@ def _diagnostic_label(key: str) -> str:
 
 def without_internal_filter_warnings(meta: Optional[RevealMeta]) -> List[WarningEntry]:
     """Hotspots' generated AST filter is not a caller typo on an empty tree."""
-    return [w for w in ((meta or {}).get('warnings') or []) if w.get('type') != 'unknown_filter_key']
+    return [w for w in ((meta or {}).get('warnings') or []) if w.get('type') != 'unknown_filter_field']
 
 
 def _count(value: Any, field: str) -> int:

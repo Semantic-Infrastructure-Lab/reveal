@@ -31,7 +31,7 @@ def test_overview_text_has_no_internal_filter_typo_warning(no_function_tree, for
             else (f'overview://{no_function_tree}',))
     result = _run(*args)
     assert result.returncode == 0, result.stderr
-    assert 'Filter key(s)' not in result.stdout + result.stderr
+    assert 'Filter field(s)' not in result.stdout + result.stderr
     assert 'typo' not in result.stdout + result.stderr
 
 
@@ -39,19 +39,19 @@ def test_overview_json_has_no_unknown_filter_key_entry(no_function_tree):
     result = _run('overview', no_function_tree, '--format', 'json')
     assert result.returncode == 0, result.stderr
     warnings = (json.loads(result.stdout).get('meta') or {}).get('warnings') or []
-    assert [w for w in warnings if w.get('type') == 'unknown_filter_key'] == []
+    assert [w for w in warnings if w.get('type') == 'unknown_filter_field'] == []  # the shared type (note #15)
 
 
 # Negative controls: a typo in a USER query still warns; hotspots stays quiet.
 def test_user_written_unknown_filter_key_still_warns(no_function_tree):
     result = _run(f'ast://{no_function_tree}?complexity_typo>3')
-    assert "Filter key(s) 'complexity_typo' never appear" in result.stdout + result.stderr
+    assert "Filter field(s) 'complexity_typo' never appear" in result.stdout + result.stderr  # shared wording (note #15)
 
 
 def test_hotspots_still_quiet_on_empty_function_population(no_function_tree):
     result = _run('hotspots', no_function_tree)
     assert result.returncode == 0
-    assert 'Filter key(s)' not in result.stdout + result.stderr
+    assert 'Filter field(s)' not in result.stdout + result.stderr
 
 
 # F4 diagnostics remain; BACK-1974 keeps every empty-ranking statement scoped.

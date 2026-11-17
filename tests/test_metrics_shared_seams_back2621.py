@@ -17,7 +17,9 @@ def test_where_param_is_the_repeatable_filter_expression_declaration():
 
 def test_ast_where_is_built_by_the_factory():
     from reveal.adapters.ast.params import WHERE
-    assert WHERE == where_param('Filter expressions, ANDed; repeat --where for multiple bounds')
+    # AST's fields come from the analyzer (BACK-2654 note #15): an open field set on the same factory-built where.
+    assert WHERE.open_fields and WHERE == where_param('Filter expressions, ANDed; repeat --where for multiple bounds',
+                                                      open_fields=WHERE.open_fields)
 
 
 @pytest.mark.parametrize('value,expected', [('lines>5', ['lines>5']), (['a>1', 'b<2'], ['a>1', 'b<2']),

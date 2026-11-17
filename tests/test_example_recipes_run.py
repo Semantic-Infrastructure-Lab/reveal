@@ -158,6 +158,10 @@ def _enrich_recipe_tree(root):
         '---\ntitle: Fixture\ntype: guide\n---\n# Proj\n'
         'nginx deploy auth token\n\nSee [auth](auth.md) and [app](app.py).\n', encoding='utf-8')
     (root / 'proj' / 'auth.md').write_text('# Auth\nAuthentication token guide.\n', encoding='utf-8')
+    # The markdown schema examples filter on topics, tags and status: a positive matching fixture for them, so they
+    # answer rows rather than the unknown-field typo warning (BACK-2654 note #14).
+    (root / 'proj' / 'notes.md').write_text(
+        '---\ntitle: Notes\ntopics: [reveal]\ntags: [python]\nstatus: active\n---\n# Notes\n', encoding='utf-8')
 
 
 def _pipeline(query):
@@ -501,7 +505,7 @@ def test_the_recipe_gate_bites(harness):
         _assert_runs_as_written(harness, 'reveal ast://proj', 'contracts')
     _, out, _, _ = harness.run_subcommand('ast://proj?no_such_key=1', '--format', 'json')
     payload = json.loads(out)
-    assert [w['type'] for w in payload['meta']['warnings']] == ['unknown_filter_key']
+    assert [w['type'] for w in payload['meta']['warnings']] == ['unknown_filter_field']  # one type (note #15)
     assert payload['type'] == 'ast_query' != 'contracts'
 
 
