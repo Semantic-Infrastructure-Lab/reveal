@@ -28,6 +28,7 @@ from ..defaults import (
     DisplayDefaults,
 )
 from ..reveal_types import PathFailure, WarningEntry
+from .causes import failure_cause
 from .request_cache import register_request_cache
 from ..registry import _is_cpp_header_content, display_name_for_extension, language_for_extension, LANGUAGE_DISPLAY_NAMES
 
@@ -969,10 +970,10 @@ def failure_of(error: BaseException) -> PathFailure:
     keeps its message and any other exception ``Type: message``; neither names a path of its own.
     """
     if not isinstance(error, OSError):
-        return PathFailure(None, f'{type(error).__name__}: {error}')
+        return PathFailure(None, failure_cause(error))
     filename = error.filename
     path = to_posix(os.fsdecode(filename)) if isinstance(filename, (str, bytes, os.PathLike)) else None
-    return PathFailure(path, f'{type(error).__name__}: {error.strerror if error.strerror else error}')
+    return PathFailure(path, failure_cause(error))
 
 
 def traversal_failed_warning(failures: Sequence[PathFailure],

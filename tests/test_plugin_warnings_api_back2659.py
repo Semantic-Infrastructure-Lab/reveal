@@ -50,3 +50,12 @@ def test_clear_forgets_the_previous_discovery():
     with log_scope(to_stderr=False) as log:
         notes.replay()
     assert log.warnings == {}
+
+
+def test_failure_cause_keeps_an_oserror_path_out_and_matches_failure_of():
+    from reveal.utils.causes import failure_cause
+    from reveal.utils.path_utils import failure_of
+    error = PermissionError(13, 'Permission denied', 'secret/abs/dir')
+    assert failure_cause(error) == 'PermissionError: Permission denied' == failure_of(error).cause
+    assert failure_cause(ImportError('boom')) == 'ImportError: boom' == failure_of(ImportError('boom')).cause
+    assert failure_cause(OSError('no strerror')) == 'OSError: no strerror'
