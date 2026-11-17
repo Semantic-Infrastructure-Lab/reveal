@@ -5,6 +5,8 @@ nested calls (common in generated parsers) exhausted Python's recursion limit an
 RecursionError traceback (exit 1). D6: the request was valid and the required analysis
 failed, so the answer is exit 3 with a diagnostic naming the flag and the element.
 """
+import gc
+
 import pytest
 
 from conftest import _run_reveal_direct
@@ -38,6 +40,46 @@ def test_deep_nesting_is_an_analysis_failure_not_a_traceback(tmp_path, flag, lan
     assert flag.split('=')[0] in result.stderr and "'f'" in result.stderr
     assert 'nested' in result.stderr
     assert result.stdout == ''
+
+
+class _ForeignGarbage:
+    """Cyclic garbage with a Python finalizer that leaves another one behind while armed.
+
+    Models what earlier tests on the same pytest worker leave for the collector (BACK-2661):
+    with collection forced on every allocation, one of these is finalized at whatever depth
+    the request has reached, including the recursion limit the walkers run into."""
+    armed = False
+
+    def __init__(self):
+        self.cycle = self
+
+    def __del__(self):
+        if _ForeignGarbage.armed:
+            _ForeignGarbage()
+
+
+@pytest.mark.parametrize('lang', ['py', 'js'])
+def test_foreign_finalizer_at_depth_does_not_reach_stderr(tmp_path, lang):
+    # BACK-2661: in-process runs share the worker's heap, so a collection inside the deep stack
+    # finalized another test's garbage there; its RecursionError broke pytest's unraisable hook and
+    # that traceback landed in the captured stderr (3 of 5 whole-suite runs). A fresh `reveal`
+    # process with collection on every allocation finalizes nothing on this path (12 of 12 flag and
+    # language cases), so the product's answer must not depend on what else is on the heap.
+    make = _nested_python if lang == 'py' else _nested_js
+    source = make(tmp_path / f'deep.{lang}', DEEP)
+    threshold = gc.get_threshold()
+    _ForeignGarbage.armed = True
+    _ForeignGarbage()
+    gc.set_threshold(1)
+    try:
+        result = _run_reveal_direct(str(source), 'f', '--inputs')
+    finally:
+        gc.set_threshold(*threshold)
+        _ForeignGarbage.armed = False
+        gc.collect()
+    assert result.returncode == 3, (result.returncode, result.stderr[-500:])
+    assert 'Traceback' not in result.stderr and 'RecursionError' not in result.stderr, result.stderr[-800:]
+    assert '--inputs' in result.stderr and 'nested' in result.stderr
 
 
 @pytest.mark.parametrize('flag', FLAGS)
