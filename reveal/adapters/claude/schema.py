@@ -22,13 +22,13 @@ _SCHEMA_QUERY_PARAMS = {
     },
     'word': {
         'type': 'flag',
-        'description': 'Whole-word match for ?search= (cross-session search only). Prevents substring matches.',
-        'examples': ['?search=auth&word']
+        'description': 'Whole-word match for ?match= (cross-session search only). Prevents substring matches.',
+        'examples': ['?match=auth&word']
     },
     'snippet': {
         'type': 'integer',
         'description': 'Characters of context around search match (cross-session search only). Default 120, range 60–500.',
-        'examples': ['?search=term&snippet=300', '?search=term&snippet=250']
+        'examples': ['?match=term&snippet=300', '?match=term&snippet=250']
     },
     'project': {
         'type': 'string',
@@ -77,7 +77,7 @@ _SCHEMA_QUERY_PARAMS = {
             'wrapper turns included, not narrowed to real prompts); /messages?detail=raw '
             'reaches parity with /assistant.'
         ),
-        'examples': ['/prompts?detail=raw', '/messages?detail=raw', '/messages?detail=raw&full']
+        'examples': ['/prompts?detail=raw', '/messages?detail=raw']
     },
 }
 
