@@ -67,9 +67,25 @@ Guides >200 lines show the first section by default (progressive disclosure). Ap
 | Databases, env, SSL, nginx, other resources | `reveal help://adapters` |
 
 - **Limit results:** `calls --sort=-callers` and `imports --sort=-fan-in` accept `--limit N` (legacy `--top N` and `--rank` note their replacements); `overview --limit N` caps each map section. Caps depend on the selected view: Calls caller/callee walks and the default Imports summary do not use `limit`. Other nouns and URI forms list their caps in `help://schemas/<adapter>`; a note names an unused cap. `--head N` slices list output.
-- **Scripting:** `--format json` puts JSON on stdout (warnings go to stderr); `--no-breadcrumbs` drops the next-step hints. A target that cannot render a `--format` value exits 2.
+- **Scripting:** `--format json` puts the whole answer on stdout, its warnings and notes inside it (`meta.warnings`), with nothing printed beside it; `--no-breadcrumbs` drops the next-step hints. A target that cannot render a `--format` value exits 2.
 - **Machine-readable discovery:** `reveal 'help://schemas/<adapter>'` gives one adapter's query params and output shape; `reveal --discover` gives every adapter's schema (query params, flags, output types, examples) as one JSON document (large: ~15,000 tokens); rules are `reveal --rules`.
 - **Exit codes:** `check` 0 clean, 1 issues found, 2 usage error, 3 scan incomplete or a requested `--output json=PATH` artifact that could not be written (`--fail-on none` reports issues without exit 1 but never hides an incomplete scan; the legacy `--exit-zero` does, and cannot be combined with it); `health` 0 pass, 1 findings (warnings or failing checks), 2 usage, 3 a check failed, could not reach its target or was incomplete (a target the check does not apply to never fails the run; `--fail-on none` skips 1); `check --changed RANGE` uses `check`'s codes, with 2 for an unusable range; `imports` defaults to no findings gate, with `--fail-on findings` for exit 1 on a `--circular`, `--unused` or `--violations` row, usage 2 and incomplete/output failure 3; `metrics --view hotspots` (and the retired `hotspots`) defaults to no findings gate; `--fail-on findings` exits 1 for an analysed file with quality below 70 or a function with complexity above 20, usage exits 2, and incomplete/output failure exits 3.
+
+**How options work (every noun):**
+
+```text
+reveal NOUN TARGET --option value  ==  NOUN://TARGET?option=value  (same answer, same exit)
+One name per idea: --limit/--offset, --sort [-]FIELD, --where 'FIELD OP VALUE',
+  --match TEXT, --detail LEVEL, --view NAME, --since/--until DATE, --against REF, --tests MODE
+--limit 0 means no cap (on ast, git, json and markdown it is still an empty page).
+On a URI, ?FIELD OP VALUE is the same filter as --where.
+Switches take on/off: --churn off.
+Filters and selections repeat and combine; settings take one value (twice, differently: exit 2).
+One answer per request (two: exit 2); an option the selected answer does not use is named in a note.
+An unknown option or field exits 2 naming the ones the noun takes (a field the data defines warns).
+Old spellings still work until 1.0 and print their replacement.
+Config files and environment set defaults; what you pass overrides them.
+```
 
 ---
 

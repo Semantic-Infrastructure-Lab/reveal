@@ -503,7 +503,7 @@ A: Architecture is complete, implementation is planned. It's the highest-priorit
 **User Guides:**
 - `reveal help://duplicates` - this guide
 - `reveal help://agent` - AI agent reference
-- `reveal --agent-help` - AI agent orientation (~1,200 tokens; `help://agent/full` for the complete guide)
+- `reveal --agent-help` - AI agent orientation (~1,900 tokens; `help://agent/full` for the complete guide)
 
 **Implementation:**
 - `reveal/rules/duplicates/D001.py` - Exact duplicate detection
