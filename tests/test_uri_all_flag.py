@@ -30,7 +30,7 @@ def test_hotspots_declares_top():
 
 @pytest.mark.parametrize('scheme,fragment', [
     ('ast', 'limit=1000000'), ('calls', 'limit=1000000'), ('patches', 'limit=1000000'),
-    ('testability', 'top=1000000'), ('stats', 'top=1000000'), ('git', 'limit=1000000'),
+    ('testability', 'top=1000000'), ('stats', 'limit=1000000'), ('metrics', 'limit=1000000'), ('git', 'limit=1000000'),
     ('overview', 'all=true'),  # Constructor-bound map expansion; does not request assessments.
 ])
 def test_back1379_adapters_declare_all(scheme, fragment):
@@ -87,3 +87,57 @@ def test_end_to_end_lifts_hotspots_cap(tmp_path):
 
     assert functions_listed() == 10
     assert functions_listed(all=True) == 14
+
+
+def _pairs(resource):
+    return sorted(resource.partition('?')[2].split('&'))
+
+
+def test_all_lifts_the_cap_of_the_answer_the_request_selects():
+    """BACK-2654 Step 5: --all lifts the cap the selected answer reads. Metrics' legacy hotspots ranking declares
+    its own cap, top, so that legacy answer is unchanged until the cut; every other Metrics answer reads limit, so
+    --all there is the canonical limit (it used to inject top, which those answers never read)."""
+    from reveal.cli.defaults import _default_args
+    for scheme in ('metrics', 'stats'):
+        assert _pairs(inject_query_flags('src', scheme, _args(all=True))) == ['limit=1000000']
+        assert _pairs(inject_query_flags('src?view=hotspots', scheme, _args(all=True))) == \
+            ['limit=1000000', 'view=hotspots']
+        assert _pairs(inject_query_flags('src?hotspots=false', scheme, _args(all=True))) == \
+            ['hotspots=false', 'limit=1000000']
+        for legacy in ('hotspots=true', 'hotspots', 'hotspots=1'):
+            assert _pairs(inject_query_flags(f'src?{legacy}', scheme, _args(all=True))) == \
+                sorted([legacy, 'top=1000000'])
+        # the global --hotspots selects the same legacy answer, whatever order the flags were typed in
+        assert _pairs(inject_query_flags('src', scheme, _default_args(all=True, hotspots=True))) == \
+            ['hotspots=true', 'top=1000000']
+    # Negative controls: nouns whose answers declare no cap of their own keep their declaration.
+    assert inject_query_flags('src?hotspots=true', 'calls', _args(all=True)) == 'src?hotspots=true&limit=1000000'
+    assert inject_query_flags('src', 'hotspots', _args(all=True)) == 'src?top=1000000'
+
+
+def test_end_to_end_metrics_all_keeps_the_legacy_ranking_and_notes_nothing_elsewhere(tmp_path):
+    import json
+    from contextlib import redirect_stderr, redirect_stdout
+    from io import StringIO
+    from reveal.cli.defaults import _default_args
+    from reveal.cli.routing.uri import handle_uri
+
+    body = '\n'.join(f'    if x == {i}:\n        return {i}' for i in range(12))
+    for n in range(14):
+        (tmp_path / f'm{n}.py').write_text(f'def f{n}(x):\n{body}\n    return -1\n', encoding='utf-8')
+
+    def answer(query, **flags):
+        out = StringIO()
+        with redirect_stdout(out), redirect_stderr(StringIO()):
+            handle_uri(f'metrics://{tmp_path.as_posix()}{query}', None, _default_args(format='json', **flags))
+        return json.loads(out.getvalue())
+
+    def codes(result):
+        return [warning.get('code') for warning in result.get('meta', {}).get('warnings', [])]
+
+    assert len(answer('?hotspots=true')['hotspots']) == 10
+    assert len(answer('?hotspots=true', all=True)['hotspots']) == 14
+    assert len(answer('', hotspots=True, all=True)['hotspots']) == 14
+    assert len(answer('?view=hotspots', all=True)['hotspots']) == 14
+    plain = answer('', all=True)
+    assert len(plain['files']) == 14 and 'unused_flag' not in codes(plain), codes(plain)

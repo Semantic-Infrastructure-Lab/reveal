@@ -352,6 +352,11 @@ PROBES = {
 # BACK-1538: every pair now shows its effect (xfail strict, so a new row must name its task).
 KNOWN_SILENT: dict = {}
 
+# (scheme, dest) -> the request a probe and its baseline run on, where the default answer has no cap for the flag to
+# lift: Metrics' per-file rows are uncapped, so --all (limit there) is judged on the ranking view it caps
+# (BACK-2654 Step 5; it used to inject top, which the per-file answer never reads, and pass on that note).
+PROBE_URIS = {('metrics', 'all'): 'metrics://proj?view=hotspots', ('stats', 'all'): 'stats://proj?view=hotspots'}
+
 # The cap --all lifts belongs to the text renderer (ACCEPTS_TOP); the JSON result already lists
 # every item, so these pairs are judged on the text view (BACK-1538).
 TEXT_ONLY_EFFECT = {('deps', 'all')}
@@ -440,18 +445,19 @@ def _enrich(root):
 
 
 class _FlagHarness(harness_module._Harness):
-    def run_flags(self, scheme, fmt='json', **flags):
+    def run_flags(self, scheme, fmt='json', probe=None, **flags):
         if scheme == 'reveal' and flags.get('check'):
             # Bare reveal:// --check is the ~50 s self-validation ci-local runs as its own step;
             # one V rule shows --check is honored (BACK-2144). select is not a probe.
             flags = {**flags, 'select': 'V001'}
-        key = (scheme, fmt, tuple(sorted((k, str(v)) for k, v in flags.items())))
+        uri = PROBE_URIS.get((scheme, probe)) or {'calls': 'calls://proj?rank=callers',
+                                                   'patches': 'patches://proj'}.get(scheme,
+                                                                                    harness_module.FIXTURE_URIS[scheme])
+        key = (uri, fmt, tuple(sorted((k, str(v)) for k, v in flags.items())))
         if key not in self._cache:
             out, err, code = StringIO(), StringIO(), 0
             with self._hermetic(), redirect_stdout(out), redirect_stderr(err):
                 try:
-                    uri = {'calls': 'calls://proj?rank=callers',
-                           'patches': 'patches://proj'}.get(scheme, harness_module.FIXTURE_URIS[scheme])
                     handle_uri(uri, None,
                                _default_args(format=fmt, **flags))
                 except SystemExit as exc:
@@ -482,6 +488,7 @@ def test_known_silent_rows_name_real_cases():
     assert {s for s, _ in KNOWN_SILENT} <= set(harness_module.FIXTURE_URIS)
     assert {d for _, d in KNOWN_SILENT} <= set(PROBES)
     assert TEXT_ONLY_EFFECT <= {(s, d) for s in harness_module.FIXTURE_URIS for d in PROBES}
+    assert set(PROBE_URIS) <= {(s, d) for s in harness_module.FIXTURE_URIS for d in PROBES}
 
 
 def test_every_runnable_adapter_is_probed():
@@ -497,8 +504,8 @@ def test_flag_is_honored_or_named(flag_harness, scheme, dest):
         pytest.skip('git not installed')
     option, value = PROBES[dest]
     fmt = 'text' if (scheme, dest) in TEXT_ONLY_EFFECT else 'json'
-    base = flag_harness.run_flags(scheme, fmt)
-    code, out, err = flag_harness.run_flags(scheme, fmt, **{dest: value})
+    base = flag_harness.run_flags(scheme, fmt, dest)
+    code, out, err = flag_harness.run_flags(scheme, fmt, dest, **{dest: value})
     named = option in err or f"'{dest}'" in err  # an adapter's own 'Unknown query param' warning
     honored = (code, out) != base[:2]
     assert named or honored, (
