@@ -196,14 +196,11 @@ NOT_YET = {
     ('surface', '4'): 'no detail declaration; --verbose: "has no effect" note, exit 0',
     ('testability', '4'): 'no detail declaration; --verbose accepted silently, exit 0',
     ('trace', '4'): 'no detail declaration; --verbose: "has no effect" note, exit 0',
-    ('ast', '3b'): '?zz-unknown=1 is read as a where field: a zero-row answer, exit 0; subcommand: argparse error',
     ('ast', '8a'): 'bare match, detail, depth, tests, since, until, against are read as where fields, exit 0 (depth '
                    'is nesting depth, with no note)',
     ('json', '8a'): 'bare match, kind, depth, tests, since, until, against: exit 0',
     ('markdown', '8a'): 'bare detail, kind, depth, tests, since, until, against: exit 0',
     ('metrics', '8b'): '?lines=5 is warned unknown and ignored; ?where=lines=5 filters (?lines>10 already filters)',
-    ('json', '3b'): '?zz-unknown=1: warned and ignored, exit 0; subcommand --zz-unknown: argparse error',
-    ('markdown', '3b'): '?zz-unknown=1: warned and ignored, exit 0; subcommand --zz-unknown: argparse error',
     ('calls', '20'): 'unread by the default answer, warned and exit 0: kind, external, builtins, test-framework',
     ('codex', '20'): 'unread by the default answer, warned and exit 0: since, until, key, last, tokens, goal, '
                      'matches',
@@ -215,7 +212,7 @@ NOT_YET = {
                        'include_unresolved',
 }
 
-NOT_YET_BASELINE = {'1a': 0, '1b': 0, '1c': 0, '1d': 0, '2': 0, '3': 3, '3b': 3, '4': 17, '5': 0, '6': 0,
+NOT_YET_BASELINE = {'1a': 0, '1b': 0, '1c': 0, '1d': 0, '2': 0, '3': 3, '3b': 0, '4': 17, '5': 0, '6': 0,
                     '8a': 3, '8b': 1, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 6}
 
 
@@ -806,9 +803,14 @@ UNKNOWN = 'zz-unknown'
 
 
 def probe_unknown_keys(noun):
+    """A noun whose where fields come from the data (open_fields; BACK-2654 notes #14, #15) reads every bare URI key
+    as a field, so only its subcommand has an unknown key: the data's keys are the fields."""
     wants = 'wants exit 2 naming the key and the supported controls'
-    run = _run(_uri(noun, f'{UNKNOWN}=1'), '--format', 'json')
-    cases = [Case(f'?{UNKNOWN}=', _teaches(run, noun, UNKNOWN), f'{run.brief()} ({wants})')]
+    where = _spec_for(noun, 'where')
+    cases = []
+    if where is None or not where.open_fields:
+        run = _run(_uri(noun, f'{UNKNOWN}=1'), '--format', 'json')
+        cases.append(Case(f'?{UNKNOWN}=', _teaches(run, noun, UNKNOWN), f'{run.brief()} ({wants})'))
     if _sub(noun) is not None:
         run = _run(*_sub(noun, f'--{UNKNOWN}', '1'), '--format', 'json')
         cases.append(Case(f'subcommand --{UNKNOWN}', _teaches(run, noun, UNKNOWN), f'{run.brief()} ({wants})'))
@@ -1470,7 +1472,7 @@ def test_cell(workspace, noun, rule):
 # Rule 3 (Scott 2026-11-16; BACK-2654 note #14): unknown keys and unsupported controls are rejected by ONE shared check
 # at the declared binder and parser, not by a per-adapter opt-in (plan section 5). The nouns still waiting on their
 # field declarations (rule 8) keep their own warning until then; this list only shrinks.
-_OWN_UNKNOWN_KEY_WARNING = {'ast', 'json', 'markdown'}
+_OWN_UNKNOWN_KEY_WARNING: set = set()
 # A call kept for another rule: unknown keys never reach it, so it is not an unknown-key check.
 _KEPT_FOR_ANOTHER_RULE = {'codex': 'warns that full is unread outside exchanges (rule 20 applicability, BACK-2656), '
                                    'on api.query and the adapter too, where the CLI ledger does not reach',
@@ -1516,3 +1518,34 @@ def test_metrics_where_fields_and_dotted_paths(workspace, query, ok):
         assert run.rc == 0, run.brief()
     else:
         assert run.rc == 2 and run.says('bogus', 'supported controls', 'lines', 'elements.*'), run.brief()
+
+
+# Open where fields (BACK-2654 notes #14, #15): Markdown, JSON and AST read fields from the data, so a bare key is a
+# where filter; a field no scanned item has gets ONE typo warning, built by one shared seam, exit 0.
+OPEN_FIELD_CASES = [('markdown', 'markdown://proj?zz-unknown=1'), ('json', 'json://proj/rows.json?zz-unknown=1'),
+                    ('ast', 'ast://proj?zz-unknown=1')]
+
+
+@pytest.mark.parametrize('noun', ['markdown', 'json', 'ast'])
+def test_open_where_fields_are_declared(noun):
+    spec = _spec_for(noun, 'where')
+    assert spec.open_fields and not spec.fields, (spec.fields, spec.open_fields)
+
+
+@pytest.mark.parametrize('noun,uri', OPEN_FIELD_CASES)
+def test_a_field_no_item_has_gets_the_one_typo_warning(workspace, noun, uri):
+    run = _run(uri, '--format', 'json')
+    assert run.rc == 0, run.brief()
+    warnings = [w for w in json.loads(run.out)['meta'].get('warnings', []) if w.get('type') == 'unknown_filter_field']
+    assert len(warnings) == 1 and "'zz-unknown'" in warnings[0]['message'], warnings
+
+
+def test_the_typo_warning_has_one_builder():
+    import inspect
+    from reveal.utils import query_eval
+    assert callable(getattr(query_eval, 'unknown_filter_field_warning', None))
+    for noun in ('markdown', 'json', 'ast'):
+        package = inspect.getmodule(_adapter(noun)).__name__.rpartition('.')[0]
+        for module in __import__('pkgutil').walk_packages(__import__(package, fromlist=['_']).__path__, package + '.'):
+            source = inspect.getsource(__import__(module.name, fromlist=['_']))
+            assert 'never appear' not in source, f'{module.name} builds its own typo warning'
