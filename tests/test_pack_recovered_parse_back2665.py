@@ -129,3 +129,16 @@ def test_content_without_a_structure_tier_file_parses_nothing(tmp_path):
     assert {entry['content_type'] for entry in answer['content']} == {'name_only'}
     assert code == 0, result.stderr[-500:]
     assert not _warnings(answer, 'parse_recovered')
+
+
+def test_warning_spells_paths_with_slashes_and_names_each_file_once():
+    """Windows spelling: the graph and the outlines may each report a file; one '/'-spelled entry."""
+    from reveal.adapters.pack import _record_recovered_warning
+    meta = {}
+    _record_recovered_warning(['proj\\core\\b.c', 'proj/core/b.c', 'proj\\core\\b.c'], meta)  # noqa: win-path
+    (warning,) = meta['warnings']
+    assert warning['type'] == 'parse_recovered'
+    assert warning['files'] == ['proj/core/b.c'] and warning['count'] == 1
+    empty = {}
+    _record_recovered_warning([], empty)
+    assert empty == {}
