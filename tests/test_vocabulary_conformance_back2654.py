@@ -230,8 +230,8 @@ def _adapter(noun):
 
 
 def _specs(noun):
-    """The noun's declared controls; a spec declared only to reject a shared control is not one."""
-    return [spec for spec in _adapter(noun).PARAM_SPECS if spec.role != 'unsupported']
+    """The noun's declared controls."""
+    return list(_adapter(noun).PARAM_SPECS)
 
 
 def _named_entries(spec):

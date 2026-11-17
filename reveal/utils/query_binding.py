@@ -257,7 +257,7 @@ def unsupported_controls_message(declarations: Iterable[ParamSpec], unknown: Ite
     does not declare, then every control it does declare, its where fields and its per-symbol lookup."""
     declarations = tuple(declarations)
     unknown = list(dict.fromkeys(unknown))
-    controls = ', '.join(spec.name for spec in declarations if spec.role != 'unsupported') or '(none)'
+    controls = ', '.join(spec.name for spec in declarations) or '(none)'
     return (f"unsupported control{'s' if len(unknown) > 1 else ''} {', '.join(repr(key) for key in unknown)}; "
             f"supported controls: {controls}{_fields_clause(declarations)}{_symbol_clause(declarations)}"
             f"{_shared_name_clause(declarations, unknown)}")

@@ -6,7 +6,6 @@ and the file hotspot ranking (``?hotspots=true``, which the hotspots noun's file
 prints the replaced-by note from the RETIREMENTS table until the cut (D5).
 """
 
-import argparse
 import os
 from datetime import datetime
 from pathlib import Path
@@ -88,8 +87,6 @@ VIEWS = ('provenance', 'hotspots')
 DETAIL_LEVELS = ('normal', 'summary')
 # The hotspot view's row cap when no limit is given (the legacy hotspots=true ranking's top default).
 HOTSPOT_VIEW_LIMIT = 10
-# Shared controls of the one vocabulary that metrics does not take (D18): rejected, never folded into where.
-UNSUPPORTED_SHARED = ('match', 'kind', 'depth', 'until')
 
 
 def _count(name: str):
@@ -144,14 +141,6 @@ def _detail(value: Any) -> str:
         raise ParamValueError(f'detail must be normal or summary, got {value!r}: metrics has no fuller level '
                               '(summary omits the per-file rows)')
     return str(value)
-
-
-def _unsupported(name: str) -> Callable[[Any], Any]:
-    def convert(value: Any) -> Any:
-        raise ParamValueError(
-            f'metrics does not support {name}: filter the files with where (where=lines>50, --where '
-            f"'avg_complexity>=5'); supported controls: {', '.join(spec.name for spec in DECLARED_SPECS)}")
-    return convert
 
 
 TEST_CHOICES = ('include', 'exclude')
@@ -244,13 +233,10 @@ _EXCLUDE = exclude_param()
 _RESPECT_GITIGNORE = ParamSpec('respect_gitignore', 'string', 'false includes files git ignores; --no-gitignore '
                                'fills it', None, lambda value: value, role='scope')
 
-# Every control the schema documents; the unsupported shared controls are declared only to reject them.
-DECLARED_SPECS = (_VIEW, _WHERE, _HOTSPOTS, _TOP, _CODE_ONLY, _CHURN, _SINCE, _MERGES, _TESTS, _DETAIL,
-                  _SORT, _LIMIT, _OFFSET, _EXCLUDE, _RESPECT_GITIGNORE)
-_UNSUPPORTED_SPECS = tuple(ParamSpec(name, 'string', argparse.SUPPRESS, None, _unsupported(name), role='unsupported',
-                                     cli=CliBinding((f'--{name}',), metavar='VALUE'))
-                           for name in UNSUPPORTED_SHARED)
-PARAM_SPECS = DECLARED_SPECS + _UNSUPPORTED_SPECS
+# Every control metrics takes; a shared control it does not take (match, kind, depth, until, ...) is rejected by the
+# binder and the declared parser from the one shared list (BACK-2654 rule 7), never declared here to reject it.
+PARAM_SPECS = (_VIEW, _WHERE, _HOTSPOTS, _TOP, _CODE_ONLY, _CHURN, _SINCE, _MERGES, _TESTS, _DETAIL,
+               _SORT, _LIMIT, _OFFSET, _EXCLUDE, _RESPECT_GITIGNORE)
 
 def _supplied(params: Any) -> Dict[str, Any]:
     return dict(peek_query_items(params))  # validating is not reading
@@ -440,7 +426,7 @@ class MetricsAdapter(ResourceAdapter):
             'resource': MetricsAdapter.RESOURCE_SPEC.schema(),
             'execution_policy': {'default_fail_on': MetricsAdapter.DEFAULT_FAIL_ON,
                                  'fail_on': list(MetricsAdapter.FINDINGS_POLICIES)},
-            'query_params': param_schema(DECLARED_SPECS),
+            'query_params': param_schema(PARAM_SPECS),
             'operators': {},
             'elements': {},
             'cli_flags': ['--view', '--where', '--format=json'],

@@ -830,10 +830,24 @@ class TestProposedChanges:
         result, answer = cli_json(uri(project, f'{control}=1'))
         assert result.returncode == 2, f'{control} is not a Metrics control and must exit 2, got {result.returncode}'
         assert control in answer['error'] and 'where' in answer['error'], answer['error']
-        result, answer = cli_json('metrics', str(project), f'--{control}', '1')
-        assert_usage(result, answer, control)
         with pytest.raises((TypeError, ValueError), match=control):
             query(uri(project), **{control: '1'})
+
+    # BACK-2654 rule 7: metrics no longer declares these flags only to reject them, so the declared parser's shared
+    # unknown-flag rejection answers (exit 2, the supported controls on stderr), as on every other noun. That path
+    # prints no JSON error document in --format json on any noun: a cross-noun gap, ruling pending.
+    @pytest.mark.xfail(strict=True, reason='BACK-2654: the declared parser rejects an unknown flag with text only, no '
+                                           'JSON error document in --format json (every noun; ruling pending)')
+    @pytest.mark.parametrize('control', ['match', 'kind', 'depth', 'until'])
+    def test_unsupported_shared_control_flags_reject_with_a_json_document(self, project, control):
+        result, answer = cli_json('metrics', str(project), f'--{control}', '1')
+        assert_usage(result, answer, control)
+
+    @pytest.mark.parametrize('control', ['match', 'kind', 'depth', 'until'])
+    def test_unsupported_shared_control_flags_exit_2_naming_them(self, project, control):
+        result, _answer = cli_json('metrics', str(project), f'--{control}', '1')
+        assert result.returncode == 2 and f"unsupported control '--{control}'" in result.stderr
+        assert 'supported controls: view, where' in result.stderr
 
     # -- Decision 8, B7 and B8 ------------------------------------------------------------------------------
 

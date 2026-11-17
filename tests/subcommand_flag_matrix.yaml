@@ -430,11 +430,11 @@ subcommands:
       via:
       - declared-read
     until:
-      reason: metrics declares --until only to reject it (exit 2 naming where and its supported
-        controls, BACK-2621); since bounds churn input and there is no time window
+      reason: 'BACK-2654 rule 7: --until is not declared on `reveal metrics`''s own parser; the
+        declared parser rejects it from the shared list (exit 2 naming the supported controls).
+        since bounds churn input and there is no time window'
       review: not-applicable
-      via:
-      - declared-read
+      via: []
     verbose:
       reason: 'BACK-2654 rule 4: --verbose is --detail full, bound from the
         declarations; metrics'' levels are normal and summary, so it exits 2 naming
