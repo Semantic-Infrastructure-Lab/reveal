@@ -189,11 +189,23 @@ def _prepare_legacy_selectors(declarations: tuple[ParamSpec, ...], source: str, 
     return selected
 
 
+def shared_name_is_legacy_field(declarations: Iterable[ParamSpec], name: str) -> bool:
+    """Rule 8 until the cut (BACK-2654): on a noun whose where fields come from the data (open fields), a bare key
+    named like a shared control the noun does not declare is a legacy spelling of the identical where term, noted
+    from the one generated RETIREMENTS row family (``invocation.retirement_note``). A closed-field noun never read
+    such a key as a field, so it has no legacy meaning there. At the cut this returns False everywhere: exit 2."""
+    declarations = tuple(declarations)
+    expression = next((spec for spec in declarations if spec.role == 'filter-expression'), None)
+    return (name in SHARED_CONTROL_NAMES and expression is not None and bool(expression.open_fields)
+            and not any(name in spec.spellings for spec in declarations))
+
+
 def _prepare_expression_params(declarations, source, params, selectors, expression) -> tuple:
     """Fold explicit where= values and bare field keys into the expression list; return the folded keys and the
     bare keys that spell a shared control the noun does not declare. Such a key is that control, never a field (rule 8,
-    BACK-2654), so the binder rejects it; a declared spelling folds as before (AST ``kind!=X``, and ``depth OP N``, the
-    legacy word of where whose translation is the same term)."""
+    BACK-2654), so the binder rejects it, except where it is a legacy field spelling until the cut
+    (``shared_name_is_legacy_field``: the same term). A declared spelling folds as before (AST ``kind!=X``, and
+    ``depth OP N``, the legacy word of where whose translation is the same term)."""
     known = {name for spec in declarations for name in spec.spellings}
     terms, folded, shared = [], [], []
     for index, part in enumerate(source.split('&')):
@@ -205,7 +217,8 @@ def _prepare_expression_params(declarations, source, params, selectors, expressi
         elif key and key not in known:
             dict.pop(params, key, None)
             field = query_key(part)
-            if field in SHARED_CONTROL_NAMES and field not in known:  # a declared one (AST kind!=X) folds as before
+            if (field in SHARED_CONTROL_NAMES and field not in known  # a declared one (AST kind!=X) folds as before
+                    and not shared_name_is_legacy_field(declarations, field)):
                 shared.append(field)
                 continue
             terms.append(part.strip())
@@ -233,7 +246,7 @@ def _shared_name_clause(declarations: tuple[ParamSpec, ...], unknown: list) -> s
     """A shared control name is never a bare field (rule 8): name the where spelling of a field so called."""
     expression = next((spec for spec in declarations if spec.role == 'filter-expression'), None)
     shared = [key for key in unknown if key in SHARED_CONTROL_NAMES]
-    if expression is None or not shared:
+    if expression is None or not expression.open_fields or not shared:  # a closed-field noun has no such field
         return ''
     return (f"; a shared control name is never a bare field: filter on a field so named with "
             f"{', '.join(f'{expression.name}={key}' for key in shared)} OP VALUE")

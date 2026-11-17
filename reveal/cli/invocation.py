@@ -562,13 +562,30 @@ class RetirementLog:
 _LOG: ContextVar[Optional[RetirementLog]] = ContextVar('reveal_retirement_log', default=None)
 
 
+def _shared_name_retirement(key: str) -> Optional[Retirement]:
+    """The one generated row family (BACK-2654 rule 8): ``param:NOUN.NAME`` for a bare key named like a shared control
+    that an open-field noun does not declare, a legacy spelling of the identical where term until the cut. Generated
+    from the noun's declarations (``shared_name_is_legacy_field``), never typed per key."""
+    from ..utils.query_parser import SHARED_CONTROL_NAMES
+    scheme, _, name = key[len('param:'):].partition('.') if key.startswith('param:') else ('', '', '')
+    if name not in SHARED_CONTROL_NAMES:
+        return None
+    from ..adapters.registry import get_adapter_class
+    from ..utils.query_binding import shared_name_is_legacy_field
+    declarations = getattr(get_adapter_class(scheme), 'PARAM_SPECS', None)
+    if not isinstance(declarations, tuple) or not shared_name_is_legacy_field(declarations, name):
+        return None
+    return Retirement(f'{scheme} bare ?{name} (a shared control name)',
+                      f"?where={name} OP VALUE (--where '{name} OP VALUE'), the same field filter")
+
+
 def retirement_note(key: str) -> Optional[Retirement]:
     """The one hook: consulted where each kind of spelling is parsed. Returns the table row for
     *key*, or None when it is not retired (nothing printed). A ``note`` row prints its note to
     stderr once per invocation (when a host asked for stderr) and joins the log that the JSON
     ``meta.warnings`` entry is built from; ``phase7`` is only recorded; ``error`` raises
     RetiredSpellingError."""
-    entry = RETIREMENTS.get(key)
+    entry = RETIREMENTS.get(key) or _shared_name_retirement(key)
     if entry is None:
         return None
     if entry.stage == 'error':
