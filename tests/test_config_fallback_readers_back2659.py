@@ -71,6 +71,20 @@ def test_health_targets_of_the_wrong_shape_fall_back_in_the_json(project, sectio
     assert 'health.targets ignored' not in result.stderr, result.stderr
 
 
+@pytest.mark.cli
+def test_a_config_warning_does_not_make_health_report_an_incomplete_check(project):
+    """A config warning is informational (exit and completeness unchanged). health judged any
+    warning in its child check's JSON as lost evidence: once config problems reached that JSON,
+    an unknown rule setting turned ``code: healthy`` (exit 0) into ``incomplete check`` (exit 3)."""
+    control = _cli(project, 'health', project.as_posix(), '--format', 'json')
+    _write(project / '.reveal.yaml', 'root: true\nrules:\n  C901:\n    bogus_key: 3\n')
+    result = _cli(project, 'health', project.as_posix(), '--format', 'json')
+    assert result.returncode == control.returncode == 0, result.stdout
+    document = json.loads(result.stdout)
+    assert [r['verdict'] for r in document['results']] == ['healthy']
+    assert [w['code'] for w in _config_warnings(document)] == ['config_key_unknown']
+
+
 # --- metrics' quality-score file ---------------------------------------------------------------
 
 @pytest.mark.cli
