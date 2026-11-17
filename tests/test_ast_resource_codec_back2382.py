@@ -112,7 +112,7 @@ def test_declared_api_overrides_preserve_raw_query_codec(tmp_path):
     expected = query(literal + '?limit=1')
     assert expected['total_results'] == 1
     overridden = query(literal + '?limit=1', limit=0)
-    assert overridden['results'] == [] and overridden['total_results'] == 1
+    assert len(overridden['results']) == 1 and overridden['total_results'] == 1  # limit=0: no cap (BACK-2654)
     with pytest.raises(ValueError, match='limit'):
         query(literal + '?limit=bad', limit=0)
     assert query(literal + '?name=alpha%26beta')['results'] == []

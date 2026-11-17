@@ -210,9 +210,11 @@ def test_measured_empty_structure_and_unsupported_analyzer_stay_distinct(repo_pa
 @pytest.mark.parametrize('view,field,extra', [('ownership', 'authors', ''), ('history', 'buckets', '&bucket=month')])
 def test_canonical_aggregate_limit_is_a_display_cap_with_full_counts(repo_path, view, field, extra):
     result = _run_reveal_in(repo_path, f'git://{repo_path}?view={view}{extra}&limit=0', '--format', 'json')
-    assert result.returncode == 0
+    uncapped = _run_reveal_in(repo_path, f'git://{repo_path}?view={view}{extra}', '--format', 'json')
+    assert result.returncode == uncapped.returncode == 0
     data = json.loads(result.stdout)
-    assert data[field] == []
+    # Caps row (BACK-2654): limit=0 is every row, as when omitted; it used to be an empty page
+    assert data[field] and data[field] == json.loads(uncapped.stdout)[field]
     assert data['total_commits' if view == 'ownership' else 'commit_count'] == 3
 
 
@@ -221,12 +223,12 @@ def test_scan_limit_is_distinct_from_rows_and_keeps_legacy_window(repo_path):
     limited = _run_reveal_in(repo_path, f'git://{repo_path}?view=ownership&scan-limit=1&limit=0', '--format', 'json')
     assert limited.returncode == 3
     data = json.loads(limited.stdout)
-    assert data['authors'] == [] and data['total_commits'] == 1
+    assert len(data['authors']) == 1 and data['total_commits'] == 1  # limit=0: every author row (Caps row, BACK-2654)
     assert data['scope']['history_window']['complete'] is False
     legacy = query(f'git://{repo_path}?type=ownership&limit=1')
     assert legacy['total_commits'] == 1 and len(legacy['authors']) == 1
     modern = query(f'git://{repo_path}?type=ownership&limit=1', limit=0)
-    assert modern['total_commits'] == 3 and modern['authors'] == []
+    assert modern['total_commits'] == 3 and len(modern['authors']) == 1
 
 
 def test_scan_limit_rejects_a_view_without_an_input_budget(repo_path):

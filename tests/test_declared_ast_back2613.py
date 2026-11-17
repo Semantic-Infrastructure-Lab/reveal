@@ -49,10 +49,11 @@ def test_invalid_requests_reject_before_analysis(tree, flags):
     assert json.loads(result.stdout)['error']
 
 
-def test_zero_limit_retains_the_existing_empty_page_meaning(tree):
+def test_zero_limit_is_every_row_on_both_forms(tree):
+    # Caps row (BACK-2654): limit=0 is no cap; it used to be an empty page
     a = answer(tree, 'ast', 'a.py', '--limit', '0')
     b = answer(tree, 'ast://a.py?limit=0')
-    assert a == b and len(a['results']) == 0 and a['total_results'] == 2
+    assert a == b and len(a['results']) == 2 and a['total_results'] == 2
 
 
 @pytest.mark.parametrize('query', ['kind=function&type=class', 'where=name%FF'])

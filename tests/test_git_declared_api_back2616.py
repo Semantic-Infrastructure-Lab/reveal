@@ -23,7 +23,7 @@ def test_typed_view_and_zero_limit_override_uri(repo_path):
     uri = f'git://{repo_path}?type=history&limit=1'
     assert len(query(uri)['history']) == 1
     result = query(uri, view='history', limit=0)
-    assert result['history'] == []
+    assert len(result['history']) == 3  # limit=0 is every row (Caps row, BACK-2654); it was an empty page
     assert len(query(uri)['history']) == 1
 
 

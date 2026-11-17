@@ -47,8 +47,8 @@ EXPLAIN = ParamSpec('explain', 'boolean', 'Include per-term body relevance evide
                     cli=CliBinding(('--explain',), action='store_true'))
 SORT = ParamSpec('sort', 'string', 'Frontmatter field; prefix - for descending', None, str,
                  cli=CliBinding(('--sort',)))
-LIMIT = ParamSpec('limit', 'integer', 'Answer rows; zero is an empty page', None, int, minimum=0,
-                  zero_policy='empty page', cli=CliBinding(('--limit',)))
+LIMIT = ParamSpec('limit', 'integer', 'Answer rows; 0 = no cap', None, int, minimum=0,
+                  zero_policy='no cap', cli=CliBinding(('--limit',)))
 OFFSET = ParamSpec('offset', 'integer', 'Answer rows skipped after sorting', 0, int, minimum=0,
                    cli=CliBinding(('--offset',)))
 PARAM_SPECS = (WHERE, MATCH, VIEW, FIELD, BACKLINKS, AGGREGATE, LINKS, LINT, LINT_FIELDS,

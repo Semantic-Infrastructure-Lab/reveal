@@ -91,7 +91,7 @@ def test_actual_cli_delivers_partial_or_failed_answer(tmp_path, surviving, outpu
 
 
 @pytest.mark.parametrize('suffix,options,shown', [
-    ('&limit=0', [], []), ('&offset=99', [], []),
+    ('&limit=0', [], ['good.md', 'peer.md']), ('&offset=99', [], []),  # limit=0 is no cap (Caps row, BACK-2654)
     ('', ['--head', '1'], ['good.md']),
     ('', ['--fields', 'results'], ['good.md', 'peer.md']),
 ])
@@ -331,8 +331,10 @@ def test_registered_sdk_partial_total_empty_cuts_and_source_edits(tmp_path, prov
         good.write_bytes(b'---\ntitle: fresh\n---\nneedle\n')
         fresh = await request()
         assert not fresh.is_error and 'fresh' in _text(fresh)
-        cut = await request(_uri(tmp_path, '&limit=0'))
+        cut = await request(_uri(tmp_path, '&offset=1'))
         assert not cut.is_error and '0 of 1' in _text(cut)
+        uncapped = await request(_uri(tmp_path, '&limit=0'))  # no cap (Caps row, BACK-2654); it was this empty cut
+        assert not uncapped.is_error and 'fresh' in _text(uncapped)
         invalid = await request(_uri(tmp_path, '&limit=-1'))
         assert invalid.is_error and 'limit must be >= 0' in _text(invalid)
         bad.write_bytes(b'needle caf\xe9\n')

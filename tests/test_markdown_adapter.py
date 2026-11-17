@@ -389,8 +389,9 @@ class TestEdgeCases:
         """Test limit=0 (edge case)."""
         adapter = MarkdownQueryAdapter(str(sample_docs), query='limit=0')
         result = adapter.get_structure()
-        # limit=0 means no results
-        assert len(result['results']) == 0
+        # limit=0 is no cap: every result, as when omitted (Caps row, BACK-2654; it was an empty page)
+        everything = MarkdownQueryAdapter(str(sample_docs), query='').get_structure()
+        assert len(result['results']) == len(everything['results']) > 0
 
 
 class TestUnknownFilterFieldDisclosure:

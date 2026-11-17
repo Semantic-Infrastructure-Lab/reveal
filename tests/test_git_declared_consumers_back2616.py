@@ -27,6 +27,6 @@ def test_sdk_canonical_controls_and_fresh_followup(repo_path):
         assert not partial.is_error
         assert any(w.get('code') == 'analysis_incomplete' for w in json.loads(_text(partial))['meta']['warnings'])
         fresh = await session.call_tool('reveal_query', {'uri': uri + '&limit=0', 'provenance': True})
-        assert not fresh.is_error and json.loads(_text(fresh))['history'] == []
+        assert not fresh.is_error and json.loads(_text(fresh))['history']  # limit=0: every row (Caps row, BACK-2654)
         assert not any(w.get('code') == 'analysis_incomplete' for w in json.loads(_text(fresh))['meta']['warnings'])
     _run(repo_path, scenario)

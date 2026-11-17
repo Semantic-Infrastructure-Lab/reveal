@@ -543,7 +543,8 @@ class AstAdapter(ResourceAdapter):
 
         # Auto-cap large unfiltered result sets to prevent accidental token floods.
         # Applies only when no explicit limit was set by the user.
-        auto_capped = not self.result_control.limit and len(controlled) > DEFAULT_RESULT_CAP
+        auto_capped = (self.result_control.limit is None and not self.result_control.uncapped
+                       and len(controlled) > DEFAULT_RESULT_CAP)
         if auto_capped:
             controlled = controlled[:DEFAULT_RESULT_CAP]
 

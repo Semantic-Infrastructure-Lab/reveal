@@ -71,9 +71,9 @@ MERGES = ParamSpec('merges', 'boolean', 'Include or exclude merge commits; omitt
 NO_MERGES = ParamSpec('no_merges', 'boolean', 'Legacy exclusion of merge commits in history', None, boolean_value)
 RAW = ParamSpec('raw', 'boolean', 'Legacy raw historical file content', None, boolean_value)
 SORT = string('sort', 'Commit field; prefix - for descending')
-LIMIT = ParamSpec('limit', 'integer', 'Returned rows; zero is empty (legacy type= aggregate requests retain input-window limits)', None,
+LIMIT = ParamSpec('limit', 'integer', 'Returned rows; 0 = no cap (legacy type= aggregate requests retain input-window limits)', None,
                   lambda v: nonnegative_display_limit(v, name='limit'), minimum=0,
-                  zero_policy='empty page', cli_flags=(('all', '1000000'),), cli=CliBinding(('--limit',)))
+                  zero_policy='no cap', cli_flags=(('all', '1000000'),), cli=CliBinding(('--limit',)))
 SCAN_LIMIT = ParamSpec('scan-limit', 'integer', 'Commit-input budget for ownership or timeline; required loss exits 3',
                        None, lambda v: nonnegative_display_limit(v, name='scan-limit'), minimum=0,
                        aliases=('scan_limit',), zero_policy='count no commits',

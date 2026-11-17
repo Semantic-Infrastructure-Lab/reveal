@@ -168,7 +168,7 @@ def get_repository_overview(
     list_branches_func,
     list_tags_func,
     get_recent_commits_func,
-    recent_limit: int = 10,
+    recent_limit: Optional[int] = 10,
 ) -> Dict[str, Any]:
     """Generate repository overview structure.
 
@@ -209,7 +209,8 @@ def get_repository_overview(
     )
     recent.disclose(result, 'commits.recent')
     for field, listed in (('branches.recent', branches), ('tags.recent', tags)):
-        note_truncation(result, field, min(recent_limit, len(listed)), len(listed), 'limit',
+        shown = len(listed) if recent_limit is None else min(recent_limit, len(listed))  # None: limit=0, every row
+        note_truncation(result, field, shown, len(listed), 'limit',
                         hint='raise ?limit=N, or --all')
     # BACK-1166: surface a content-pattern search degradation, if the caller
     # requested one (get_recent_commits_func resets this before running).
@@ -225,7 +226,7 @@ def get_repository_overview(
 
 def get_recent_commits(
     repo: 'pygit2.Repository',
-    limit: int,
+    limit: Optional[int],
     format_commit_func,
     matches_all_filters_func,
     result_control,
@@ -244,7 +245,7 @@ def get_recent_commits(
 def get_commit_history(
     repo: 'pygit2.Repository',
     start_commit: 'pygit2.Commit',
-    limit: int,
+    limit: Optional[int],
     format_commit_func,
     matches_all_filters_func,
     result_control,
@@ -294,7 +295,7 @@ def bucket_commits(commit_dicts: List[Dict[str, Any]], bucket: str) -> List[Dict
 def get_commit_timeline(
     repo: 'pygit2.Repository',
     start_commit: 'pygit2.Commit',
-    limit: int,
+    limit: Optional[int],
     format_commit_func,
     matches_all_filters_func,
     no_merges: bool = False,

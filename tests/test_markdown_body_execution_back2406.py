@@ -51,7 +51,7 @@ def assert_analysis(answer, state, candidates, analyzed, failed, discovery=0):
     (b'needle\n', 'body-contains=needle', ['good.md']),
     (b'other\n', 'body-contains=needle', []),
     (b'---\ntitle: other\n---\nneedle\n', 'body-contains=needle&title=wanted', []),
-    (b'needle\n', 'body-contains=needle&limit=0', []),
+    (b'needle\n', 'body-contains=needle&limit=0', ['good.md']),  # limit=0 is no cap (Caps row, BACK-2654)
 ])
 def test_successful_source_survives_selection_with_decode_loss(tmp_path, healthy, query, expected):
     document(tmp_path, 'good.md', healthy)

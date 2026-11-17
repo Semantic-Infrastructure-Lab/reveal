@@ -10,6 +10,7 @@ from reveal.reveal_types import CONTRACT_VERSION
 from ...errors import MissingResourceError, RequestValidationError
 from ...utils.path_utils import failure_of
 from ...utils.results import ResultBuilder, note_truncation
+from .params import LIMIT
 from .qualification import text_evidence
 from .commits import (commit_filter, resolve_commit, disclose_timeline_cut, history_sort, timeline_fields,
                       walk_history)
@@ -286,7 +287,7 @@ def get_file_history(
     import pygit2
 
     try:
-        limit = int(query.get('limit', 50))
+        limit = LIMIT.row_cap(query.get('limit', 50))
 
         # Start from HEAD or specified ref
         commit = resolve_commit(repo, ref)
@@ -354,7 +355,7 @@ def get_file_timeline(
         raise ValueError(f"Invalid bucket: {bucket!r} (expected 'week' or 'month')")
 
     try:
-        limit = int(query.get('limit', 20000))
+        limit = LIMIT.row_cap(query.get('limit', 20000))
 
         commit = resolve_commit(repo, ref)
         keep = commit_filter(repo, format_commit_func, matches_all_filters_func,

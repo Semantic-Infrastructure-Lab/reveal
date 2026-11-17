@@ -205,7 +205,7 @@ def _native_uncapped_value(adapter_class: Any, fragment: str, fallback: int) -> 
     parameter = fragment.partition('=')[0]
     declaration = next((p for p in getattr(adapter_class, 'PARAM_SPECS', ())
                         if parameter in p.spellings), None)
-    return 0 if declaration is not None and declaration.zero_policy == 'all' else fallback
+    return 0 if declaration is not None and declaration.zero_uncaps else fallback
 
 
 def _reject_unreceived_control(adapter_class: Any, spec: FlagSpec) -> None:

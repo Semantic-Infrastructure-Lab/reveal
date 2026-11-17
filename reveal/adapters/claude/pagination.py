@@ -67,9 +67,7 @@ def page_result(result: Dict[str, Any], params) -> Dict[str, Any]:
     rows = result.get(field)
     if not isinstance(rows, list):
         return _unavailable_page(result, params, field)
-    control = declared_result_control(params)
-    if control.limit == 0:
-        control.limit = None
+    control = declared_result_control(params)  # limit=0 is uncapped there: claude declares it (Caps row)
     result[field] = apply_result_control(rows, control)
     receipt = _request_receipt(params, field)
     receipt.update(applied=True, total=len(rows), shown=len(result[field]))

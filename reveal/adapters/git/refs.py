@@ -6,6 +6,7 @@ from reveal.reveal_types import CONTRACT_VERSION
 
 from ...utils.results import ResultBuilder
 from .commits import disclose_timeline_cut, resolve_commit, timeline_fields
+from .params import LIMIT
 
 if TYPE_CHECKING:
     import pygit2
@@ -27,7 +28,7 @@ def get_ref_structure(
     commit_obj = resolve_commit(repo, ref)
     try:
         # Get commit history from this point
-        limit = int(query.get('limit', 20))
+        limit = LIMIT.row_cap(query.get('limit', 20))
         walk = get_commit_history_func(repo, commit_obj, limit=limit)
     except (KeyError, pygit2.GitError) as e:
         raise ValueError(f"Cannot read the history of {ref}") from e

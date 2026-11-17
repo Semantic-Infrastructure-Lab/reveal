@@ -42,8 +42,8 @@ DETAIL = ParamSpec('detail', 'string', 'Flatten text detail: full (default) or r
                    'full', str, choices=('full', 'raw'), cli=CliBinding(('--detail',)))
 SORT = ParamSpec('sort', 'string', 'Array field; prefix - for descending', None, str,
                  cli=CliBinding(('--sort',)))
-LIMIT = ParamSpec('limit', 'integer', 'Array rows; zero is an empty page', None, lambda v: nonnegative('limit', v), minimum=0,
-                  zero_policy='empty page', cli=CliBinding(('--limit',)))
+LIMIT = ParamSpec('limit', 'integer', 'Array rows; 0 = no cap', None, lambda v: nonnegative('limit', v), minimum=0,
+                  zero_policy='no cap', cli=CliBinding(('--limit',)))
 OFFSET = ParamSpec('offset', 'integer', 'Array rows skipped after sorting', 0, lambda v: nonnegative('offset', v), minimum=0,
                    cli=CliBinding(('--offset',)))
 PARAM_SPECS = (VIEW, WHERE, DETAIL, SORT, LIMIT, OFFSET)

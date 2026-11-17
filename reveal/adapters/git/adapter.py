@@ -26,7 +26,7 @@ from ...utils.results import note_warning
 from ...utils.path_utils import to_posix
 from .renderer import GitRenderer
 from . import refs, commits, files, queries
-from .params import PARAM_SPECS, runtime_query, apply_aggregate_rows, validate_resource_controls
+from .params import LIMIT, PARAM_SPECS, runtime_query, apply_aggregate_rows, validate_resource_controls
 from .qualification import execution_facts, answer_requirement_error, qualify_source_evidence, portable_repository_paths
 
 _SCHEMA_QUERY_PARAMS = {
@@ -385,6 +385,9 @@ class GitAdapter(ResourceAdapter):
             _, self.result_control = parse_result_control(result_control_query)
         else:
             self.result_control = ResultControl()
+        fields = vars(self.result_control)  # translating is not reading: the ledger still sees an unread limit
+        if fields.get('limit') is not None and LIMIT.row_cap(fields['limit']) is None:
+            fields.update(limit=None, uncapped=True)  # Caps row: limit=0 is every row
 
     def _initialize_query_filters(self, filter_parts: list) -> None:
         """Initialize query filters from parts.
@@ -793,7 +796,7 @@ class GitAdapter(ResourceAdapter):
             bucket = self.query.get('bucket', 'month')
             if bucket not in ('week', 'month'):
                 raise ValueError(f"Invalid bucket: {bucket!r} (expected 'week' or 'month')")
-            limit = int(self.query.get('limit', 20000))
+            limit = LIMIT.row_cap(self.query.get('limit', 20000))
             return refs.get_ref_timeline(
                 repo, self.ref, bucket,
                 lambda repo, start_commit, _lim=limit, _nm=no_merges: \
@@ -837,7 +840,7 @@ class GitAdapter(ResourceAdapter):
                         no_merges=_nm,
                         content_pattern=_cp,
                     ),
-                recent_limit=int(self.query.get('limit', 10)),
+                recent_limit=LIMIT.row_cap(self.query.get('limit', 10)),
             )
 
     def get_element(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:
