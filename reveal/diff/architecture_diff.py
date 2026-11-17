@@ -890,6 +890,16 @@ def _diagnostic_message(message: str, root: Path) -> str:
     return message
 
 
+def _diagnostic_failure(record: Dict[str, Any], root: Path) -> Dict[str, Any]:
+    """A ``failures`` entry (BACK-2659) without the snapshot root, in its path and its reason."""
+    record = dict(record)
+    if record.get('path'):
+        record['path'] = _diagnostic_path(record['path'], root)
+    if record.get('reason'):
+        record['reason'] = _diagnostic_message(record['reason'], root)
+    return record
+
+
 def _snapshot_meta(raw: Dict[str, Any], side: str) -> List[Tuple[str, Dict[str, Any]]]:
     """Attribute diagnostics and remove known materialization path spellings."""
     root = raw['root']
@@ -903,6 +913,8 @@ def _snapshot_meta(raw: Dict[str, Any], side: str) -> List[Tuple[str, Dict[str, 
                 entry['files'] = [_diagnostic_path(file, root) for file in entry['files']]
             if entry.get('causes'):
                 entry['causes'] = [_diagnostic_message(cause, root) for cause in entry['causes']]
+            if entry.get('failures'):
+                entry['failures'] = [_diagnostic_failure(record, root) for record in entry['failures']]
             entry['message'] = f"{side}: {_diagnostic_message(entry.get('message', ''), root)}"
             entries.append((kind, entry))
     return entries
