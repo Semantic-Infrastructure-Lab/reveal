@@ -230,6 +230,11 @@ PRODUCTION_CASES = {
     'param:imports.max_files': lambda f: [f'imports://{Path(f).parent}?sort=-fan-in&max_files=100'],
     # Rule 4 (BACK-2654, note #17): the global --verbose is --detail full, or the noun's legacy word verbose.
     'flag:--verbose': lambda f: [f'calls://{Path(f).parent}?callees=auth_gate', '--verbose'],
+    # Rule 15 (BACK-2654): each presentation switch's --no-NAME is --NAME off, on every parser that carries it.
+    'flag:--no-breadcrumbs': lambda f: [f, '--no-breadcrumbs'],
+    'flag:--no-fallback': lambda f: [f, '--no-fallback'],
+    'flag:--no-group': lambda f: ['check', f, '--no-group'],
+    'flag:--no-snippets': lambda f: ['check', f, '--no-snippets'],
     'param:git.verbose': lambda f: [f'git://{Path(f).parent}?verbose'],
     'param:pack.verbose': lambda f: [f'pack://{Path(f).parent}?verbose'],
     'param:overview.verbose': lambda f: [f'overview://{Path(f).parent}?verbose'],

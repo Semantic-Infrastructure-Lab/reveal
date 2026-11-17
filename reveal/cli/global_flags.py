@@ -11,12 +11,14 @@ main._dispatch_and_run applies it around the run, from the parsed args.
 
 from __future__ import annotations
 
-from argparse import Namespace
-from typing import Any
+from argparse import ArgumentTypeError, Namespace
+from typing import Any, Dict
 
 from ..utils.gitignore import set_gitignore_enabled
 from ..utils.invocation_log import answer_is_json
 from ..utils.json_utils import set_provenance_enabled
+from ..utils.query_binding import ScalarOnceAction, switch_value
+from .invocation import SWITCHES, retirement_note
 
 
 # Flags in effect for every command once parsed: applied by apply_global_flags below, or, for
@@ -34,6 +36,38 @@ def add_gitignore_arguments(parser: Any) -> None:
                         help='Skip files git ignores (default: enabled; tracked files are never skipped)')
     parser.add_argument('--no-gitignore', action='store_false', dest='respect_gitignore',
                         help='Include files git ignores')
+
+
+def _on_off(value: str) -> str:
+    """argparse ``type`` of a switch: the word as typed, checked by the shared on/off codec."""
+    try:
+        switch_value(value)
+    except ValueError:
+        raise ArgumentTypeError(f'expected on or off, got {value!r}') from None
+    return value
+
+
+class _SwitchAction(ScalarOnceAction):
+    """One spelling of a switch: ``--NAME on|off`` records the word typed, ``--no-NAME`` and a short spelling record
+    ``off``. The spellings of one switch share one conflict box, so different values exit 2 naming both and equal ones
+    are one (COMMAND_MODEL "Conflicting values"); the namespace gets the codec's boolean."""
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        typed = 'off' if self.nargs == 0 else values
+        self._store(namespace, typed, option_string)
+        setattr(namespace, self.dest, switch_value(typed))
+        if option_string == '--no-' + self.dest:
+            retirement_note('flag:' + option_string)
+
+
+def add_switch_argument(parser: Any, name: str) -> None:
+    """``--NAME on|off`` and its legacy ``--no-NAME`` (plus any short spelling of off), from ``SWITCHES[name]``."""
+    switch = SWITCHES[name]
+    shared: Dict[str, Any] = {'dest': name, 'default': None, 'action': _SwitchAction, 'comparable': switch_value,
+                              'seen': {}}
+    parser.add_argument('--' + name, type=_on_off, metavar='on|off', help=switch.help, **shared)
+    parser.add_argument('--no-' + name, *switch.short_off, nargs=0, **shared,
+                        help=f'Same as --{name} off (--no-{name} is deprecated)')
 
 
 _EXCLUDE_HELP = ('Exclude files/directories matching pattern from analysis entirely '
@@ -60,7 +94,6 @@ def rule_patterns(value: str) -> str:
     Returns the value normalized (spaces and empty items dropped), still comma-joined,
     so every consumer's ``.split(',')`` keeps working.
     """
-    from argparse import ArgumentTypeError
     from ..rules import parse_rule_patterns
     try:
         return ','.join(parse_rule_patterns(value))

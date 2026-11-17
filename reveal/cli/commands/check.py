@@ -15,7 +15,7 @@ import argparse
 import textwrap
 from pathlib import Path
 from argparse import Namespace
-from ..global_flags import add_exclude_argument, add_gitignore_arguments, rule_patterns
+from ..global_flags import add_exclude_argument, add_gitignore_arguments, add_switch_argument, rule_patterns
 from ...rules.base import category_legend
 from ..routing.ledger import complete
 
@@ -24,7 +24,7 @@ def create_check_parser() -> argparse.ArgumentParser:
     """Create a standalone argument parser for `reveal check`.
 
     Uses _build_global_options_parser() via parents= so the check subcommand
-    automatically inherits --format, --copy, --verbose, --no-breadcrumbs, etc.
+    automatically inherits --format, --copy, --verbose, --breadcrumbs, etc.
     """
     from reveal.cli.parser import _build_global_options_parser
     from reveal.cli.invocation import exit_codes_text
@@ -104,10 +104,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
              'Repeatable. Excluded files are never parsed or checked (BACK-1042).',
     )
     add_gitignore_arguments(parser)
-    parser.add_argument(
-        '--no-group', action='store_true', dest='no_group',
-        help='Show every check result individually (disables collapsing repeated rules)',
-    )
+    add_switch_argument(parser, 'group')
     parser.add_argument(
         '--severity', type=str, metavar='LEVEL',
         help='Minimum severity level to report: low, medium, high, critical. Default: medium and above',
@@ -145,15 +142,9 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         '--max-snippet-chars', type=int, metavar='N', dest='max_snippet_chars',
         help='Truncate the embedded source-code excerpt (the 📝 line / JSON "context" '
              'field) to N characters (BACK-1181). rule/file/line/severity/suggestion are '
-             'never truncated. See also --no-snippets to omit the excerpt entirely.',
+             'never truncated. See also --snippets off to omit the excerpt entirely.',
     )
-    parser.add_argument(
-        '--no-snippets', action='store_true', dest='no_snippets',
-        help='Omit the embedded source-code excerpt (the 📝 line / JSON "context" field) '
-             'from violation output -- rule/file/line/severity/suggestion still print. For '
-             'a compliance-sensitive engagement where the evidence output needs to be '
-             'shareable without embedding actual source (BACK-1182).',
-    )
+    add_switch_argument(parser, 'snippets')
     parser.add_argument(
         '--exit-zero', action='store_true', dest='exit_zero',
         help='Always exit 0 once the scan itself completed, regardless of findings or '
@@ -269,7 +260,7 @@ def run_check(args: Namespace) -> None:
         from reveal.file_handler import _get_analyzer_or_exit, _build_file_cli_overrides
         from reveal.checks import run_pattern_detection
         from reveal.config import RevealConfig
-        allow_fallback = not getattr(args, 'no_fallback', False)
+        allow_fallback = getattr(args, 'fallback', None) is not False
         # An unreadable file could not be checked: exit 3 like a recursive check
         # of the same file, or 0 under --exit-zero (BACK-1424).
         analyzer = _get_analyzer_or_exit(

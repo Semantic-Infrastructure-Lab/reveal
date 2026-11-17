@@ -1457,7 +1457,7 @@ reveal check /etc/nginx/nginx.conf
 
 # Large generated configs collapse repeated rules by default
 reveal check ea-nginx.conf          # N003 x2,685 shown as one summary line
-reveal check ea-nginx.conf --no-group  # expand all occurrences
+reveal check ea-nginx.conf --group off  # expand all occurrences
 
 # Check nobody-user ACL access (cPanel ACME requirement)
 reveal /path/user.conf --check-acl

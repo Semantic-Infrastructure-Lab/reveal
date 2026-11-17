@@ -168,3 +168,25 @@ def test_other_no_flags_are_not_switches_yet(flag):
     --no-gitignore is not one of the four presentation switches; none has a generated row."""
     from reveal.cli.invocation import RETIREMENTS
     assert f'flag:{flag}' not in RETIREMENTS
+
+
+@pytest.mark.parametrize('typed', [['--group', 'off'], ['--no-group']])
+def test_a_switch_typed_off_is_a_given_flag_beside_a_second_path(project, typed):
+    """A switch off is a value (False), not an absent flag: beside a second path it is refused like --group on, and
+    the refusal names the switch by its flag; the legacy spelling also prints its note."""
+    from conftest import _run_reveal_direct
+    result = _run_reveal_direct('a.py', 'long.py', *typed)
+    assert result.returncode == 2 and 'long.py' in result.stderr and '--group' in result.stderr, result.stderr
+    assert ('note: --no-group is deprecated; use --group off.' in result.stderr) == (typed == ['--no-group'])
+
+
+@pytest.mark.parametrize('view', [[], ['f'], ['--metadata'], ['--typed']], ids=['structure', 'element', 'metadata', 'typed'])
+@pytest.mark.parametrize('switch', ['breadcrumbs', 'fallback'])
+def test_the_old_no_flag_note_reaches_every_file_view_json_answer(project, switch, view):
+    """Rule 2 on the file route's JSON writers (structure, element, metadata, typed): a legacy switch spelling there
+    answers with its retired_spelling warning, as the URI and subcommand writers already do."""
+    from conftest import _run_reveal_direct
+    result = _run_reveal_direct('a.py', *view, f'--no-{switch}', '--format', 'json')
+    warnings = json.loads(result.stdout).get('meta', {}).get('warnings', [])
+    assert result.returncode == 0 and [w.get('field') for w in warnings if w.get('code') == 'retired_spelling'] == [
+        f'flag:--no-{switch}'], result.stdout

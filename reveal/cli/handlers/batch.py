@@ -121,7 +121,7 @@ def _process_stdin_file(
         from reveal.file_handler import _get_analyzer_or_exit, _build_file_cli_overrides
         from reveal.checks import run_pattern_detection
         from reveal.config import RevealConfig
-        allow_fallback = not getattr(args, 'no_fallback', False)
+        allow_fallback = getattr(args, 'fallback', None) is not False
         analyzer = _get_analyzer_or_exit(str(path), allow_fallback)
         cli_overrides = _build_file_cli_overrides(args)
         config = RevealConfig.get(start_path=path.parent, cli_overrides=cli_overrides or None)
@@ -680,7 +680,7 @@ def _schema_batch_entry(target: str, schema: dict, args: 'Namespace') -> dict:
         if path.suffix.lower() not in get_markdown_extensions():
             entry['error'] = 'Schema validation requires a Markdown file'
             return entry
-        analyzer_class = get_analyzer(target, allow_fallback=not getattr(args, 'no_fallback', False))
+        analyzer_class = get_analyzer(target, allow_fallback=getattr(args, 'fallback', None) is not False)
         if analyzer_class is None:
             entry['error'] = 'No analyzer available for input'
             return entry

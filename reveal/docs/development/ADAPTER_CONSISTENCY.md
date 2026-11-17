@@ -78,7 +78,7 @@ table mirrors those groups; verified live against reveal-cli 0.129.0.
 --format {text,json,typed,grep}   # Output format (each target accepts its declared subset)
 --copy                             # Copy to clipboard
 --verbose                          # Detailed output
---no-breadcrumbs                   # Scripting mode
+--breadcrumbs off                  # Scripting mode
 --head N / --tail N / --range      # Semantic slicing
 --sort FIELD / --desc / --asc      # Sort results
 --limit N / --all                  # Cap results / lift caps (--limit is also --check's file cap)

@@ -1337,7 +1337,7 @@ class TestHandleFile(unittest.TestCase):
             os.unlink(temp_path)
 
     def test_no_fallback_flag(self):
-        """Verify --no-fallback flag prevents fallback analyzer."""
+        """Verify --fallback off (legacy --no-fallback) prevents fallback analyzer."""
         import tempfile
         from reveal.cli.routing import handle_file
         from reveal import registry
@@ -1348,7 +1348,7 @@ class TestHandleFile(unittest.TestCase):
 
         try:
             mock_args = Namespace(
-                no_fallback=True,
+                fallback=False,
                 check=False,
                 validate_schema=None
             )

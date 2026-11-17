@@ -21,7 +21,7 @@ from .utils.severity import (SEVERITY_ORDER, check_fail_on, check_gate_count,
                             severity_counts, filter_detections_by_severity, check_exit_code)
 
 # When a single rule fires this many times in one file, collapse to a summary line.
-# Users can disable with --no-group.
+# Users can disable with --group off.
 _GROUP_THRESHOLD = 10
 
 # Patterns indicating a file is auto-generated and should be skipped in recursive --check.
@@ -363,7 +363,7 @@ def _format_detections_text(
     """Format detections as human-readable text.
 
     When a rule fires >= _GROUP_THRESHOLD times, collapses to a single summary
-    line to keep output scannable.  Use --no-group to expand everything.
+    line to keep output scannable.  Use --group off to expand everything.
 
     Args:
         path: File path
@@ -433,7 +433,7 @@ def _format_detections_text(
             shown_collapsed.add(d.rule_code)
             total = len(by_rule[d.rule_code])
             print(d.render(no_snippets=no_snippets, max_snippet_chars=max_snippet_chars))
-            print(f"\n  ↳ +{total - 1} more {d.rule_code} occurrences hidden — use --no-group to expand\n")
+            print(f"\n  ↳ +{total - 1} more {d.rule_code} occurrences hidden — use --group off to expand\n")
 
 
 def _analyzer_error_position(analyzer: Any) -> Optional[Tuple[int, int]]:
@@ -534,8 +534,8 @@ def run_pattern_detection(
     # Parse select/ignore options
     select = args.select.split(',') if args.select else None
     ignore = args.ignore.split(',') if args.ignore else None
-    no_group = getattr(args, 'no_group', False)
-    no_snippets = getattr(args, 'no_snippets', False)
+    no_group = getattr(args, 'group', None) is False
+    no_snippets = getattr(args, 'snippets', None) is False
     severity_arg = getattr(args, 'severity', None)
 
     # Get structure and content

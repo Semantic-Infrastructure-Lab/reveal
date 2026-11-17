@@ -31,7 +31,7 @@ CASES = [
     ('py', ['--typed']), ('py', ['--filter', 'function']),
     ('conf', ['--server-name', 'a.example.com']), ('conf', ['--log-path', 'x.log']),
     ('py', ['--select', 'E501']), ('py', ['--ignore', 'E501']), ('py', ['--severity', 'high']),
-    ('py', ['--no-group']),
+    ('py', ['--group', 'off']),
 ]
 CONTENT = {'html': HTML, 'md': MD, 'py': PY, 'conf': CONF}
 

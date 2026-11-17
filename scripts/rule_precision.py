@@ -209,7 +209,7 @@ def main(argv=None) -> int:
         else:
             identity = implementation_identity()
             result = subprocess.run([sys.executable, '-m', 'reveal', 'check', str(root),
-                                     '--select='+','.join(args.rules), '--format=json', '--no-snippets'],
+                                     '--select='+','.join(args.rules), '--format=json', '--snippets=off'],
                                     capture_output=True, text=True, encoding='utf-8', timeout=600)
             report = json.loads(result.stdout)
             if result.returncode not in (0, 1, 3):

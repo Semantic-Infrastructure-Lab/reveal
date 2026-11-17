@@ -23,6 +23,7 @@ from .formats import (  # noqa: E402
 from ...file_handler import handle_file  # noqa: E402
 from .grep import handle_grep, handle_grep_directory
 from .ledger import FlagLedger, ledger_of, mark, peek  # noqa: E402
+from ..defaults import _parser_defaults  # noqa: E402
 from ...utils.path_utils import to_posix  # noqa: E402
 from ...registry import get_markdown_extensions  # noqa: E402
 
@@ -412,7 +413,7 @@ WHOLE_FILE_FLAGS = {
     'related': '--related', 'related_all': '--related-all', 'related_flat': '--related-flat',
     'typed': '--typed', 'filter': '--filter',
     'server_name': '--server-name', 'log_path': '--log-path',
-    'select': '--select', 'ignore': '--ignore', 'severity': '--severity', 'no_group': '--no-group',
+    'select': '--select', 'ignore': '--ignore', 'severity': '--severity', 'group': '--group',
 }
 
 # Flags that ARE the element, spelled as a flag (dest -> spelling). Beside an element argument
@@ -440,8 +441,11 @@ STDIN_BLIND_FLAGS = frozenset({'explain_file', 'capabilities', 'show_ast', 'deco
 
 
 def _given_flags(args: 'Namespace', table: dict) -> list:
-    """The (dest, spelling) pairs of ``table`` the command line set."""
-    return [(dest, spelling) for dest, spelling in table.items() if getattr(args, dest, None)]
+    """The (dest, spelling) pairs of ``table`` the command line set: a value other than the parser's default, as the
+    flag ledger reads it, so a switch typed off (``--group off``, default None) counts as given."""
+    defaults = _parser_defaults()
+    return [(dest, spelling) for dest, spelling in table.items()
+            if getattr(args, dest, None) not in (None, defaults.get(dest))]
 
 
 def reject_ignored_element(args: 'Namespace') -> None:

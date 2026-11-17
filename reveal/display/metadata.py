@@ -5,6 +5,7 @@ from typing import Optional
 
 from reveal.base import FileAnalyzer
 from reveal.utils import safe_json_dumps, print_breadcrumbs
+from reveal.utils.json_utils import attach_invocation_warnings
 from reveal.utils.formatting import lines_label
 
 
@@ -22,9 +23,9 @@ def show_metadata(analyzer: FileAnalyzer, output_format: str, config=None):
     if output_format == 'json':
         from ..utils.results import ResultBuilder
         from ..reveal_types import CONTRACT_VERSION
-        print(safe_json_dumps(ResultBuilder.create(
+        print(safe_json_dumps(attach_invocation_warnings(ResultBuilder.create(
             'file_metadata', analyzer.path, source_type='file', contract_version=CONTRACT_VERSION,
-            data=meta)))
+            data=meta))))
     else:
         print(f"File: {meta['name']}\n")
         print(f"Path:     {meta['path']}")

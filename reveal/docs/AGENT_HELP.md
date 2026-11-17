@@ -67,7 +67,7 @@ Guides >200 lines show the first section by default (progressive disclosure). Ap
 | Databases, env, SSL, nginx, other resources | `reveal help://adapters` |
 
 - **Limit results:** `calls --sort=-callers` and `imports --sort=-fan-in` accept `--limit N` (legacy `--top N` and `--rank` note their replacements); `overview --limit N` caps each map section. Caps depend on the selected view: Calls caller/callee walks and the default Imports summary do not use `limit`. Other nouns and URI forms list their caps in `help://schemas/<adapter>`; a note names an unused cap. `--head N` slices list output.
-- **Scripting:** `--format json` puts the whole answer on stdout, its warnings and notes inside it (`meta.warnings`), with nothing printed beside it; `--no-breadcrumbs` drops the next-step hints. A target that cannot render a `--format` value exits 2.
+- **Scripting:** `--format json` puts the whole answer on stdout, its warnings and notes inside it (`meta.warnings`), with nothing printed beside it; `--breadcrumbs off` (or `-q`) drops the next-step hints. A target that cannot render a `--format` value exits 2.
 - **Machine-readable discovery:** `reveal 'help://schemas/<adapter>'` gives one adapter's query params and output shape; `reveal --discover` gives every adapter's schema (query params, flags, output types, examples) as one JSON document (large: ~15,000 tokens); rules are `reveal --rules`.
 - **Exit codes:** `check` 0 clean, 1 issues found, 2 usage error, 3 scan incomplete or a requested `--output json=PATH` artifact that could not be written (`--fail-on none` reports issues without exit 1 but never hides an incomplete scan; the legacy `--exit-zero` does, and cannot be combined with it); `health` 0 pass, 1 findings (warnings or failing checks), 2 usage, 3 a check failed, could not reach its target or was incomplete (a target the check does not apply to never fails the run; `--fail-on none` skips 1); `check --changed RANGE` uses `check`'s codes, with 2 for an unusable range; `imports` defaults to no findings gate, with `--fail-on findings` for exit 1 on a `--circular`, `--unused` or `--violations` row, usage 2 and incomplete/output failure 3; `metrics --view hotspots` (and the retired `hotspots`) defaults to no findings gate; `--fail-on findings` exits 1 for an analysed file with quality below 70 or a function with complexity above 20, usage exits 2, and incomplete/output failure exits 3.
 
@@ -1834,7 +1834,7 @@ reveal check ea-nginx.conf --ignore N011,E501  # suppress certbot/line-length no
 
 # Tip: large generated configs (e.g. cPanel) collapse repeated rules by default
 reveal check ea-nginx.conf             # 2,685 N003s shown as one summary line
-reveal check ea-nginx.conf --no-group  # expand all occurrences
+reveal check ea-nginx.conf --group off  # expand all occurrences
 # Add '# reveal: generated' to skip a file in recursive sweeps
 
 # Dockerfile
@@ -2870,7 +2870,7 @@ reveal file.py process_request --copy
 reveal metrics . --view hotspots --copy
 
 # Suppress breadcrumb hints (clean output for scripts / agents)
-reveal file.py -q                    # -q / --no-breadcrumbs
+reveal file.py -q                    # -q / --breadcrumbs off
 
 # Default format for every call in this shell / agent session
 export REVEAL_FORMAT=json
@@ -3406,7 +3406,7 @@ The message now includes line count — use it to decide whether `Read` is worth
 3. **TreeSitter parser missing**
    ```bash
    # Try without TreeSitter (uses fallback)
-   reveal script.py --no-fallback
+   reveal script.py --fallback off
 
    # Check which parsers are available
    reveal reveal://adapters

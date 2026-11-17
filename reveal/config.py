@@ -1221,7 +1221,7 @@ class RevealConfig:
             breadcrumbs are automatically suppressed.
 
         First-run hint:
-            On first use in a terminal, shows a hint about --no-breadcrumbs.
+            On first use in a terminal, shows a hint about --breadcrumbs off.
 
         Returns:
             True if breadcrumbs should be displayed (default: True for TTY)

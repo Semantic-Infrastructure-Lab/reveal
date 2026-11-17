@@ -182,8 +182,9 @@ def _build_file_cli_overrides(args: Optional['Namespace']) -> dict:
         CLI overrides dict
     """
     cli_overrides = {}
-    if args and getattr(args, 'no_breadcrumbs', False):
-        cli_overrides['display'] = {'breadcrumbs': False}
+    breadcrumbs = getattr(args, 'breadcrumbs', None) if args else None
+    if breadcrumbs is not None:  # typed --breadcrumbs on|off overrides config, REVEAL_BREADCRUMBS and the TTY default
+        cli_overrides['display'] = {'breadcrumbs': breadcrumbs}
     return cli_overrides
 
 
@@ -533,7 +534,7 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
 
     args = _effects_args(args, path, show_meta)
 
-    allow_fallback = not getattr(args, 'no_fallback', False) if args else True
+    allow_fallback = getattr(args, 'fallback', None) is not False if args else True
     analyzer = _get_analyzer_or_exit(path, allow_fallback, nav_source=_has_nav_flag(args))
 
     cli_overrides = _build_file_cli_overrides(args)

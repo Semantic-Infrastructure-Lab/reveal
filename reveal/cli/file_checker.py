@@ -172,7 +172,7 @@ def _print_grouped_detections(
     which rule codes have already had their full suggestion+context shown
     anywhere — first occurrence run-wide gets the full block, every later
     one (same file or a different one) gets the terse file:line line only.
-    `--no-group` still bypasses this, same as the within-file collapsing.
+    `--group off` still bypasses this, same as the within-file collapsing.
 
     Args:
         detections: Ordered list of Detection objects for this file
@@ -221,7 +221,7 @@ def _print_grouped_detections(
             shown_collapsed.add(d.rule_code)
             total = len(by_rule[d.rule_code])
             _emit(d, icon)
-            print(f"  ↳ +{total - 1} more {d.rule_code} occurrences hidden — use --no-group to expand")
+            print(f"  ↳ +{total - 1} more {d.rule_code} occurrences hidden — use --group off to expand")
 
 
 def _cwd_relative(file_path: Path, directory: Path, cwd: Optional[Path] = None) -> str:
@@ -1293,7 +1293,7 @@ def _check_views(formats, checked: List[_CheckedFile], files: List[Path], direct
         # applied --max-items or the snippet flags, BACK-1035).
         if fmt == 'text':
             max_items = getattr(args, 'max_items', None)
-            no_snippets = getattr(args, 'no_snippets', False)
+            no_snippets = getattr(args, 'snippets', None) is False
             max_snippet_chars = getattr(args, 'max_snippet_chars', None)
             limit = getattr(args, 'limit', None)
             if limit is None:  # --limit not typed (parser default is None; URI targets share the flag)
@@ -1301,7 +1301,7 @@ def _check_views(formats, checked: List[_CheckedFile], files: List[Path], direct
             text = _build_text_report(checked, limit, max_items)
 
             def render_text(_result: dict, text=text, limit=limit) -> None:
-                _print_text_report(text, limit, no_group=getattr(args, 'no_group', False),
+                _print_text_report(text, limit, no_group=getattr(args, 'group', None) is False,
                                    no_snippets=no_snippets, max_snippet_chars=max_snippet_chars)
                 render_check_coverage(coverage, selected=bool(select), said=disclosures)
                 low = tally.severity_totals.get('low', 0)
@@ -1328,7 +1328,7 @@ def _check_views(formats, checked: List[_CheckedFile], files: List[Path], direct
             views[fmt] = (report(tally, budget, entries), render_grep)
         else:
             entries, budget = _json_file_entries(
-                checked, getattr(args, 'max_items', None), no_snippets=getattr(args, 'no_snippets', False),
+                checked, getattr(args, 'max_items', None), no_snippets=getattr(args, 'snippets', None) is False,
                 max_snippet_chars=getattr(args, 'max_snippet_chars', None))
             views[fmt] = (attach_provenance(report(tally, budget, entries)), None)
     return views

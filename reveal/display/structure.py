@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional, cast
 from reveal.base import FileAnalyzer
 from reveal.defaults import DisplayDefaults
 from reveal.utils import safe_json_dumps, get_file_type_from_analyzer, print_breadcrumbs
+from reveal.utils.json_utils import attach_invocation_warnings
 from reveal.utils.formatting import lines_label
 from reveal.utils.path_utils import is_minified_content, is_minified_filename, to_posix
 from reveal.utils.results import note_truncation, outcome_of, truncations_of
@@ -280,10 +281,10 @@ def _render_typed_structure_output(
             result["warnings"] = [warning]
         from ..utils.results import ResultBuilder
         from ..reveal_types import CONTRACT_VERSION
-        print(safe_json_dumps(ResultBuilder.create(
+        print(safe_json_dumps(attach_invocation_warnings(ResultBuilder.create(
             result.pop('type') or 'typed_structure', analyzer.path, data=result,
             source_type='file', contract_version=CONTRACT_VERSION,
-            meta={'warnings': [warning] if warning else [], 'errors': []})))
+            meta={'warnings': [warning] if warning else [], 'errors': []}))))
         return
 
     # Text output: show hierarchical structure with containment
@@ -520,7 +521,7 @@ def _render_json_output(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[s
     meta = result.pop('meta')
     result = dict(ResultBuilder.create(result.pop('type'), analyzer.path, data=result,
                                        source_type='file', contract_version=CONTRACT_VERSION, meta=meta))
-    print(safe_json_dumps(result))
+    print(safe_json_dumps(attach_invocation_warnings(result)))
 
 
 def _should_skip_category(category: str, items: Any) -> bool:

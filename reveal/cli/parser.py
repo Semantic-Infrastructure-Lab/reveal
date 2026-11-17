@@ -12,7 +12,7 @@ from typing import Optional
 # shadowing the editable dev checkout (BACK-1014) shows up immediately as
 # an unexpected site-packages path instead of silently resolving.
 _PACKAGE_DIR = Path(__file__).resolve().parent.parent
-from .global_flags import add_exclude_argument, add_gitignore_arguments, rule_patterns
+from .global_flags import add_exclude_argument, add_gitignore_arguments, add_switch_argument, rule_patterns
 from ..utils.query_binding import ScalarOnceAction
 from .routing.declared import JsonUsageParser, invalid_uri_request, uri_flag_message
 from ..rules.base import category_legend
@@ -248,8 +248,7 @@ def _add_global_options(target) -> None:
                         help='Copy output to clipboard (also prints normally)')
     target.add_argument('--verbose', '-v', action='store_true',
                         help='Show detailed output (e.g., all results instead of truncated summary for imports://)')
-    target.add_argument('--no-breadcrumbs', '-q', action='store_true',
-                        help='Disable breadcrumb navigation hints (scripting mode)')
+    add_switch_argument(target, 'breadcrumbs')
     target.add_argument('--disable-breadcrumbs', action='store_true',
                         help='Permanently disable breadcrumbs in user config')
     target.add_argument('--provenance', action='store_true',
@@ -394,8 +393,7 @@ def _add_type_aware_options(parser: argparse.ArgumentParser) -> None:
 
 def _add_display_options(parser: argparse.ArgumentParser) -> None:
     """Add display and visualization options."""
-    parser.add_argument('--no-fallback', action='store_true',
-                        help='Disable TreeSitter fallback for unknown file types')
+    add_switch_argument(parser, 'fallback')
     parser.add_argument('--depth', type=int, default=None,
                         help='Directory tree depth (default: 3); also overrides the markdown '
                              'heading outline collapse level when set; code-element structural '
@@ -432,8 +430,7 @@ def _add_pattern_detection_options(parser: argparse.ArgumentParser) -> None:
                         help=f'Select specific rules or categories (e.g., "B,S,T" or "B001,S701"). Categories: {category_legend()}')
     parser.add_argument('--ignore', type=rule_patterns, metavar='RULES',
                         help='Ignore specific rules or categories (e.g., "E501" or "C")')
-    parser.add_argument('--no-group', action='store_true', dest='no_group',
-                        help='Show every check result individually (disables collapsing repeated rules)')
+    add_switch_argument(parser, 'group')
     parser.add_argument('--recursive', '-r', action='store_true',
                         help='Process directory recursively (with --check)')
     parser.add_argument('--rules', action='store_true',

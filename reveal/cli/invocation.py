@@ -253,6 +253,30 @@ class Retirement:
         return f'{self.old} {state}; use {self.replacement}.'
 
 
+@dataclass(frozen=True)
+class Switch:
+    """A presentation switch (COMMAND_MODEL "Switches", BACK-2654 rule 15): ``--NAME on|off``. ``--no-NAME`` is its
+    legacy spelling of off (a ``flag:--no-NAME`` RETIREMENTS row, generated from SWITCHES); ``short_off`` are short
+    spellings of off, the same word, so they carry no note."""
+    name: str
+    help: str
+    short_off: Tuple[str, ...] = ()
+
+
+# The one declaration: each parser that carries a switch calls global_flags.add_switch_argument, and RETIREMENTS
+# below generates each switch's flag:--no-NAME row from it. The namespace holds the switch's boolean under NAME, or
+# None when it was not typed (the default applies: config/env for breadcrumbs, on for the others).
+SWITCHES: Dict[str, Switch] = {switch.name: switch for switch in (
+    Switch('breadcrumbs', 'Navigation hints after the output: on, or off for scripting (default: on in a terminal, '
+           'off when piped; REVEAL_BREADCRUMBS and display.breadcrumbs set the default)', short_off=('-q',)),
+    Switch('fallback', 'TreeSitter fallback for file types without an analyzer: on (default) or off'),
+    Switch('group', 'Collapse a rule repeated many times in one file into one line: on (default), or off to show '
+           'every check result'),
+    Switch('snippets', 'The source-code excerpt in each violation (the 📝 line / JSON "context" field): on (default), '
+           'or off to keep only rule/file/line/severity/suggestion, so the output embeds no source (BACK-1182)'),
+)}
+
+
 # The two older BACK-1906 notes, then Phase 2b's call-graph spellings (BACK-2066). A param:
 # row covers the URI parameter and the same parameter typed as a declared subcommand's flag.
 RETIREMENTS: Dict[str, Retirement] = {
@@ -281,6 +305,9 @@ RETIREMENTS: Dict[str, Retirement] = {
     # Rule 4 (COMMAND_MODEL "Detail", BACK-2654): the global --verbose on a declared noun is --detail full; a noun whose
     # verbose lifts its caps declares it as a legacy word of the uncapping control instead (param:<noun>.verbose rows).
     'flag:--verbose': Retirement('--verbose', '--detail full (?detail=full)'),
+    # Switches (COMMAND_MODEL "Switches", BACK-2654 rule 15): each presentation switch's --no-NAME is --NAME off, one
+    # row per SWITCHES entry, generated rather than typed. A short spelling of off (-q) is the same word: no row.
+    **{f'flag:--no-{name}': Retirement(f'--no-{name}', f'--{name} off') for name in SWITCHES},
     # review folded into check --changed plus the diff:// adapter (D3, BACK-2068 slice 3b): it answers as before until the
     # cut. Its hotspots and complexity sections have no new home until stats becomes metrics (BACK-2069);
     # the MCP tool reveal_review keeps its name until Phase 7.
