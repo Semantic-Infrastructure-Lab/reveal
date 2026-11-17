@@ -428,8 +428,8 @@ happened:
 | `config_key_unknown` | a `rules.<CODE>` setting the rule does not have (it is ignored) | `rule`, `key` |
 
 `path` is POSIX. Each problem is one entry however many times the config is read in one
-invocation, including reads inside pool workers and `reveal health`'s child checks. The entry never
-changes the exit code or the answer's completeness. With `--format json` it is not also printed on stderr; any other answer
+invocation, including reads inside pool workers and child processes. The entry never changes
+the exit code or the answer's completeness. With `--format json` it is not also printed on stderr; any other answer
 prints it once on stderr after the answer, as `warning: <message>`, and an MCP text result ends
 with a `[warning: <message>]` line. A plain library call outside any invocation (for example
 `RevealConfig.get()`) logs it through the `reveal.config` logger as before.
