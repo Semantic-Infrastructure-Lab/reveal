@@ -471,7 +471,7 @@ def _record_recovered_warning(recovered: Sequence[str], meta: Dict[str, Any]) ->
     BACK-2665): the import graph behind --architecture/--focus and the --content outlines read
     them, so the answer is incomplete. One finding per file, however many reads saw it."""
     from .ast.analysis import recovered_files_warning
-    warning = recovered_files_warning(sorted(set(recovered)))
+    warning = recovered_files_warning(sorted({to_posix(found) for found in recovered}))
     if warning:
         meta.setdefault('warnings', []).append(warning)
 
