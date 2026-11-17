@@ -227,6 +227,15 @@ def _declared_fragment(args: Any, spec: FlagSpec, binding: Callable[[Any], tuple
     return f"{key}={'true' if value is True else value}"
 
 
+def _fragment_for(args: Any, spec: FlagSpec, adapter_class: Any, scheme: str, declared: Mapping) -> str | None:
+    """The fragment *spec* reaches this adapter with: from a declared noun's own declarations when the flag binds
+    that way (rule 4), else the adapter's CLI_QUERY_FLAGS declaration."""
+    declarations = getattr(adapter_class, 'PARAM_SPECS', None)
+    if spec.declared_binding is not None and declarations:
+        return _declared_fragment(args, spec, spec.declared_binding, declarations, scheme)
+    return declared.get(spec.dest)
+
+
 def inject_query_flags(resource: str, scheme: str, args: Any) -> str:
     """Append the query fragment for every CLI flag in effect that this scheme's adapter
     declares; print a note for the flags it does not support (where the spec says to)."""
@@ -244,10 +253,7 @@ def inject_query_flags(resource: str, scheme: str, args: Any) -> str:
             print(f"Note: {spec.option} has no effect on {scheme}:// -- it does not take "
                   f"sort=/limit=/offset=.", file=sys.stderr)
             continue
-        declarations = getattr(adapter_class, 'PARAM_SPECS', None)
-        fragment = (_declared_fragment(args, spec, spec.declared_binding, declarations, scheme)
-                    if spec.declared_binding is not None and declarations
-                    else declared.get(spec.dest))
+        fragment = _fragment_for(args, spec, adapter_class, scheme, declared)
         if fragment and spec.unbounded is not None and value == 0:
             value = _native_uncapped_value(adapter_class, fragment, spec.unbounded)
         fragment = fragment or spec.universal
