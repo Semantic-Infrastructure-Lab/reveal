@@ -169,8 +169,19 @@ _CAP_CASES = {
     'git-repository': ('commits.recent', lambda p, n: f'git://{p.as_posix()}?limit={n}'),
 }
 
+# Exemptions, each with its written reason. A strict xfail: the cell fails the suite once the budget reaches
+# the list, so the exemption is removed with the fix.
+_MAP_SECTIONS_REASON = ('map sections follow ?top, the Caps-row divergence Overview\'s own package closes (BACK-2669)')
+_EXEMPT_CASES = {
+    f'{noun}-{section}': (f'map.{section}.rows', lambda p, n, noun=noun: f'{noun}://{p.as_posix()}?top={n}')
+    for noun in ('overview', 'architecture') for section in ('fan_in', 'entrypoints')
+}
+_CAP_CASES.update(_EXEMPT_CASES)
 
-@pytest.mark.parametrize('case', sorted(_CAP_CASES))
+
+@pytest.mark.parametrize('case', [
+    pytest.param(case, marks=pytest.mark.xfail(strict=True, reason=_MAP_SECTIONS_REASON))
+    if case in _EXEMPT_CASES else case for case in sorted(_CAP_CASES)])
 def test_every_list_the_cap_shapes_is_reachable_by_the_budget(request, case):
     path, uri = _CAP_CASES[case]
     proj = request.getfixturevalue('repo' if case.startswith('git') else 'proj')
