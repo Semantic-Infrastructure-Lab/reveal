@@ -272,3 +272,80 @@ def test_architecture_diff_strips_the_snapshot_root_from_failures_too(tmp_path):
     assert 'reveal-archdiff-snapshot' not in json.dumps(entry['failures'])
     assert 'Permission denied' in record['reason']
     assert warning['failures'][0]['path'] == target.as_posix()  # the builder's own entry is not mutated
+
+
+# --- step 6: Python's parse message in metrics; architecture diff directories ------------------------
+
+BROKEN_PY = 'def ok():\n    return 1\n\n\ndef broken(:\n    pass\n'
+WALRUS_PY = 'a := 1\n'  # Python rejects it; tree-sitter reads it without an error node
+
+
+def _python_reason(source):
+    """What Python's own parser says, as the silenced ``AST parse failed`` line said it."""
+    import ast
+    try:
+        ast.parse(source)
+    except SyntaxError as error:
+        return f'{error.msg} (line {error.lineno})'
+    raise AssertionError('fixture parses')
+
+
+@pytest.mark.cli
+@pytest.mark.parametrize('noun', ['metrics', 'hotspots'])
+def test_a_broken_python_file_carries_pythons_parse_message_and_line(tmp_path, noun):
+    root = tmp_path / 'proj'
+    root.mkdir()
+    (root / 'b.py').write_text(BROKEN_PY, encoding='utf-8')
+    (root / 'ok.py').write_text('def a():\n    return 1\n', encoding='utf-8')
+    result = _cli(tmp_path, f'{noun}://{root.as_posix()}', '--format', 'json')
+    assert result.stderr == ''
+    (warning,) = [w for w in json.loads(result.stdout)['meta']['warnings'] if w['type'] == 'parse_degraded']
+    assert warning['failures'] == [{'path': 'b.py', 'cause': 'parse_degraded', 'reason': _python_reason(BROKEN_PY)}]
+    text = _cli(tmp_path, f'{noun}://{root.as_posix()}')
+    assert _python_reason(BROKEN_PY).split(' (line')[0] in text.stderr  # the line the JSON now carries
+
+
+@pytest.mark.cli
+def test_a_file_only_python_rejects_carries_the_message_on_its_row_and_keeps_its_exit(tmp_path):
+    """tree-sitter reads ``a := 1``, so the file is not parse_degraded and the exit is unchanged; the
+    rules that parse it with Python skipped it, and the text answer's log line said why: the row says it."""
+    root = tmp_path / 'proj'
+    root.mkdir()
+    (root / 'w.py').write_text(WALRUS_PY, encoding='utf-8')
+    (root / 'ok.py').write_text('def a():\n    return 1\n', encoding='utf-8')
+    result = _cli(tmp_path, f'metrics://{root.as_posix()}', '--format', 'json')
+    assert result.returncode == 0 and result.stderr == ''
+    rows = {row['file']: row for row in json.loads(result.stdout)['files']}
+    assert rows['w.py']['parse_error'] == _python_reason(WALRUS_PY)
+    assert not rows['w.py'].get('parse_degraded')
+    assert 'parse_error' not in rows['ok.py']  # negative control: a clean file has no such field
+
+
+@pytest.mark.cli
+@pytest.mark.skipif(sys.platform == 'win32' or (hasattr(os, 'geteuid') and os.geteuid() == 0),
+                    reason='needs POSIX permissions that bind the current user')
+def test_architecture_diff_names_an_unreadable_directory_relative_to_its_snapshot(tmp_path):
+    """A denied directory in the head tree: every ``analysis_incomplete`` names it relative to the
+    snapshot root, in ``directories`` as in ``message`` and ``failures``, never by the root's own path."""
+    pygit2 = pytest.importorskip('pygit2')
+    repo = pygit2.init_repository(str(tmp_path / 'repo'))
+    src = tmp_path / 'repo' / 'src'
+    (src / 'locked').mkdir(parents=True)
+    (src / 'a.py').write_text('import os\n', encoding='utf-8')
+    (src / 'locked' / 'c.py').write_text('import a\n', encoding='utf-8')
+    for name in ('src/a.py', 'src/locked/c.py'):
+        repo.index.add(name)
+    repo.index.write()
+    sig = pygit2.Signature('fixture', 'fixture@example.invalid')
+    repo.create_commit('HEAD', sig, sig, 'fixture', repo.index.write_tree(), [])
+    (src / 'a.py').write_text('import os\n# dirty\n', encoding='utf-8')
+    (src / 'locked').chmod(0)
+    try:
+        result = _cli(tmp_path / 'repo', f'architecture://{src.as_posix()}?against=HEAD', '--format', 'json')
+    finally:
+        (src / 'locked').chmod(0o755)
+    incomplete = [w for w in json.loads(result.stdout)['meta']['warnings'] if w['type'] == 'analysis_incomplete']
+    assert incomplete
+    for warning in incomplete:
+        assert warning['directories'] == ['locked'], warning
+    assert str(tmp_path) not in json.dumps(incomplete)

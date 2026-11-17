@@ -132,6 +132,46 @@ def test_metrics_failed_rule_run_is_logged_only_beside_a_text_answer(tmp_path, m
     assert len([r for r in caplog.records if 'Check rules failed' in r.getMessage()]) == logged
 
 
+BOOM_ANALYZER = (
+    "from reveal.base import FileAnalyzer\n"
+    "from reveal.registry import register\n\n\n"
+    "@register('.boom', name='boom', icon='')\n"
+    "class BoomAnalyzer(FileAnalyzer):\n"
+    "    def get_structure(self, **kwargs):\n"
+    "        raise ValueError('BOOM_ANALYZER_FAILED')\n")
+DIFF_URI = 'diff://git://HEAD~1/pkg:git://HEAD/pkg'
+
+
+def _diff_repo(root):
+    """A git repo whose newer commit adds a file a project analyzer plugin raises on: diff's git-directory
+    scan skips it (``Skipping <file>@<ref> in directory scan``) and its JSON names it in analysis_failed."""
+    pygit2 = pytest.importorskip('pygit2')
+    repo = pygit2.init_repository(str(root))
+    (root / 'pkg').mkdir()
+    (root / '.reveal' / 'analyzers').mkdir(parents=True)
+    (root / '.reveal' / 'analyzers' / 'boom_analyzer.py').write_text(BOOM_ANALYZER, encoding='utf-8')
+    sig = pygit2.Signature('fixture', 'fixture@example.invalid')
+    parents = []
+    for files in ({'pkg/a.py': 'def a():\n    return 1\n'}, {'pkg/a.boom': 'x\n'}):
+        for name, content in files.items():
+            (root / name).write_text(content, encoding='utf-8')
+            repo.index.add(name)
+        repo.index.write()
+        parents = [repo.create_commit('HEAD', sig, sig, 'fixture', repo.index.write_tree(), parents)]
+    return root
+
+
+@pytest.mark.cli
+def test_diff_git_directory_skip_is_in_the_json_not_beside_it(tmp_path):
+    repo = _diff_repo(tmp_path / 'repo')
+    result = _cli(repo, DIFF_URI, '--format', 'json')
+    assert result.stderr == '', result.stderr
+    (warning,) = [w for w in json.loads(result.stdout)['meta']['warnings'] if w['type'] == 'analysis_failed']
+    assert warning['failures'] == [{'path': 'pkg/a.boom', 'cause': 'ValueError',
+                                    'reason': 'ValueError: BOOM_ANALYZER_FAILED'}]
+    assert 'BOOM_ANALYZER_FAILED' in _cli(repo, DIFF_URI).stderr  # the text answer still prints it
+
+
 @pytest.mark.mcp
 @pytest.mark.component
 def test_real_stdio_session_sends_one_block_per_noun_in_json_mode(tmp_path):
@@ -141,11 +181,14 @@ def test_real_stdio_session_sends_one_block_per_noun_in_json_mode(tmp_path):
     from mcp import ClientSession, StdioServerParameters
     from mcp.client.stdio import stdio_client
     blocks = {}
+    # diff reads the git repository the server runs in (BACK-2659 step 6).
+    repo = _diff_repo(tmp_path / 'repo')
 
     async def exercise():
         env = {key: value for key, value in os.environ.items() if not key.startswith('REVEAL_')}
         env.update(REVEAL_DISK_CACHE='0', XDG_CONFIG_HOME=str(tmp_path / 'xdg'))
-        params = StdioServerParameters(command=sys.executable, args=['-m', 'reveal.mcp_server'], env=env)
+        params = StdioServerParameters(command=sys.executable, args=['-m', 'reveal.mcp_server'], env=env,
+                                       cwd=str(repo))
         with (tmp_path / 'server-stderr.txt').open('w', encoding='utf-8') as errlog:
             async with stdio_client(params, errlog=errlog) as (read, write):
                 async with ClientSession(read, write) as session:
@@ -157,9 +200,18 @@ def test_real_stdio_session_sends_one_block_per_noun_in_json_mode(tmp_path):
                         assert not result.is_error, (noun, query, result.content[0].text[:300])
                         json.loads(result.content[0].text)
                         blocks[f'{noun}{query}'] = [block.text for block in result.content[1:]]
+                    result = await session.call_tool('reveal_query', {'uri': DIFF_URI, 'provenance': True})
+                    assert not result.is_error, result.content[0].text[:300]
+                    assert 'BOOM_ANALYZER_FAILED' in result.content[0].text  # the skip reached the JSON
+                    blocks['diff'] = [block.text for block in result.content[1:]]
 
     asyncio.run(asyncio.wait_for(exercise(), timeout=300))
     assert {name: extra for name, extra in blocks.items() if extra} == {}
+    # The second block is gone (c1a60cb2), so stray stderr beside a JSON answer would only reach the
+    # server's own log: the server's stderr is where zero residual is proven.
+    # The SDK's log handler wraps lines at the terminal width, so whitespace is collapsed first.
+    server_log = ' '.join((tmp_path / 'server-stderr.txt').read_text(encoding='utf-8').split())
+    assert 'beside a JSON answer' not in server_log, server_log[-2000:]
 
 
 def test_stderr_beside_a_json_answer_is_logged_for_the_operator_not_sent(caplog):
