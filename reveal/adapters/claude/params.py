@@ -67,9 +67,11 @@ def _spec(name, schema):
     retired = {'summary', 'search', 'contains', 'tail', 'full', 'raw'}
     cli = None if name in retired else CliBinding(('--' + name,), action='store_true' if kind == 'flag' else None)
     description = ('Deprecated compatibility control; ' if name in retired else '') + schema['description']
-    # tail answers differently from any canonical request (a chronological slice, zero empty): a legacy operation that
-    # selects the answer, with last as its other spelling (COMMAND_MODEL "Legacy operations", BACK-2654 note #9).
-    role = 'operation' if name == 'tail' else None
+    # tail, search and summary answer differently from any canonical request (a chronological slice; a session-wide
+    # search or the overview analytics in place of the path's view): legacy operations that select the answer, last
+    # being tail's other spelling (COMMAND_MODEL "Legacy operations", BACK-2654 notes #9 and #12). contains, full and
+    # raw are standalone too, but filter or detail the answer: no role.
+    role = 'operation' if name in ('tail', 'search', 'summary') else None
     legacy = (LegacySpelling('last', codec=_last_count),) if name == 'tail' else ()
     return ParamSpec(name, kind, description, None, convert,
                      examples=tuple(schema.get('examples', ())), cli=cli, role=role, legacy=legacy)

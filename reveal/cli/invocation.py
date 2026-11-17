@@ -338,12 +338,18 @@ RETIREMENTS: Dict[str, Retirement] = {
     # Decision (e): ast's call filters are retired, not kept as element filters; calls= matched call
     # text in every scanned file instead of the callers index, so the two could disagree.
     # Claude vocabulary retains its legacy readers/codecs until the cut (BACK-2617).
+    # summary, search and contains answer differently from their replacements on most resources (BACK-2654 note #12):
+    # standalone legacy words until the cut; each note names the replacement for what the word did.
     'param:claude.summary': Retirement('claude ?summary',
-        '--detail summary (or ?detail=summary) on a session overview'),
+        'claude://session/NAME?detail=summary (--detail summary) on the session overview; on a session sub-resource '
+        '?summary answered the overview analytics, and detail=summary there exits 2', standalone=True),
     'param:claude.search': Retirement('claude ?search',
-        '--match TEXT (or ?match=TEXT) on the same supported text population; URI match text percent-decodes once'),
+        'claude://session/NAME?match=TEXT (--match TEXT) on the session overview for the session-wide search, or ?match=TEXT '
+        'on sessions, history and search; on a session sub-resource match filters that view or exits 2; URI match text '
+        'percent-decodes once', standalone=True),
     'param:claude.contains': Retirement('claude ?contains',
-        '--view messages --match TEXT for narrative text, or --match TEXT with --tools/--errors for tool-result text; URI match text percent-decodes once'),
+        '?match=TEXT (--match TEXT) on /messages for narrative text, or with --tools/--errors for tool-result text; '
+        'where match is unsupported the request exits 2; URI match text percent-decodes once', standalone=True),
     'param:claude.filter': Retirement('claude ?filter',
         'sessions --where session~=TEXT (or ?where=session~=TEXT), a case-insensitive session-name substring; URI expressions percent-decode once'),
     'param:claude.tail': Retirement('claude ?tail',
