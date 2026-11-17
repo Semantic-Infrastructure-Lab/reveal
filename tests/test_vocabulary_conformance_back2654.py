@@ -354,10 +354,23 @@ class Case:
     evidence: str
 
 
+def _error_message(run):
+    """The request's own error: the JSON document's ``error``, else stderr without its notes. A retirement note
+    beside the error names a spelling too, so it cannot stand in for the error naming it."""
+    try:
+        doc = json.loads(run.out)
+    except ValueError:
+        doc = None
+    if isinstance(doc, dict) and isinstance(doc.get('error'), str):
+        return doc['error']
+    return '\n'.join(line for line in run.err.splitlines() if not line.lower().startswith('note:'))
+
+
 def _conflict_case(label, conflict, names):
-    """Rule 1, different values: exit 2 naming both spellings."""
-    return Case(f'{label} conflict', conflict.rc == 2 and conflict.says(*names),
-                f'{conflict.brief()} (wants exit 2 naming {" and ".join(names)})')
+    """Rule 1, different values: exit 2, the error naming both spellings as the request typed them."""
+    message = _error_message(conflict)
+    return Case(f'{label} conflict', conflict.rc == 2 and conflict.says(*names) and all(n in message for n in names),
+                f'{conflict.brief()} (wants exit 2, the error naming {" and ".join(names)})')
 
 
 def _equal_case(label, noun, pair, single):
@@ -823,6 +836,16 @@ def _verbose_as_declared(noun, owner):
         cases.append(Case(f'{form} --verbose is ?verbose ({owner.name})', ok,
                           f'{verbose.brief()} vs {declared.brief()}: retired fields {_retired_fields(doc)} '
                           f'(wants the same answer and the {key} note)'))
+    # Rule 1 on the word's two spellings, named as typed: keys on the URI, flags on the subcommand.
+    other = _distinct_values(owner)[0]
+    entry = next(entry for entry in owner.legacy if entry.name == 'verbose')
+    if owner.cli is not None and owner.validate(other) != owner.validate(entry.translate(True)[owner.name]):
+        flag = owner.cli.flags[0]
+        cases.append(_conflict_case(f'?{owner.name}= vs ?verbose=', _run(_uri(noun, f'{owner.name}={other}', 'verbose=true'),
+                                                                     '--format', 'json'), (owner.name, 'verbose')))
+        if _sub(noun) is not None:
+            cases.append(_conflict_case(f'{flag} vs --verbose', _run(*_sub(noun, flag, other), '--verbose', '--format', 'json'),
+                                        (flag, '--verbose')))
     return cases
 
 
@@ -1380,6 +1403,22 @@ def _legacy_demo():
                      legacy=(LegacySpelling('rank', codec=lambda value: f'-{value}', flag='--rank'),
                              LegacySpelling('rank', value='calls'), LegacySpelling('schema', first=True)),
                      cli=CliBinding(('--sort',)))
+
+
+def test_the_binder_names_conflicting_spellings_as_the_transport_typed_them():
+    """Rule 1's conflict names each spelling as typed (BACK-2654 item F): a declaration with no RETIREMENTS row (so no
+    note can name them) told how the subcommand spelled its keys names those flags; a URI or typed call names keys."""
+    from reveal.utils.query_binding import prepare_declared_params
+    spec = _legacy_demo()
+    with pytest.raises(ValueError, match=r'^sort: conflicting spellings: --sort, --rank$'):
+        prepare_declared_params((spec,), {'sort': '-x', 'rank': 'fan-in'}, 'typed',
+                                spelled={'sort': '--sort', 'rank': '--rank'})
+    with pytest.raises(ValueError, match=r'^sort: conflicting spellings: sort, rank$'):  # api.query keywords
+        prepare_declared_params((spec,), {'sort': '-x', 'rank': 'fan-in'}, 'typed')
+    with pytest.raises(ValueError, match=r'^sort: conflicting spellings: sort, rank$'):  # URI keys
+        prepare_declared_params((spec,), 'sort=-x&rank=fan-in', 'uri')
+    assert dict(prepare_declared_params((spec,), {'sort': '-fan-in', 'rank': 'fan-in'}, 'typed',
+                                        spelled={'sort': '--sort', 'rank': '--rank'}).peek_items()) == {'sort': '-fan-in'}
 
 
 def test_a_legacy_entry_belongs_to_its_control_and_translates_into_it():
