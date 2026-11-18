@@ -89,10 +89,14 @@ def test_file_reader_rejects_walking_flags(data, flag):
         assert flag.partition('=')[0] in result.stderr + result.stdout
 
 
-def test_api_legacy_inspection_ignores_old_array_controls(data):
+def test_api_legacy_inspection_refuses_array_controls(data):
+    """A legacy first-word selector selects the same answer as its view, so an array control it does not read is
+    refused as on ?view=keys (BACK-2656, COMMAND_MODEL "Applicability"); it used to be dropped unread."""
     from reveal.api import query
-    result = query(f'json://{data / "data.json"}?keys&limit=-1')
-    assert result['keys'] == ['items', 'flag', 'nothing']
+    from reveal.errors import RequestValidationError
+    assert query(f'json://{data / "data.json"}?keys')['keys'] == ['items', 'flag', 'nothing']
+    with pytest.raises(RequestValidationError, match=r"control 'limit' is not read by this answer \(json_keys"):
+        query(f'json://{data / "data.json"}?keys&limit=1')
 
 
 @pytest.mark.parametrize('view,field', [('schema', 'schema'), ('flatten', 'line_count'),

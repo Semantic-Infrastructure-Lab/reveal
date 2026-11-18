@@ -274,17 +274,18 @@ def test_json_modes_and_applied_filters_get_no_note(jsons, uri):
     assert 'has no effect' not in proc.stderr, proc.stderr
 
 
-@pytest.mark.parametrize('uri, key', [('json://obj.json?bogus=1', 'bogus'),
-                                      ('json://obj.json?limit=1', 'limit')])
-def test_json_filters_on_an_object_are_named(jsons, uri, key):
+@pytest.mark.parametrize('uri, control', [('json://obj.json?bogus=1', 'where'),
+                                          ('json://obj.json?limit=1', 'limit')])
+def test_json_filters_on_an_object_are_named(jsons, uri, control):
     """BACK-1542: filters and ?limit apply to arrays; on an object they were silently
-    dropped (a filter counted as used when parsed, ?limit when validated)."""
+    dropped (a filter counted as used when parsed, ?limit when validated). Only the data shows
+    they are unread, so the answer names them in the one shared warning (BACK-2656, Q2), which
+    counts as their read: the ledger does not name them again."""
     proc = _cli(uri, '--format', 'json', cwd=jsons)
     assert proc.returncode == 0 and not proc.stderr
     warnings = json.loads(proc.stdout)['meta']['warnings']
-    assert any(warning['type'] == 'unused_query_param' and warning['fields'] == [key]
-               and 'has no effect' in warning['message']
-               for warning in warnings)
+    assert [(warning['type'], warning['fields']) for warning in warnings] == [('control_unread_by_data', [control])]
+    assert 'has no effect on this data' in warnings[0]['message']
 
 
 def test_check_on_an_adapter_without_check_is_named(db):

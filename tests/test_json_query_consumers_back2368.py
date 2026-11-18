@@ -50,9 +50,12 @@ mcp_server.main()
         assert not empty.is_error
         warning = await request('/items?absent=1')
         assert not warning.is_error and 'never appear' in _text(warning)
-        # Legacy selectors keep delivery and unused-input notes under qualified inspection.
-        keys = await request('?keys&limit=-1')
+        # Legacy selectors keep delivery under qualified inspection; an array control their answer does not read is
+        # refused, as on ?view=keys (BACK-2656).
+        keys = await request('?keys')
         assert not keys.is_error and 'items' in _text(keys)
+        refused = await request('?keys&limit=1')
+        assert refused.is_error and "control 'limit' is not read by this answer" in _text(refused), _text(refused)
         for view in ('schema', 'flatten', 'type', 'keys', 'length'):
             inspected = await request('?view=' + view)
             assert not inspected.is_error, (view, _text(inspected))

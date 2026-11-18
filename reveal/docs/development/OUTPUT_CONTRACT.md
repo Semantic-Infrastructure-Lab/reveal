@@ -382,7 +382,10 @@ parameters the parser owns unknown keys (`unknown_query_param`); on a declared n
 key is an invalid request instead (next section). The flag ledger owns inputs that were accepted
 but not used by this operation. Each entry has a `type` and `code` (`unknown_query_param`,
 `unused_query_param`, or `unused_flag`), a human-readable `message`, and `fields`: the query keys
-or flag spellings concerned. Existing warnings remain in the answer.
+or flag spellings concerned. Existing warnings remain in the answer. A control that only the data
+shows to be unread (JSON's `where`, `sort`, `limit` and `offset` on a value that is not a list) is
+named once, in a `control_unread_by_data` warning whose `fields` are the controls; the ledger does
+not name it again (COMMAND_MODEL "Applicability").
 
 These are informational diagnostics and do not make a usable answer fail. An
 operation rejected before it could run does not gain an unused-input warning;

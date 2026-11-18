@@ -162,7 +162,7 @@ def test_missing_required_value_is_not_an_empty_success(source, monkeypatch):
 
 
 def test_qualified_introspection_and_ordinary_warnings_keep_meaning(source):
-    for suffix, result_type in [('?keys&limit=-1', 'json_keys'), ('?schema', 'json_schema'),
+    for suffix, result_type in [('?keys', 'json_keys'), ('?schema', 'json_schema'),
                                 ('?flatten', 'json_flatten'), ('?type', 'json_type'),
                                 ('?length', 'json_length'), ('?gron&data-only', None)]:
         response = run(uri(source, suffix), '--format', 'json')
@@ -170,6 +170,9 @@ def test_qualified_introspection_and_ordinary_warnings_keep_meaning(source):
         answer = json.loads(response.stdout)
         assert isinstance(answer, list) if result_type is None else answer['type'] == result_type
         assert resolve_uri(uri(source, suffix), _default_args()).execution_facts is not None
+    # An array control the legacy selector's answer does not read is refused, not dropped (BACK-2656).
+    response = run(uri(source, '?keys&limit=1'), '--format', 'json')
+    assert response.returncode == 2 and "control 'limit' is not read by this answer" in response.stderr
     response = run(uri(source, '/items?missing=1'), '--format', 'json')
     answer = json.loads(response.stdout)
     assert response.returncode == 0 and answer['value'] == []

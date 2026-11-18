@@ -51,8 +51,16 @@ def test_cli_json_and_text_preserve_unknown_and_unused_inputs(resources):
     for fmt in ('json', 'text'):
         code, out, err = _cli(f'trace://{resources}?from=main&bogus=1', '--format', fmt)
         assert code == 2 and "unsupported control 'bogus'; supported controls: from, depth" in err, (fmt, err)
+    # JSON: a bare field is the where filter, which only the data (an object) leaves unread: the one shared warning, in
+    # the JSON and in the text answer (BACK-2656, Q2).
+    json_uri = f'json://{resources / "object.json"}?bogus=1'
+    code, out, err = _cli(json_uri, '--format', 'json')
+    assert code == 0 and not err, err
+    assert [(w['type'], w['fields']) for w in json.loads(out)['meta']['warnings']] == [('control_unread_by_data',
+                                                                                        ['where'])]
+    code, out, err = _cli(json_uri, '--format', 'text')
+    assert code == 0 and "'where' has no effect on this data" in out and 'bogus' not in err, (out, err)
     for uri, field, options in (
-        (f'json://{resources / "object.json"}?bogus=1', 'bogus', ()),
         (f'sqlite://{resources / "data.db"}?bogus=1', 'bogus', ()),
         (f'sqlite://{resources / "data.db"}?limit=1', 'limit', ()),
         (f'sqlite://{resources / "data.db"}', '--depth', ('--depth', '4')),
@@ -133,14 +141,15 @@ def test_sdk_provenance_keeps_one_json_value_and_diagnostics_without_leaking(res
         for uri in (f'trace://{resources}?from=main&bogus=1', f'trace://{resources}?from=absent&bogus=1'):
             rejected = await session.call_tool('reveal_query', {'uri': uri, 'provenance': True})
             assert rejected.is_error and "unsupported control 'bogus'" in _text(rejected), _text(rejected)
-        for uri in (
-            f'json://{resources / "object.json"}?bogus=1',
-            f'sqlite://{resources / "data.db"}?bogus=1',
-        ):
+        for uri, warning in ((f'json://{resources / "object.json"}?bogus=1', ('control_unread_by_data', ['where'])),
+                             (f'sqlite://{resources / "data.db"}?bogus=1', None)):
             result = await session.call_tool('reveal_query', {'uri': uri, 'provenance': True})
             assert not result.is_error, _text(result)
             answer = json.loads(_text(result))
-            assert len(_ignored(answer, 'bogus')) == 1, answer
+            if warning:  # JSON: the data leaves the where filter unread (BACK-2656, Q2)
+                assert [(w['type'], w['fields']) for w in answer['meta']['warnings']] == [warning], answer
+            else:
+                assert len(_ignored(answer, 'bogus')) == 1, answer
             assert answer['execution']['command']
         # Text names the rejected input too. A later clean JSON answer has no stale warning.
         text = await session.call_tool('reveal_query', {'uri': f'trace://{resources}?from=main&bogus=1'})

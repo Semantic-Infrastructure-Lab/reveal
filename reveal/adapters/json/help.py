@@ -51,7 +51,9 @@ _SCHEMA_NOTES = [
     '?flatten / ?gron outputs flat "json.key = value" lines — pipe to grep for search',
     'Filtering (=, >, <, !=, ~=, ..) applies to arrays of objects only',
     'Field names in filters support dot notation for nested access (e.g., user.name)',
-    'Result control (sort, limit, offset) only applies when filtering arrays',
+    'Filters and result control (where, sort, limit, offset) belong to the value view: any other view exits 2 '
+    'naming them; on a value that is not a list the answer says they had no effect (control_unread_by_data)',
+    '--detail belongs to the flatten view; any other view exits 2 naming it',
     'Array slices use Python-style [start:end] syntax — end index is exclusive',
     'Ordinary values, filters and navigation exit 0 when complete, 2 for invalid requests or missing files, '
     'and 3 for required read/parse/output failures; failed answers retain type json_value',

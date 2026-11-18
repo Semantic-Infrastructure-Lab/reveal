@@ -59,7 +59,8 @@ def test_the_shared_warning_reaches_the_api_and_the_text_answer(proj):
         assert [w['fields'] for w in _warnings(answer, 'control_unread_by_data')] == [['limit']], answer['meta']
     text = _run_reveal_direct('json://data.json?limit=1')
     assert text.returncode == 0, text.stderr
-    assert "'limit' has no effect on this data: the value at (root) is an object, not a list" in text.stderr, text.stderr
+    assert "'limit' has no effect on this data: the value at (root) is an object, not a list" in text.stdout, text.stdout
+    assert 'limit' not in text.stderr, text.stderr  # not also the ledger's note
 
 
 # --- an answer that does not read the control: exit 2, one message ------------------------------------------------

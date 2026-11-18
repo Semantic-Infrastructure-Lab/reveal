@@ -197,8 +197,6 @@ NOT_YET = {
                    'limit, offset, since, until; ownership: no_merges, since, until',
     ('imports', '20'): 'warned, exit 0: format on every answer; limit on all but sort=-fan-in; detail on default, '
                        'components, entrypoints and sort=-fan-in',
-    ('json', '20'): 'warned, exit 0: sort, limit, offset on the value view of a value that is not a list (data.json); the '
-                    'data decides, so this becomes the shared control_unread_by_data warning (Step 0 Q2)',
     ('markdown', '20'): 'warned, exit 0: sort, limit, offset on view=links and view=lint',
     ('metrics', '20'): 'warned, exit 0: directory default: top, churn, since, merges, tests; view=hotspots: sort; '
                        'provenance: every control but view; file default: also limit, offset, exclude; file hotspots: '
@@ -208,7 +206,7 @@ NOT_YET = {
 }
 
 NOT_YET_BASELINE = {'1a': 0, '1b': 0, '1c': 0, '1d': 0, '2': 0, '3': 0, '3b': 0, '4': 0, '5': 0, '6': 0,
-                    '8a': 0, '8b': 0, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 8, '14': 0, '21j': 0, '22': 0}
+                    '8a': 0, '8b': 0, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 7, '14': 0, '21j': 0, '22': 0}
 
 
 # --- the fixture -------------------------------------------------------------------------------------------

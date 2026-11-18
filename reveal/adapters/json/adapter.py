@@ -11,7 +11,7 @@ from ...utils.path_utils import to_posix
 from ...utils.query_parser import note_query_parsed, QueryParams, ResourceSpec, param_schema
 from ...utils.query_binding import bind_prepared_params, prepare_declared_params, apply_declared_overrides
 from .params import (PARAM_SPECS, VIEW, WHERE, DETAIL, result_type, uri_result_type,
-                     result_control, validate_request, legacy_raw)
+                     result_control, validate_request, legacy_raw, array_controls_unread_by_data)
 from ...utils.query import (
     parse_query_filters
 )
@@ -152,9 +152,6 @@ class JsonAdapter(ResourceAdapter):
             params = prepare_declared_params(PARAM_SPECS, query or '', 'uri')
         elif not isinstance(params, QueryParams):
             params = prepare_declared_params(PARAM_SPECS, params, 'typed')
-        if params._selectors:
-            for key in ('sort', 'limit', 'offset'):
-                dict.pop(params, key, None)  # legacy inspection ignores array controls
         params = bind_prepared_params(PARAM_SPECS, params, transport=params._transport)
         validate_request(params)
         params = apply_declared_overrides(PARAM_SPECS, params, overrides)
@@ -263,7 +260,7 @@ class JsonAdapter(ResourceAdapter):
             contract_version=CONTRACT_VERSION,
             data={
                 'file': to_posix(self.file_path),
-                'path': '/'.join(str(p) for p in self.json_path) if self.json_path else '(root)',
+                'path': self._display_path(),
                 'value_type': get_type_str(value),
                 'value': value,
             }
@@ -279,6 +276,9 @@ class JsonAdapter(ResourceAdapter):
                             metadata['total_matches'], 'limit')
 
         return result
+
+    def _display_path(self) -> str:
+        return '/'.join(str(p) for p in self.json_path) if self.json_path else '(root)'
 
     def _is_legacy_query(self) -> bool:
         """Check if query uses legacy mode.
@@ -358,9 +358,10 @@ class JsonAdapter(ResourceAdapter):
         """
         metadata: Dict[str, Any] = {}
 
-        # Only process arrays with filters or result control
+        # Only arrays are filtered and paged; the controls given for another value are disclosed, not applied
         if not isinstance(value, list):
-            return value, metadata
+            warning = array_controls_unread_by_data(self.query_params, value, self._display_path())
+            return value, ({'warnings': [warning]} if warning else metadata)
 
         has_result_control = self._has_result_control()
         if not (self.query_filters or has_result_control):
