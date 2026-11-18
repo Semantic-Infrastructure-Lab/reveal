@@ -45,10 +45,6 @@ NOT_YET = {
     ('git', 'proj/app.py', 'default'): '2d: git declares which answers read limit',
     ('git', 'proj/app.py', 'view=blame'): '2d: git declares which answers read limit',
     ('git', 'proj/app.py', 'view=diff'): '2d: git declares which answers read limit',
-    ('metrics', 'proj', 'view=provenance'): '2c: metrics declares which answers read limit',
-    ('metrics', 'proj/app.py', 'default'): '2c: metrics declares which answers read limit',
-    ('metrics', 'proj/app.py', 'view=provenance'): '2c: metrics declares which answers read limit',
-    ('patches', 'proj', 'view=pressure'): '2c: patches declares which answers read limit',
 }
 
 

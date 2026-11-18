@@ -96,18 +96,13 @@ def test_the_default_view_still_scans_a_test_root(repo):
 
 
 @pytest.mark.parametrize('output_format', ['text', 'json'])
-def test_pressure_only_parameters_are_not_silently_ignored_by_the_default_view(repo, output_format):
-    """tests= means nothing to the patches scan (its path is the root); the answer says so."""
+def test_pressure_only_parameters_are_refused_by_the_default_view(repo, output_format):
+    """tests= means nothing to the patches scan (its path is the root): an invalid request naming where it is read
+    (COMMAND_MODEL "Applicability", BACK-2656; it was an unused-input note, exit 0)."""
     done = run(f'patches://{repo}/t?tests={repo}/t', '--format', output_format)
-    assert done.returncode == 0, done.stderr
-    if output_format == 'json':
-        answer = json.loads(done.stdout)
-        assert answer['type'] == 'patches_scan'
-        warnings = [w for w in answer['meta']['warnings'] if w['type'] == 'unused_query_param']
-        assert [(w['code'], w['fields']) for w in warnings] == [('unused_query_param', ['tests'])]
-        assert 'has no effect' not in done.stderr
-    else:
-        assert done.stderr.count("query param 'tests' has no effect on this patches:// query") == 1
+    assert done.returncode == 2, done.stderr
+    assert "control 'tests' is not read by this answer (patches_scan, default)" in done.stderr
+    assert 'tests is read by: testability_report' in done.stderr
 
 
 def test_an_unknown_view_is_rejected(repo):

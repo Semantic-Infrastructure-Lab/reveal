@@ -279,11 +279,17 @@ Default penalties:
 | `since` | `--since DATE` | ISO date | Bound the churn walk to commits on/after this date (default: full history); an invalid date exits 2 | `?view=hotspots&since=2026-01-01` |
 | `tests` | `--tests include\|exclude` | `include` (default), `exclude` | In the hotspot ranking: leave test/support files selected by conventional names plus the selected project's `test_layout.additional_paths` out of the ranking. Only the ranking is narrowed; totals still count them. A request that names it adds `test_scope` (`rule`, policy basis/anchor/source, current declaration when present, `tests`, `files_excluded`). The default (and the retired `reveal hotspots`) ranks test files. Ordinary overview does not request this ranking. | `?view=hotspots&tests=exclude` |
 | `detail` | `--detail` | `normal` (default), `summary` | `summary` omits the per-file `files` array: the aggregate summary only (the walk still runs). Use on large repos. There is no fuller level: `detail=full` exits 2 | `?detail=summary` |
-| `sort`, `limit`, `offset` | `--sort=FIELD`, `--limit N`, `--offset N` | | Order and page the rows (`--sort=-lines` for descending); in `view=hotspots`, `limit`/`offset` page the ranking and `sort` does not apply | `?sort=-lines&limit=10` |
+| `sort`, `limit`, `offset` | `--sort=FIELD`, `--limit N`, `--offset N` | | Order and page the rows (`--sort=-lines` for descending); in `view=hotspots`, `limit`/`offset` page the ranking and `sort` exits 2 | `?sort=-lines&limit=10` |
 | `exclude`, `respect_gitignore` | `--exclude`, `--respect-gitignore off` | | The walk's scope | `?exclude=vendor` |
 
-`churn`, `merges` and `since` only affect the hotspot score and are unread otherwise. `match`, `kind`,
-`depth` and `until` are not metrics controls: they exit 2 naming `where` and the supported controls.
+Each control is read by the answers it applies to, and any other answer exits 2 naming the controls it reads:
+`top`, `churn`, `merges`, `since` and `tests` by the hotspot rankings (`view=hotspots`, legacy `hotspots=true`);
+`sort` and `detail` by the per-file rows (the default view, and legacy `hotspots=true` beside its ranking);
+`code-only` and `exclude` by a directory (a file is not walked); `limit` and `offset` by a directory and by
+`view=hotspots`; `view=provenance` reads only the walk's `respect_gitignore`. Where the files have no git
+history, a ranking leaves `since` and `merges` unread and says so in one `control_unread_by_data` warning, exit 0.
+`match`, `kind`, `depth` and `until` are not metrics controls: they exit 2 naming `where` and the supported
+controls.
 
 `reveal metrics PATH` and `metrics://PATH` are two spellings of one answer: the same JSON, the
 same exit code, and (with `--provenance`) a manifest that differs only in `execution.command`.

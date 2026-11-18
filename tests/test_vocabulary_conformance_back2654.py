@@ -199,15 +199,10 @@ NOT_YET = {
                    'merges, bucket or element outside the views that read them; file default, blame and diff: sort, '
                    'limit, offset, since, until; ownership: no_merges, since, until',
     ('markdown', '20'): 'warned, exit 0: sort, limit, offset on view=links and view=lint',
-    ('metrics', '20'): 'warned, exit 0: directory default: top, churn, since, merges, tests; view=hotspots: sort; '
-                       'provenance: every control but view; file default: also limit, offset, exclude; file hotspots: '
-                       'limit, offset, exclude; file view=hotspots: exclude',
-    ('patches', '20'): 'warned, exit 0: default: tests, min_patches, min_categories, include_unresolved; '
-                       'view=pressure: group, limit, min, target, private, suppress',
 }
 
 NOT_YET_BASELINE = {'1a': 0, '1b': 0, '1c': 0, '1d': 0, '2': 0, '3': 0, '3b': 0, '4': 0, '5': 0, '6': 0,
-                    '8a': 0, '8b': 0, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 5, '14': 0, '21j': 0, '22': 0}
+                    '8a': 0, '8b': 0, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 3, '14': 0, '21j': 0, '22': 0}
 
 
 # --- the fixture -------------------------------------------------------------------------------------------

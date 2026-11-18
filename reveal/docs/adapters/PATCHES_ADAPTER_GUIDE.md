@@ -129,9 +129,10 @@ reveal 'patches://src?view=pressure&tests=tests,integration_tests&top=20&min_pat
 The pressure view answers a `testability_report`. Its own parameters are `tests`, `top`
 (maximum groups per hotspot list, default 20), `min_patches` (default 3), `min_categories`
 (default 3) and `include_unresolved`; `limit`, `min`, `group`, `target`, `private` and
-`suppress` belong to the default scan, and a pressure-only parameter on the default scan
-is named in a note. `testability://` and `reveal testability` still answer, with a
-replaced-by note, until the cut release.
+`suppress` belong to the default scan. A parameter given to the view that does not read it
+exits 2 naming the ones that view reads, and `--all` lifts the pressure view's `top`.
+`testability://` and `reveal testability` still answer, with a replaced-by note, until the
+cut release.
 
 The source boundary-profile population is unchanged by test-support policy and can
 include test functions when they are under the source target. The report supplies

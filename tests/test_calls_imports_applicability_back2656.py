@@ -132,9 +132,10 @@ def test_imports_dot_still_draws_the_directory_importers(proj):
     assert run.stdout.startswith('digraph modules {')
 
 
-# --- a sibling noun that declares in a later group (2c) ---------------------------------------------------------
+# --- a sibling noun that declares in a later group (2d; metrics declared in 2c) -----------------------------------
 
-def test_metrics_is_unchanged_until_its_own_group(proj):
-    run, doc = _run('metrics://.?top=3')
+def test_markdown_is_unchanged_until_its_own_group(proj):
+    (proj / 'guide.md').write_text('# Guide\n\n[a](a.py)\n', encoding='utf-8')
+    run, doc = _run('markdown://.?view=links&limit=1')
     assert run.returncode == 0, run.stderr
-    assert [w['fields'] for w in _unread(doc)] == [['top']], doc.get('meta')
+    assert [w['fields'] for w in _unread(doc)] == [['limit']], doc.get('meta')

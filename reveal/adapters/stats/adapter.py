@@ -7,6 +7,7 @@ prints the replaced-by note from the RETIREMENTS table until the cut (D5).
 """
 
 import os
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from typing import Callable, Dict, Any, List, Optional, cast
@@ -25,7 +26,8 @@ from ...utils.query_parser import (
     CliBinding, LegacySpelling, ParamSpec, ParamValueError, QueryParams, ResourceSpec, filter_expression, param_schema,
     exclude_param, peek_query_items, split_exclude_param, where_param, whole_number,
 )
-from ...utils.query_binding import bind_declared_params, boolean_value, switch_value
+from ...utils.query_binding import (bind_declared_params, boolean_value, given_controls, switch_value,
+                                   unread_by_data_warning)
 from ...utils.gitignore import respect_gitignore_param
 from ...utils.path_utils import (TestLayout, failure_of, failure_records, provenance_for_display_path,
                                  to_relative_display)
@@ -141,6 +143,13 @@ def _detail(value: Any) -> str:
 
 TEST_CHOICES = ('include', 'exclude')
 
+# The answers each control is read by (COMMAND_MODEL "Applicability", BACK-2656): a directory answers stats_summary and
+# a file stats_file in the default view, the legacy hotspots ranking and view=hotspots; view=provenance answers a
+# classify_report and reads none of them. The rankings read the churn and test controls; the per-file rows (the default
+# view, and legacy hotspots beside its ranking) read sort and detail; only a directory is walked.
+_DIRECTORY, _FILE = 'stats_summary', 'stats_file'
+_RANKINGS, _PER_FILE_ROWS = ('hotspots', 'view=hotspots'), ('default', 'hotspots')
+
 # The declaration `reveal metrics` and metrics:// are both generated from (BACK-2146, BACK-2621). Operator
 # filters (`lines>50`, `complexity=5..15`) are where's terms: the binder folds a bare URI key into it.
 _VIEW = ParamSpec('view', 'string', 'hotspots: the ranked hotspot files are the rows (quality, complexity and churn '
@@ -181,51 +190,56 @@ _WHERE = where_param('Keep the files whose field matches: FIELD OP VALUE (lines>
                              _threshold('max_complexity', 'avg_complexity<=', _number('max_complexity'), 'a valid number')),
                      # file and the alias names, and a dotted path under a record section (BACK-2654 note #15)
                      fields=(*SORT_FIELDS, 'lines.*', 'complexity.*', 'elements.*', 'quality.*'))
+_WHERE = replace(_WHERE, answers=(_DIRECTORY, _FILE))
 _HOTSPOTS = ParamSpec('hotspots', 'boolean', 'Legacy: per-file rows plus the hotspot ranking, top capping it; '
                       'replaced by view=hotspots', False, boolean_value, ('hotspots=true',), role='operation',
                       cli=CliBinding(('--hotspots',), action='store_true'), cap='top')
 _TOP = ParamSpec('top', 'integer', 'Legacy hotspot cap: limit in view=hotspots; with legacy hotspots=true it caps the '
-                 'ranking (default 10, 0 = all)', 10, _count('top'), ('top=25',), minimum=0, zero_policy='all',
-                 role='analysis', cli=CliBinding(('--top',), metavar='N'))
+                 'ranking (default 10, 0 = all)', 10, _count('top'), ('view=hotspots&top=25',), minimum=0,
+                 zero_policy='all', role='analysis', cli=CliBinding(('--top',), metavar='N'), answers=_RANKINGS)
 # The map's spelling (BACK-2621); code_only is an alias that answers the same, as scan_limit is for Imports.
 _CODE_ONLY = ParamSpec('code-only', 'boolean', 'Exclude data/config files (xml, csv, sql, yaml, toml, large json) '
                        'from the walk; totals describe the code files', False, boolean_value, ('code-only=true',),
                        role='analysis', aliases=('code_only',),
-                       cli=CliBinding(('--code-only',), dest='code_only', action='store_true'))
+                       cli=CliBinding(('--code-only',), dest='code_only', action='store_true'), answers=(_DIRECTORY,))
 _CHURN = ParamSpec('churn', 'boolean', 'Fold commit-touch counts into the hotspot score: on (default in a git '
                    'repository; silently off elsewhere) or off for complexity-only scoring',
-                   True, switch_value, ('churn=off',), role='analysis', cli=CliBinding(('--churn',), metavar='on|off'),
+                   True, switch_value, ('view=hotspots&churn=off',), role='analysis',
+                   cli=CliBinding(('--churn',), metavar='on|off'),
                    legacy=(LegacySpelling('no_churn', codec=_legacy_switch('no_churn', 'off', 'on'),
-                                          flag='--no-churn', flag_value=True),))
+                                          flag='--no-churn', flag_value=True),), answers=_RANKINGS)
 _SINCE = ParamSpec('since', 'string', 'Bound the churn walk to commits on/after this ISO date (default: full history). Only affects churn scoring, not the file list itself.',
-                   None, _iso_date('since'), ('since=2026-01-01',), role='analysis',
-                   cli=CliBinding(('--since',), metavar='DATE'))
+                   None, _iso_date('since'), ('view=hotspots&since=2026-01-01',), role='analysis',
+                   cli=CliBinding(('--since',), metavar='DATE'), answers=_RANKINGS)
 _MERGES = ParamSpec('merges', 'boolean', 'Count merge commits in the churn tally: on (default) or off', None,
-                    switch_value, ('merges=off',), role='analysis', cli=CliBinding(('--merges',), metavar='on|off'),
+                    switch_value, ('view=hotspots&merges=off',), role='analysis',
+                    cli=CliBinding(('--merges',), metavar='on|off'),
                     legacy=(LegacySpelling('no_merges', codec=_legacy_switch('no_merges', 'off', 'on'),
-                                           flag='--no-merges', flag_value=True),))
+                                           flag='--no-merges', flag_value=True),), answers=_RANKINGS)
 _TESTS = ParamSpec('tests', 'string',
                    'Test/support files in the hotspot ranking, selected by conventional names plus project test_layout.additional_paths: '
                    'include them (default) or exclude them from the ranking. Only the ranking changes; totals and files still count them',
-                   'include', _text('tests'), ('tests=exclude',), choices=TEST_CHOICES, role='analysis',
-                   cli=CliBinding(('--tests',), metavar='{include,exclude}'))
+                   'include', _text('tests'), ('view=hotspots&tests=exclude',), choices=TEST_CHOICES, role='analysis',
+                   cli=CliBinding(('--tests',), metavar='{include,exclude}'), answers=_RANKINGS)
 _DETAIL = ParamSpec('detail', 'string', 'normal: the per-file rows; summary: the aggregate summary only (the per-file '
                     'walk still runs; use it on unscoped whole-repo calls, where the rows can reach tens of MB)',
                     'normal', _detail, ('detail=summary',), choices=DETAIL_LEVELS, role='presentation',
                     cli=CliBinding(('--detail',), metavar='LEVEL'),
                     legacy=(LegacySpelling('summary_only', codec=_legacy_switch('summary_only', 'summary', 'normal'),
-                                           flag='--summary-only', flag_value=True),))
+                                           flag='--summary-only', flag_value=True),), answers=_PER_FILE_ROWS)
 _SORT = ParamSpec('sort', 'string', 'Sort the files by a field, ascending; a leading - sorts descending', None,
-                  _text('sort'), ('sort=-lines',), role='analysis', cli=CliBinding(('--sort',), metavar='FIELD'))
+                  _text('sort'), ('sort=-lines',), role='analysis', cli=CliBinding(('--sort',), metavar='FIELD'),
+                  answers=_PER_FILE_ROWS)
 _LIMIT = ParamSpec('limit', 'integer', 'Keep at most this many rows: files, or the ranked files of view=hotspots '
                    '(default 10 there); 0 = no cap', None, _count('limit'), ('limit=10',), minimum=0,
-                   zero_policy='no cap', role='analysis', cli=CliBinding(('--limit',), metavar='N'))
+                   zero_policy='no cap', role='analysis', cli=CliBinding(('--limit',), metavar='N'),
+                   answers=(_DIRECTORY, 'view=hotspots'))
 _OFFSET = ParamSpec('offset', 'integer', 'Skip this many rows before the first one kept', None,
                     _count('offset'), ('offset=5',), minimum=0, role='analysis',
-                    cli=CliBinding(('--offset',), metavar='N'))
+                    cli=CliBinding(('--offset',), metavar='N'), answers=(_DIRECTORY, 'view=hotspots'))
 # The walk's scope, from the URI or the global --exclude/--no-gitignore (overview composes them); declared so
 # where does not take them for filters. No subcommand flag: the global flags carry them.
-_EXCLUDE = exclude_param()
+_EXCLUDE = replace(exclude_param(), answers=(_DIRECTORY,))
 _RESPECT_GITIGNORE = ParamSpec('respect_gitignore', 'string', 'false includes files git ignores; --respect-gitignore '
                                'off fills it', None, lambda value: value, role='scope')
 
@@ -850,6 +864,8 @@ class MetricsAdapter(ResourceAdapter):
             if self._churn_disclosure:
                 # In the envelope, so the text answer prints it too (it sat in a top-level list, BACK-2621).
                 note_warning(result, {'type': 'churn_unavailable', 'message': self._churn_disclosure})
+            if churn_counts is None:
+                note_warning(result, self._churn_bounds_unread())
         result['hotspots'] = self._top_hotspots(
             result, identify_hotspots(file_stats, churn_counts=churn_counts))
         # The path-only tag the hotspots noun put on its file entries (test/vendor/minified, None for first
@@ -858,6 +874,15 @@ class MetricsAdapter(ResourceAdapter):
         for entry in result['hotspots']:
             entry['provenance'] = provenance_for_display_path(entry['file'], base)
         result['summary']['has_findings'] = self._population_findings
+
+    def _churn_bounds_unread(self) -> Optional[Dict[str, Any]]:
+        """since and merges bound the churn walk, so a ranking whose files have no git history to walk leaves them
+        unread, and only the data shows it: the one shared disclosure (COMMAND_MODEL "Applicability", Scott
+        2026-11-18 Q2), not an invalid request. None when the request gave neither."""
+        given = given_controls(self.query_params)
+        reason = self._churn_disclosure or 'no analysed file has git history, so the ranking counts no churn'
+        return unread_by_data_warning(self.query_params, [name for name in ('since', 'merges') if name in given],
+                                      reason)
 
     def _rank_population(self, result: dict, file_stats: list, layout: Optional[TestLayout]) -> list:
         """Narrow only the ranking, using the policy selected before analysis.

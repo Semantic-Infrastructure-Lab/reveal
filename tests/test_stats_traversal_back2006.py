@@ -139,7 +139,7 @@ def test_actual_text_and_json_artifact_preserve_stats_diagnostic(tmp_path, monke
 def test_direct_stats_discloses_and_exits_by_its_route(tmp_path, monkeypatch, output, scheme, exit_code):
     child = tree(tmp_path)
     deny_stats(monkeypatch, {child})
-    result = run(f'{scheme}://{tmp_path}?churn=false', '--format', output)
+    result = run(f'{scheme}://{tmp_path}', '--format', output)
     assert result.returncode == exit_code
     if output == 'json':
         assert json.loads(result.stdout)['summary']['total_files'] == 1

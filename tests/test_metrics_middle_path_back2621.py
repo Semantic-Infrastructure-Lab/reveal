@@ -211,12 +211,10 @@ class TestPreservation:
             assert result.returncode == 0, result.stderr
             assert_equal_answer(answer, expected)
 
-    def test_provenance_view_warns_on_unread_uri_controls(self, project):
+    def test_provenance_view_refuses_controls_it_does_not_read(self, project):
+        # An invalid request naming them (COMMAND_MODEL "Applicability", BACK-2656); it was an unused-input note.
         result, answer = cli_json(uri(project, 'view=provenance&code_only=true&sort=-lines&limit=2'))
-        assert result.returncode == 0
-        assert answer['type'] == 'classify_report' and answer['summary']['total'] == 12
-        fields = [field for warning in unread(answer) for field in warning.get('fields', [])]
-        assert {'code_only', 'sort', 'limit'} <= set(fields), unread(answer)
+        assert_usage(result, answer, "controls 'code-only', 'sort', 'limit' are not read by this answer")
 
     def test_legacy_hotspots_shape(self, project):
         expected = query(uri(project, 'hotspots=true'))
@@ -365,10 +363,9 @@ class TestPreservation:
             assert result.returncode == 2 and 'detail' in result.stderr
             assert 'normal' in result.stderr and 'summary' in result.stderr
 
-    def test_unused_top_without_ranking_is_disclosed(self, project):
+    def test_top_without_ranking_is_refused(self, project):
         result, answer = cli_json(uri(project, 'top=3'))
-        assert result.returncode == 0 and 'hotspots' not in answer
-        assert [w.get('fields') for w in unread(answer)] == [['top']]
+        assert_usage(result, answer, 'top is read by: hotspots, view=hotspots')
 
     def test_existing_retirement_notes(self, project):
         for old, new, expected_controls in (('stats', 'metrics://', ''), ('classify', 'view=provenance', 'view=provenance')):
@@ -817,19 +814,15 @@ class TestProposedChanges:
         with pytest.raises(TypeError):
             MetricsAdapter(str(project)).get_structure(hotspots=True)
 
-    @pytest.mark.parametrize('flags,field', [
-        (('--code-only',), '--code-only'),
-        # BACK-2654: --min-lines binds as --where 'lines>=5' and answers as it does; the provenance view does not
-        # disclose an unread where yet (applicability, BACK-2656).
-        pytest.param(('--min-lines', '5'), 'min-lines', marks=pytest.mark.xfail(strict=True, reason='BACK-2656')),
-        pytest.param(('--where', 'lines>=5'), 'where', marks=pytest.mark.xfail(strict=True, reason='BACK-2656')),
-        (('--detail', 'summary'), '--detail')])
-    def test_subcommand_discloses_controls_the_provenance_view_does_not_read(self, project, flags, field):
-        """B4: the URI form warns; the subcommand must too."""
+    @pytest.mark.parametrize('flags,control', [
+        (('--code-only',), 'code-only'),
+        (('--min-lines', '5'), 'where'),  # --min-lines binds as --where 'lines>=5' (BACK-2654)
+        (('--where', 'lines>=5'), 'where'),
+        (('--detail', 'summary'), 'detail')])
+    def test_subcommand_refuses_controls_the_provenance_view_does_not_read(self, project, flags, control):
+        """B4: the subcommand answers as the URI form: an invalid request naming the control (BACK-2656)."""
         result, answer = cli_json('metrics', str(project), '--view', 'provenance', *flags)
-        assert result.returncode == 0, result.stderr[-300:]
-        fields = [f for warning in unread(answer) for f in warning.get('fields', [])]
-        assert any(field in f for f in fields), f'{flags} unread but undisclosed: {unread(answer)}'
+        assert_usage(result, answer, f"control '{control}' is not read by this answer (classify_report")
 
     @pytest.mark.parametrize('control', ['match', 'kind', 'depth', 'until'])
     def test_unsupported_shared_controls_reject(self, project, control):
@@ -895,11 +888,10 @@ class TestStep4Additions:
         assert result.returncode == 0, result.stderr
         assert_equal_answer(answer, query(uri(project, 'detail=summary')))
 
-    def test_sort_is_unread_in_the_hotspot_view(self, project):
+    def test_sort_is_refused_in_the_hotspot_view(self, project):
+        # The ranking orders its own rows; sort orders the per-file rows this view does not draw (BACK-2656).
         result, answer = cli_json('metrics', str(project), '--view', 'hotspots', '--sort', '-lines')
-        assert result.returncode == 0
-        assert [w.get('fields') for w in unread(answer)] == [['--sort']]
-        assert hotspot_rows(answer) == HOTSPOTS
+        assert_usage(result, answer, "control 'sort' is not read by this answer (stats_summary, view, view=hotspots)")
 
     def test_unsupported_controls_stay_out_of_the_schema_and_help(self, project):
         from reveal.adapters.stats import MetricsAdapter

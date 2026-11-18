@@ -54,7 +54,8 @@ def test_configured_ranking_preserves_analyzed_population(project, adapter):
 def test_root_child_and_file_choose_same_policy(project):
     root = query(f'metrics://{project}?{OPTIONS}')
     child = query(f'metrics://{project / "tests" / "unit"}?{OPTIONS}')
-    single = query(f'metrics://{project / "src" / "support.py"}?{OPTIONS}')
+    # A file is not walked, so it refuses code-only (BACK-2656); the ranking's policy is the same without it.
+    single = query(f'metrics://{project / "src" / "support.py"}?{OPTIONS.replace("&code_only=true", "")}')
     assert 'tests/unit/helper.py' not in ranked(root)
     assert ranked(child) == ranked(single) == set()
     assert child['summary']['total_files'] == single['summary']['total_files'] == 1
@@ -134,11 +135,15 @@ def test_default_and_unrelated_views_keep_population_and_no_policy_claim(project
     assert default['files'] == include['files']
     assert default['summary'] == include['summary']
     assert ranked(default) == ranked(include)
-    ordinary = query(f'metrics://{project}?tests=exclude&code_only=true')
+    ordinary = query(f'metrics://{project}?code_only=true')
     assert ordinary['files'] == include['files'] and 'test_scope' not in ordinary
-    provenance = query(f'metrics://{project}?view=provenance&tests=exclude')
+    provenance = query(f'metrics://{project}?view=provenance')
     assert 'test_scope' not in provenance
     assert {row['file'] for row in provenance['files']} >= {row['file'] for row in include['files']}
+    # tests= narrows the ranking only: the default and provenance views, which have none, refuse it (BACK-2656).
+    for view in ('', 'view=provenance&'):
+        with pytest.raises(RequestValidationError, match="control 'tests' is not read by this answer"):
+            query(f'metrics://{project}?{view}tests=exclude')
 
 
 def test_omission_and_toml_replacement(project):

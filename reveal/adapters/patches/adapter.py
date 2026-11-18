@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -44,26 +45,32 @@ def _whole(value: Any) -> int:
     return whole_number(value)
 
 
+# The answers each control is read by (COMMAND_MODEL "Applicability", BACK-2656): the raw scan's grouping controls, and
+# the pressure report's own, which are testability's.
+_SCAN, _PRESSURE = ('patches_scan',), (TestabilityAdapter.RESULT_TYPE,)
 _VIEW = ParamSpec('view', 'string', 'pressure: testability\'s report (was testability://), patch hotspots joined with production '
                   'boundary fan-out; the path is then the production root. Omitted: the raw patch scan of a test root',
                   None, _text, ('view=pressure',), choices=VIEWS, role='operation',
-                  cli=CliBinding(('--view',), metavar='VIEW'))
+                  cli=CliBinding(('--view',), metavar='VIEW'), cap='top')  # --all lifts the report's group cap
 _GROUP = ParamSpec('group', 'string', 'Grouping mode: target, test, or file', 'target', _text,
-                   ('group=target',), choices=GROUPS, role='analysis', cli=CliBinding(('--group',), metavar='MODE'))
+                   ('group=target',), choices=GROUPS, role='analysis', cli=CliBinding(('--group',), metavar='MODE'),
+                   answers=_SCAN)
 _LIMIT = ParamSpec('limit', 'integer', 'Maximum groups to return', 20, _whole,
                    ('limit=20',), minimum=0, zero_policy='all', role='presentation',
-                   cli=CliBinding(('--limit',), metavar='N'))
+                   cli=CliBinding(('--limit',), metavar='N'), answers=_SCAN)
 _MIN = ParamSpec('min', 'integer', 'Minimum patch count for a group', 1, _whole,
-                 ('min=3',), minimum=0, zero_policy='no minimum', role='analysis', cli=CliBinding(('--min',), metavar='N'))
+                 ('min=3',), minimum=0, zero_policy='no minimum', role='analysis',
+                 cli=CliBinding(('--min',), metavar='N'), answers=_SCAN)
 _TARGET = ParamSpec('target', 'string', 'Filter by target substring or glob', '', _text, ('target=ssl',),
-                    role='analysis', cli=CliBinding(('--target',), metavar='PATTERN'))
+                    role='analysis', cli=CliBinding(('--target',), metavar='PATTERN'), answers=_SCAN)
 _PRIVATE = ParamSpec('private', 'boolean', 'Only include private/internal patch targets', False, boolean_value,
-                     ('private=true',), role='analysis', cli=CliBinding(('--private',), action='store_true'))
+                     ('private=true',), role='analysis', cli=CliBinding(('--private',), action='store_true'),
+                     answers=_SCAN)
 _SUPPRESS = ParamSpec('suppress', 'boolean', 'Hide stdlib I/O noise (sys.stdout/stderr, builtins) from grouped output. '
                       'Default: true. Raw totals always include them.', True, boolean_value, ('suppress=false',),
-                      role='analysis', cli=CliBinding(('--no-suppress',), action='store_false'))
-# The pressure view's own parameters are testability's, declared once there.
-_PRESSURE_SPECS = PRESSURE_SPECS
+                      role='analysis', cli=CliBinding(('--no-suppress',), action='store_false'), answers=_SCAN)
+# The pressure view's own parameters are testability's, declared once there; here only the pressure report reads them.
+_PRESSURE_SPECS = tuple(replace(spec, answers=_PRESSURE) for spec in PRESSURE_SPECS)
 PARAM_SPECS = (_VIEW, _GROUP, _LIMIT, _MIN, _TARGET, _PRIVATE, _SUPPRESS, *_PRESSURE_SPECS)
 
 
