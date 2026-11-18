@@ -361,13 +361,15 @@ rm -rf "$XDG_CONFIG_HOME" && mkdir -p "$XDG_CONFIG_HOME"
 # hint store (~/.local/share/reveal/seen_hints.json: a green gate, then 14/14 red CI on 5be5feca), files
 # read through Path.home() rather than XDG (~/.config/reveal/<adapter>.yaml, ~/.reveal/plugins) and a
 # global git identity CI does not have. Only the toolchain stores are kept: the grammar cache (CI restores
-# it too; a fresh one downloads and warns), rustup/cargo and Go's module and build caches.
+# it too; a fresh one downloads and warns), rustup/cargo and Go's module and build caches. The run's own venv
+# leads PATH, as CI's interpreter does: `python`/`python3` on a developer PATH can be home-relative shims
+# (~/.local/bin/python3 exec'ing $HOME/.venvs/...) or find tools only in the user site-packages.
 ISO_HOME="${REVEAL_CI_VENV_ROOT:-$HOME/.cache/reveal-ci}/isolated-home"
 rm -rf "$ISO_HOME" && mkdir -p "$ISO_HOME/.config" "$ISO_HOME/.local/share" "$ISO_HOME/.cache"
 GRAMMAR_CACHE="$("$PY" -c 'import pathlib, tree_sitter_language_pack as p; print(pathlib.Path(p.cache_dir()).parents[1])')" \
     || fail "grammar cache location"
 ln -s "$GRAMMAR_CACHE" "$ISO_HOME/.cache/$(basename "$GRAMMAR_CACHE")"
-ISOLATED_HOME=(env HOME="$ISO_HOME" XDG_CONFIG_HOME="$ISO_HOME/.config" XDG_DATA_HOME="$ISO_HOME/.local/share"
+ISOLATED_HOME=(env HOME="$ISO_HOME" PATH="$VENV/bin:$PATH" XDG_CONFIG_HOME="$ISO_HOME/.config" XDG_DATA_HOME="$ISO_HOME/.local/share"
                XDG_CACHE_HOME="$ISO_HOME/.cache" RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rustup}"
                CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}")
 if command -v go >/dev/null 2>&1; then
