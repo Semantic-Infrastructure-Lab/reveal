@@ -43,7 +43,9 @@ control whatever its value type; 1b, 1d and 6 read every spelling (aliases and n
   17  one answer per request: two controls with role='operation' (views, modes, rankings, legacy operations) exit 2
       naming both; every ``view`` is such a control.
   18  every scalar global flag repeated with different values exits 2 (presentation flags included); equal is one.
-  20  applicability (BACK-2656, measured only): a declared control the selected answer does not read exits 2.
+  20  applicability (BACK-2656): a declared control the selected answer does not read exits 2, on every answer: each
+      operation selection, on each resource whose path selects an answer (ANSWER_TARGETS). An answer that reports the
+      control unread (the ledger, a noun's own warning or a stderr note) does not conform; a refusal conforms.
   14  defaults (Scott 2026-11-16): an environment or config value is a default, never a conflict: with
       ``REVEAL_FORMAT=json`` a request answers as ``--format json``, and ``--format text`` / ``--output text`` answer as
       with no default (no exit 2); on a noun that walks, ``REVEAL_IGNORE=P`` combines with ``--exclude Q`` (the answer
@@ -137,9 +139,10 @@ EXEMPT = {
     **{(noun, '17'): 'one control at most selects the answer: no two selections to give' for noun in (
         'architecture', 'codex', 'contracts', 'deps', 'hotspots', 'overview', 'pack', 'surface', 'testability',
         'trace')},
-    **{(noun, '20'): 'no declared control goes unread by the default answer' for noun in (
-        'architecture', 'ast', 'claude', 'contracts', 'deps', 'git', 'hotspots', 'markdown', 'overview', 'pack',
-        'surface', 'testability', 'trace')},
+    **{(noun, '20'): 'no answer reports a declared control unread, on any resource ANSWER_TARGETS lists (a control '
+                     'read and not applied is the Step 4 backstop\'s: Claude contains/full/raw)' for noun in (
+        'architecture', 'ast', 'claude', 'contracts', 'deps', 'hotspots', 'overview', 'pack', 'surface', 'testability',
+        'trace')},
 }
 
 # Rules 1, 2, 5, 6, 10 and 12 are the shared seams' defaults (Scott 2026-11-16; BACK-2654 Step 3): their cells must
@@ -182,19 +185,30 @@ RULED_EXEMPT_NOUNS = {'stats': 'rule 9: the retired stats:// scheme is deleted a
 # Cells that do not conform yet: (noun, rule) -> the behaviour observed at fac0718b. May only shrink; every
 # entry reaches zero before the cut.
 NOT_YET = {
-    ('calls', '20'): 'unread by the default answer, warned and exit 0: kind, external, builtins, test-framework',
-    ('codex', '20'): 'unread by the default answer, warned and exit 0: since, until, key, last, tokens, goal, '
-                     'matches',
-    ('imports', '20'): 'unread by the default answer, warned and exit 0: limit, detail, format',
-    ('json', '20'): 'unread by the default answer, warned and exit 0: sort, limit, offset',
-    ('metrics', '20'): 'unread by the default answer, warned and exit 0: top, churn, no_churn, since, merges, '
-                       'no_merges, tests',
-    ('patches', '20'): 'unread by the default answer, warned and exit 0: tests, min_patches, min_categories, '
-                       'include_unresolved',
+    # Rule 20 measured on every answer since BACK-2656 Step 1 (operation selections and the resources ANSWER_TARGETS
+    # lists): each answer with the controls it answered without reading, warned (ledger, own warning or stderr note).
+    ('calls', '20'): 'warned, exit 0: callers/default: kind, external, builtins, test-framework; callees and root: kind, '
+                     'external, test-framework; modules: kind, builtins, depth, test-framework; sort=-callers: kind, '
+                     'external, depth, format; uncalled: external, builtins, depth',
+    ('codex', '20'): 'warned, exit 0: catalog: since, until, key, last, tokens, goal, matches, full; session overview, '
+                     'messages and tools: filter, search, since, until, key, matches, full; config: all but key; info: all',
+    ('git', '20'): 'warned, exit 0 (the view-scoped parameters on stderr only): every view: context, detail, ignore, '
+                   'merges, bucket or element outside the views that read them; file default, blame and diff: sort, '
+                   'limit, offset, since, until; ownership: no_merges, since, until',
+    ('imports', '20'): 'warned, exit 0: format on every answer; limit on all but sort=-fan-in; detail on default, '
+                       'components, entrypoints and sort=-fan-in',
+    ('json', '20'): 'warned, exit 0: sort, limit, offset on the value view of a value that is not a list (data.json); the '
+                    'data decides, so this becomes the shared control_unread_by_data warning (Step 0 Q2)',
+    ('markdown', '20'): 'warned, exit 0: sort, limit, offset on view=links and view=lint',
+    ('metrics', '20'): 'warned, exit 0: directory default: top, churn, since, merges, tests; view=hotspots: sort; '
+                       'provenance: every control but view; file default: also limit, offset, exclude; file hotspots: '
+                       'limit, offset, exclude; file view=hotspots: exclude',
+    ('patches', '20'): 'warned, exit 0: default: tests, min_patches, min_categories, include_unresolved; '
+                       'view=pressure: group, limit, min, target, private, suppress',
 }
 
 NOT_YET_BASELINE = {'1a': 0, '1b': 0, '1c': 0, '1d': 0, '2': 0, '3': 0, '3b': 0, '4': 0, '5': 0, '6': 0,
-                    '8a': 0, '8b': 0, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 6, '14': 0, '21j': 0, '22': 0}
+                    '8a': 0, '8b': 0, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 8, '14': 0, '21j': 0, '22': 0}
 
 
 # --- the fixture -------------------------------------------------------------------------------------------
@@ -1196,20 +1210,84 @@ def probe_repeated_global_flags(noun):
     return cases
 
 
-# --- rule 20: applicability (BACK-2656), measured only -----------------------------------------------------
+# --- rule 20: applicability (BACK-2656) ---------------------------------------------------------------------
+
+# The resources whose path selects an answer (Scott 2026-11-18, Step 0 Q1: an answer is the predicted type together with
+# the operation selection, so a path that selects one counts); other nouns are probed on their default target only.
+_CODEX_SESSION = '019e5cc5-0000-7000-8000-000000000001'  # codex_session_fixture.DOC_SESSION_ID
+ANSWER_TARGETS = {
+    'ast': ('proj', 'proj/app.py'), 'claude': ('sessions', 'session/my-session'),
+    'codex': ('', _CODEX_SESSION, f'{_CODEX_SESSION}/messages', f'{_CODEX_SESSION}/tools', 'config', 'info'),
+    'git': ('proj', 'proj/app.py'), 'json': ('proj/data.json', 'proj/rows.json'), 'metrics': ('proj', 'proj/app.py'),
+}
+# A value each selection or control accepts on the fixture where the declaration's own first candidate is not one: a
+# probe value the request rejects for itself tests nothing.
+APPLICABILITY_VALUES = {
+    ('calls', 'callers'): 'serve', ('calls', 'callees'): 'serve', ('calls', 'root'): 'serve',
+    ('imports', 'importers'): 'app.py', ('overview', 'against'): 'HEAD', ('architecture', 'against'): 'HEAD',
+    ('claude', 'search'): 'x', ('claude', 'tail'): '2', ('claude', 'tools'): 'Bash', ('claude', 'match'): 'x',
+    ('codex', 'search'): 'auth', ('codex', 'filter'): 'auth', ('codex', 'key'): 'model',
+    ('git', 'sort'): 'date', ('git', 'ref'): 'HEAD', ('git', 'element'): 'serve', ('git', 'bucket'): 'day',
+    ('markdown', 'sort'): 'title', ('markdown', 'match'): 'Body', ('metrics', 'sort'): 'lines',
+    ('patches', 'target'): 'serve', ('pack', 'since'): 'HEAD', ('pack', 'budget'): '2000',
+    **{(noun, key): value for noun in NOUNS for key, value in (('since', '2020-01-01'), ('until', '2030-01-01'))},
+}
+# Not applicability's subject: the filter expression (rules 8 and 3 own its fields) and the walk policy every transport
+# splits off before binding.
+_NOT_PROBED = ('where', 'respect_gitignore')
+
+
+def _applicability_value(noun, spec):
+    return APPLICABILITY_VALUES.get((noun, spec.name)) or _selecting_value(spec)
+
+
+def _answers(noun):
+    """(label, query parts) for the default answer and each operation selection (role='operation'), every value of a
+    selection with choices. A selection replaces the base request's own selection (calls' callers), never its other
+    controls (trace's from)."""
+    base = [part for part in BASE[noun][1].lstrip('?').split('&') if part]
+    kept = [part for part in base if getattr(_spec_for(noun, query_key(part)), 'role', None) != 'operation']
+    answers = [('default', base)]
+    for spec in _specs(noun):
+        if spec.role == 'operation':
+            values = [str(choice) for choice in spec.choices if choice] or [_applicability_value(noun, spec)]
+            answers += [(f'{spec.name}={value}', [*kept, f'{spec.name}={value}']) for value in values]
+    return answers
+
+
+def _unread(run, name):
+    """Whether *run* answered while saying *name* went unread: the ledger's facts, a noun's own unknown-key warning
+    (Codex full), or a stderr note only (Git's view-scoped parameters print theirs on stderr in JSON mode too)."""
+    doc = json.loads(run.out) if run.out.strip().startswith('{') else {}
+    for warning in (doc.get('meta') or {}).get('warnings') or []:
+        if (warning.get('code') or warning.get('type')) in ('unused_query_param', 'unused_flag', 'unknown_query_param') \
+                and name in (warning.get('fields') or []):
+            return True
+    return any(f"'{name}'" in line and ('no effect' in line or 'ignored' in line) for line in run.err.splitlines())
+
 
 def probe_applicability(noun):
-    """Each declared control the default answer does not read (the unused-input warning names it) must exit 2."""
+    """Every answer (each operation selection, on each resource whose path selects an answer) given each declared
+    control: one the answer does not read must exit 2 naming it, never answer with a note that it went unread."""
     cases = []
-    for spec in _specs(noun):
-        if spec.role in ('operation', 'scope') or spec.name == 'where':
-            continue
-        run = _run(_uri(noun, f'{spec.name}={_selecting_value(spec)}'), '--format', 'json')
-        doc = json.loads(run.out) if run.out.strip().startswith('{') else {}
-        unread = [w for w in (doc.get('meta') or {}).get('warnings') or []
-                  if w.get('code') in ('unused_query_param', 'unused_flag') and spec.name in w.get('fields', [])]
-        if unread:
-            cases.append(Case(f'?{spec.name}= unread', run.rc == 2, f'{run.brief()}: the answer does not read it'))
+    for target in ANSWER_TARGETS.get(noun, (TARGETS.get(noun, 'proj'),)):
+        for label, parts in _answers(noun):
+            def uri(*extra):
+                query = '&'.join([*parts, *extra])
+                return f'{noun}://{target}' + (f'?{query}' if query else '')
+            if _run(uri(), '--format', 'json').rc not in (0, 1, 3):
+                continue  # not an answer on this resource (Claude's views need a session)
+            given = {query_key(part) for part in parts}
+            for spec in _specs(noun):
+                if spec.role == 'operation' or spec.name in _NOT_PROBED or spec.name in given:
+                    continue
+                run = _run(uri(f'{spec.name}={_applicability_value(noun, spec)}'), '--format', 'json')
+                where = f"{target or '(root)'} {label}"
+                if run.rc == 2 and 'is not read by this answer' in run.err:
+                    cases.append(Case(f'{where} ?{spec.name}= refused', True, run.brief()))
+                elif _unread(run, spec.name):
+                    cases.append(Case(f'{where} ?{spec.name}= unread', False,
+                                      f'{run.brief()}: answered, and said the answer does not read it'))
     return cases
 
 
