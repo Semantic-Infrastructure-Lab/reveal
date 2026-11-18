@@ -1620,17 +1620,24 @@ class ImportsAdapter(ResourceAdapter):
         return result
 
     def get_element(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:
-        """Get imports for a specific file.
+        """Get imports for a specific file of a graph this adapter already built (``get_structure``).
 
         Args:
             element_name: File name (e.g., 'main.py')
             **kwargs: Additional parameters
 
         Returns:
-            Dictionary with imports for that file
+            Dictionary with imports for that file, or None when no file has that name.
+
+        Raises:
+            RequestValidationError: No graph was built: a positional element is not an imports request
+                (``reveal.api.query('imports://P', element_name=...)``). The CLI refuses it with the same
+                message, naming the URI form (BACK-2651); a missing graph read as "Element not found".
         """
         if not self.analysis.graph:
-            return None
+            from ..errors import RequestValidationError
+            from .base import unread_element_message
+            raise RequestValidationError(unread_element_message(type(self), 'imports', element_name))
 
         # Find matching file
         for file_path, imports in self.analysis.graph.files.items():

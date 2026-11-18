@@ -349,7 +349,7 @@ def run_declared_uri(uri: str, element: str | None, args, consumed=(), *, answer
     path, _, query = resource.partition('?')
     if element:
         # One stderr line and an empty stdout left --format json with no answer (BACK-2526).
-        from .uri import unread_element_message
+        from ...adapters.base import unread_element_message
         adapter = declared_adapter_class(name)
         (answer_consumer or (lambda answer: answer.emit()))(_invalid_answer(
             adapter, name, path, unread_element_message(adapter, name, element), args))
