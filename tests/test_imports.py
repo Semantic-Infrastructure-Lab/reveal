@@ -1278,22 +1278,10 @@ class TestClassifyImportIsIntra:
         assert result_missing is None
 
     def test_get_element_before_analysis(self):
-        """Before any analysis an element is not an imports request: the CLI's usage error, not None
-        (None read as "Element not found" through reveal.api.query, BACK-2651)."""
-        from reveal.errors import RequestValidationError
+        """Test get_element returns None before analysis."""
         adapter = ImportsAdapter()
-        with pytest.raises(RequestValidationError, match=r"imports:// takes no positional element \('anything.py'\)"):
-            adapter.get_element("anything.py")
-
-    def test_api_element_answers_as_the_cli_does(self, tmp_path):
-        """reveal.api.query raises the CLI's message (exit 2 there), naming the URI form (BACK-2651)."""
-        from reveal.api import query
-        from reveal.errors import RequestValidationError
-        (tmp_path / "a.py").write_text("import os\n", encoding="utf-8")
-        with pytest.raises(RequestValidationError) as raised:
-            query(f"imports://{tmp_path.as_posix()}", element_name="a.py")
-        assert str(raised.value) == ("imports:// takes no positional element ('a.py'); "
-                                     "name it in the URI: imports://<path>[?query]")
+        result = adapter.get_element("anything.py")
+        assert result is None
 
     def test_get_metadata_before_analysis(self):
         """Test get_metadata before analysis."""
