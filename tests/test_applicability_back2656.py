@@ -88,6 +88,23 @@ def test_an_omitted_typed_control_and_a_none_override_are_not_given():
         _check(apply_declared_overrides(SPECS, _uri('view=b'), {'alpha': 2}))
 
 
+PICKED = ParamSpec('picked', 'flag', 'selects the fixture_b answer without being an operation (Q5)', None,
+                   lambda v: v is True or str(v).lower() in ('', '1', 'true'), answers=('fixture_b',))
+
+
+def test_a_presence_flag_given_off_selects_nothing_and_is_not_judged():
+    """Codex last/tokens/goal and Claude's presence flags name the answer they select; off (typed False, ?flag=false)
+    they select nothing, as when omitted, so they are not a control the answer leaves unread (BACK-2656 Step 2d)."""
+    specs = (*SPECS, PICKED)
+    for params in (bind_prepared_params(specs, prepare_declared_params(specs, {'picked': False}, 'typed'),
+                                        transport='typed'),
+                   bind_prepared_params(specs, prepare_declared_params(specs, 'picked=false', 'uri'), transport='uri')):
+        reject_unread_controls(specs, params, lambda: 'fixture_a')
+    with pytest.raises(RequestValidationError, match="'picked' is not read"):  # on, on an answer it does not select
+        reject_unread_controls(specs, bind_prepared_params(specs, prepare_declared_params(specs, 'picked', 'uri'),
+                                                           transport='uri'), lambda: 'fixture_a')
+
+
 def test_the_declaration_is_published_in_the_schema():
     assert ALPHA.schema()['answers'] == ['view=a']
     assert 'answers' not in BETA.schema()
