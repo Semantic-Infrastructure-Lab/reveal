@@ -100,6 +100,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
+- `==` in a where expression is equality on every noun, as on `ast://`: `reveal markdown docs --where 'status==draft'`, `json://F?where=v==1`, `git://R?view=log&where=author==T` and `metrics PATH --where 'lines==9'` matched nothing and exited 0, because the value was read as `=draft`. A value that contains `==` (`hash=abc==`) keeps it (BACK-2662).
+
 - The file view's JSON (`reveal FILE --format json`: structure, element, metadata and typed views) and the directory tree, `--files` and `--meta` JSON now carry the `retired_spelling` warning of a retired spelling they were given, like the URI and subcommand answers (BACK-2654).
 
 - `--max-items` and `--head/--tail/--range` now restate the noun's own count of rows shown (Metrics `population.displayed_files`, Patches `displayed_groups`, Calls `?rank=callers` `top`, Testability's reported counts): `reveal metrics proj --max-items 2` showed 2 rows and said 11. When the noun's own limit and one of these both cut a list, the `truncated` warning names both: `cause` stays the cut that set `shown`, a new `causes` list names every cut, and the message gives each cut's hint. Population totals are unchanged (BACK-2653).

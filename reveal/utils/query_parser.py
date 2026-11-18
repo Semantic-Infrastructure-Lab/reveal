@@ -792,6 +792,18 @@ def _filter_value(text: str, percent_decode_values: bool) -> str:
     return unquote(value, encoding='utf-8', errors='strict') if percent_decode_values else value
 
 
+def _equality_spelled_once(part: str) -> str:
+    """*part* with a ``==`` operator written as ``=`` (BACK-2662), so it gets ``=``'s wildcard and range handling.
+
+    ``==`` is the operator only as the term's first ``=`` and not the tail of ``!=``, ``~=``, ``<=`` or ``>=``: a
+    value that contains ``==`` (``hash=abc==``) keeps it, and ``name!==x`` stays ``!=`` with value ``=x``.
+    """
+    eq = part.find('=')
+    if eq > 0 and part.startswith('==', eq) and part[eq - 1] not in '!~<>':
+        return part[:eq] + part[eq + 1:]
+    return part
+
+
 def _try_parse_two_char_operators(
     part: str, coerce_numeric: bool, percent_decode_values: bool = False,
 ) -> Optional[QueryFilter]:
@@ -899,6 +911,7 @@ def parse_query_filters(
                 filters.append(parsed_filter)
                 continue
 
+        part = _equality_spelled_once(part)
         parsed_filter = _try_parse_two_char_operators(part, coerce_numeric, percent_decode_values)
         if parsed_filter:
             filters.append(parsed_filter)
