@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable, Iterator, List, NoReturn, Optional, Tuple, cast
 
 from ...errors import (ConfigLoadError, ConfigValidationError, MissingResourceError, NotApplicableError,
-                       RequestValidationError, TestLayoutValidationError)
+                       RequestValidationError, TestLayoutValidationError, UnreadControlError)
 from ...adapters.base import unread_element_message
 from ...rendering.base import emit_rendered
 from ...reveal_types import CONTRACT_VERSION, RevealResult
@@ -112,7 +112,9 @@ def _call_adapter(call: Callable[[], Any], scheme: str, resource: str,
         logger.debug('%s:// adapter call raised', scheme, exc_info=True)
         # A setting that cannot be used is the request's fault (2) or unknown input (3) on every operation, legacy
         # ones included (COMMAND_MODEL "Configuration failures", BACK-2677), as test_layout's already were.
-        invalid = (isinstance(e, (TestLayoutValidationError, ConfigValidationError, MissingResourceError))
+        # An applicability refusal is invalid on every resource of a declaring noun, qualified or not (BACK-2656).
+        invalid = (isinstance(e, (TestLayoutValidationError, ConfigValidationError, MissingResourceError,
+                                  UnreadControlError))
                    or (classify_validation and isinstance(e, RequestValidationError)))
         code = 'invalid_request' if invalid else 'adapter_error'
         _fail(scheme, resource, _exception_message(e), adapter_class=adapter_class,

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Union
 from urllib.parse import quote, unquote
 
-from ..errors import RequestValidationError, UnsupportedOverrideError
+from ..errors import RequestValidationError, UnreadControlError, UnsupportedOverrideError
 from .query_parser import (SHARED_CONTROL_NAMES, LegacySpelling, ParamSpec, ParamValueError, QueryParams, ResourceSpec,
                            mark_query_keys, parse_query_params, peek_query_items, query_key)
 
@@ -511,11 +511,11 @@ def reject_unread_controls(declarations: Iterable[ParamSpec], params: Mapping[st
         facets = answer_facets(declarations, params, result_type())
         unread = [spec for spec in scoped if not _reads(spec, facets)]
         if unread:
-            raise RequestValidationError(_unread_controls_message(declarations, unread, facets, params))
+            raise UnreadControlError(_unread_controls_message(declarations, unread, facets, params))
     unmet = [problem for spec in declarations if spec.requires and spec.name in given
              for problem in _unmet_requirements(declarations, spec, params)]
     if unmet:
-        raise RequestValidationError('; '.join(unmet))
+        raise UnreadControlError('; '.join(unmet))
 
 
 def _judged_controls(declarations: tuple, params: Mapping[str, Any], given: set) -> list:

@@ -355,3 +355,36 @@ def test_the_rule_20_probe_counts_a_refusal_as_conforming(workspace, monkeypatch
     assert len(refused) == 2 and all(case.ok for case in refused), refused  # view=links and view=lint
     assert not [case for case in cases if case.label.endswith('?limit= unread')]
     assert [case.ok for case in cases if case.label.endswith('view=links ?offset= unread')] == [False]
+
+
+def test_a_refusal_on_an_unqualified_resource_is_exit_2_and_an_undeclared_adapters_error_keeps_its_exit(monkeypatch):
+    """The generic route exits 1 for a construction-time validation error of a resource without execution facts; an
+    applicability refusal is exit 2 there too (codex's memories, rules, skills, plugins), while an undeclared
+    adapter's own RequestValidationError keeps the generic route's exit 1 (BACK-2656)."""
+    declared, renderer, _built = _fixture_classes(declared=True)
+
+    class Unqualified(declared):
+        PARAM_SPECS = SPECS  # its own declaration
+
+        @classmethod
+        def uri_execution_facts(cls, resource):
+            return None
+
+    class Raises(ResourceAdapter):
+        LEGACY_INIT = False
+        RESOURCE_SPEC = ResourceSpec(uri_default='', walks=False, filesystem=False)
+
+        def __init__(self, resource='', query=None, *, params=None):
+            raise RequestValidationError('the adapter rejects this request itself')
+
+        def get_structure(self, **kwargs):
+            raise AssertionError('never built')
+
+    for scheme, adapter in (('applicability-unqualified', Unqualified), ('applicability-raises', Raises)):
+        monkeypatch.setitem(_ADAPTER_REGISTRY, scheme, adapter)
+        monkeypatch.setitem(_RENDERER_REGISTRY, scheme, renderer)
+    refused = _run_reveal_direct('applicability-unqualified://r?alpha=1', '--format', 'json')
+    assert refused.returncode == 2 and 'is not read by this answer' in refused.stderr, (refused.returncode,
+                                                                                         refused.stderr)
+    own = _run_reveal_direct('applicability-raises://r', '--format', 'json')
+    assert own.returncode == 1 and 'the adapter rejects this request itself' in own.stderr, (own.returncode, own.stderr)

@@ -33,6 +33,13 @@ class NavRequestValidationError(RequestValidationError):
     """
 
 
+class UnreadControlError(RequestValidationError):
+    """A control the selected answer does not read, or one given without the control value it requires
+    (COMMAND_MODEL "Applicability", BACK-2656): an invalid request, exit 2, on every resource of a noun that declares
+    its controls' answers, qualified or not. Only that declaration raises it, so transports classify this bounded
+    origin without reclassifying an undeclared adapter's other validation failures."""
+
+
 class MissingResourceError(RequestValidationError):
     """The resource a request names is not there (a path that does not exist).
 
