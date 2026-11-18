@@ -198,11 +198,10 @@ NOT_YET = {
     ('git', '20'): 'warned, exit 0 (the view-scoped parameters on stderr only): every view: context, detail, ignore, '
                    'merges, bucket or element outside the views that read them; file default, blame and diff: sort, '
                    'limit, offset, since, until; ownership: no_merges, since, until',
-    ('markdown', '20'): 'warned, exit 0: sort, limit, offset on view=links and view=lint',
 }
 
 NOT_YET_BASELINE = {'1a': 0, '1b': 0, '1c': 0, '1d': 0, '2': 0, '3': 0, '3b': 0, '4': 0, '5': 0, '6': 0,
-                    '8a': 0, '8b': 0, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 3, '14': 0, '21j': 0, '22': 0}
+                    '8a': 0, '8b': 0, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 2, '14': 0, '21j': 0, '22': 0}
 
 
 # --- the fixture -------------------------------------------------------------------------------------------

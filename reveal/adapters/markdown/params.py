@@ -21,16 +21,20 @@ def fields(value: Any) -> list[str]:
     return strings(value)
 
 
+# The answers each control is read by (COMMAND_MODEL "Applicability", BACK-2656): the listing, the aggregate and lint read
+# their own controls; the link graph and backlinks read none of these.
+_LIST, _AGGREGATE, _LINT = 'markdown_query', 'markdown_aggregate', 'markdown_frontmatter_lint'
+_FILTERED = (_LIST, _AGGREGATE)
 WHERE = ParamSpec('where', 'array', 'Frontmatter expressions, ANDed; repeat for multiple constraints',
                   [], strings, role='filter-expression', repeatable=True, cli=CliBinding(('--where',)),
-                  open_fields='any front matter key')
+                  open_fields='any front matter key', answers=_FILTERED)
 MATCH = ParamSpec('match', 'array', 'Body terms, ANDed; repeat to require multiple terms',
                   [], strings, legacy=(LegacySpelling('body-contains', flag='--body-contains'),), uri_codec='percent',
-                  repeatable=True, cli=CliBinding(('--match',)))
+                  repeatable=True, cli=CliBinding(('--match',)), answers=_FILTERED)
 VIEW = ParamSpec('view', 'string', 'Answer view: list, links, aggregate (or legacy lint)',
                  None, str, choices=('list', 'links', 'aggregate', 'lint'), role='operation', cli=CliBinding(('--view',)))
 FIELD = ParamSpec('field', 'string', 'Frontmatter field counted by the aggregate view', None, str,
-                  cli=CliBinding(('--field',)))
+                  cli=CliBinding(('--field',)), answers=(_AGGREGATE,))
 BACKLINKS = ParamSpec('backlinks', 'string', 'Reverse link target, relative to the scanned directory',
                       None, str, cli=CliBinding(('--backlinks',)), uri_codec='percent')
 AGGREGATE = ParamSpec('aggregate', 'string', 'Legacy aggregate field; use --view aggregate --field FIELD',
@@ -40,17 +44,17 @@ LINKS = ParamSpec('link-graph', 'boolean', 'Legacy link graph selector; use --vi
 LINT = ParamSpec('lint', 'boolean', 'Legacy frontmatter lint selector', False, boolean_value,
                  cli=CliBinding(('--lint',), action='store_true'))
 LINT_FIELDS = ParamSpec('lint-fields', 'array', 'Required frontmatter fields for legacy lint', None, fields,
-                        cli=CliBinding(('--lint-fields',)))
+                        cli=CliBinding(('--lint-fields',)), answers=(_LINT,))
 FIELDS = ParamSpec('columns', 'array', 'Additional frontmatter fields displayed as listing columns', None, fields,
-                   legacy=(LegacySpelling('fields'),), cli=CliBinding(('--columns',)))
+                   legacy=(LegacySpelling('fields'),), cli=CliBinding(('--columns',)), answers=(_LIST,))
 EXPLAIN = ParamSpec('explain', 'boolean', 'Include per-term body relevance evidence', False, boolean_value,
-                    cli=CliBinding(('--explain',), action='store_true'))
+                    cli=CliBinding(('--explain',), action='store_true'), answers=(_LIST,))
 SORT = ParamSpec('sort', 'string', 'Frontmatter field; prefix - for descending', None, str,
-                 cli=CliBinding(('--sort',)))
+                 cli=CliBinding(('--sort',)), answers=(_LIST,))
 LIMIT = ParamSpec('limit', 'integer', 'Answer rows; 0 = no cap', None, int, minimum=0,
-                  zero_policy='no cap', cli=CliBinding(('--limit',)))
+                  zero_policy='no cap', cli=CliBinding(('--limit',)), answers=(_LIST,))
 OFFSET = ParamSpec('offset', 'integer', 'Answer rows skipped after sorting', 0, int, minimum=0,
-                   cli=CliBinding(('--offset',)))
+                   cli=CliBinding(('--offset',)), answers=(_LIST,))
 PARAM_SPECS = (WHERE, MATCH, VIEW, FIELD, BACKLINKS, AGGREGATE, LINKS, LINT, LINT_FIELDS,
                FIELDS, EXPLAIN, SORT, LIMIT, OFFSET)
 
@@ -103,10 +107,7 @@ def validate_request(params: QueryParams, args=None) -> None:
         selectors = ('link-graph', 'lint', 'backlinks', 'aggregate')
         if any(values.get(key) for key in selectors):
             raise ValueError('view conflicts with a legacy selector or backlinks target')
-        if view not in ('list', 'aggregate') and (values.get('where') or values.get('match')):
-            raise ValueError('where/match require the list or aggregate view')
+    # Which answers read where, match, field and the rest is their declaration's (BACK-2656).
     if view == 'aggregate' and not (values.get('field') or values.get('aggregate')):
         raise ValueError('aggregate view requires field')
-    if values.get('field') and view != 'aggregate':
-        raise ValueError('field requires the aggregate view')
     filter_state(params)

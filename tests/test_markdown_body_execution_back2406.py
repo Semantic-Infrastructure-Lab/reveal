@@ -195,10 +195,9 @@ def test_resource_validation_precedes_controls_and_preserves_api_missing_excepti
     assert run(uri(file), '--format', 'json').returncode == 2
 
 
-@pytest.mark.parametrize('query', ['body-contains=', 'body-contains', 'title=guide',
-    'body-contains=needle&link-graph',
-    'body-contains=needle&link_graph', 'body-contains=needle&lint',
-    'body-contains=needle&backlinks=good.md'])
+# The sibling views read no body terms: given one they refuse it (BACK-2656), so they are asked without it.
+@pytest.mark.parametrize('query', ['body-contains=', 'body-contains', 'title=guide', 'link-graph', 'link_graph',
+                                   'lint', 'backlinks=good.md'])
 def test_sibling_views_now_record_source_completeness(tmp_path, query):
     document(tmp_path, 'good.md', b'---\ntitle: guide\n---\nneedle\n')
     if query == 'body-contains':

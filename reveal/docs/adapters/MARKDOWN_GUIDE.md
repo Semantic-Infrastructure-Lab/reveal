@@ -37,6 +37,10 @@ reveal markdown docs/ --backlinks guide.md
 | `lint` | Legacy frontmatter maintenance queue |
 | `lint-fields` | Required frontmatter fields for legacy lint |
 
+Each control is read by the answers it applies to: the listing reads `where`, `match`, `columns`, `explain`,
+`sort`, `limit` and `offset`; `view=aggregate` reads `field`, `where` and `match`; lint reads `lint-fields`; the link
+graph and backlinks read none of them. Any other answer exits 2 naming the controls it reads.
+
 `--fields` keeps its shared JSON projection meaning; `--columns` adds frontmatter
 columns. A bare `body-contains` is rejected because it supplies no search term;
 `body-contains=` retains the empty-term listing behavior. Nonempty `body-contains=`

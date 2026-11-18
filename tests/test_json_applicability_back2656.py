@@ -130,12 +130,10 @@ def test_the_flatten_answer_still_reads_its_own_controls(proj, uri):
     assert run.stderr == '', run.stderr
 
 
-def test_a_sibling_noun_is_unchanged_until_its_own_group(tmp_path, monkeypatch):
-    """Markdown declares its answers in a later group (2d): its links view still answers an unread limit with the
-    ledger's warning."""
+def test_a_sibling_noun_refuses_through_its_own_declaration(tmp_path, monkeypatch):
+    """Markdown declares its answers since group 2d: its links view refuses limit with the same shared message."""
     (tmp_path / 'a.md').write_text('# A\n\n[b](b.md)\n', encoding='utf-8')
     (tmp_path / 'b.md').write_text('# B\n', encoding='utf-8')
     monkeypatch.chdir(tmp_path)
-    run, doc = _json('markdown://.?view=links&limit=1')
-    assert run.returncode == 0, run.stderr
-    assert [w['fields'] for w in _warnings(doc, 'unused_query_param')] == [['limit']], doc['meta']
+    run, _doc = _json('markdown://.?view=links&limit=1')
+    assert run.returncode == 2 and "control 'limit' is not read by this answer" in run.stderr, run.stderr

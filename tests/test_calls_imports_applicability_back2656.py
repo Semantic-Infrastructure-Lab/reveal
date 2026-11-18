@@ -132,10 +132,10 @@ def test_imports_dot_still_draws_the_directory_importers(proj):
     assert run.stdout.startswith('digraph modules {')
 
 
-# --- a sibling noun that declares in a later group (2d; metrics declared in 2c) -----------------------------------
+# --- a sibling noun on the same seam ------------------------------------------------------------------------------
 
-def test_markdown_is_unchanged_until_its_own_group(proj):
+def test_markdown_refuses_through_its_own_declaration(proj):
+    """A sibling noun on the same seam (Markdown declares since group 2d)."""
     (proj / 'guide.md').write_text('# Guide\n\n[a](a.py)\n', encoding='utf-8')
-    run, doc = _run('markdown://.?view=links&limit=1')
-    assert run.returncode == 0, run.stderr
-    assert [w['fields'] for w in _unread(doc)] == [['limit']], doc.get('meta')
+    run, _doc = _run('markdown://.?view=links&limit=1')
+    assert run.returncode == 2 and "control 'limit' is not read by this answer" in run.stderr, run.stderr

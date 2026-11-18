@@ -268,10 +268,11 @@ def test_postprocessing_cannot_rewrite_source_loss_as_success_or_decline(
                for entry in json.loads(response.stdout)['meta']['errors'])
 
 
+# The sibling views read no body terms: given one they refuse it (BACK-2656), so they are asked without it.
 @pytest.mark.parametrize('suffix,expected_type', [
-    ('?link-graph&body-contains=needle', 'markdown_link_graph'),
-    ('?lint&body-contains=needle', 'markdown_frontmatter_lint'),
-    ('?backlinks=good.md&body-contains=needle', 'markdown_backlinks'),
+    ('?link-graph', 'markdown_link_graph'),
+    ('?lint', 'markdown_frontmatter_lint'),
+    ('?backlinks=good.md', 'markdown_backlinks'),
     ('?body-contains=', 'markdown_query'), ('?body-contains', 'markdown_query'),
 ])
 def test_sibling_views_retain_partial_results_with_incomplete_status(tmp_path, suffix, expected_type):

@@ -212,10 +212,10 @@ def test_all_lifts_the_pressure_view_cap(proj, form):
     assert len(doc['patch_hotspots']) == len(expected['patch_hotspots']) == _TARGETS
 
 
-# --- a sibling noun that declares in a later group (2d) ---------------------------------------------------------
+# --- a sibling noun on the same seam ------------------------------------------------------------------------------
 
-def test_markdown_is_unchanged_until_its_own_group(proj):
+def test_markdown_refuses_through_its_own_declaration(proj):
+    """A sibling noun on the same seam (Markdown declares since group 2d)."""
     (proj / 'guide.md').write_text('# Guide\n\n[a](app.py)\n', encoding='utf-8')
-    run, doc = _run('markdown://.?view=links&limit=1')
-    assert run.returncode == 0, run.stderr
-    assert [w['fields'] for w in _unread(doc)] == [['limit']], doc.get('meta')
+    run, _doc = _run('markdown://.?view=links&limit=1')
+    assert run.returncode == 2 and "control 'limit' is not read by this answer" in run.stderr, run.stderr
