@@ -147,7 +147,9 @@ def test_adopter_callable_and_class_local_capability():
     assert adopted == {SurfaceAdapter, get_adapter_class('contracts'), get_adapter_class('trace'),
                        get_adapter_class('overview'), get_adapter_class('architecture'), get_adapter_class('calls'),
                        *(get_adapter_class(s) for s in ('ast', 'markdown', 'json', 'git', 'claude', 'codex', 'imports',
-                                                        'metrics', 'stats'))}
+                                                        'metrics', 'stats',
+                                                        # their own PARAM_SPECS adopt it (BACK-2656)
+                                                        'deps', 'hotspots', 'pack', 'patches', 'testability'))}
     assert list(inspect.signature(SurfaceAdapter.get_structure).parameters) == ['self']
     assert SurfaceAdapter.__dict__['BOUND_QUERY_CALL'] is True
     assert ResourceAdapter.BOUND_QUERY_CALL is False

@@ -153,8 +153,9 @@ class ResourceAdapter(ABC):
     # enforces this.
     LEGACY_INIT: bool = True
 
-    # Explicit class-local adoption: constructor-bound query controls and a zero-argument
-    # get_structure call. Subclasses must opt in themselves; plugin from_uri stays legacy.
+    # Constructor-bound query controls and a zero-argument get_structure call. A class's own PARAM_SPECS with
+    # LEGACY_INIT = False adopts it (factory.uses_bound_query_call); this flag adopts it for a subclass that
+    # inherits its declaration. Subclasses must opt in themselves; plugin from_uri stays legacy.
     # Optional validate_original_request(params, resource) checks semantic URI constraints
     # before typed API overrides; source-before-controls readers retain their own loading order.
     BOUND_QUERY_CALL: bool = False

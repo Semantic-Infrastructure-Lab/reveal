@@ -113,8 +113,17 @@ def _try_full_uri_init(adapter_class: type, scheme: str, resource: str,
 
 
 def uses_bound_query_call(adapter_class: type) -> bool:
-    """Only a class's own declaration adopts constructor-bound structure calls."""
-    return isinstance(adapter_class, type) and adapter_class.__dict__.get('BOUND_QUERY_CALL') is True
+    """Whether the class binds its query controls in its constructor and answers a zero-argument structure call. A
+    class's own ``PARAM_SPECS`` with the canonical constructor is that declaration: its typed ``api.query`` keywords
+    bind through the same binder and checks as its URI query (BACK-2656; a noun that declared its controls without the
+    flag dropped or crashed on every keyword). ``BOUND_QUERY_CALL`` adopts it for a class that inherits its
+    declaration (the retired ``stats://``, Architecture). Only a class's own declaration counts: a plugin subclass
+    that inherits ``PARAM_SPECS`` keeps forwarding keywords to its structure call."""
+    if not isinstance(adapter_class, type):
+        return False
+    own = adapter_class.__dict__
+    return own.get('BOUND_QUERY_CALL') is True or (
+        'PARAM_SPECS' in own and getattr(adapter_class, 'LEGACY_INIT', True) is False)
 
 
 def scope_path_of(adapter_class: type, path: str) -> str:

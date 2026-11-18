@@ -181,10 +181,9 @@ def test_patches_api_refuses_the_same_request(proj):
         api.query('patches://.?view=pressure&group=file')
 
 
-@pytest.mark.xfail(strict=True, reason='BACK-2656: patches declares no BOUND_QUERY_CALL, so api.query hands its typed '
-                                       'keywords to get_structure(**kwargs), which reads none of them: every keyword '
-                                       'is dropped in silence (group=file answers grouped by target), unread ones too')
 def test_patches_api_keyword_reaches_the_same_check(proj):
+    """A typed keyword binds through the declarations as the URI does (it went to get_structure(**kwargs) and was
+    dropped in silence, tests/test_api_typed_keywords_back2656.py)."""
     from reveal import api
     with pytest.raises(RequestValidationError, match=r"control 'min_patches' is not read by this answer"):
         api.query('patches://tests', min_patches=2)
