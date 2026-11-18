@@ -19,7 +19,7 @@ date: 2026-03-28
 
 The script handles:
 - Pre-flight checks (clean repo, on master, etc.)
-- GitHub Actions Tests status check for HEAD (BACK-578 — aborts if red or missing)
+- GitHub Actions Tests status check for HEAD (BACK-578 — aborts if any completed run for HEAD failed, or none passed; every run on the sha counts, since the `ci/**` run and the master fast-forward's both test it, BACK-2683)
 - Version bump in `pyproject.toml`
 - CHANGELOG validation
 - Reveal self-check (V007/V011/V012/V013)
@@ -86,8 +86,8 @@ Fix any errors before proceeding.
 
 `./scripts/pre-release-check.sh` runs the full gate set (its last step, CI parity, runs
 `scripts/ci-local.sh --matrix`: a CI-equivalent venv per Python 3.11/3.12/3.14, the 3.12 @ language-pack 1.8.1 floor, plus the CI-only
-steps -- see CONTRIBUTING.md "Testing". It skips that run when GitHub's Tests run is already
-green for HEAD, which covers every `--matrix` leg plus macOS and Windows (BACK-1646);
+steps -- see CONTRIBUTING.md "Testing". It skips that run when a GitHub Tests run is already
+green for HEAD and none failed, which covers every `--matrix` leg plus macOS and Windows (BACK-1646);
 `SKIP_CI_PARITY=1` skips it regardless), including two
 regression-only ratchets that need the maintainer environment:
 - **mypy** (`scripts/check_mypy_baseline.py`) fails if any (file, error-code) count rose
@@ -404,7 +404,7 @@ Bumping mid-session causes the doc validation test (`test_agent_help_is_current_
 - [ ] **Version check**: `git tag | grep vX.Y.Z` returns nothing (or use `--resume` if it exists)
 - [ ] All features merged to master
 - [ ] Tests passing: `pytest`
-- [ ] **GitHub Actions Tests workflow is green for HEAD** (BACK-578 — script checks this automatically via `gh run list` and aborts if red or missing; a red CI run must not ship)
+- [ ] **GitHub Actions Tests workflow is green for HEAD** (BACK-578 — script checks this automatically via `gh run list` and aborts if any run for HEAD failed or none passed; a red CI run must not ship)
 - [ ] Clean git status
 - [ ] On master branch, pulled latest
 

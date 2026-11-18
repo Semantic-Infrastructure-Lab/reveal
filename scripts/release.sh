@@ -51,6 +51,10 @@ warn() {
     echo -e "${YELLOW}⚠ $1${NC}"
 }
 
+# ci_verdict judges the Tests runs for HEAD (BACK-2683); release_test_python picks the interpreter
+# of the local test run and the file unsets PYTHONPATH (BACK-2684).
+source "$(dirname "${BASH_SOURCE[0]}")/release_checks.sh"
+
 # ============================================================================
 # ARGUMENT PARSING
 # ============================================================================
@@ -165,16 +169,21 @@ echo
 info "Checking GitHub Actions Tests status for HEAD..."
 
 HEAD_SHA=$(git rev-parse HEAD)
-CI_CONCLUSION=$(gh run list --workflow test.yml --json headSha,conclusion,status -L 100 \
-    --jq ".[] | select(.headSha == \"$HEAD_SHA\") | .conclusion" | head -1)
+# Every run for the sha counts, not the newest (BACK-2683): any completed failure refuses, otherwise
+# one completed success is the green run.
+CI_RUNS=$(ci_runs "$HEAD_SHA") || error "Could not list GitHub Actions Tests runs for HEAD ($HEAD_SHA)"
+CI_VERDICT=$(ci_verdict <<< "$CI_RUNS")
+case "$CI_VERDICT" in
+    green*) ;;
+    failed*)
+        error "GitHub Actions Tests failed for HEAD ($HEAD_SHA): ${CI_VERDICT#failed }\nFix CI before releasing: https://github.com/Semantic-Infrastructure-Lab/reveal/actions" ;;
+    pending*)
+        error "No completed green GitHub Actions Tests run for HEAD ($HEAD_SHA) yet; still running: ${CI_VERDICT#pending }\nWait for it to finish, then retry." ;;
+    *)
+        error "No green GitHub Actions Tests run found for HEAD ($HEAD_SHA).\nPush it to a ci/** branch to trigger one, wait for it to finish, then retry.\nCheck: https://github.com/Semantic-Infrastructure-Lab/reveal/actions" ;;
+esac
 
-if [ -z "$CI_CONCLUSION" ]; then
-    error "No GitHub Actions Tests run found for HEAD ($HEAD_SHA).\nWait for CI to finish (or push to trigger it), then retry.\nCheck: https://github.com/Semantic-Infrastructure-Lab/reveal/actions"
-elif [ "$CI_CONCLUSION" != "success" ]; then
-    error "GitHub Actions Tests run for HEAD ($HEAD_SHA) is not green (conclusion: $CI_CONCLUSION).\nFix CI before releasing: https://github.com/Semantic-Infrastructure-Lab/reveal/actions"
-fi
-
-success "GitHub Actions Tests passed for HEAD ($HEAD_SHA)"
+success "GitHub Actions Tests passed for HEAD ($HEAD_SHA): run ${CI_VERDICT#green }"
 echo
 
 # ============================================================================
@@ -289,7 +298,8 @@ if [ "$CURRENT_VERSION_IN_FILE" = "$NEW_VERSION" ]; then
     success "Tests: GitHub Actions run for HEAD is green and the release adds no change"
 else
     info "Running test suite (version bumped by this script, so HEAD differs from the tested commit)..."
-    python3 -m pytest tests/ -q --tb=short || error "Tests failed — fix failures before releasing"
+    TEST_PY=$(release_test_python) || error "No interpreter with reveal's dev extras for the test run (see above)"
+    "$TEST_PY" -m pytest tests/ -q --tb=short || error "Tests failed — fix failures before releasing"
     success "All tests passed"
 fi
 

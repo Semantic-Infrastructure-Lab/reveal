@@ -14,6 +14,7 @@ echo "╚═══════════════════════�
 echo ""
 
 cd "$PROJECT_ROOT"
+source "$SCRIPT_DIR/release_checks.sh"  # unsets PYTHONPATH; release_test_python, ci_runs, ci_verdict
 
 # Color codes for output
 RED='\033[0;31m'
@@ -67,9 +68,14 @@ done
 check_step "Test Suite (All Tests)" 3 12
 
 TEST_LOG=$(mktemp)
-python3 -m pytest tests/ -v --cov=reveal --cov-report=term-missing --cov-fail-under=70 2>&1 | tee "$TEST_LOG"
-TEST_STATUS=${PIPESTATUS[0]}
-TEST_SUMMARY=$(grep -E '^=+ .* in [0-9.]+s' "$TEST_LOG" | tail -1)
+if TEST_PY=$(release_test_python); then
+    echo "Interpreter: $TEST_PY"
+    "$TEST_PY" -m pytest tests/ -v --cov=reveal --cov-report=term-missing --cov-fail-under=70 2>&1 | tee "$TEST_LOG"
+    TEST_STATUS=${PIPESTATUS[0]}
+else
+    TEST_STATUS=1
+fi
+TEST_SUMMARY=$(grep -E '^=+ .* in [0-9.]+s' "$TEST_LOG" | tail -1 || true)
 
 if [ "$TEST_STATUS" -ne 0 ] && { echo "$TEST_SUMMARY" | grep -qE '[0-9]+ (failed|errors?)\b' || [ -z "$TEST_SUMMARY" ]; }; then
     echo -e "${RED}✗ Tests FAILED: ${TEST_SUMMARY:-no pytest summary (collection or startup error)}${NC}"
@@ -191,12 +197,12 @@ fi
 check_step "CI Parity (CI environment + CI-only steps, Python 3.11/3.12/3.14)" 12 12
 
 HEAD_SHA=$(git rev-parse HEAD)
-HEAD_CI=$(gh run list --workflow test.yml --json headSha,conclusion -L 100 \
-    --jq ".[] | select(.headSha == \"$HEAD_SHA\") | .conclusion" 2>/dev/null | head -1)
+# Every run for the sha, not the newest: the master fast-forward queues a second one (BACK-2683).
+HEAD_CI=$(ci_verdict <<< "$(ci_runs "$HEAD_SHA" 2>/dev/null || true)")
 
 if [ "${SKIP_CI_PARITY:-0}" = "1" ]; then
     echo -e "${YELLOW}⚠ CI parity SKIPPED (SKIP_CI_PARITY=1)${NC}"
-elif [ "$HEAD_CI" = "success" ]; then
+elif [[ "$HEAD_CI" == green* ]]; then
     echo -e "${GREEN}✓ GitHub Tests run is green for HEAD ($HEAD_SHA); local --matrix skipped (BACK-1646)${NC}"
 elif "$SCRIPT_DIR/ci-local.sh" --matrix; then
     echo -e "${GREEN}✓ CI parity run passed${NC}"
