@@ -66,7 +66,10 @@ from reveal.utils.query_parser import ParamSpec  # noqa: E402
 SWITCH = ParamSpec('walk', 'boolean', 'a switch, on by default', True, switch_value)
 BOUND = ParamSpec('bound', 'string', 'needs the walk', None, str, requires=('walk=on',))
 FREE = ParamSpec('free', 'string', 'needs nothing', None, str)
-SPECS = (SWITCH, BOUND, FREE)
+PICK = ParamSpec('pick', 'string', 'one way to narrow', None, str)
+FIND = ParamSpec('find', 'string', 'another way to narrow', None, str)
+NARROWED = ParamSpec('narrowed', 'string', 'bounds a narrowed request', None, str, requires=('pick|find',))
+SPECS = (SWITCH, BOUND, FREE, PICK, FIND, NARROWED)
 
 
 def _check(query=None, **typed):
@@ -89,6 +92,18 @@ def test_a_requirement_the_request_contradicts_is_an_invalid_request_naming_both
         _check(**request_)
 
 
+@pytest.mark.parametrize('query', ['narrowed=x&pick=a', 'narrowed=x&find=b', 'narrowed=x&pick=a&find=b', 'pick=a'])
+def test_a_presence_requirement_met_by_any_alternative_answers(query):
+    _check(query)
+
+
+@pytest.mark.parametrize('request_', [{'query': 'narrowed=x'}, {'query': 'narrowed=x&free=y'}, {'narrowed': 'x'}])
+def test_a_presence_requirement_with_no_alternative_given_is_an_invalid_request_naming_them(request_):
+    with pytest.raises(RequestValidationError, match=r"control 'narrowed' requires pick or find; this request gives "
+                                                     r"none of them: give one, or drop narrowed"):
+        _check(**request_)
+
+
 def test_the_requirement_is_published_in_the_schema():
     assert BOUND.schema()['requires'] == ['walk=on'] and 'requires' not in FREE.schema()
 
@@ -98,7 +113,9 @@ def test_every_declared_requirement_names_a_sibling_control_and_a_value_it_accep
     requirements = [(noun, spec, requirement) for noun in NOUNS for spec in _adapter(noun).PARAM_SPECS
                     for requirement in spec.requires]
     for noun, spec, requirement in requirements:
-        other, sep, value = requirement.partition('=')
-        [sibling] = [s for s in _adapter(noun).PARAM_SPECS if s.name == other]
-        assert sep and other != spec.name, (noun, spec.name, requirement)
-        sibling.validate(value)  # a value the required control accepts (raises otherwise)
+        for alternative in requirement.split('|'):
+            other, sep, value = alternative.partition('=')
+            [sibling] = [s for s in _adapter(noun).PARAM_SPECS if s.name == other]
+            assert other != spec.name, (noun, spec.name, requirement)
+            if sep:
+                sibling.validate(value)  # a value the required control accepts (raises otherwise)
