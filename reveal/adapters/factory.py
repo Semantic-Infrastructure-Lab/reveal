@@ -141,7 +141,7 @@ def answer_reads_control(adapter_class: type, name: str, selection: Any, path: O
     """Whether the answer *selection* selects (a raw URI query, or a subcommand's typed values) reads control *name*,
     by the noun's own declarations (COMMAND_MODEL "Applicability"). A control that declares no answers, a noun that
     declares none, and a selection that does not bind (the request's own binding names that problem) read it."""
-    if not _declares_answers(adapter_class):
+    if not _declares_applicability(adapter_class):
         return True
     declarations = getattr(adapter_class, 'PARAM_SPECS')
     spec = next((declaration for declaration in declarations if name in declaration.spellings), None)
@@ -228,21 +228,21 @@ def _built(adapter_class: type, path: str, bound: Callable[[], Any], construct: 
         adapter = construct()
         _reject_unread_controls(adapter_class, getattr(adapter, 'query_params', {}), path)
         return adapter
-    if _declares_answers(adapter_class):
+    if _declares_applicability(adapter_class):
         _reject_unread_controls(adapter_class, bound(), path)
     return construct()
 
 
-def _declares_answers(adapter_class: type) -> bool:
+def _declares_applicability(adapter_class: type) -> bool:
     """A noun's own ``PARAM_SPECS`` (as ``api.query``'s unsupported-control check reads it) with a control that names
-    its answers: only then is there an applicability check to run. A plugin subclass that inherits the declaration
-    keeps its own behaviour."""
+    its answers or the values of others it requires: only then is there an applicability check to run. A plugin
+    subclass that inherits the declaration keeps its own behaviour."""
     declarations = vars(adapter_class).get('PARAM_SPECS') if isinstance(adapter_class, type) else None
-    return any(getattr(spec, 'answers', ()) for spec in declarations or ())
+    return any(getattr(spec, 'answers', ()) or getattr(spec, 'requires', ()) for spec in declarations or ())
 
 
 def _reject_unread_controls(adapter_class: type, params: Any, path: str) -> None:
-    if not _declares_answers(adapter_class):
+    if not _declares_applicability(adapter_class):
         return
     from ..utils.query_binding import reject_unread_controls
     reject_unread_controls(getattr(adapter_class, 'PARAM_SPECS'), params,

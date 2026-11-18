@@ -507,12 +507,44 @@ def reject_unread_controls(declarations: Iterable[ParamSpec], params: Mapping[st
     declarations = tuple(declarations)
     given = given_controls(params)
     scoped = [spec for spec in declarations if spec.answers and spec.role != 'operation' and spec.name in given]
-    if not scoped:
-        return
-    facets = answer_facets(declarations, params, result_type())
-    unread = [spec for spec in scoped if not _reads(spec, facets)]
-    if unread:
-        raise RequestValidationError(_unread_controls_message(declarations, unread, facets, params))
+    if scoped:
+        facets = answer_facets(declarations, params, result_type())
+        unread = [spec for spec in scoped if not _reads(spec, facets)]
+        if unread:
+            raise RequestValidationError(_unread_controls_message(declarations, unread, facets, params))
+    unmet = [problem for spec in declarations if spec.requires and spec.name in given
+             for problem in _unmet_requirements(declarations, spec, params)]
+    if unmet:
+        raise RequestValidationError('; '.join(unmet))
+
+
+def _unmet_requirements(declarations: tuple, spec: ParamSpec, params: Mapping[str, Any]) -> list:
+    """Each ``requires`` entry of *spec* (``churn=on``) the request's value of that control does not meet, as the
+    message naming both: the given or default value, compared after the control's own conversion."""
+    problems = []
+    for requirement in spec.requires:
+        name, _, wanted = requirement.partition('=')
+        other = next(declaration for declaration in declarations if declaration.name == name)
+        actual = _bound_value(other, params)
+        if actual != other.validate(wanted):
+            problems.append(f"control {_as_typed(params, spec.name)} requires {requirement}; this request gives "
+                            f"{name}={_shown(actual, wanted)}: give one or the other")
+    return problems
+
+
+def _bound_value(spec: ParamSpec, params: Mapping[str, Any]) -> Any:
+    """The value *spec* has in *params* (its default when not given), converted, without counting it as read."""
+    normalized = getattr(params, '_normalized', {}).get(spec.name)
+    if normalized is not None and normalized[0] is spec:
+        return normalized[1]
+    return spec.validate(dict(peek_query_items(params)).get(spec.name))
+
+
+def _shown(value: Any, like: str) -> str:
+    """*value* spelled as the requirement spells its own (a switch's ``on``/``off``, a boolean's ``true``/``false``)."""
+    if isinstance(value, bool):
+        return ('on' if value else 'off') if like.lower() in ('on', 'off') else str(value).lower()
+    return str(value)
 
 
 def _folded_terms(params: Mapping[str, Any], name: str) -> list:

@@ -414,6 +414,10 @@ class ParamSpec:
     # name (``hotspots``), ``name=value`` (``view=hotspots``) or ``default`` (no operation given). A control given to
     # an answer that matches no entry is an invalid request, refused before analysis.
     answers: Tuple[str, ...] = ()
+    # The values of other controls this one needs, each ``name=value`` (``churn=on``: Metrics ``since`` bounds the churn
+    # walk). Given beside a different value of that control, the request conflicts with itself: an invalid request
+    # naming both, refused before analysis by the same check as ``answers`` (Scott 2026-11-18, BACK-2656).
+    requires: Tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         from dataclasses import replace
@@ -522,6 +526,8 @@ class ParamSpec:
             result['names'] = self.names
         if self.answers:
             result['answers'] = list(self.answers)
+        if self.requires:
+            result['requires'] = list(self.requires)
         if self.cli is not None:
             result['cli'] = {'flags': list(self.flags), 'dest': self.cli.dest or self.name,
                              'nargs': self.cli.nargs, 'required': self.cli.required,

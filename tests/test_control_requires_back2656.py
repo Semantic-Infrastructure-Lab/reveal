@@ -55,3 +55,50 @@ def test_churn_on_with_its_bounds_and_churn_off_alone_answer(proj, uri):
     run, doc = _run(uri)
     assert run.returncode == 0, run.stderr
     assert doc['type'] == 'stats_summary'
+
+
+# --- the shared declaration (unit) ---------------------------------------------------------------------------------
+
+from reveal.utils.query_binding import (bind_prepared_params, prepare_declared_params,  # noqa: E402
+                                        reject_unread_controls, switch_value)
+from reveal.utils.query_parser import ParamSpec  # noqa: E402
+
+SWITCH = ParamSpec('walk', 'boolean', 'a switch, on by default', True, switch_value)
+BOUND = ParamSpec('bound', 'string', 'needs the walk', None, str, requires=('walk=on',))
+FREE = ParamSpec('free', 'string', 'needs nothing', None, str)
+SPECS = (SWITCH, BOUND, FREE)
+
+
+def _check(query=None, **typed):
+    if query is not None:
+        params = bind_prepared_params(SPECS, prepare_declared_params(SPECS, query, 'uri'), transport='uri')
+    else:
+        params = bind_prepared_params(SPECS, prepare_declared_params(SPECS, typed, 'typed'), transport='typed')
+    reject_unread_controls(SPECS, params, lambda: 'fixture')
+
+
+@pytest.mark.parametrize('query', ['bound=x', 'walk=on&bound=x', 'walk=off', 'walk=off&free=y', ''])
+def test_a_requirement_met_or_not_asked_answers(query):
+    _check(query)
+
+
+@pytest.mark.parametrize('request_', [{'query': 'walk=off&bound=x'}, {'walk': False, 'bound': 'x'},
+                                      {'walk': 'off', 'bound': 'x'}])
+def test_a_requirement_the_request_contradicts_is_an_invalid_request_naming_both(request_):
+    with pytest.raises(RequestValidationError, match=r"control 'bound' requires walk=on; this request gives walk=off"):
+        _check(**request_)
+
+
+def test_the_requirement_is_published_in_the_schema():
+    assert BOUND.schema()['requires'] == ['walk=on'] and 'requires' not in FREE.schema()
+
+
+def test_every_declared_requirement_names_a_sibling_control_and_a_value_it_accepts():
+    from test_vocabulary_conformance_back2654 import NOUNS, _adapter
+    requirements = [(noun, spec, requirement) for noun in NOUNS for spec in _adapter(noun).PARAM_SPECS
+                    for requirement in spec.requires]
+    for noun, spec, requirement in requirements:
+        other, sep, value = requirement.partition('=')
+        [sibling] = [s for s in _adapter(noun).PARAM_SPECS if s.name == other]
+        assert sep and other != spec.name, (noun, spec.name, requirement)
+        sibling.validate(value)  # a value the required control accepts (raises otherwise)
