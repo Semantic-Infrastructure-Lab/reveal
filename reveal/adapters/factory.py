@@ -17,7 +17,7 @@ _default_from_uri's one-time-per-class deprecation warning.
 from __future__ import annotations
 
 import warnings
-from typing import Any, Mapping, Optional, Set, Tuple
+from typing import Any, Callable, Mapping, Optional, Set, Tuple
 
 # Adapter classes already warned about LEGACY_INIT — one warning per class,
 # not per call, so a hot loop through a legacy plugin adapter doesn't spam.
@@ -161,10 +161,7 @@ def _canonical_init(adapter_class: type, resource: str, *, params: Optional[Any]
         raise TypeError('params and overrides cannot be supplied together')
     if params is not None:
         # Already-bound input keeps literal '?' paths out of URI serialization.
-        if getattr(adapter_class, 'SOURCE_BEFORE_CONTROLS', False):
-            return _checked(adapter_class(resource, params=params), resource)
-        _reject_unread_controls(adapter_class, params, resource)
-        return adapter_class(resource, params=params)
+        return _built(adapter_class, resource, lambda: params, lambda: adapter_class(resource, params=params))
     empty_default = getattr(adapter_class, 'CANONICAL_EMPTY_RESOURCE', '.')
     if resource and '?' in resource:
         path, query = resource.split('?', 1)
@@ -173,31 +170,48 @@ def _canonical_init(adapter_class: type, resource: str, *, params: Optional[Any]
         path = resource or empty_default
         query = None
     if overrides is not None:
-        from ..utils.query_binding import bind_declared_params, bind_resource_path
-        from ..utils.query_parser import ResourceSpec
-        spec = getattr(adapter_class, 'RESOURCE_SPEC', ResourceSpec(uri_default=empty_default))
-        path = bind_resource_path(spec, path, transport='uri',
-                                  resolve=getattr(adapter_class, 'resource_path', None))
-        if getattr(adapter_class, 'SOURCE_BEFORE_CONTROLS', False):
-            return _checked(adapter_class(path, query, overrides=overrides), path)
-        validate = getattr(adapter_class, 'validate_original_request', None)
-        bound = bind_declared_params(getattr(adapter_class, 'PARAM_SPECS'), query or '', transport='uri',
-                                     overrides=overrides,
-                                     validate=(lambda bound: validate(bound, path)) if validate else None)
-        _reject_unread_controls(adapter_class, bound, path)
-        return adapter_class(path, params=bound)
+        return _built_with_overrides(adapter_class, path, query, overrides, empty_default)
     spec = getattr(adapter_class, 'RESOURCE_SPEC', None)
     if spec is not None:
         from ..utils.query_binding import bind_resource_path
         path = bind_resource_path(spec, path, transport='uri',
                                   resolve=getattr(adapter_class, 'resource_path', None))
+    from ..utils.query_binding import bind_declared_params
+    # The adapter binds its own query; the check reads the same binding first, only when a control declares answers.
+    return _built(adapter_class, path,
+                  lambda: bind_declared_params(getattr(adapter_class, 'PARAM_SPECS'), query or '', transport='uri'),
+                  lambda: adapter_class(path, query))
+
+
+def _built_with_overrides(adapter_class: type, path: str, query: Optional[str], overrides: Mapping[str, Any],
+                          empty_default: str) -> Any:
+    """Typed overrides bind after validating the URI query, then reach the constructor as params."""
+    from ..utils.query_binding import bind_declared_params, bind_resource_path
+    from ..utils.query_parser import ResourceSpec
+    spec = getattr(adapter_class, 'RESOURCE_SPEC', ResourceSpec(uri_default=empty_default))
+    path = bind_resource_path(spec, path, transport='uri', resolve=getattr(adapter_class, 'resource_path', None))
     if getattr(adapter_class, 'SOURCE_BEFORE_CONTROLS', False):
-        return _checked(adapter_class(path, query), path)
-    if _declares_answers(adapter_class):  # the adapter binds its own query; the check reads the same binding first
-        from ..utils.query_binding import bind_declared_params
-        _reject_unread_controls(adapter_class, bind_declared_params(
-            getattr(adapter_class, 'PARAM_SPECS'), query or '', transport='uri'), path)
-    return adapter_class(path, query)
+        return _built(adapter_class, path, dict, lambda: adapter_class(path, query, overrides=overrides))
+    validate = getattr(adapter_class, 'validate_original_request', None)
+    bound = bind_declared_params(getattr(adapter_class, 'PARAM_SPECS'), query or '', transport='uri',
+                                 overrides=overrides,
+                                 validate=(lambda bound: validate(bound, path)) if validate else None)
+    return _built(adapter_class, path, lambda: bound, lambda: adapter_class(path, params=bound))
+
+
+def _built(adapter_class: type, path: str, bound: Callable[[], Any], construct: Callable[[], Any]) -> Any:
+    """Applicability (COMMAND_MODEL, BACK-2656), once for every transport: the CLI's declared dispatch, ``api.query``,
+    the generic URI route and MCP all construct a declared adapter here. A control the selected answer does not read
+    is an invalid request, raised before the adapter is built (*bound* gives the bound params), so before any analysis.
+    A source that must be read before its controls bind (``SOURCE_BEFORE_CONTROLS``: JSON) binds them in its
+    constructor, so the check reads that binding right after construction, still before the adapter answers."""
+    if getattr(adapter_class, 'SOURCE_BEFORE_CONTROLS', False):
+        adapter = construct()
+        _reject_unread_controls(adapter_class, getattr(adapter, 'query_params', {}), path)
+        return adapter
+    if _declares_answers(adapter_class):
+        _reject_unread_controls(adapter_class, bound(), path)
+    return construct()
 
 
 def _declares_answers(adapter_class: type) -> bool:
@@ -205,25 +219,15 @@ def _declares_answers(adapter_class: type) -> bool:
     its answers: only then is there an applicability check to run. A plugin subclass that inherits the declaration
     keeps its own behaviour."""
     declarations = vars(adapter_class).get('PARAM_SPECS') if isinstance(adapter_class, type) else None
-    return bool(declarations) and any(getattr(spec, 'answers', ()) for spec in declarations)
+    return any(getattr(spec, 'answers', ()) for spec in declarations or ())
 
 
 def _reject_unread_controls(adapter_class: type, params: Any, path: str) -> None:
-    """Applicability (COMMAND_MODEL, BACK-2656), once for every transport: the CLI's declared dispatch, ``api.query``,
-    the generic URI route and MCP all construct a declared adapter here. A control the selected answer does not read
-    is an invalid request, raised before the adapter is built, so before any analysis."""
     if not _declares_answers(adapter_class):
         return
     from ..utils.query_binding import reject_unread_controls
     reject_unread_controls(getattr(adapter_class, 'PARAM_SPECS'), params,
                            lambda: predicted_result_type(adapter_class, params, scope_path_of(adapter_class, path)))
-
-
-def _checked(adapter: Any, path: str) -> Any:
-    """A source that must be read before its controls bind (``SOURCE_BEFORE_CONTROLS``: JSON) binds them in its
-    constructor; the check reads that binding before the adapter answers, so still before any analysis."""
-    _reject_unread_controls(type(adapter), getattr(adapter, 'query_params', {}), path)
-    return adapter
 
 
 def _default_from_uri(adapter_class: type, scheme: str, resource: str,

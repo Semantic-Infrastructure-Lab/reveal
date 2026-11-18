@@ -366,6 +366,11 @@ def prepare_declared_params(declarations: Iterable[ParamSpec],
         raise ValueError(f'Unknown parameter transport {transport!r}')
     if isinstance(source, str):
         raise TypeError('Typed parameters must be a mapping')
+    return _prepare_typed_params(declarations, source, spelled)
+
+
+def _prepare_typed_params(declarations: tuple, source: Mapping[str, Any],
+                          spelled: Optional[Mapping[str, str]]) -> QueryParams:
     supplied = _normalize_aliases(declarations, source, spelled)
     params = QueryParams()
     params._aliases = {spec.name: spec.spellings[1:] for spec in declarations}
@@ -499,19 +504,22 @@ def reject_unread_controls(declarations: Iterable[ParamSpec], params: Mapping[st
         return
     facets = answer_facets(declarations, params, result_type())
     unread = [spec for spec in scoped if not _reads(spec, facets)]
-    if not unread:
-        return
-    # Named by the control, whatever spelling carried it: a URI key, a flag injected into the query (--limit can reach
-    # a URI as a legacy key) and a legacy flag all name one control; its retirement note names the old spelling.
+    if unread:
+        raise RequestValidationError(_unread_controls_message(declarations, unread, facets))
+
+
+def _unread_controls_message(declarations: tuple, unread: list, facets: tuple) -> str:
+    """Named by the control, whatever spelling carried it: a URI key, a flag injected into the query (--limit can
+    reach a URI as a legacy key) and a legacy flag all name one control; its retirement note names the old spelling."""
     reads = ', '.join(spec.name for spec in declarations if spec.role != 'operation' and _reads(spec, facets))
     where = '; '.join(f"{spec.name} is read by: {', '.join(spec.answers)}" for spec in unread)
-    raise RequestValidationError(
-        f"control{'s' if len(unread) > 1 else ''} {', '.join(repr(spec.name) for spec in unread)} "
-        f"{'are' if len(unread) > 1 else 'is'} not read by this answer ({', '.join(facets)}); {where}; "
-        f"controls this answer reads: {reads or '(none)'}")
+    several = len(unread) > 1
+    return (f"control{'s' if several else ''} {', '.join(repr(spec.name) for spec in unread)} "
+            f"{'are' if several else 'is'} not read by this answer ({', '.join(facets)}); {where}; "
+            f"controls this answer reads: {reads or '(none)'}")
 
 
-def unread_by_data_warning(params: Mapping[str, Any], names: Iterable[str], reason: str) -> Optional[Dict[str, Any]]:
+def unread_by_data_warning(params: Dict[str, Any], names: Iterable[str], reason: str) -> Optional[Dict[str, Any]]:
     """The one disclosure of a control only the data can show to be unread (COMMAND_MODEL "Applicability", Scott
     2026-11-18 Q2: JSON ``sort``/``limit``/``offset`` on a value that is not a list), shaped like the open field sets'
     ``unknown_filter_field``: a ``meta.warnings`` entry, exit 0. It counts the controls as read (the disclosure is
