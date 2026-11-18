@@ -73,6 +73,25 @@ def recovered_files_warning(paths: Sequence[str]) -> Optional[WarningEntry]:
     }
 
 
+def check_rules_failed_warning(paths: Sequence[str], consequence: str) -> Optional[WarningEntry]:
+    """The ``check_rules_failed`` warning naming *paths* (up to five, then a count): files where a check
+    rule raised, so its findings are missing. *consequence* says what that means for the answer. None
+    when empty."""
+    paths = sorted(to_posix(f) for f in paths)
+    if not paths:
+        return None
+    shown = paths[:5]
+    more = f" and {len(paths) - len(shown)} more" if len(paths) > len(shown) else ''
+    return cast(WarningEntry, {
+        'type': 'check_rules_failed',
+        'count': len(paths),
+        'files': shown,
+        'failures': failure_records([(f, None) for f in paths], cause='check_rules_failed'),
+        'message': f"{len(paths)} file(s) had check rules that could not run; {consequence}: "
+                   f"{', '.join(shown)}{more}",
+    })
+
+
 def dropped_values_summary(structures: Sequence[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     """The declarations bound to a call that no file's rule listed as a function (BACK-2229), counted over
     *structures*: ``count``, up to five ``files``, and the callees, an import of the file apart from the rest.

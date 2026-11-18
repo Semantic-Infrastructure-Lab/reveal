@@ -342,6 +342,15 @@ class RuleRegistry:
         cls._log_discovery_summary()
 
     @classmethod
+    def load_failures(cls) -> List[Dict[str, Any]]:
+        """The user or project rule modules that did not load in the current discovery (``plugin_warning``
+        ``plugin_load_failed`` of kind ``rule``): their rules ran on nothing, which check counts as lost
+        evidence, exit 3 (BACK-2668). Other nouns keep the plugin_warning as disclosure only."""
+        cls.discover()
+        return [entry for entry in _discovery_notes.entries()
+                if entry.get('code') == 'plugin_load_failed' and entry.get('kind') == 'rule']
+
+    @classmethod
     def _discover_dir(cls, rules_dir: Path, module_prefix: str, external: bool = False):
         """
         Discover rules in a directory.

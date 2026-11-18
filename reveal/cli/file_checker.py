@@ -15,7 +15,7 @@ from concurrent.futures import ProcessPoolExecutor
 from ..logging_setup import worker_bootstrap
 from ..utils.parallel import pool_worker_count, submit_each
 from ..utils.json_utils import attach_provenance, file_sinks, write_also_json, write_requested_artifact, write_text_artifact
-from ..utils.results import note_truncation
+from ..utils.results import note_truncation, note_warning
 from ..utils.severity import check_exit_code, check_fail_on, check_gate_count, severity_counts
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -49,10 +49,11 @@ from reveal.checks import (  # noqa: E402
     _GROUP_THRESHOLD,
     _is_generated_file,
     capability_disclosures,
+    check_loss_warnings,
 )
 # The rules' project-wide indexes, built once here and seeded into every pool
 # worker (BACK-1051); shared with stats://'s pool.
-from reveal.rules import CoverageTally  # noqa: E402
+from reveal.rules import CoverageTally, RuleRegistry  # noqa: E402
 from reveal.rules.scan_caches import (  # noqa: E402
     get_scan_budgets,
     get_scan_disclosures,
@@ -493,6 +494,10 @@ def check_and_collect_file(
                 "detail": f"{parse_error_description(_analyzer_error_position(analyzer), structure.get('error'))}; "
                           "results may be incomplete or incorrect",
             }
+            if structure.get('error'):
+                # The analyzer's own parser failed (a notebook that is not JSON): analysis_failed with this
+                # cause, not a recovered parse (BACK-2682). Not a files[] field; the tally reads it.
+                status["reason"] = str(structure['error'])
         if rule_errors:
             status["rule_errors"] = rule_errors
         # The rule-outcome ledger rides the status dict across the process pool (plain, picklable
@@ -672,6 +677,10 @@ class _CheckTally:
     files_errored: int = 0
     files_degraded: int = 0
     severity_totals: Dict[str, int] = field(default_factory=dict)
+    # The files behind files_errored/files_degraded, for the answer's meta.warnings (BACK-2682).
+    recovered: List[str] = field(default_factory=list)
+    failed: List[Tuple[str, str]] = field(default_factory=list)
+    rules_failed: List[str] = field(default_factory=list)
 
     def add(self, checked: _CheckedFile) -> None:
         # A rule that raised left its file only partly checked, exactly the single-file
@@ -681,6 +690,14 @@ class _CheckTally:
             self.files_errored += 1
         elif checked.state == "warning":
             self.files_degraded += 1
+        if checked.state == "error":
+            self.failed.append((checked.relative, str(checked.status.get("detail", ""))))
+        elif checked.state == "warning" and checked.status.get("reason"):
+            self.failed.append((checked.relative, str(checked.status["reason"])))
+        elif checked.state == "warning":
+            self.recovered.append(checked.relative)
+        if checked.status.get("rule_errors"):
+            self.rules_failed.append(checked.relative)
         counts = checked.severity_totals or severity_counts(checked.detections)
         for level, count in counts.items():
             self.severity_totals[level] = self.severity_totals.get(level, 0) + count
@@ -963,6 +980,7 @@ def _check_report(
     scan_incomplete: bool = False,
     fail_on: str = 'findings',
     coverage: Optional[dict] = None,
+    rule_load_failures: Optional[List[dict]] = None,
 ) -> dict:
     """check's result as plain data; the subcommand seam (emit_subcommand_result /
     subcommand_json) adds the Output Contract envelope (BACK-1545).
@@ -986,6 +1004,8 @@ def _check_report(
             `scope.unscoped_categories` (BACK-1021) only reports gaps among
             rule categories that actually ran.
         ignore: Rule ignore filter actually applied to this run (see `select`).
+        rule_load_failures: ``RuleRegistry.load_failures()``, configured rule modules that did not
+            load (BACK-2668); the caller counts them in *scan_incomplete*.
         scan_disclosures: BACK-1051 — one-line skip reasons from any
             scan-capped rule (I002, D005, T006) whose own project/directory-wide
             index build was truncated by a safety ceiling. Distinct from
@@ -1020,6 +1040,8 @@ def _check_report(
         result["scope"] = _scope_dict(scope, select, ignore)
     if coverage is not None:
         result["coverage"] = coverage
+    for entry in check_loss_warnings(tally.recovered, tally.failed, tally.rules_failed, rule_load_failures):
+        note_warning(result, entry)
     budget.note_cut(result)
     return result
 
@@ -1241,7 +1263,7 @@ def _scan_disclosures(files: List[Path], select, ignore, *,
 
 def _report_for(files: List[Path], collection: 'FileCollectionResult', args: 'Namespace',
                 select, ignore, disclosures: List[str], scan_incomplete: bool,
-                coverage: Optional[dict] = None):
+                coverage: Optional[dict] = None, rule_load_failures: Optional[List[dict]] = None):
     """_check_report with this run's arguments, so --format json and both
     --also-json writers describe the run the same way (BACK-1248): same scope,
     same scan disclosures, same exit_zero and fail_on."""
@@ -1254,6 +1276,7 @@ def _report_for(files: List[Path], collection: 'FileCollectionResult', args: 'Na
             scan_incomplete=scan_incomplete,
             fail_on=check_fail_on(args),
             coverage=coverage,
+            rule_load_failures=rule_load_failures,
         )
         if collection.changed and 'scope' in result:
             result['scope']['changed'] = collection.changed
@@ -1286,7 +1309,10 @@ def _check_views(formats, checked: List[_CheckedFile], files: List[Path], direct
         if outcomes is not None else None
     disclosures, scan_incomplete = _scan_disclosures(
         files, select, ignore, collection=collection, directory=directory)
-    report = _report_for(files, collection, args, select, ignore, disclosures, scan_incomplete, coverage)
+    # BACK-2668: a configured rule module that did not load checked no file, so the scan is incomplete.
+    unloaded = RuleRegistry.load_failures()
+    scan_incomplete = scan_incomplete or bool(unloaded)
+    report = _report_for(files, collection, args, select, ignore, disclosures, scan_incomplete, coverage, unloaded)
     views: dict = {}
     for fmt in formats:
         # Read a flag only in the view that applies it: the flag ledger reports a flag nobody read (grep never

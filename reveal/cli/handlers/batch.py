@@ -685,7 +685,7 @@ def _schema_batch_entry(target: str, schema: dict, args: 'Namespace') -> dict:
             entry['error'] = 'No analyzer available for input'
             return entry
         detections, degraded, errors = collect_schema_detections(analyzer_class(target), target, schema, args)
-        entry.update(_detections_result(target, detections, parse_degraded=degraded, rule_errors=errors))
+        entry.update(_detections_result(target, detections, source_degraded=degraded, rule_errors=errors))
         if degraded or errors:
             entry['error'] = 'Validation incomplete: parse or rule failure'
         else:

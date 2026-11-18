@@ -88,9 +88,7 @@ def test_no_noun_hand_types_a_loss_list():
         if path.name == 'results.py' and path.parent.name == 'utils':
             continue
         text = path.read_text(encoding='utf-8')
-        # check's parse_degraded is a keyword argument between its own functions, never an answer field.
-        offenders += [f'{path.relative_to(package)}: {old}' for old in OLD_SPELLINGS
-                      if f"'{old}'" in text and path.name != 'checks.py']
+        offenders += [f'{path.relative_to(package)}: {old}' for old in OLD_SPELLINGS if f"'{old}'" in text]
         offenders += [f'{path.relative_to(package)}:{n}' for n, line in enumerate(text.split('\n'), 1)
                       if len(set(named.findall(line))) >= 2]
     assert offenders == []

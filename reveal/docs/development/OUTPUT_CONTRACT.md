@@ -482,6 +482,17 @@ invocation, informational, never on stderr beside a JSON answer) (BACK-2659):
 Plugins are discovered once per process; every later discovery replays what the first one met, so a
 long-lived MCP server reports a broken plugin in every answer, not only the first.
 
+One exception to "informational": on `reveal check`, a rule module that did not load (`plugin_load_failed`
+of kind `rule`) means its rule checked no file, so the answer also carries a `check_rules_failed` warning
+with code `rule_module_not_loaded` (`files` and `failures` name the module) and is incomplete, exit 3
+(BACK-2668). Every other noun keeps the `plugin_warning` alone and its exit code.
+
+`reveal check` names the files it could not fully check in `meta.warnings` like every other noun
+(BACK-2682): `parse_recovered` for a file read only through parser recovery, `analysis_failed` with the
+cause for a file its analyzer could not read (a notebook that is not JSON), and `check_rules_failed` for a
+file where a rule raised. `summary.files_degraded`, `summary.files_errored` and each `files[]` entry's
+`status` and `detail` are unchanged.
+
 ### Nothing beside a JSON answer
 
 A `--format json` answer is the whole answer: nothing is printed on stderr beside it, and an MCP

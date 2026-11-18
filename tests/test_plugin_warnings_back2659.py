@@ -5,7 +5,8 @@ or a rule module (``.reveal/rules/<category>/<CODE>.py``) that raised on import,
 its rule class, a rule with an unknown severity and the legacy rules directory were ``logger`` lines on
 stderr only (a rule import failure with a full traceback): the JSON answer, the library API and MCP's
 JSON said nothing, and ``check`` reported a complete run. Each is now a ``plugin_warning`` entry in
-``meta.warnings``, informational (exit and completeness unchanged), with nothing on stderr in JSON mode.
+``meta.warnings``, informational (exit and completeness unchanged), with nothing on stderr in JSON mode;
+since BACK-2668 a rule module that did not load also makes ``check`` incomplete (exit 3).
 Plugins load once per process, so every later discovery call replays what the load met: an MCP server
 reports it on every request, not only the first.
 """
@@ -79,8 +80,15 @@ def test_check_json_carries_every_plugin_problem_and_stderr_is_empty(tmp_path):
     control = _cli(_project(tmp_path / 'clean', plugins=False), 'check', '.', '--format', 'json')
     root = _project(tmp_path / 'proj')
     result = _cli(root, 'check', '.', '--format', 'json')
-    assert result.returncode == control.returncode == 0, result.stderr
-    entries = _plugin_warnings(json.loads(result.stdout), root)
+    # A rule module that did not load is lost evidence on check (BACK-2668): incomplete, exit 3. The
+    # other plugin problems stay disclosure only.
+    assert control.returncode == 0, control.stderr
+    assert result.returncode == 3, result.stderr
+    answer = json.loads(result.stdout)
+    lost = [w for w in answer['meta']['warnings'] if w['type'] == 'check_rules_failed']
+    assert [(w['code'], w['files']) for w in lost] == [
+        ('rule_module_not_loaded', [(root / '.reveal' / 'rules' / 'custom' / 'X001.py').as_posix()])], lost
+    entries = _plugin_warnings(answer, root)
     found = sorted((w['code'], w.get('kind') or w.get('rule')) for w in entries)
     assert found == [('plugin_load_failed', 'adapter'), ('plugin_load_failed', 'analyzer'),
                      ('plugin_load_failed', 'rule'), ('rule_class_missing', 'X002'),

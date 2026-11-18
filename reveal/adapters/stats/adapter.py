@@ -725,22 +725,14 @@ class MetricsAdapter(ResourceAdapter):
 
     def _disclose_failures(self, result: dict) -> None:
         """Disclose directory and file analysis loss without treating totals as complete."""
-        from ..ast.analysis import traversal_failed_warning
+        from ..ast.analysis import check_rules_failed_warning, traversal_failed_warning
         note_warning(result, cast(Optional[Dict[str, Any]],
                                   traversal_failed_warning(self._traversal_failures, self.path)))
         self._disclose_issue_count(result)
         note_warning(result, self._parse_recovered_warning())
-        rules_failed = sorted(s['file'] for s in self._analysis_failures if s.get('check_rules_failed'))
-        if rules_failed:
-            shown = rules_failed[:5]
-            more = f" and {len(rules_failed) - len(shown)} more" if len(rules_failed) > len(shown) else ''
-            note_warning(result, {
-                'type': 'check_rules_failed', 'count': len(rules_failed), 'files': shown,
-                'failures': failure_records([(f, None) for f in rules_failed], cause='check_rules_failed'),
-                'message': (f"{len(rules_failed)} file(s) had check rules that could not run; their "
-                            f"check-issue counts are lower bounds and quality scores may be optimistic: "
-                            f"{', '.join(shown)}{more}"),
-            })
+        note_warning(result, cast(Optional[Dict[str, Any]], check_rules_failed_warning(
+            [s['file'] for s in self._analysis_failures if s.get('check_rules_failed')],
+            "their check-issue counts are lower bounds and quality scores may be optimistic")))
         failures = sorted((f['path'], f['analysis_failed']) for f in self._analysis_failures if is_failure(f))
         failed = [path for path, _ in failures]
         if not failed:

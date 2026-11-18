@@ -126,10 +126,61 @@ def parse_error_description(position: Optional[Tuple[int, int]], reason: Optiona
     return reason or f"file did not parse cleanly{parse_error_suffix(position)}"
 
 
+def check_loss_warnings(recovered: List[str], failed: List[Tuple[str, str]],
+                        rules_failed: List[str], unloaded: Optional[List[Dict[str, Any]]] = None
+                        ) -> List[Dict[str, Any]]:
+    """A check answer's lost-evidence ``meta.warnings`` (COMMAND_MODEL 'Degraded input', BACK-2682): the
+    files it read only through parser recovery (``parse_recovered``), the files it could not analyze with
+    each cause (``analysis_failed``), the files where a rule raised (``check_rules_failed``) and the rule
+    modules that never loaded (*unloaded*, ``RuleRegistry.load_failures()``; ``check_rules_failed`` with
+    code ``rule_module_not_loaded``, BACK-2668). Each type is in ``utils.results.LOST_EVIDENCE``, so the
+    answer is incomplete (exit 3)."""
+    from .adapters.ast.analysis import (analysis_skipped_warning, check_rules_failed_warning,
+                                        recovered_files_warning)
+    entries = (
+        recovered_files_warning(recovered),
+        analysis_skipped_warning(list(failed), consequence="its rules did not run, so its findings are missing"),
+        check_rules_failed_warning(rules_failed, "findings from those rules are missing"),
+        _unloaded_rules_warning(unloaded or []),
+    )
+    return [dict(entry) for entry in entries if entry is not None]
+
+
+def _file_loss_warnings(path: str, source_degraded: bool, parse_error_reason: Optional[str],
+                        rules_raised: bool, unloaded: Optional[List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
+    """check_loss_warnings for one file: a degraded source with an analyzer's reason failed analysis,
+    without one the parser recovered (BACK-2682)."""
+    failed = source_degraded and bool(parse_error_reason)
+    return check_loss_warnings([path] if source_degraded and not failed else [],
+                               [(path, str(parse_error_reason))] if failed else [],
+                               [path] if rules_raised else [], unloaded)
+
+
+def _unloaded_rules_warning(unloaded: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """One ``check_rules_failed`` warning for configured rule modules that did not load (BACK-2668): their
+    rules checked no file, so every file's findings from them are missing. None when all loaded."""
+    if not unloaded:
+        return None
+    paths = sorted(str(entry['path']) for entry in unloaded)
+    named = ', '.join(f"{entry['path']} ({entry.get('reason', 'did not load')})"
+                      for entry in sorted(unloaded, key=lambda e: str(e['path'])))
+    return {
+        'type': 'check_rules_failed',
+        'code': 'rule_module_not_loaded',
+        'count': len(paths),
+        'files': paths[:5],
+        'failures': [{'path': str(entry['path']), 'cause': 'plugin_load_failed',
+                      **({'reason': entry['reason']} if entry.get('reason') else {})}
+                     for entry in sorted(unloaded, key=lambda e: str(e['path']))],
+        'message': f"{len(paths)} rule module(s) did not load, so their rules checked no file and their "
+                   f"findings are missing: {named}",
+    }
+
+
 def _detections_result(
     path: str,
     detections: List[Any],
-    parse_degraded: bool = False,
+    source_degraded: bool = False,
     parse_error_at: Optional[Tuple[int, int]] = None,
     rule_errors: Optional[List[dict]] = None,
     no_snippets: bool = False,
@@ -140,6 +191,7 @@ def _detections_result(
     coverage: Optional[dict] = None,
     severity_totals: Optional[Dict[str, int]] = None,
     verdict: Optional[dict] = None,
+    rule_load_failures: Optional[List[Dict[str, Any]]] = None,
 ) -> dict:
     """The single-file check result as plain data; the subcommand seam
     (emit_subcommand_result / subcommand_json) adds the Output Contract envelope
@@ -153,9 +205,11 @@ def _detections_result(
     Args:
         path: File path
         detections: Detection objects, already --max-items-truncated by the caller
-        parse_degraded: True when the parser recovered from a syntax error
-            (BACK-1084's structure['_has_errors']) -- detections for this file may be
-            incomplete or wrong, not just "clean" (BACK-1083).
+        source_degraded: True when the file did not parse cleanly (BACK-1084's
+            structure['_has_errors']) -- detections for this file may be incomplete or
+            wrong, not just "clean" (BACK-1083). Without *parse_error_reason* the parser
+            recovered (``parse_recovered``); with it the analyzer's own parser failed
+            (``analysis_failed``, BACK-2682).
         parse_error_reason: An analyzer's explicit source-invalidity reason, when
             degradation is known without native parser recovery.
         rule_errors: Rules that raised during check() ({"rule", "error"})
@@ -170,9 +224,11 @@ def _detections_result(
             key recursive check's summary uses.
         coverage: Per-rule outcomes for this file (``CoverageTally.report``, BACK-2137), emitted
             as ``coverage``, the key a directory check and ``reveal://`` carry.
+        rule_load_failures: ``RuleRegistry.load_failures()``: configured rule modules that did not
+            load, so their rules did not check this file (BACK-2668).
     """
     from reveal.utils.path_utils import to_posix
-    from reveal.utils.results import note_truncation
+    from reveal.utils.results import note_truncation, note_warning
 
     path = to_posix(path)  # '/' on every OS, like the directory envelope (BACK-1366)
     result = {
@@ -193,13 +249,16 @@ def _detections_result(
         }
         note_truncation(result, 'detections', len(detections), total_available,
                         cause='max_items')
-    if parse_degraded:
+    if source_degraded:
         result['warning'] = (
             f"{parse_error_description(parse_error_at, parse_error_reason)}; "
             "results may be incomplete or incorrect"
         )
     if rule_errors:
         result['errors'] = rule_errors
+    for entry in _file_loss_warnings(path, source_degraded, parse_error_reason, bool(rule_errors),
+                                     rule_load_failures):
+        note_warning(result, entry)
     if verdict is not None:
         result['summary'] = verdict
     if severity_totals is not None:
@@ -281,7 +340,7 @@ def _emit_detections(path: str, output_format: str, detections: List[Any],
     JSON gets its envelope there, text/grep are rendered by it, and a --max-items cut
     is disclosed once after the render (BACK-1702). *rendered* is *detections* after
     --max-items; grep prints every detection, as it always has, so its result carries
-    no cut. *result_fields* are _detections_result's (parse_degraded, rule_errors,
+    no cut. *result_fields* are _detections_result's (source_degraded, rule_errors,
     no_snippets, max_snippet_chars, total_available, disclosures). *scan_incomplete*
     only selects the text verdict (BACK-1826). The returned result is the one for
     *rendered*, which --also-json writes.
@@ -300,7 +359,7 @@ def _emit_detections(path: str, output_format: str, detections: List[Any],
         else:
             _format_detections_text(
                 path, rendered, no_group=no_group,
-                parse_degraded=result_fields.get('parse_degraded', False),
+                source_degraded=result_fields.get('source_degraded', False),
                 parse_error_at=result_fields.get('parse_error_at'),
                 parse_error_reason=result_fields.get('parse_error_reason'),
                 rule_errors=result_fields.get('rule_errors'),
@@ -349,7 +408,7 @@ def _format_detections_text(
     path: str,
     detections: List[Any],
     no_group: bool = False,
-    parse_degraded: bool = False,
+    source_degraded: bool = False,
     parse_error_at: Optional[Tuple[int, int]] = None,
     rule_errors: Optional[List[dict]] = None,
     no_snippets: bool = False,
@@ -371,7 +430,7 @@ def _format_detections_text(
             by the caller, if requested — this just renders what it's given;
             the cut is disclosed by the subcommand seam, BACK-1702)
         no_group: Disable collapsing of repeated rules
-        parse_degraded: True when the parser recovered from a syntax error —
+        source_degraded: True when the parser recovered from a syntax error —
             see _format_detections_json (BACK-1083).
         parse_error_reason: An explicit invalid-source reason instead of the
             generic recovery description.
@@ -392,7 +451,7 @@ def _format_detections_text(
     _print_run_notes(path, rule_errors, disclosures, coverage, coverage_selected)
 
     if not detections:
-        if parse_degraded:
+        if source_degraded:
             print(f"{path}: ⚠️  {parse_error_description(parse_error_at, parse_error_reason)}"
                   " — results may be incomplete or incorrect")
         else:
@@ -406,7 +465,7 @@ def _format_detections_text(
         return
 
     count = len(detections)
-    if parse_degraded:
+    if source_degraded:
         print(f"{path}: ⚠️  {parse_error_description(parse_error_at, parse_error_reason)}"
               " — results below may be incomplete or incorrect")
     print(f"{path}: Found {count} issue{'s' if count != 1 else ''}\n")
@@ -521,7 +580,7 @@ def run_pattern_detection(
         (gated_count, degraded, artifact_failed) tuple. The count uses the full severity
         census for severity gates, or displayed findings before pagination for findings.
         `degraded` is True when the file
-        did not parse cleanly (BACK-1083's parse_degraded, tree-sitter
+        did not parse cleanly (BACK-1083, tree-sitter
         error-recovery) or a rule raised (rule_errors) -- meaning
         `detection_count` may be incomplete/wrong, not a trustworthy
         "clean" signal. Added for BACK-1099's exit-code contract: a caller
@@ -553,7 +612,7 @@ def run_pattern_detection(
     # BACK-1083: a tree-sitter recovery parse (structure['_has_errors'], set by
     # BACK-1084) means rules ran against fabricated/partial structure — surface
     # that instead of letting "0 detections" read as "clean file".
-    parse_degraded = structure_parse_degraded(structure)
+    source_degraded = structure_parse_degraded(structure)
     # BACK-1466: the same rule/language gaps recursive check discloses (W-CAP-1
     # T006, W-CAP-2 I001) -- without them a single-file ✅ claims more than ran.
     from reveal.rules.scan_caches import get_scan_disclosures
@@ -579,7 +638,9 @@ def run_pattern_detection(
     if max_items is not None and total_available > max_items:
         rendered_detections = detections[:max_items]
 
-    degraded = parse_degraded or bool(rule_errors) or bool(scan_disclosures)
+    # BACK-2668: a configured rule module that did not load checked nothing; the answer is incomplete.
+    unloaded = RuleRegistry.load_failures()
+    degraded = source_degraded or bool(rule_errors) or bool(scan_disclosures) or bool(unloaded)
     policy = check_fail_on(args)
     gated_count = check_gate_count(counts, len(detections), policy)
     verdict = {'fail_on': policy, 'gated_issues': gated_count,
@@ -588,12 +649,13 @@ def run_pattern_detection(
                    exit_zero=getattr(args, 'exit_zero', False))}
     artifact_failed = _emit_check_outputs(
         analyzer, path, output_format, args, config, detections, rendered_detections, collect,
-        no_group=no_group, parse_degraded=parse_degraded, rule_errors=rule_errors,
+        no_group=no_group, source_degraded=source_degraded, rule_errors=rule_errors,
         no_snippets=no_snippets,
-        parse_error_at=_analyzer_error_position(analyzer) if parse_degraded else None,
+        parse_error_at=_analyzer_error_position(analyzer) if source_degraded else None,
         parse_error_reason=structure.get('error'), max_snippet_chars=max_snippet_chars,
         total_available=total_available, disclosures=disclosures,
-        scan_incomplete=bool(scan_disclosures), coverage=outcomes.report(len(rule_errors)),
+        scan_incomplete=bool(scan_disclosures or unloaded), coverage=outcomes.report(len(rule_errors)),
+        rule_load_failures=unloaded,
         coverage_selected=bool(select), severity_totals=counts, verdict=verdict,
     )
 
@@ -638,7 +700,7 @@ def run_schema_validation(
 
     detections, degraded, errors = collect_schema_detections(analyzer, path, schema, args)
     _emit_detections(path, output_format, detections, detections,
-                     parse_degraded=degraded, rule_errors=errors)
+                     source_degraded=degraded, rule_errors=errors)
     if detections or degraded or errors:
         sys.exit(1)
 

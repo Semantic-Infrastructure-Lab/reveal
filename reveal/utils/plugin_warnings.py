@@ -4,8 +4,10 @@ An analyzer plugin, an adapter plugin or a rule module that raised on import, a 
 its rule class, a rule with an unknown severity and the legacy rules directory are each a
 ``meta.warnings`` entry of type ``plugin_warning`` (BACK-2659), recorded in the running invocation
 like a ``config_warning``: the answer carries it, and it never changes the exit code or the
-answer's completeness. Plugins load once per process, so a discovery keeps what it met in a
-``DiscoveryNotes`` and every later discovery call replays it into the invocation that makes it (an
+answer's completeness. One exception: ``check`` counts a rule module that did not load as lost
+evidence (``RuleRegistry.load_failures()``; incomplete, exit 3, BACK-2668). Plugins load once per
+process, so a discovery keeps what it met in a ``DiscoveryNotes`` and every later discovery call
+replays it into the invocation that makes it (an
 MCP server reports a broken plugin on every request, not only the first).
 """
 
@@ -37,6 +39,10 @@ class DiscoveryNotes:
         self._notes.append((entry, level, log_format, log_args))
         if not record_warning(entry):
             self._logger.log(level, log_format, *log_args)
+
+    def entries(self) -> List[Dict[str, Any]]:
+        """The entries the current discovery met, in the order it met them."""
+        return [entry for entry, _level, _format, _args in self._notes]
 
     def replay(self) -> None:
         """Record what the discovery met in the running invocation (once per invocation)."""
