@@ -2810,11 +2810,11 @@ class TestViewScopedParamWarnings:
     no signal that it was ignored."""
 
     @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
-    def test_merges_on_default_view_warns(self, git_repo_ownership, capsys):
+    def test_merges_on_default_view_is_the_switch(self, git_repo_ownership, capsys):
+        """BACK-2656: legacy merges=1 is merges=on on every view (COMMAND_MODEL "Switches"); the default view's
+        recent commits read it, so it is no longer noted as ownership-only."""
         GitAdapter(path=str(git_repo_ownership), query={'merges': '1'})
-        err = capsys.readouterr().err
-        assert "'merges'" in err
-        assert 'ownership' in err
+        assert "'merges'" not in capsys.readouterr().err
 
     @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
     def test_merges_on_ownership_view_silent(self, git_repo_ownership, capsys):

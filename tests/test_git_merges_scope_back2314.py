@@ -1,4 +1,6 @@
-"""Ownership-only merges controls do not filter unrelated views (BACK-2314)."""
+"""The merge policy outside ownership (BACK-2314). Since BACK-2656 the legacy numeric ``merges=1`` is the on/off switch's
+``on`` on every view (COMMAND_MODEL "Switches"): it answers as before (merge commits are already included outside
+ownership) without the old ownership-only note."""
 import json
 
 import pytest
@@ -15,7 +17,7 @@ pygit2 = pytest.importorskip('pygit2')
                                         ('file', 'type=history'),
                                         ('file', 'type=history&bucket=month')])
 @pytest.mark.parametrize('entry', ['api', 'cli'])
-def test_merges_is_inert_outside_ownership(history_repo, target, query, entry, capsys):
+def test_legacy_merges_answers_unchanged_outside_ownership(history_repo, target, query, entry, capsys):
     path = history_repo / 'sample.py' if target == 'file' else history_repo
     with_merges = query + ('&' if query else '') + 'merges=1'
     if entry == 'cli':
@@ -29,8 +31,7 @@ def test_merges_is_inert_outside_ownership(history_repo, target, query, entry, c
         modified = GitAdapter(str(path), with_merges).get_structure()
         assert modified == baseline
         warning = capsys.readouterr().err
-    assert "'merges' has no effect" in warning
-    assert 'only applies to ?type=ownership' in warning
+    assert 'has no effect' not in warning
 
 
 def test_merges_still_changes_ownership_on_a_real_merge(history_repo):

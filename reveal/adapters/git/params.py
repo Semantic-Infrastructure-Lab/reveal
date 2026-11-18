@@ -1,5 +1,4 @@
 """Declared Git controls, applied through the existing resource and predicate owners."""
-from dataclasses import dataclass
 from typing import Any
 
 from ...utils.query_binding import boolean_value, switch_value, verbose_legacy
@@ -41,17 +40,6 @@ def detail(value: Any) -> str:
     return 'normal' if name == 'summary' else name
 
 
-@dataclass(frozen=True)
-class MergePolicy:
-    include: bool
-    legacy: bool
-
-
-def merge_policy(value):
-    """The shared on/off codec, remembering whether the value was a legacy boolean spelling rather than on|off."""
-    return MergePolicy(switch_value(value), not isinstance(value, bool) and str(value).lower() not in ('on', 'off'))
-
-
 def string(name, description, *, legacy=(), choices=(), role=None):
     return ParamSpec(name, 'string', description, None, nonempty_scalar, legacy=legacy, choices=choices, role=role,
                      cli=CliBinding(('--' + name,)))
@@ -65,8 +53,9 @@ WHERE = ParamSpec('where', 'array', 'Existing commit predicates; repeat to AND (
 DETAIL = ParamSpec('detail', 'string', 'normal, full blame, or raw historical file content', None, detail,
                    choices=('normal', 'full', 'raw'), cli=CliBinding(('--detail',)),
                    legacy=(verbose_legacy('full', 'detail=full (--detail full)'),))
+# One on/off switch on every view (COMMAND_MODEL "Switches"): a legacy boolean spelling (merges=0/1) is its value.
 MERGES = ParamSpec('merges', 'boolean', 'Include or exclude merge commits; omitted preserves each view default',
-                   None, merge_policy, cli=CliBinding(('--merges',)))
+                   None, switch_value, cli=CliBinding(('--merges',)))
 NO_MERGES = ParamSpec('no_merges', 'boolean', 'Legacy exclusion of merge commits in history', None, boolean_value)
 RAW = ParamSpec('raw', 'boolean', 'Legacy raw historical file content', None, boolean_value)
 SORT = string('sort', 'Commit field; prefix - for descending')
@@ -137,8 +126,7 @@ def validate_resource_controls(params, subpath):
         raise RequestValidationError('scan-limit requires ownership or a bucketed history view')
     if values.get('detail') is not None and values.get('raw') is not None:
         raise RequestValidationError('detail and legacy raw cannot be supplied together')
-    merges = values.get('merges')
-    if merges is not None and not merges.legacy and values.get('no_merges') is not None:
+    if values.get('merges') is not None and values.get('no_merges') is not None:
         raise RequestValidationError('merges and legacy no_merges cannot be supplied together')
 
 
@@ -211,8 +199,8 @@ def _runtime_merges(params, query):
     merges = MERGES.read(params)
     no_merges = NO_MERGES.read(params)
     if merges is not None:
-        key = 'merges' if merges.legacy or query.get('type') == 'ownership' else 'no_merges'
-        included = merges.include if key == 'merges' else not merges.include
+        key = 'merges' if query.get('type') == 'ownership' else 'no_merges'
+        included = merges if key == 'merges' else not merges
         query[key] = '1' if included else '0'
     if no_merges is not None:
         query['no_merges'] = '1' if no_merges else '0'

@@ -31,7 +31,7 @@ from .qualification import execution_facts, answer_requirement_error, qualify_so
 
 _SCHEMA_QUERY_PARAMS = {
     'type': {'type': 'string', 'description': 'Query type for file operations', 'values': ['history', 'blame', 'diff', 'ownership'], 'examples': ['?type=history', '?type=blame', '?type=ownership']},
-    'merges': {'type': 'string', 'description': 'For ownership: "1" includes merge commits (excluded by default)', 'examples': ['?type=ownership&merges=1']},
+    'merges': {'type': 'string', 'description': 'on/off (legacy 1/0): include or exclude merge commits; ownership excludes them by default, every other commit list includes them', 'examples': ['?type=ownership&merges=on', '?type=history&merges=off']},
     'detail': {'type': 'string', 'description': 'Detail level for blame', 'values': ['full', 'summary'], 'examples': ['?type=blame&detail=full']},
     'element': {'type': 'string', 'description': 'Semantic element (function/class name) for blame, history/log and diff', 'examples': ['?type=blame&element=load_config', '?type=history&element=load_config']},
     'context': {'type': 'integer', 'description': 'For diff: number of context lines around each hunk (default: 3)', 'examples': ['?type=diff&context=10']},
@@ -946,7 +946,7 @@ class GitAdapter(ResourceAdapter):
             'query_parameters': {
                 'type': 'Operation type: history, blame, diff, or ownership. Default (no type): structural view of file at ref.',
                 'bucket': 'Modifier on type=history: "week" or "month" — buckets commits into periods (commit_count + distinct author_count per period) instead of returning a flat list. Works on a file, directory, or the whole repo. Rendering (bars, charts) is consumer-side.',
-                'merges': 'For ownership: "1" includes merge commits (excluded by default, since merges rarely represent authorship).',
+                'merges': 'on/off (legacy 1/0): include or exclude merge commits. Ownership excludes them by default (merges rarely represent authorship); every other commit list includes them.',
                 'raw': 'For file-at-ref: "1" returns raw file contents instead of structural view',
                 'detail': 'For blame: "full" shows line-by-line (default is summary)',
                 'element': 'For blame/diff/history: function/class name to scope output to that element. For ?type=history, runs the analyzer at each commit — use ?limit=N on files with deep history.',

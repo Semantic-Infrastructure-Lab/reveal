@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from reveal.adapters.git.params import merge_policy
+from reveal.adapters.git.params import MERGES
 from reveal.utils.query_binding import switch_value
 
 
@@ -22,12 +22,12 @@ def test_the_shared_switch_codec_rejects_other_values(value):
         switch_value(value)
 
 
-@pytest.mark.parametrize('value, include, legacy', [
-    ('on', True, False), ('OFF', False, False), ('true', True, True), ('0', False, True), (False, False, False),
+@pytest.mark.parametrize('value, include', [
+    ('on', True), ('OFF', False), ('true', True), ('0', False), ('1', True), (False, False),
 ])
-def test_git_merges_reads_the_shared_codec_and_remembers_a_legacy_boolean(value, include, legacy):
-    policy = merge_policy(value)
-    assert (policy.include, policy.legacy) == (include, legacy)
+def test_git_merges_is_the_shared_codec(value, include):
+    """A legacy boolean spelling is the switch's value on every view (BACK-2656: it no longer routes to ownership)."""
+    assert MERGES.validate(value) is include
 
 
 # --- rule 15: presentation switches -------------------------------------------------------------------------
