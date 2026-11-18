@@ -1,0 +1,57 @@
+"""A control that requires another control's value (Scott 2026-11-18, COMMAND_MODEL "Applicability", BACK-2656).
+
+Metrics ``since`` and ``merges`` bound the churn walk, so they require ``churn`` on: given with ``churn off`` (or the
+legacy ``--no-churn``) the request conflicts with itself and exits 2 before analysis, naming both. One generic
+declaration on the control (``ParamSpec.requires``), checked by the shared applicability seam on every transport; no
+metrics-only code path. Before, the request answered and the ledger noted since/merges unused, exit 0.
+"""
+import json
+
+import pytest
+
+from conftest import _run_reveal_direct
+from reveal.errors import RequestValidationError
+
+
+@pytest.fixture
+def proj(tmp_path, monkeypatch):
+    (tmp_path / 'app.py').write_text('def serve(x):\n    if x:\n        return 1\n    return 2\n', encoding='utf-8')
+    monkeypatch.chdir(tmp_path)
+    return tmp_path
+
+
+def _run(*argv):
+    run = _run_reveal_direct(*argv, '--format', 'json')
+    return run, (json.loads(run.stdout) if run.stdout.strip().startswith('{') else {})
+
+
+@pytest.mark.parametrize('argv,control,given', [
+    (('metrics://.?view=hotspots&churn=off&since=2020-01-01',), 'since', 'churn=off'),
+    (('metrics://.?view=hotspots&churn=off&merges=off',), 'merges', 'churn=off'),
+    (('metrics://.?hotspots&no_churn=true&since=2020-01-01',), 'since', 'churn=off'),   # the legacy spelling
+    (('metrics', '.', '--view', 'hotspots', '--churn', 'off', '--since', '2020-01-01'), 'since', 'churn=off'),
+    (('metrics', '.', '--view', 'hotspots', '--no-churn', '--merges', 'on'), 'merges', 'churn=off'),
+    (('metrics://.?view=hotspots&churn=off', '--since', '2020-01-01'), 'since', 'churn=off'),
+])
+def test_since_and_merges_with_churn_off_conflict(proj, argv, control, given):
+    run, _doc = _run(*argv)
+    assert run.returncode == 2, (run.returncode, run.stdout[:300], run.stderr)
+    assert f"control '{control}' requires churn=on" in run.stderr and given in run.stderr, run.stderr
+
+
+def test_the_api_refuses_the_same_request(proj):
+    from reveal import api
+    with pytest.raises(RequestValidationError, match=r"control 'since' requires churn=on"):
+        api.query('metrics://.?view=hotspots&churn=off&since=2020-01-01')
+    with pytest.raises(RequestValidationError, match=r"control 'merges' requires churn=on"):
+        api.query('metrics://.?view=hotspots', churn=False, merges=False)
+
+
+@pytest.mark.parametrize('uri', ['metrics://.?view=hotspots&since=2020-01-01',           # churn on by default
+                                 'metrics://.?view=hotspots&churn=on&since=2020-01-01&merges=off',
+                                 'metrics://.?view=hotspots&churn=off',                    # churn off alone
+                                 'metrics://.?hotspots&no_churn=true'])
+def test_churn_on_with_its_bounds_and_churn_off_alone_answer(proj, uri):
+    run, doc = _run(uri)
+    assert run.returncode == 0, run.stderr
+    assert doc['type'] == 'stats_summary'
