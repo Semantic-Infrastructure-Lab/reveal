@@ -482,7 +482,7 @@ def answer_facets(declarations: Iterable[ParamSpec], params: Mapping[str, Any], 
     return (result_type, *(selections or ['default']))
 
 
-def _given_controls(params: Mapping[str, Any]) -> set:
+def given_controls(params: Mapping[str, Any]) -> set:
     """The controls a request gave: the binder's record, or (a plain mapping) every key with a value."""
     given = getattr(params, '_given', None)
     return set(given) if given is not None else {key for key, value in peek_query_items(params) if value is not None}
@@ -498,7 +498,7 @@ def reject_unread_controls(declarations: Iterable[ParamSpec], params: Mapping[st
     invalid request, naming where it is read and the controls this answer reads. *result_type* predicts the selected
     answer's type before analysis; it is asked only when a given control declares its answers."""
     declarations = tuple(declarations)
-    given = _given_controls(params)
+    given = given_controls(params)
     scoped = [spec for spec in declarations if spec.answers and spec.role != 'operation' and spec.name in given]
     if not scoped:
         return
