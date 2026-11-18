@@ -122,6 +122,9 @@ class QueryParams(Dict[str, Any]):
         self._folded: Tuple[str, ...] = ()  # bare field keys the binder folded into where
         self._source_query: Optional[str] = None
         self._overrides: set[str] = set()
+        # The declared controls the request gave a value (an omitted typed flag arrives as None, an API override of
+        # None selects the default): what the applicability check judges (COMMAND_MODEL "Applicability", BACK-2656).
+        self._given: set[str] = set()
         self._transport = "typed"
         self._normalized: Dict[str, Tuple[Any, Any, Any]] = {}
 
@@ -406,6 +409,11 @@ class ParamSpec:
     # On an answer selector (role='operation'): the control that caps the rows of the answer it selects, which the
     # global --all lifts (Metrics' legacy hotspots ranking reads top). None: the noun's own --all declaration.
     cap: Optional[str] = None
+    # The answers that read this control (COMMAND_MODEL "Applicability", BACK-2656); empty: every answer. Each entry
+    # names an answer by its predicted result type (``stats_file``) or by the selection that picks it: an operation's
+    # name (``hotspots``), ``name=value`` (``view=hotspots``) or ``default`` (no operation given). A control given to
+    # an answer that matches no entry is an invalid request, refused before analysis.
+    answers: Tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         from dataclasses import replace
@@ -512,6 +520,8 @@ class ParamSpec:
             result['role'] = self.role
         if self.names is not None:
             result['names'] = self.names
+        if self.answers:
+            result['answers'] = list(self.answers)
         if self.cli is not None:
             result['cli'] = {'flags': list(self.flags), 'dest': self.cli.dest or self.name,
                              'nargs': self.cli.nargs, 'required': self.cli.required,

@@ -9,7 +9,7 @@ from urllib.parse import quote, unquote
 
 from ..errors import RequestValidationError, UnsupportedOverrideError
 from .query_parser import (SHARED_CONTROL_NAMES, LegacySpelling, ParamSpec, ParamValueError, QueryParams, ResourceSpec,
-                           parse_query_params, peek_query_items, query_key)
+                           mark_query_keys, parse_query_params, peek_query_items, query_key)
 
 
 def boolean_value(value: Any) -> bool:
@@ -345,6 +345,7 @@ def _prepare_uri_params(declarations: tuple[ParamSpec, ...], source: str) -> Que
     prepared._source_query = source
     prepared._supplied_aliases = {alias for spec in declarations for alias in spec.spellings[1:]
                                   if alias in dict.keys(params)}
+    prepared._given = set(dict.keys(prepared))
     for name, selector in selectors.items():
         prepared._aliases[name] += (selector,)
     return prepared
@@ -375,6 +376,7 @@ def prepare_declared_params(declarations: Iterable[ParamSpec],
             params[spec.name] = supplied[destination]
         elif spec.name in supplied:
             params[spec.name] = supplied[spec.name]
+    params._given = {name for name, value in dict.items(params) if value is not None}  # an omitted flag is None
     from .query_parser import query_key_recorder
     query_key_recorder(*dict.keys(params))
     return params
@@ -461,6 +463,68 @@ def reject_two_answers(declarations: Iterable[ParamSpec], params: Mapping[str, A
                                      'give one of ' + ', '.join(spec.name for spec in operations))
 
 
+def answer_facets(declarations: Iterable[ParamSpec], params: Mapping[str, Any], result_type: str) -> tuple:
+    """The names of the answer a request selects (COMMAND_MODEL "Applicability", BACK-2656): its predicted result
+    type, then each operation it gives, as ``name`` and, for a valued one, ``name=value``; ``default`` when it gives
+    none. A path that selects an answer is in the type (``git_file_history``, ``stats_file``)."""
+    supplied = dict(peek_query_items(params))
+    selections: list = []
+    for spec in declarations:
+        if spec.role == 'operation' and spec.name in supplied and _selects(spec, supplied[spec.name]):
+            selections.append(spec.name)
+            if spec.type not in ('boolean', 'flag'):
+                selections.append(f'{spec.name}={supplied[spec.name]}')
+    return (result_type, *(selections or ['default']))
+
+
+def _given_controls(params: Mapping[str, Any]) -> set:
+    """The controls a request gave: the binder's record, or (a plain mapping) every key with a value."""
+    given = getattr(params, '_given', None)
+    return set(given) if given is not None else {key for key, value in peek_query_items(params) if value is not None}
+
+
+def _reads(spec: ParamSpec, facets: tuple) -> bool:
+    return not spec.answers or bool(set(spec.answers).intersection(facets))
+
+
+def reject_unread_controls(declarations: Iterable[ParamSpec], params: Mapping[str, Any],
+                           result_type: Callable[[], str]) -> None:
+    """Applicability (COMMAND_MODEL, BACK-2656): a control given to an answer its declaration does not name is an
+    invalid request, naming where it is read and the controls this answer reads. *result_type* predicts the selected
+    answer's type before analysis; it is asked only when a given control declares its answers."""
+    declarations = tuple(declarations)
+    given = _given_controls(params)
+    scoped = [spec for spec in declarations if spec.answers and spec.role != 'operation' and spec.name in given]
+    if not scoped:
+        return
+    facets = answer_facets(declarations, params, result_type())
+    unread = [spec for spec in scoped if not _reads(spec, facets)]
+    if not unread:
+        return
+    supplied = set(getattr(params, '_supplied_aliases', set()))
+    spelled = [next((name for name in spec.spellings[1:] if name in supplied), spec.name) for spec in unread]
+    reads = ', '.join(spec.name for spec in declarations if spec.role != 'operation' and _reads(spec, facets))
+    where = '; '.join(f"{name} is read by: {', '.join(spec.answers)}" for name, spec in zip(spelled, unread))
+    raise RequestValidationError(
+        f"control{'s' if len(unread) > 1 else ''} {', '.join(repr(name) for name in spelled)} "
+        f"{'are' if len(unread) > 1 else 'is'} not read by this answer ({', '.join(facets)}); {where}; "
+        f"controls this answer reads: {reads or '(none)'}")
+
+
+def unread_by_data_warning(params: Mapping[str, Any], names: Iterable[str], reason: str) -> Optional[Dict[str, Any]]:
+    """The one disclosure of a control only the data can show to be unread (COMMAND_MODEL "Applicability", Scott
+    2026-11-18 Q2: JSON ``sort``/``limit``/``offset`` on a value that is not a list), shaped like the open field sets'
+    ``unknown_filter_field``: a ``meta.warnings`` entry, exit 0. It counts the controls as read (the disclosure is
+    their use), so the unused-input ledger does not name them a second time. None when *names* is empty."""
+    fields = list(dict.fromkeys(names))
+    if not fields:
+        return None
+    mark_query_keys(params, *fields)
+    named = ', '.join(f"'{field}'" for field in fields)
+    return {'type': 'control_unread_by_data', 'code': 'control_unread_by_data', 'fields': fields,
+            'message': f"{named} {'has' if len(fields) == 1 else 'have'} no effect on this data: {reason}"}
+
+
 def reject_unsupported_overrides(declarations: Iterable[ParamSpec], overrides: Mapping[str, Any]) -> None:
     """A typed override that names no declared spelling of the noun (``_`` and ``-`` alike) is rule 3's invalid
     request, with the one shared message (BACK-2654). ``api.query`` reads it for a declared noun whose structure call
@@ -491,6 +555,7 @@ def apply_declared_overrides(declarations: Iterable[ParamSpec], params: QueryPar
         for spec in declarations:
             if spec.name in supplied:
                 raw = supplied[spec.name]
+                (params._given.discard if raw is None else params._given.add)(spec.name)  # None: the default
                 value = spec.validate(None) if raw is None else _validate_binding(spec, raw, 'typed')
                 params.set_normalized(spec, value)
     return params
