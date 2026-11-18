@@ -4,12 +4,13 @@ import logging
 import os
 import tempfile
 from pathlib import Path
-from typing import Dict, Any, Optional, cast
+from typing import Dict, Any, Optional, Tuple, cast
 
 from ...diff.structure_diff import element_categories
 from ...registry import get_analyzer
 from ...utils.invocation_log import json_answer_running
 from ...utils.lines import normalize_newlines
+from ...utils.results import outcome_of
 
 logger = logging.getLogger(__name__)
 
@@ -222,10 +223,12 @@ def resolve_git_file(git_ref: str, path: str) -> Dict[str, Any]:
         os.unlink(temp_path)
 
 
-def _fetch_and_analyze_git_file(git_ref: str, file_path: str) -> Dict[str, Any]:
-    """Fetch a file from git and analyze its structure.
+def _fetch_and_analyze_git_file(git_ref: str, file_path: str) -> Tuple[Dict[str, Any], Optional[str]]:
+    """Fetch a file from git and analyze its structure: ``(structure, failure)``.
 
-    Returns the structure dict (functions/classes/imports), or raises on failure.
+    An analyzer that reports failure in its result (``outcome_of`` 'failed', e.g. the notebook analyzer on
+    invalid JSON) gives ``({}, its error)``, as ``ast.analysis.analyze_file_outcome`` reads it (BACK-2672).
+    A blob that cannot be read, or an analyzer that raises, still raises.
     """
     repo = _open_repo()
     commit = _resolve_commit(repo, git_ref)
@@ -238,9 +241,11 @@ def _fetch_and_analyze_git_file(git_ref: str, file_path: str) -> Dict[str, Any]:
     try:
         analyzer_class = get_analyzer(temp_path, allow_fallback=False)
         if not analyzer_class:
-            return {}
+            return {}, None
         structure = analyzer_class(temp_path).get_structure()
-        return cast(Dict[str, Any], structure.get('structure', structure))
+        if outcome_of(structure) == 'failed':
+            return {}, str(structure['error'])
+        return cast(Dict[str, Any], structure.get('structure', structure)), None
     finally:
         os.unlink(temp_path)
 
@@ -313,13 +318,16 @@ def resolve_git_directory(git_ref: str, dir_path: str) -> Dict[str, Any]:
         if not get_analyzer(file_path, allow_fallback=False):
             continue
         try:
-            struct = _fetch_and_analyze_git_file(git_ref, file_path)
+            struct, failure = _fetch_and_analyze_git_file(git_ref, file_path)
         except Exception as e:  # boundary-ok: broad-except -- one blob that the analyzer (arbitrary per-language parser code) or the blob read cannot handle must not end a whole-tree comparison; logged at warning naming the file and ref
             # The answer's analysis_failed warning names the file and this reason (``failures``), so beside a
             # JSON answer the line would only repeat it (BACK-2659).
             logger.log(logging.DEBUG if json_answer_running() else logging.WARNING,
                        "Skipping %s@%s in directory scan: %s", file_path, git_ref, e)
             skipped[file_path] = f"{type(e).__name__}: {e}"
+            continue
+        if failure is not None:
+            skipped[file_path] = failure
             continue
         if not struct:
             continue

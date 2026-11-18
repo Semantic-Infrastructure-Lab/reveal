@@ -192,10 +192,11 @@ class TestFetchAndAnalyzeGitFile:
     def test_no_analyzer_returns_empty_dict(self, git_repo):
         with patch('reveal.adapters.diff.git.get_analyzer', return_value=None):
             result = _fetch_and_analyze_git_file('HEAD', 'file.py')
-        assert result == {}
+        assert result == ({}, None)
 
     def test_success_returns_structure(self, git_repo):
-        result = _fetch_and_analyze_git_file('HEAD', 'file.py')
+        result, failure = _fetch_and_analyze_git_file('HEAD', 'file.py')
+        assert failure is None
         assert any(f['name'] == 'foo' for f in result['functions'])
 
 
@@ -263,7 +264,7 @@ class TestResolveGitDirectory:
 
         with patch('reveal.adapters.diff.git._ls_tree_files', return_value=['dir/file.py']):
             with patch('reveal.adapters.diff.git.get_analyzer', return_value=mock_cls):
-                with patch('reveal.adapters.diff.git._fetch_and_analyze_git_file', return_value={}):
+                with patch('reveal.adapters.diff.git._fetch_and_analyze_git_file', return_value=({}, None)):
                     result = resolve_git_directory('HEAD', 'dir')
         assert result['file_count'] == 0
 
@@ -273,7 +274,7 @@ class TestResolveGitDirectory:
 
         with patch('reveal.adapters.diff.git._ls_tree_files', return_value=['dir/file.py']):
             with patch('reveal.adapters.diff.git.get_analyzer', return_value=mock_cls):
-                with patch('reveal.adapters.diff.git._fetch_and_analyze_git_file', return_value=struct):
+                with patch('reveal.adapters.diff.git._fetch_and_analyze_git_file', return_value=(struct, None)):
                     result = resolve_git_directory('HEAD', 'dir')
 
         assert result['file_count'] == 1
