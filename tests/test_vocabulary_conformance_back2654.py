@@ -105,6 +105,7 @@ CONTROL_TARGETS = {('claude', 'tail'): 'session/my-session'}
 # The answer a probe of a control's spelling selects when the default one does not read the control (rule 20,
 # BACK-2656: there it is refused, which is applicability's subject, not the spelling's): (subcommand argv, URI query).
 CONTROL_BASES = {('calls', 'kind'): (['--uncalled'], '?uncalled'), ('calls', 'external'): (['--modules'], '?modules'),
+                 ('calls', 'limit'): (['--sort=-callers'], '?sort=-callers'),
                  ('imports', 'limit'): (['--sort=-fan-in'], '?sort=-fan-in'),
                  ('imports', 'detail'): (['--circular'], '?circular')}
 
@@ -450,19 +451,19 @@ def probe_uri_and_flag(noun):
             flag_value, uri_value = template, _other(spec, template)
             flag_argv = [flag.option]
         label = f'{flag.option} vs ?{key}='
-        cases.append(_conflict_case(label, _run(_uri(noun, f'{key}={uri_value}', base=base), *flag_argv, '--format',
+        cases.append(_conflict_case(label, _run(_uri(noun, f'{key}={uri_value}', base=base, control=key), *flag_argv, '--format',
                                                 'json'), (flag.option, f'{key}={uri_value}')))
         cases.append(_equal_case(label, noun,
-                                 _run(_uri(noun, f'{key}={flag_value}', base=base), *flag_argv, '--format', 'json'),
-                                 _run(_uri(noun, f'{key}={flag_value}', base=base), '--format', 'json')))
+                                 _run(_uri(noun, f'{key}={flag_value}', base=base, control=key), *flag_argv, '--format', 'json'),
+                                 _run(_uri(noun, f'{key}={flag_value}', base=base, control=key), '--format', 'json')))
         if '{value}' in template:  # the same global flag twice on a URI request (rule 12)
             label = f'{flag.option} twice on the URI'
             twice = [f'{flag.option}={uri_value}', f'{flag.option}={flag_value}']
-            cases.append(_conflict_case(label, _run(_uri(noun, base=base), *twice, '--format', 'json'),
+            cases.append(_conflict_case(label, _run(_uri(noun, base=base, control=key), *twice, '--format', 'json'),
                                         (flag.option, uri_value, flag_value)))
             cases.append(_equal_case(label, noun,
-                                     _run(_uri(noun, base=base), *flag_argv, *flag_argv, '--format', 'json'),
-                                     _run(_uri(noun, base=base), *flag_argv, '--format', 'json')))
+                                     _run(_uri(noun, base=base, control=key), *flag_argv, *flag_argv, '--format', 'json'),
+                                     _run(_uri(noun, base=base, control=key), *flag_argv, '--format', 'json')))
     return cases
 
 

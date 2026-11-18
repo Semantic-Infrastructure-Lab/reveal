@@ -358,17 +358,19 @@ def run_declared_uri(uri: str, element: str | None, args, consumed=(), *, answer
     _run_declared(name, args, path, query, 'uri', consumed, answer_consumer=answer_consumer)
 
 
-def _bind_global_all(name, adapter, args, source, spelled=None) -> None:
+def _bind_global_all(name, adapter, args, source, spelled=None, path=None) -> None:
     """The subcommand's global ``--all`` through the URI form's own seam (``declared_flag_fragment``, BACK-2654): the
     noun's ``--all`` declaration, re-keyed to the cap of the answer the typed values select. A value the request
-    already sets differently is an invalid request naming both flags, as on the URI form; a noun that declares no
-    ``--all`` leaves it unread, so the ledger notes it unused on both forms."""
+    already sets differently is an invalid request naming both flags, as on the URI form; on an answer with no cap
+    (the noun declares no ``--all``, or the answer does not read its cap) it is satisfied, quietly, on both forms."""
     if peek(args, 'all', False) is not True:
         return
     from .flag_specs import FLAG_SPECS, declared_flag_fragment
     spec = next(flag for flag in FLAG_SPECS if flag.dest == 'all')
-    fragment = declared_flag_fragment(spec, adapter, {key: value for key, value in source.items() if value is not None})
-    if not fragment:
+    fragment = declared_flag_fragment(spec, adapter, {key: value for key, value in source.items() if value is not None},
+                                      path)
+    if not fragment:  # a declared noun: no cap the selected answer reads, so --all is satisfied (lifts_no_cap)
+        mark(args, 'all')
         return
     key, _, value = fragment.partition('=')
     owner = next((declaration for declaration in adapter.PARAM_SPECS if key in declaration.spellings), None)
@@ -541,14 +543,14 @@ def _flagged_query(adapter, name, path, source, transport: str, args, consume, s
     if transport != 'uri':
         try:
             _bind_global_verbose(name, adapter, args, source, spelled)
-            _bind_global_all(name, adapter, args, source, spelled)
+            _bind_global_all(name, adapter, args, source, spelled, path)
         except ValueError as exc:
             consume(_invalid_prepared_answer(adapter, name, path, query_resource, str(exc), args))
             return None
         return query_resource
     from .flag_specs import inject_query_flags
     try:
-        flagged: str = inject_query_flags(query_resource, name, args)
+        flagged: str = inject_query_flags(query_resource, name, args, path)
     except ValueError as exc:
         consume(_invalid_prepared_answer(adapter, name, path, query_resource, str(exc), args))
         return None

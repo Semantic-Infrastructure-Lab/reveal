@@ -137,6 +137,25 @@ def predicted_result_type(adapter_class: type, params: Any, path: Optional[str] 
     return result_type
 
 
+def answer_reads_control(adapter_class: type, name: str, selection: Any, path: Optional[str] = None) -> bool:
+    """Whether the answer *selection* selects (a raw URI query, or a subcommand's typed values) reads control *name*,
+    by the noun's own declarations (COMMAND_MODEL "Applicability"). A control that declares no answers, a noun that
+    declares none, and a selection that does not bind (the request's own binding names that problem) read it."""
+    if not _declares_answers(adapter_class):
+        return True
+    declarations = getattr(adapter_class, 'PARAM_SPECS')
+    spec = next((declaration for declaration in declarations if name in declaration.spellings), None)
+    if spec is None or not spec.answers:
+        return True
+    from ..utils.query_binding import answer_reads, prepare_declared_params
+    try:
+        params = prepare_declared_params(declarations, selection, 'uri' if isinstance(selection, str) else 'typed')
+    except ValueError:
+        return True
+    scope = scope_path_of(adapter_class, path) if path else None
+    return answer_reads(declarations, spec, params, lambda: predicted_result_type(adapter_class, params, scope))
+
+
 def _canonical_init(adapter_class: type, resource: str, *, params: Optional[Any] = None,
                     overrides: Optional[Mapping[str, Any]] = None) -> Any:
     """Construct a canonically-migrated adapter directly (BACK-907).

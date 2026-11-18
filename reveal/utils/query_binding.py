@@ -492,6 +492,13 @@ def _reads(spec: ParamSpec, facets: tuple) -> bool:
     return not spec.answers or bool(set(spec.answers).intersection(facets))
 
 
+def answer_reads(declarations: Iterable[ParamSpec], spec: ParamSpec, params: Mapping[str, Any],
+                 result_type: Callable[[], str]) -> bool:
+    """Whether the answer *params* select reads control *spec* (its declared answers; empty: every answer).
+    *result_type* is asked only when the control declares its answers."""
+    return not spec.answers or _reads(spec, answer_facets(tuple(declarations), params, result_type()))
+
+
 def reject_unread_controls(declarations: Iterable[ParamSpec], params: Mapping[str, Any],
                            result_type: Callable[[], str]) -> None:
     """Applicability (COMMAND_MODEL, BACK-2656): a control given to an answer its declaration does not name is an

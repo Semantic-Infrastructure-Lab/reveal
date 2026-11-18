@@ -141,7 +141,6 @@ class TestLimitLive:
         assert proc.returncode == 2, proc.stderr
         assert "control 'limit' is not read by this answer (calls_query" in proc.stderr
 
-    @pytest.mark.xfail(strict=True, reason="BACK-2656: --all injects calls' limit into every mode, and only the ranking and uncalled read limit, so --all on callers/callees/root/modules is refused naming limit; the --all-on-an-uncapped-answer rule is pending a ruling (Step 2b report)")
     def test_calls_target_mode_all_is_quiet(self, imported):
         proc = run_reveal(f'calls://{imported}?target=helper', '--all', '--format', 'json')
         assert proc.returncode == 0, proc.stderr

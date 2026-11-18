@@ -46,7 +46,8 @@ class FlagSpec:
     # declarations -> (key, value); raises when the noun declares nothing to receive it (rule 4, note #17).
     declared_binding: Callable[[Any], tuple] | None = None
     # Lifts the cap of the answer the request selects (an answer selector's declared ``cap``), keeping the value the
-    # noun's own declaration gives; a request whose answer declares no cap gets that declaration as it is (--all).
+    # noun's own declaration gives; a request whose answer declares no cap gets that declaration as it is (--all). On a
+    # declared noun whose selected answer does not read that cap, or that declares none, it is satisfied: quiet.
     answer_cap: bool = False
 
 
@@ -237,33 +238,50 @@ def _declared_fragment(args: Any, spec: FlagSpec, binding: Callable[[Any], tuple
     return f"{key}={'true' if value is True else value}"
 
 
-def _fragment_for(args: Any, spec: FlagSpec, adapter_class: Any, scheme: str, resource: str) -> str | None:
+def _fragment_for(args: Any, spec: FlagSpec, adapter_class: Any, scheme: str, resource: str,
+                  path: str | None = None) -> str | None:
     """The fragment *spec* reaches this adapter with: from a declared noun's own declarations when the flag binds
     that way (rule 4), else the adapter's CLI_QUERY_FLAGS declaration, re-keyed to the cap the selected answer
     declares when the flag lifts a cap (--all on Metrics' legacy hotspots ranking lifts top, elsewhere limit)."""
     declarations = getattr(adapter_class, 'PARAM_SPECS', None)
     if spec.declared_binding is not None and declarations:
         return _declared_fragment(args, spec, spec.declared_binding, declarations, scheme)
-    return declared_flag_fragment(spec, adapter_class, resource.partition('?')[2])
-
-
-def declared_flag_fragment(spec: FlagSpec, adapter_class: Any, selection: Any) -> str | None:
-    """The fragment the adapter's CLI_QUERY_FLAGS declaration gives *spec*, re-keyed to the cap of the answer
-    *selection* selects (a raw URI query or a subcommand's typed values) when the flag lifts a cap. One answer for
-    both forms of a request: the URI injection and the declared subcommand both read it (BACK-2654)."""
-    fragment = _declared(adapter_class).get(spec.dest)
-    declarations = getattr(adapter_class, 'PARAM_SPECS', None)
-    if spec.answer_cap and fragment and declarations:
-        from ...utils.query_binding import selected_cap
-        cap = selected_cap(declarations, selection)
-        if cap:
-            return f"{cap}={fragment.partition('=')[2]}"
+    target, _, query = resource.partition('?')
+    fragment = declared_flag_fragment(spec, adapter_class, query, path or target or None)
+    if lifts_no_cap(spec, adapter_class, fragment):
+        mark(args, spec.dest)  # satisfied: the selected answer has no cap to lift
     return fragment
 
 
-def inject_query_flags(resource: str, scheme: str, args: Any) -> str:
+def lifts_no_cap(spec: FlagSpec, adapter_class: Any, fragment: str | None) -> bool:
+    """A cap-lifting flag (--all) that reaches no cap on a declared noun is satisfied, not unused: the selected
+    answer is every row already, so it answers quietly (Scott 2026-11-18, COMMAND_MODEL "Applicability")."""
+    return spec.answer_cap and not fragment and bool(getattr(adapter_class, 'PARAM_SPECS', None))
+
+
+def declared_flag_fragment(spec: FlagSpec, adapter_class: Any, selection: Any, path: str | None = None) -> str | None:
+    """The fragment the adapter's CLI_QUERY_FLAGS declaration gives *spec*, re-keyed to the cap of the answer
+    *selection* selects (a raw URI query or a subcommand's typed values) when the flag lifts a cap. One answer for
+    both forms of a request: the URI injection and the declared subcommand both read it (BACK-2654). A cap-lifting
+    flag reaches the selected answer's cap only: None when that answer does not read the cap (its declared answers,
+    on *path*), or the noun declares none, so the flag is satisfied (``lifts_no_cap``)."""
+    fragment = _declared(adapter_class).get(spec.dest)
+    declarations = getattr(adapter_class, 'PARAM_SPECS', None)
+    if spec.answer_cap and fragment and declarations:
+        from ...adapters.factory import answer_reads_control
+        from ...utils.query_binding import selected_cap
+        cap = selected_cap(declarations, selection)
+        if cap:
+            fragment = f"{cap}={fragment.partition('=')[2]}"
+        if not answer_reads_control(adapter_class, fragment.partition('=')[0], selection, path):
+            return None
+    return fragment
+
+
+def inject_query_flags(resource: str, scheme: str, args: Any, path: str | None = None) -> str:
     """Append the query fragment for every CLI flag in effect that this scheme's adapter
-    declares; print a note for the flags it does not support (where the spec says to)."""
+    declares; print a note for the flags it does not support (where the spec says to). *path* is the request's
+    path when *resource* is its query alone (the declared route), for a cap only an answer on that path reads."""
     from ...adapters.base import get_adapter_class
     adapter_class = get_adapter_class(scheme)
     honors_result_control = getattr(adapter_class, 'HONORS_RESULT_CONTROL', True)
@@ -277,7 +295,7 @@ def inject_query_flags(resource: str, scheme: str, args: Any) -> str:
             print(f"Note: {typed_option(spec)} has no effect on {scheme}:// -- it does not take "
                   f"sort=/limit=/offset=.", file=sys.stderr)
             continue
-        fragment = _fragment_for(args, spec, adapter_class, scheme, resource)
+        fragment = _fragment_for(args, spec, adapter_class, scheme, resource, path)
         if fragment and spec.unbounded is not None and value == 0:
             value = _native_uncapped_value(adapter_class, fragment, spec.unbounded)
         fragment = fragment or spec.universal

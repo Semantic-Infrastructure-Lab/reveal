@@ -356,10 +356,8 @@ def ignored_flags(stderr):
 
 @pytest.mark.parametrize('flags', VALUE_CASES, ids=' '.join)
 @pytest.mark.parametrize('noun', NOUNS)
-def test_option_values_are_read_alike(project, noun, flags, request):
+def test_option_values_are_read_alike(project, noun, flags):
     """Zero, negative, malformed and unused values: same exit, same stdout, same ignored-flag notes."""
-    if noun == 'calls' and flags == ['--format', 'json', '--all']:
-        request.applymarker(pytest.mark.xfail(strict=True, reason="BACK-2656: --all injects calls' limit into every mode, and only the ranking and uncalled read limit, so --all on callers/callees/root/modules is refused naming limit; the --all-on-an-uncapped-answer rule is pending a ruling (Step 2b report)"))
     a, b = run(noun, 'cli', *flags), run(noun, 'uri', *flags)
     assert a.returncode == b.returncode, (a.stderr, b.stderr)
     assert_equal_stdout(noun, a.stdout, b.stdout)
@@ -406,8 +404,15 @@ def test_all_lifts_the_same_cap_on_both_forms(project, noun, cli, query):
 
 @pytest.mark.parametrize('noun', ['ast', 'calls', 'git', 'metrics'])
 def test_all_beside_a_different_limit_is_one_invalid_request_on_both_forms(project, noun):
-    """--all sets the noun's limit, so beside --limit 1 it names both flags and exits 2 on both forms (rule 1)."""
-    a, b = run(noun, 'cli', '--all', '--limit', '1'), run(noun, 'uri', '--all', '--limit', '1')
+    """--all sets the noun's limit, so beside --limit 1 it names both flags and exits 2 on both forms (rule 1). It
+    sets the cap of an answer that reads it: calls' ranking (its callers answer has none, BACK-2656)."""
+    ranking = {'calls': ['--sort=-callers']}.get(noun)
+    if ranking:
+        walk = ['--respect-gitignore=off']
+        a = _run_reveal_direct(noun, 'proj', *ranking, *walk, '--all', '--limit', '1')
+        b = _run_reveal_direct(f'{noun}://proj?sort=-callers', *walk, '--all', '--limit', '1')
+    else:
+        a, b = run(noun, 'cli', '--all', '--limit', '1'), run(noun, 'uri', '--all', '--limit', '1')
     assert a.returncode == b.returncode == 2, (a.stderr, b.stderr)
     assert rejection(a.stderr) == rejection(b.stderr) == [
         f'Error ({noun}://): --limit conflicts with --all: both set limit with different values; give one']

@@ -509,9 +509,24 @@ def test_flag_is_honored_or_named(flag_harness, scheme, dest):
     code, out, err = flag_harness.run_flags(scheme, fmt, dest, **{dest: value})
     named = option in err or f"'{dest}'" in err  # an adapter's own 'Unknown query param' warning
     honored = (code, out) != base[:2]
-    assert named or honored, (
+    assert named or honored or _satisfied(flag_harness, scheme, dest), (
         f'{option} on {scheme}:// changed nothing and no note named it. Honor it, or make '
         f'sure the ledger sees that it went unused (reveal/cli/routing/ledger.py).')
+
+
+def _satisfied(harness, scheme, dest):
+    """--all on a declared noun's answer with no cap is satisfied (the answer is every row): it answers quietly
+    (Scott 2026-11-18, BACK-2656), judged by the one rule the CLI applies, never listed by hand."""
+    from reveal.adapters.base import get_adapter_class
+    from reveal.cli.routing.flag_specs import FLAG_SPECS, declared_flag_fragment, lifts_no_cap
+    spec = next(flag for flag in FLAG_SPECS if flag.dest == dest)
+    if not spec.answer_cap:
+        return False
+    uri = PROBE_URIS.get((scheme, dest)) or {'calls': 'calls://proj?rank=callers', 'patches': 'patches://proj'}.get(
+        scheme, harness_module.FIXTURE_URIS[scheme])
+    target, _, query = uri.partition('://')[2].partition('?')
+    adapter = get_adapter_class(scheme)
+    return lifts_no_cap(spec, adapter, declared_flag_fragment(spec, adapter, query, str(harness.root / target)))
 
 
 def test_tracked_args_behave_like_the_namespace_they_copy():
