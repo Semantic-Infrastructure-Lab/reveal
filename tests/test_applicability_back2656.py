@@ -103,6 +103,28 @@ def test_a_control_only_the_data_shows_unread_is_one_shared_warning_that_counts_
     assert unread_by_data_warning(params, [], 'x') is None
 
 
+WHERE = ParamSpec('where', 'array', 'filters', [], lambda v: list(v) if isinstance(v, (list, tuple)) else [v],
+                  role='filter-expression', repeatable=True, open_fields='any key', answers=('view=a',))
+FOLDING = (VIEW, WHERE, BETA)
+
+
+def test_a_folded_bare_key_is_named_as_typed_by_the_refusal_and_the_shared_warning():
+    """Bare field keys fold into the filter expression: both disclosures name the control (canonical ``fields``) and
+    the terms as typed, so ``?bogus=1`` is recognisable; ``where=`` itself adds nothing."""
+    def bound(query):
+        return bind_prepared_params(FOLDING, prepare_declared_params(FOLDING, query, 'uri'), transport='uri')
+    with pytest.raises(RequestValidationError, match=r"^control 'where' \(bogus=1, n%3E1\) is not read by this "):
+        reject_unread_controls(FOLDING, bound('view=b&bogus=1&n%3E1'), lambda: 'fixture_b')
+    with pytest.raises(RequestValidationError, match=r"^control 'where' is not read by this "):
+        reject_unread_controls(FOLDING, bound('view=b&where=n>1'), lambda: 'fixture_b')
+    with collect_query_keys() as log:
+        params = bound('where=n>1&bogus=1&beta=2')
+        warning = unread_by_data_warning(params, ['where', 'beta'], 'not a list')
+    assert warning['fields'] == ['where', 'beta']
+    assert warning['message'] == "'where' (bogus=1), 'beta' have no effect on this data: not a list"
+    assert {'where', 'bogus', 'beta'} <= log.used  # the folded key is disclosed with its control, not left unread
+
+
 # --- the seam: every transport refuses before the adapter is built ---------------------------------------------
 
 import json  # noqa: E402

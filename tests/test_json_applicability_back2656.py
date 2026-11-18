@@ -53,6 +53,22 @@ def test_an_array_control_on_a_value_that_is_not_a_list_answers_with_the_shared_
     assert not _warnings(doc, *UNREAD_WARNINGS), doc['meta']['warnings']  # disclosed once, not also as unread
 
 
+@pytest.mark.parametrize('uri,named', [
+    ('json://data.json?bogus=1', "'where' (bogus=1) has"),            # bare field keys: named as typed
+    ('json://data.json?n>1&name~=x', "'where' (n>1, name~=x) has"),
+    ('json://data.json?where=n>1&m=2', "'where' (m=2) has"),          # only the bare one was folded
+    ('json://data.json?where=n>1', "'where' has"),                    # the control's own spelling
+    ('json://data.json?bogus=1&limit=1', "'where' (bogus=1), 'limit' have"),
+])
+def test_the_shared_warning_names_bare_field_keys_as_typed(proj, uri, named):
+    run, doc = _json(uri)
+    assert run.returncode == 0, run.stderr
+    shared = _warnings(doc, 'control_unread_by_data')
+    assert shared and shared[0]['message'].startswith(f'{named} no effect on this data: '), shared
+    assert shared[0]['fields'][0] == 'where'  # the fields stay canonical
+    assert not _warnings(doc, *UNREAD_WARNINGS), doc['meta']['warnings']
+
+
 def test_the_shared_warning_reaches_the_api_and_the_text_answer(proj):
     from reveal import api
     for answer in (api.query('json://data.json?limit=1'), api.query('json://data.json', limit=1)):
@@ -68,8 +84,9 @@ def test_the_shared_warning_reaches_the_api_and_the_text_answer(proj):
 @pytest.mark.parametrize('argv,control,facets', [
     (('json://rows.json?schema&limit=1',), 'limit', 'json_schema, view, view=schema'),     # legacy selector: warned
     (('json://rows.json?flatten&sort=n',), 'sort', 'json_flatten, view, view=flatten'),
-    (('json://rows.json?schema&n>1',), 'where', 'json_schema, view, view=schema'),
-    (('json://rows.json?gron&data-only&n>1',), 'where', 'json_flatten, view, view=flatten'),
+    (('json://rows.json?schema&n>1',), 'where (n>1)', 'json_schema, view, view=schema'),  # a bare field: as typed
+    (('json://rows.json?gron&data-only&n>1',), 'where (n>1)', 'json_flatten, view, view=flatten'),
+    (('json://rows.json?view=schema&where=n>1',), 'where', 'json_schema, view, view=schema'),
     (('json://rows.json?view=keys&offset=1',), 'offset', 'json_keys, view, view=keys'),    # the hand check's text
     (('json', 'rows.json', '--view', 'keys', '--limit', '1'), 'limit', 'json_keys, view, view=keys'),
     (('json://rows.json?detail=raw',), 'detail', 'json_value, default'),
@@ -78,7 +95,9 @@ def test_the_shared_warning_reaches_the_api_and_the_text_answer(proj):
 def test_a_control_the_answer_does_not_read_exits_2_naming_where_it_is_read(proj, argv, control, facets):
     run, doc = _json(*argv)
     assert run.returncode == 2, (run.returncode, run.stdout, run.stderr)
-    assert f"control '{control}' is not read by this answer ({facets}); {control} is read by: " in run.stderr, \
+    name, _, typed = control.partition(' ')
+    named = f"'{name}'" + (f' {typed}' if typed else '')
+    assert f"control {named} is not read by this answer ({facets}); {name} is read by: " in run.stderr, \
         run.stderr
     assert doc.get('type', '').startswith('json_'), doc  # the invalid-request document
 
