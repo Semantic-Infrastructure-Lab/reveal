@@ -30,7 +30,7 @@ def test_malformed_selected_policy_is_invalid_request(project, scheme):
 
 @pytest.mark.parametrize('scheme,params', [('imports', ''), ('overview', ''), ('stats', 'hotspots=true&tests=exclude')])
 def test_required_config_syntax_failure_remains_operational(project, scheme, params):
-    from reveal.errors import TestLayoutConfigError as ConfigFailure
+    from reveal.errors import ConfigLoadError as ConfigFailure  # test_layout's own failure included
     (project / '.reveal.yaml').write_text('test_layout: [\n', encoding='utf-8')
     uri = f'{scheme}://{project}?{params}'
     with pytest.raises(ConfigFailure, match='ParserError'):

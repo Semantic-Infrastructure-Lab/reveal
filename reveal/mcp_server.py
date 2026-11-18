@@ -50,7 +50,7 @@ from .cli.defaults import _default_args
 from .cli.global_flags import apply_global_flags
 from .utils.path_utils import failure_of
 from .utils.results import NavSourceFailure
-from .errors import NavRequestValidationError, TestLayoutValidationError, TestLayoutConfigError
+from .errors import ConfigLoadError, ConfigValidationError, NavRequestValidationError, TestLayoutValidationError
 
 # All reveal-mcp tools are read-only (no writes, no side effects) and
 # idempotent (same args -> same result, modulo underlying files changing).
@@ -214,7 +214,7 @@ def _run_and_capture(fn, *args, capture_stderr: bool = True, **kwargs) -> str:
     if captured_exception is not None:
         from .cli.invocation import RetiredSpellingError
         return _tool_failure(str(captured_exception),
-                             public=isinstance(captured_exception, (OSError, NavRequestValidationError, TestLayoutValidationError, TestLayoutConfigError,
+                             public=isinstance(captured_exception, (OSError, NavRequestValidationError, TestLayoutValidationError, ConfigValidationError, ConfigLoadError,
                                                                    RetiredSpellingError)),
                              exception=captured_exception)
     if out.strip():
@@ -290,7 +290,7 @@ def _declared_failure(answer) -> str | None:
         return None
     if answer.exception is not None:
         exc = answer.exception
-        return _tool_failure(str(exc), public=isinstance(exc, (OSError, TestLayoutConfigError)), exception=exc)
+        return _tool_failure(str(exc), public=isinstance(exc, (OSError, ConfigLoadError)), exception=exc)
     if answer.public_diagnostic is not None:
         return _tool_failure(answer.public_diagnostic)
     return _tool_failure(answer.private_diagnostic or 'Required analysis or output failed', public=False)
@@ -839,7 +839,7 @@ def reveal_check(path: str, severity: str = '', select: str = '', ignore: str = 
         tally = _tally(checked)
         total_issues = tally.total_issues
         file_results, _ = _json_file_entries(checked)
-    except (TestLayoutValidationError, TestLayoutConfigError) as exc:
+    except (TestLayoutValidationError, ConfigValidationError, ConfigLoadError) as exc:
         return _tool_failure(str(exc), exception=exc)
     notes, incomplete = _check_notes(
         files, select_list, ignore_list, file_results, collection=collection, directory=directory)

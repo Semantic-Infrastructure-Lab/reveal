@@ -1,8 +1,10 @@
-"""A config file that exists but cannot be loaded is disclosed, not read as "no config" (BACK-1857).
+"""A config file that exists but cannot be loaded is never read as "no config" (BACK-1857, BACK-2677).
 
 ``_load_file`` returned None after a ``logger.error``, so the layers saw an empty config and
 ``check`` ran under the defaults while its JSON/MCP result said nothing about the user's
-``.reveal.yaml`` having been ignored.
+``.reveal.yaml`` having been ignored. BACK-1857/2659 disclosed it in a warning over that defaults-built
+answer; it now fails every answer that reads configuration (``RevealConfig.require``: ConfigLoadError,
+exit 3), and no warning claims the defaults were used.
 """
 from pathlib import Path
 
@@ -10,6 +12,7 @@ import pytest
 
 from reveal.checks import capability_disclosures
 from reveal.config import RevealConfig
+from reveal.errors import ConfigLoadError
 from reveal.utils.invocation_log import invocation_warnings, log_scope
 
 pytestmark = pytest.mark.component
@@ -37,12 +40,17 @@ def project(tmp_path, monkeypatch):
     return root
 
 
-def _config_notes(root):
-    """The ``config_load_failed`` warnings an invocation reading *root*'s config records: the one
-    disclosure every answer carries (BACK-2659), which replaced check's own capability note."""
+def _load_failure(root):
+    """The failure an answer reading *root*'s config meets (BACK-2677), after checking that the load records
+    no ``config_load_failed`` warning claiming the defaults were used. None when the config is usable."""
     with log_scope(to_stderr=False):
-        RevealConfig.get(root)
-        return [w['message'] for w in invocation_warnings() if w['code'] == 'config_load_failed']
+        config = RevealConfig.get(root)
+        assert not [w for w in invocation_warnings() if w['code'] == 'config_load_failed']
+    try:
+        config.require()
+    except ConfigLoadError as exc:
+        return str(exc)
+    return None
 
 
 def test_check_no_longer_adds_its_own_config_note(project):
@@ -58,30 +66,28 @@ def test_broken_yaml_is_recorded_on_the_config(project):
     assert RevealConfig._load_file(project / '.reveal.yaml') is None  # the old contract is unchanged
 
 
-def test_check_discloses_the_config_it_ignored(project):
+def test_a_broken_config_fails_the_answer_naming_it(project):
     (project / '.reveal.yaml').write_text(BROKEN_YAML, encoding='utf-8')
-    (note,) = _config_notes(project)
-    assert '.reveal.yaml could not be loaded' in note and 'ParserError' in note
-    assert 'settings were not applied' in note
+    failure = _load_failure(project)
+    assert '.reveal.yaml could not be loaded' in failure and 'ParserError' in failure
+    assert 'settings in it are unknown' in failure
 
 
 def test_invalid_schema_is_a_load_failure(project):
     (project / '.reveal.yaml').write_text('- just\n- a list\n', encoding='utf-8')
-    assert _config_notes(project), 'a config that fails validation is not "no config"'
+    assert _load_failure(project), 'a config that fails validation is not "no config"'
 
 
 def test_malformed_pyproject_hides_its_tool_reveal_section(project):
     (project / 'pyproject.toml').write_text('[tool.reveal\nx = \n', encoding='utf-8')
-    (note,) = _config_notes(project)
-    assert 'pyproject.toml could not be loaded' in note
+    assert 'pyproject.toml could not be loaded' in _load_failure(project)
 
 
 def test_reveal_config_pointing_at_a_broken_file_is_disclosed(project, tmp_path, monkeypatch):
     broken = tmp_path / 'custom.yaml'
     broken.write_text(BROKEN_YAML, encoding='utf-8')
     monkeypatch.setenv('REVEAL_CONFIG', str(broken))
-    (note,) = _config_notes(project)
-    assert 'custom.yaml could not be loaded' in note
+    assert 'custom.yaml could not be loaded' in _load_failure(project)
 
 
 @pytest.mark.parametrize('content', [None, '', 'rules:\n  disable: [E501]\n'],
@@ -90,4 +96,4 @@ def test_absent_empty_and_valid_configs_are_not_failures(project, content):
     if content is not None:
         (project / '.reveal.yaml').write_text(content, encoding='utf-8')
     assert RevealConfig.get(project).load_failures == []
-    assert not _config_notes(project)
+    assert _load_failure(project) is None

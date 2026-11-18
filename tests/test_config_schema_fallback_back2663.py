@@ -1,9 +1,12 @@
-"""A config value that fails the schema falls back to its default (BACK-2663).
+"""A config value that fails the schema never crashes a reader (BACK-2663) and fails the request that reads it
+(BACK-2677, COMMAND_MODEL "Configuration failures").
 
 ``_validate_config_schema`` only warned, and the merged value was used as it was: ``ignore: 5``
 made every walking noun exit 1 with ``TypeError: 'int' object is not iterable`` from
-``ignore_patterns``. The value is now dropped, the answer says so in a ``config_schema_invalid``
-warning, and the exit code is the one the request has without that setting.
+``ignore_patterns``. BACK-2663 dropped the value and used the default with a warning, exit 0, which
+walked the trees the user meant to hide. The value is still dropped (no reader meets a shape it cannot
+read), and an answer that reads its key exits 2 naming the file and key; a noun that does not read it is
+unaffected.
 """
 import json
 import logging
@@ -40,15 +43,17 @@ def project(tmp_path):
 @pytest.mark.parametrize('argv', [('ast://{root}',), ('metrics://{root}',), ('calls://{root}?callers=ok',),
                                   ('imports://{root}',), ('check', '{root}')],
                          ids=['ast', 'metrics', 'calls', 'imports', 'check'])
-def test_schema_invalid_ignore_falls_back_instead_of_crashing(project, argv):
+def test_schema_invalid_ignore_is_an_invalid_request_naming_file_and_key(project, argv):
     (project / '.reveal.yaml').write_text('root: true\nignore: 5\n', encoding='utf-8')
     result = _cli(project.parent / 'xdg', *[a.format(root=project.as_posix()) for a in argv], '--format', 'json',
                   cwd=project.parent)
     assert 'Traceback' not in result.stderr, result.stderr
-    assert result.returncode == 0, result.stderr
-    entries = [w for w in json.loads(result.stdout)['meta']['warnings'] if w.get('type') == 'config_warning']
-    assert [(w['code'], w['key']) for w in entries] == [('config_schema_invalid', 'ignore')]
-    assert 'default' in entries[0]['message']
+    assert result.returncode == 2, result.stderr
+    expected = f"config {(project / '.reveal.yaml').as_posix()}: ignore: 5 is not of type 'array'"
+    assert expected in result.stderr
+    if argv[0] != 'check':  # check answers its usage errors in text only (the BACK-2671 class)
+        document = json.loads(result.stdout)
+        assert expected in document['error'] and 'ok.py' not in json.dumps(document)
 
 
 @pytest.mark.cli
@@ -85,16 +90,17 @@ def test_architecture_keeps_its_own_validation():
 
 
 @pytest.mark.cli
-@pytest.mark.parametrize('noun', ['ast', 'metrics'])
-def test_an_override_with_an_invalid_files_pattern_is_dropped_whole(project, noun):
+@pytest.mark.parametrize('noun,code', [('ast', 0), ('metrics', 2)])
+def test_an_override_with_an_invalid_files_pattern_fails_only_the_nouns_that_read_rules(project, noun, code):
     """Dropping only ``files`` left an override without its required pattern, and loading the
-    config raised ``KeyError: 'files'`` on every noun. The whole override goes."""
+    config raised ``KeyError: 'files'`` on every noun; the whole override is still dropped. Metrics reads
+    the rule settings and fails naming the key; ast reads none and answers as without the override."""
     (project / '.reveal.yaml').write_text('root: true\noverrides:\n  - files: 5\n    rules: {}\n', encoding='utf-8')
     result = _cli(project.parent / 'xdg', f'{noun}://{project.as_posix()}', '--format', 'json', cwd=project.parent)
     assert 'Traceback' not in result.stderr, result.stderr
-    assert result.returncode == 0, result.stderr
-    keys = [w['key'] for w in json.loads(result.stdout)['meta']['warnings'] if w.get('type') == 'config_warning']
-    assert 'overrides.0.files' in keys and 'overrides.0' in keys
+    assert result.returncode == code, result.stderr
+    if code == 2:
+        assert 'overrides.0.files' in json.loads(result.stdout)['error']
 
 
 def test_a_dropped_required_value_takes_its_object_with_it():
@@ -110,15 +116,16 @@ def test_a_dropped_required_value_takes_its_object_with_it():
                          ids=['schema-invalid-value', 'not-a-table'])
 def test_pyproject_tool_reveal_is_validated_like_a_reveal_yaml(project, pyproject, key):
     """``[tool.reveal]`` skipped the schema: ``ignore = 5`` crashed with the same TypeError, and a
-    section that is not a table with ``AttributeError: 'str' object has no attribute 'get'``."""
+    section that is not a table with ``AttributeError: 'str' object has no attribute 'get'``. An invalid
+    value is an invalid request (2) naming the key; a section that cannot be read leaves every setting in
+    it unknown (3)."""
     (project / 'pyproject.toml').write_text(pyproject, encoding='utf-8')
     result = _cli(project.parent / 'xdg', f'ast://{project.as_posix()}', '--format', 'json', cwd=project.parent)
     assert 'Traceback' not in result.stderr, result.stderr
-    assert result.returncode == 0, result.stderr
-    entries = [w for w in json.loads(result.stdout)['meta']['warnings'] if w.get('type') == 'config_warning']
-    expected = [('config_schema_invalid', key)] if key else [('config_load_failed', None)]
-    assert [(w['code'], w.get('key')) for w in entries] == expected
-    assert entries[0]['path'] == (project / 'pyproject.toml').as_posix()
+    assert result.returncode == (2 if key else 3), result.stderr
+    error = json.loads(result.stdout)['error']
+    assert (project / 'pyproject.toml').as_posix() in error
+    assert (f': {key}: ' in error) if key else ('could not be loaded' in error)
 
 
 @pytest.mark.cli

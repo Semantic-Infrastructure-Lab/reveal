@@ -216,18 +216,19 @@ def test_direct_context_normalizes_immutable_tuple_and_rejects_mutable_list(tmp_
 
 
 def test_missing_custom_source_is_required_and_selection_survives_env_change(tmp_path, monkeypatch):
-    from reveal.errors import TestLayoutConfigError as ConfigFailure
+    """A missing selected file is an invalid request (exit 2, BACK-2677), remembered by the config it selected."""
+    from reveal.errors import ConfigValidationError
     root = project(tmp_path)
     missing = tmp_path / 'missing.yaml'
     monkeypatch.setenv('REVEAL_CONFIG', str(missing))
     config = RevealConfig.get(root)
     monkeypatch.delenv('REVEAL_CONFIG')
-    with pytest.raises(ConfigFailure, match='FileNotFoundError'):
+    with pytest.raises(ConfigValidationError, match='REVEAL_CONFIG names .*missing.yaml'):
         config.apply_test_layout(Layout.for_path(root))
 
 
 def test_failed_custom_source_stays_required_after_environment_changes(tmp_path, monkeypatch):
-    from reveal.errors import TestLayoutConfigError as ConfigFailure
+    from reveal.errors import ConfigLoadError as ConfigFailure
     root = project(tmp_path)
     custom = tmp_path / 'bad.yaml'
     custom.write_text('test_layout: [\n', encoding='utf-8')

@@ -225,7 +225,7 @@ def test_alias_churn_keeps_physical_repo_mapping(project, monkeypatch):
 def test_selected_unreadable_config_retains_operational_failure(project, monkeypatch):
     import builtins
     from pathlib import Path
-    from reveal.errors import TestLayoutConfigError
+    from reveal.errors import ConfigLoadError
     original = builtins.open
     selected = project / '.reveal.yaml'
     def denied(file, *args, **kwargs):
@@ -233,7 +233,7 @@ def test_selected_unreadable_config_retains_operational_failure(project, monkeyp
             raise PermissionError('synthetic selected config denied')
         return original(file, *args, **kwargs)
     monkeypatch.setattr(builtins, 'open', denied)
-    with pytest.raises(TestLayoutConfigError, match='Required test_layout configuration'):
+    with pytest.raises(ConfigLoadError, match='synthetic selected config denied'):
         query(f'metrics://{project}?{OPTIONS}')
 
 

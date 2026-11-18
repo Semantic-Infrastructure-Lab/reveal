@@ -55,6 +55,9 @@ control whatever its value type; 1b, 1d and 6 read every spelling (aliases and n
       typed target; in text mode stdout stays empty.
   12  repeatability is declared once (``ParamSpec.repeatable``): the CLI appends exactly when it is set, settings
       (limit, offset, sort, depth, detail, view, since, until, format, columns) are scalar, where/match/exclude repeat.
+  22  configuration failures (Scott 2026-11-17, BACK-2677): ``REVEAL_CONFIG`` naming no file exits 2 naming it, on
+      every noun; on a noun that walks (it reads ``ignore``) an unparseable project config exits 3 and ``ignore: 5``
+      exits 2, each naming the file. Never an answer built from the defaults.
 
 A cell is ``conforms`` (asserted), ``not_yet`` (recorded below with the behaviour observed; the count may only
 fall and must reach zero before the cut) or ``exempt`` (a written reason; the probe must find nothing to run).
@@ -87,7 +90,7 @@ def _declared_nouns():
 
 NOUNS = _declared_nouns()
 RULES = ('1a', '1b', '1c', '1d', '2', '3', '3b', '4', '5', '6', '8a', '8b', '10', '12', '16', '17', '18', '20',
-         '14', '21j')
+         '14', '21j', '22')
 
 # The request each noun answers by default: the parity gate's table (CLI argv after the noun, URI suffix), plus
 # the two declared nouns it has no row for. None: no subcommand (codex is URI-only; stats is metrics' retired scheme).
@@ -191,7 +194,7 @@ NOT_YET = {
 }
 
 NOT_YET_BASELINE = {'1a': 0, '1b': 0, '1c': 0, '1d': 0, '2': 0, '3': 0, '3b': 0, '4': 0, '5': 0, '6': 0,
-                    '8a': 0, '8b': 0, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 6, '14': 0, '21j': 0}
+                    '8a': 0, '8b': 0, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 6, '14': 0, '21j': 0, '22': 0}
 
 
 # --- the fixture -------------------------------------------------------------------------------------------
@@ -1359,12 +1362,46 @@ def probe_invalid_requests_answer_json(noun):
     return cases
 
 
+# --- rule 22: configuration failures (BACK-2677) -------------------------------------------------------------
+
+_MISSING_CONFIG = 'missing-config.yaml'
+_PROJECT_CONFIG = os.path.join('proj', '.reveal.yaml')
+
+
+def probe_config_failures(noun):
+    """A setting the answer reads that could not be used fails the request, naming the file: a missing selected
+    file on every noun (2); on a noun that walks, which reads ``ignore``, an unparseable project config (3) and an
+    invalid ``ignore`` value (2)."""
+    from reveal.utils.request_cache import reset_request_caches
+    request = _uri(noun)
+    with _env(REVEAL_CONFIG=os.path.abspath(_MISSING_CONFIG)):
+        run = _run(request, '--format', 'json')
+    cases = [Case('REVEAL_CONFIG naming no file', run.rc == 2 and _MISSING_CONFIG in run.out,
+                  f'{run.brief()}: expected exit 2 naming {_MISSING_CONFIG}')]
+    if not getattr(_adapter(noun).RESOURCE_SPEC, 'walks', False):
+        return cases
+    for content, code, label in (('ignore: [\n', 3, 'an unparseable project config'),
+                                 ('ignore: 5\n', 2, 'ignore: 5 in the project config')):
+        with open(_PROJECT_CONFIG, 'w', encoding='utf-8') as handle:
+            handle.write(content)
+        reset_request_caches()  # each CLI run is a fresh process; in-process runs share the config cache
+        try:
+            run = _run(request, '--format', 'json')
+        finally:
+            os.remove(_PROJECT_CONFIG)
+            reset_request_caches()
+        cases.append(Case(label, run.rc == code and '.reveal.yaml' in run.out,
+                          f'{run.brief()}: expected exit {code} naming .reveal.yaml'))
+    return cases
+
+
 PROBES = {'1a': probe_uri_and_flag, '1b': probe_alias_and_name, '1c': probe_repeated_spelling,
           '1d': probe_repeatable_aliases, '3': probe_unsupported_controls, '3b': probe_unknown_keys,
           '4': probe_verbose_is_detail_full, '8a': probe_bare_shared_keys,
           '8b': probe_bare_field_filters, '10': probe_spellings_declared, '12': probe_repeatability_declared,
           '16': probe_legacy_operations, '17': probe_one_answer, '18': probe_repeated_global_flags,
-          '20': probe_applicability, '14': probe_defaults, '21j': probe_invalid_requests_answer_json}
+          '20': probe_applicability, '14': probe_defaults, '21j': probe_invalid_requests_answer_json,
+          '22': probe_config_failures}
 # These also run the retirement cases' sample file.
 SAMPLE_PROBES = {'2': probe_retirement_notes, '5': probe_legacy_declarations, '6': probe_alias_notes}
 

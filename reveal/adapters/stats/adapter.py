@@ -502,6 +502,10 @@ class MetricsAdapter(ResourceAdapter):
             params = bind_declared_params(PARAM_SPECS, '&'.join(filter_expression(key, value) for key, value
                                                                  in peek_query_items(params)), transport='uri')
         _validate_request(params)
+        # Metrics reads the rule settings (check-issue counts, hotspot thresholds): one that cannot be used fails the
+        # request before analysis (COMMAND_MODEL "Configuration failures", BACK-2677), not per file as lost evidence.
+        from ...config import RevealConfig
+        RevealConfig.get(self.path).require('rules', 'overrides')
         self.query_params = params
         filter_query, self.result_control = parse_result_control(self._control_query())
         self.view = _VIEW.read(self.query_params)  # the binder already checked it against VIEWS

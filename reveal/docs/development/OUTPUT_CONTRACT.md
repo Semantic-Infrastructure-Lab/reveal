@@ -438,16 +438,25 @@ and prints nothing yet.
 
 ### Configuration warnings (`config_warning`)
 
-A configuration problem met while answering is a `meta.warnings` entry of type `config_warning`
-in every JSON answer: the CLI's, `reveal.api.query`'s and MCP's (BACK-2659). The `code` says what
-happened:
+A setting the answer reads that cannot be used is not a warning: it fails the request
+(COMMAND_MODEL "Configuration failures", BACK-2677). `REVEAL_CONFIG` naming a file that does not
+exist is an invalid request on every noun (exit 2); a config file that exists but cannot be read
+or parsed (unreadable, not UTF-8, not YAML/TOML, not a mapping) fails every answer that reads
+configuration (exit 3); a value of a read key that fails the schema (`ignore`, `rules`, `overrides`,
+`adapters`, `plugins`), or a non-integer `REVEAL_C901_THRESHOLD`/`REVEAL_E501_MAX_LENGTH`, is an
+invalid request naming the file or variable and the key (exit 2). The answer is the invalid-request
+or failed document with that message in `error`; the library raises `ConfigValidationError` (a
+`RequestValidationError`) or `ConfigLoadError`. `reveal://config` lists them (`load_failures`,
+`invalid_values`) instead of failing.
+
+A configuration problem that leaves the answer's settings known is a `meta.warnings` entry of type
+`config_warning` in every JSON answer: the CLI's, `reveal.api.query`'s and MCP's (BACK-2659). The
+`code` says what happened:
 
 | `code` | When | Extra fields |
 |---|---|---|
-| `config_file_missing` | `REVEAL_CONFIG` names a file that does not exist (no config file is read) | `path` |
-| `config_load_failed` | a config file exists but is unreadable, not UTF-8, not YAML/TOML, or not a mapping (its settings are not applied); also metrics' `.reveal/stats-quality.yaml` (the default quality scoring is used), and a reader whose config could not be resolved (a rule's settings, metrics' hotspot thresholds, import layers), which used its defaults | `path` (when one file is meant), `reason`; `rule` for a rule's settings |
-| `config_schema_invalid` | a value fails the config schema; it is ignored and its default used (`test_layout` keeps its own validation, which fails the request; a key the schema does not know is only reported) | `path`, `key` |
-| `config_env_invalid` | `REVEAL_C901_THRESHOLD` or `REVEAL_E501_MAX_LENGTH` is not an integer (it is ignored) | `path` (the variable's name) |
+| `config_load_failed` | a standalone reader's file or settings could not be used: metrics' `.reveal/stats-quality.yaml` (the default quality scoring is used), a rule's settings, import layers, which used their defaults | `path` (when one file is meant), `reason`; `rule` for a rule's settings |
+| `config_schema_invalid` | a key the schema does not know (only reported), or a value of a key no reader checks yet (`health`, `display`, `output`, ...: ignored and its default used) | `path`, `key` |
 | `config_key_unknown` | a `rules.<CODE>` setting the rule does not have (it is ignored) | `rule`, `key` |
 
 `path` is POSIX. Each problem is one entry however many times the config is read in one

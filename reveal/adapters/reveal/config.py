@@ -21,12 +21,19 @@ def get_config(reveal_root: Optional[Path] = None) -> Dict[str, Any]:
         Dict containing active config, sources, and metadata
     """
     from ...config import CONFIG_ENV_VARS, CUSTOM_CONFIG_ENV, NO_CONFIG_ENV, RevealConfig, config_env_vars
+    from ...errors import ConfigLoadError, ConfigValidationError
 
     # Get current config instance
     config = RevealConfig.get()
 
     layout = TestLayout.for_path(Path.cwd(), fallback_root=Path.cwd())
-    test_layout = config.inspect_test_layout(layout)
+    # This view is where a config that cannot be used is diagnosed, so it shows the failure an answer would
+    # meet (BACK-2677) instead of failing with it.
+    test_layout: Dict[str, Any]
+    try:
+        test_layout = config.inspect_test_layout(layout)
+    except (ConfigLoadError, ConfigValidationError) as exc:
+        test_layout = {'error': str(exc)}
 
     env_vars = config_env_vars()
     # Set REVEAL_* variables the config loader does not read (cache, workers, a misspelling):
@@ -66,6 +73,11 @@ def get_config(reveal_root: Optional[Path] = None) -> Dict[str, Any]:
             'system_config': read_file('system'),
             'load_failures': [
                 {'path': to_posix(path), 'reason': why} for path, why in config.load_failures
+            ],
+            # Values that failed the schema: an answer that reads the key fails naming it (BACK-2677).
+            'invalid_values': [
+                {'source': source, 'key': key, 'message': entry['message']}
+                for source, key, entry in config.invalid_values
             ],
         },
         'metadata': {

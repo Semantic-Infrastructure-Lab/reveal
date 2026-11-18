@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from .ledger import FlagLedger, complete, delegate, ledger_of, mark, peek
+from ...config import require_selected_config
+from ...errors import ConfigLoadError
 from ...utils.severity import CHECK_GATES
 from ...utils.path_utils import to_posix
 from ...utils.query_parser import ParamSpec
@@ -480,6 +482,7 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
     try:
         with dispatch:
             try:
+                require_selected_config()  # on every noun, read or not (BACK-2677)
                 _validate_walk_policy(adapter, args, query_walk_policy)
                 source = prepare_declared_params(adapter.PARAM_SPECS, source, transport, spelled=spelled)
             except ValueError as exc:
@@ -501,7 +504,7 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
             expected_type = _result_type_at(adapter, expected_type, source, scope_path)
             try:
                 root, excludes = _walk_scope(adapter, scope_path, args)
-            except (OSError, ValueError) as exc:
+            except (OSError, ValueError, ConfigLoadError) as exc:  # the walk's settings included (BACK-2677)
                 consume(_invalid_answer(adapter, name, path, str(exc), args, _resource_failure_cause(exc),
                                         result_type=expected_type))
                 return
@@ -514,9 +517,13 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
             ledger.report(name)
 
 
-def _resource_failure_cause(error: OSError | ValueError):
-    """Windows invalid-name metadata rejects a resource; other OS loss stays analysis."""
+def _resource_failure_cause(error: OSError | ValueError | ConfigLoadError):
+    """Windows invalid-name metadata and a request the walk's settings reject (a config value the walk reads that
+    cannot be used, BACK-2677) are invalid requests; other OS loss stays analysis."""
+    from ...errors import RequestValidationError
     from ...utils.results import FailureCause
+    if isinstance(error, RequestValidationError):
+        return FailureCause.INVALID_REQUEST
     return (FailureCause.INVALID_REQUEST if isinstance(error, OSError) and getattr(error, 'winerror', None) == 123
             else FailureCause.ANALYSIS)
 

@@ -29,7 +29,7 @@ import hashlib
 from contextvars import ContextVar
 
 from .utils.path_utils import TestLayout, resolve_project_root, reveal_yaml_is_root, failure_of, to_posix
-from .errors import TestLayoutValidationError, TestLayoutConfigError
+from .errors import ConfigLoadError, ConfigValidationError, TestLayoutValidationError, TestLayoutConfigError
 
 try:
     import yaml
@@ -47,15 +47,34 @@ CUSTOM_CONFIG_ENV = 'REVEAL_CONFIG'
 
 _EnvApplier = Callable[[Dict[str, Any], str, str], None]
 
-# A configuration problem is a ``meta.warnings`` entry of this type (BACK-2659, COMMAND_MODEL
-# "Transports"): the answer carries it in its JSON, and says it once on stderr otherwise. It never
-# changes the exit code or completeness: the answer is complete under the settings that applied.
+# A configuration problem that leaves the answer's settings known is a ``meta.warnings`` entry of this
+# type (BACK-2659, COMMAND_MODEL "Transports"): the answer carries it in its JSON, and says it once on
+# stderr otherwise (an unknown key, a standalone adapter file). A setting the answer reads that could not
+# be used is not a warning but a failure of the request (COMMAND_MODEL "Configuration failures",
+# BACK-2677): RevealConfig.require raises when an answer reads it.
 CONFIG_WARNING = 'config_warning'
+# The codes RevealConfig.require turns into a failure when an answer reads the setting; they are kept on
+# the instance (reveal://config shows them) but never recorded as an answer's warning.
+_FAILING_CODES = frozenset({'config_file_missing', 'config_load_failed'})
+# The top-level keys whose readers go through RevealConfig.require: an invalid value of one fails the answer
+# that reads it. Any other key's reader has no such check yet, so its invalid value stays a warning with the
+# default used (BACK-2663) rather than vanishing; it joins here when its reader calls require (BACK-2677).
+_REQUIRED_KEYS = frozenset({'ignore', 'rules', 'overrides', 'adapters', 'plugins', 'test_layout', 'architecture'})
 
 # The entries one RevealConfig load collects, set by RevealConfig.get around the load; each
 # instance keeps them, and every get() of it records them in the running invocation.
 _LoadNote = Tuple[Dict[str, Any], int, str, Tuple[Any, ...]]  # (entry, log level, log format, its args)
 _LOAD_NOTES: ContextVar[Optional[List[_LoadNote]]] = ContextVar('reveal_config_load_notes', default=None)
+# The invalid values one load met: (file or variable, top-level key, the entry that said it).
+_InvalidValue = Tuple[str, str, Dict[str, Any]]
+_LOAD_INVALID: ContextVar[Optional[List[_InvalidValue]]] = ContextVar('reveal_config_load_invalid', default=None)
+
+
+def _note_invalid_value(source: str, key: str, entry: Dict[str, Any]) -> None:
+    """Keep an invalid value for the load that met it: an answer that reads *key* fails (BACK-2677)."""
+    invalid = _LOAD_INVALID.get()
+    if invalid is not None:
+        invalid.append((source, key, entry))
 
 
 def config_warning(code: str, message: str, path: Optional[str] = None, **fields: Any) -> Dict[str, Any]:
@@ -88,6 +107,21 @@ def config_load_failed_warning(path: Path, why: str) -> Dict[str, Any]:
                           "so this run used the defaults for them", to_posix(path), reason=why)
 
 
+def _missing_selected_message(path: str) -> str:
+    return f"REVEAL_CONFIG names {to_posix(path)}, which does not exist; point it at a config file or unset it"
+
+
+def require_selected_config() -> None:
+    """A request selects its config file through ``REVEAL_CONFIG``; one that does not exist is an invalid request
+    on every noun, whether or not its answer reads a setting (COMMAND_MODEL "Configuration failures", BACK-2677).
+    The declared request path calls this before analysis; ``RevealConfig.require`` says the same to any reader."""
+    if os.getenv(NO_CONFIG_ENV) == '1':
+        return
+    selected = os.getenv(CUSTOM_CONFIG_ENV)
+    if selected and not os.path.exists(selected):
+        raise ConfigValidationError(_missing_selected_message(selected))
+
+
 def _env_csv(value: str) -> List[str]:
     return [part.strip() for part in value.split(',')]
 
@@ -114,9 +148,9 @@ def _env_int_rule(rule_key: str, field_key: str) -> _EnvApplier:
         try:
             config.setdefault('rules', {})[rule_key] = {field_key: int(value)}
         except ValueError:
-            _config_note(config_warning('config_env_invalid',
-                                        f"{name}={value!r} is not an integer, so it was ignored", name),
-                         logging.WARNING, "Invalid %s value: %s", name, value)
+            entry = config_warning('config_env_invalid', f"{name}={value!r} is not an integer", name, key='rules')
+            _note_invalid_value(name, 'rules', entry)
+            _config_note(entry, logging.WARNING, "Invalid %s value: %s", name, value)
     return apply
 
 
@@ -499,7 +533,32 @@ class RevealConfig:
         self.sources: List[ConfigSource] = []
         self._selected_custom_config: Optional[str] = None
         self._selected_custom_failure: Optional[str] = None
+        self._selected_custom_missing = False
+        # (file or variable, top-level key, entry) for each value that failed the schema (BACK-2677).
+        self.invalid_values: List[_InvalidValue] = []
         self._overrides = self._parse_overrides()
+
+    def require(self, *keys: str) -> None:
+        """Fail the request when a setting it reads could not be used (COMMAND_MODEL "Configuration failures",
+        BACK-2677). Every answer-reading accessor calls this with the top-level keys it reads.
+
+        ``REVEAL_CONFIG`` naming no file is an invalid request (exit 2) whatever is read; a config file that
+        exists but could not be read or parsed leaves every setting unknown (exit 3); a value of a read key
+        that failed the schema is an invalid request naming the file and key (exit 2). Never a fallback to
+        the defaults: ``ignore: 5`` used to walk the trees the user meant to hide and exit 0.
+        """
+        if self._selected_custom_missing:
+            raise ConfigValidationError(_missing_selected_message(self._selected_custom_config or ''))
+        if self.load_failures:
+            path, why = self.load_failures[0]
+            more = f" (and {len(self.load_failures) - 1} more config file(s))" if len(self.load_failures) > 1 else ''
+            raise ConfigLoadError(f"config {to_posix(path)} could not be loaded ({why}){more}, so the settings in it "
+                                  "are unknown; fix the file, or set REVEAL_NO_CONFIG=1 to run without config")
+        for source, key, entry in self.invalid_values:
+            if key in keys:
+                raise ConfigValidationError(f"{entry['message']}; fix or remove that value"
+                                            if entry['message'].startswith('config ') else
+                                            f"{entry['message']}; fix or unset {source}")
 
     def apply_test_layout(self, layout: TestLayout) -> TestLayout:
         """Bind the highest present declaration eligible for the selected anchor.
@@ -507,6 +566,7 @@ class RevealConfig:
         Sources are already in low-to-high precedence order. A root-local empty
         list replaces lower additions independently of global list merging.
         """
+        self.require('test_layout')
         self._require_test_layout_sources(layout)
         selected = self._test_layout_source(layout)
         if selected is None:
@@ -632,10 +692,7 @@ class RevealConfig:
             project_root = start_path
 
         instance = cls._load_instance(start_path, project_root, cli_overrides, no_config)
-        instance._selected_custom_config = os.path.abspath(selected_custom) if selected_custom else None
-        if selected_custom and not any(source.layer == 'custom' for source in instance.sources):
-            instance._selected_custom_failure = next((why for path, why in instance.load_failures if path == selected_custom),
-                                                    'FileNotFoundError: selected configuration file was not found')
+        instance._note_selected_custom(selected_custom)
 
         # Cache it
         if not no_config:
@@ -651,25 +708,44 @@ class RevealConfig:
         failures: List[Tuple[str, str]] = []
         sources: List[ConfigSource] = []
         notes: List[_LoadNote] = []
-        token = _LOAD_NOTES.set(notes)
+        invalid: List[_InvalidValue] = []
+        token, invalid_token = _LOAD_NOTES.set(notes), _LOAD_INVALID.set(invalid)
         try:
             merged = cls._load_and_merge(start_path, cli_overrides, no_config, failures, sources)
         finally:
             _LOAD_NOTES.reset(token)
+            _LOAD_INVALID.reset(invalid_token)
         instance = cls(merged, project_root)
         instance.load_failures = failures
+        instance.invalid_values = invalid
         instance.warnings = [entry for entry, _level, _format, _args in notes]
         for entry, level, log_format, log_args in notes:
+            if instance._fails(entry):
+                continue  # require() fails the answer that reads it (BACK-2677)
             if not record_warning(entry):  # outside an invocation: logged once per load, as before
                 logger.log(level, log_format, *log_args)
         instance.sources = sources
         return instance
 
+    def _note_selected_custom(self, selected: Optional[str]) -> None:
+        """Remember the ``REVEAL_CONFIG`` file this config selected and, when it was not read, whether it is missing
+        (an invalid request) or failed to load (unknown settings), whatever the environment says later."""
+        self._selected_custom_config = os.path.abspath(selected) if selected else None
+        if selected and not any(source.layer == 'custom' for source in self.sources):
+            failed = next((why for path, why in self.load_failures if path == selected), None)
+            self._selected_custom_missing = failed is None
+            self._selected_custom_failure = failed or 'FileNotFoundError: selected configuration file was not found'
+
+    def _fails(self, entry: Dict[str, Any]) -> bool:
+        """Whether *entry* is a setting require() turns into a failure rather than a warning."""
+        return entry.get('code') in _FAILING_CODES or any(entry is said for _s, _k, said in self.invalid_values)
+
     def _record_warnings(self) -> None:
         """Record this config's problems in the running invocation (once per invocation however
         many get() calls reach it, and whichever request filled the cache)."""
         for entry in self.warnings:
-            record_warning(entry)
+            if not self._fails(entry):
+                record_warning(entry)
 
     @classmethod
     def _cache_inputs(cls) -> Tuple[Tuple[Tuple[str, str], ...], Optional[str], Optional[str]]:
@@ -879,11 +955,12 @@ class RevealConfig:
     def _validate_config_schema(cls, config: Dict[str, Any], path: Path) -> None:
         """Validate config against the schema if jsonschema is available (never raises).
 
-        A value that fails the schema falls back to its default: it is removed here, so no reader
-        meets a shape it cannot read (``ignore: 5`` crashed every walking noun with a traceback,
-        BACK-2663). Each problem is a ``config_schema_invalid`` warning. A key the schema does not
-        know is only warned about (nothing reads it), and a key whose reader validates it and fails
-        the request naming the file (``_SELF_VALIDATED_KEYS``) keeps that, rather than falling back.
+        A value that fails the schema is removed here, so no reader meets a shape it cannot read
+        (``ignore: 5`` crashed every walking noun with a traceback, BACK-2663), and kept as an invalid
+        value: an answer that reads its key fails, exit 2 naming the file and key (``require``,
+        BACK-2677), never a silent fallback to the default. A key the schema does not know is only a
+        ``config_schema_invalid`` warning (nothing reads it), and a key whose reader validates it and
+        fails the request naming the file (``_SELF_VALIDATED_KEYS``) keeps that.
 
         Validation repeats until nothing more is removed: dropping a required value (an override's
         ``files: 5``) leaves its object invalid, and the next pass drops the object too.
@@ -916,13 +993,18 @@ class RevealConfig:
         for error in validator.iter_errors(config):
             where = list(error.absolute_path)
             key = '.'.join(str(part) for part in where)
-            falls_back = bool(where) and where[0] not in _SELF_VALIDATED_KEYS and error.validator != 'additionalProperties'
-            message = (f"config {to_posix(path)}: {key}: {error.message}; that value was ignored and its default used"
-                       if falls_back else f"config {to_posix(path)}: {error.message}")
+            invalid = bool(where) and where[0] not in _SELF_VALIDATED_KEYS and error.validator != 'additionalProperties'
+            required = invalid and where[0] in _REQUIRED_KEYS
+            message = (f"config {to_posix(path)}: {key}: {error.message}" if required else
+                       f"config {to_posix(path)}: {key}: {error.message}; that value was ignored and its default used"
+                       if invalid else f"config {to_posix(path)}: {error.message}")
             if message not in said:
                 said.add(message)
-                _config_note(config_warning('config_schema_invalid', message, to_posix(path), key=key),
-                             logging.WARNING, "Invalid config in %s: %s", path, error.message)
+                entry = config_warning('config_schema_invalid', message, to_posix(path), key=key)
+                if required:  # its reader fails the answer (BACK-2677)
+                    _note_invalid_value(to_posix(path), str(where[0]), entry)
+                _config_note(entry, logging.WARNING, "Invalid config in %s: %s", path, error.message)
+            falls_back = invalid
             if falls_back and where not in removed:
                 removed.append(where)
         return removed
@@ -1031,6 +1113,7 @@ class RevealConfig:
         Returns:
             FileConfig instance with merged configuration
         """
+        self.require('rules', 'overrides')
         # Start with base config
         effective = self._config.copy()
 
@@ -1051,6 +1134,7 @@ class RevealConfig:
         Returns:
             True if rule should run
         """
+        self.require('rules', 'overrides')
         if file_path:
             return self.get_file_config(file_path).is_rule_enabled(rule_code)
         return _check_rule_enabled(self._config.get('rules', {}), rule_code)
@@ -1066,6 +1150,7 @@ class RevealConfig:
         Returns:
             Configuration value or default
         """
+        self.require('rules')
         return _lookup_rule_config(self._config, rule_code, key, default)
 
     def should_ignore(self, path: Path, is_dir: bool = False) -> bool:
@@ -1076,6 +1161,7 @@ class RevealConfig:
         against the analysed path (``utils.exclusions.dispatch_scope``), as the docs say.
         *is_dir* lets a directory-only pattern (``gen/``) prune the directory itself.
         """
+        self.require('ignore')
         ignore_patterns = self._config.get('ignore', [])
         if not ignore_patterns:
             return False
@@ -1102,6 +1188,7 @@ class RevealConfig:
         ``resolve()`` calls per file were a walk's largest cost). None when there is nothing
         to match or the root is outside the project; callers then use ``should_ignore``.
         """
+        self.require('ignore')
         patterns = self._config.get('ignore', [])
         if not patterns or not self._project_root:
             return None
@@ -1122,6 +1209,7 @@ class RevealConfig:
         into utils.exclusions' active --exclude scope, which the shared
         walker matches relative to the analysed path (BACK-1223).
         """
+        self.require('ignore')
         return list(self._config.get('ignore', []))
 
     def get_layers(self) -> List[Dict[str, Any]]:
@@ -1134,6 +1222,7 @@ class RevealConfig:
 
     def get_architecture(self) -> Dict[str, Any]:
         """Get the whole `architecture` section, so a loader can reject keys it does not read."""
+        self.require('architecture')
         return cast(Dict[str, Any], self._config.get('architecture', {}))
 
     def get_adapter_config(self, adapter_name: str, section: Optional[str] = None) -> Dict[str, Any]:
@@ -1146,6 +1235,7 @@ class RevealConfig:
         Returns:
             Adapter configuration dict
         """
+        self.require('adapters')
         adapters = self._config.get('adapters', {})
         adapter_config = adapters.get(adapter_name, {})
 
@@ -1162,6 +1252,7 @@ class RevealConfig:
         Returns:
             Plugin configuration dict
         """
+        self.require('plugins')
         plugins = self._config.get('plugins', {})
         return cast(Dict[str, Any], plugins.get(plugin_name, {}))
 

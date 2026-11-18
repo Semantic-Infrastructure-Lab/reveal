@@ -42,11 +42,22 @@ class MissingResourceError(RequestValidationError):
     """
 
 
+class ConfigValidationError(RequestValidationError):
+    """A setting the answer reads cannot be used as given: ``REVEAL_CONFIG`` names a file that does not exist,
+    or a value fails the config schema (``ignore: 5``, a non-integer ``REVEAL_C901_THRESHOLD``). An invalid
+    request, exit 2, naming the file (or variable) and key (COMMAND_MODEL "Configuration failures", BACK-2677)."""
+
+
+class ConfigLoadError(RuntimeError):
+    """A config file that exists could not be read or parsed, so the settings in it are unknown: the answer
+    cannot be complete, exit 3 (COMMAND_MODEL "Configuration failures", BACK-2677)."""
+
+
 class TestLayoutValidationError(RequestValidationError):
     """A selected test/support declaration or unsupported adoption is invalid."""
 
 
-class TestLayoutConfigError(RuntimeError):
+class TestLayoutConfigError(ConfigLoadError):
     """A required test/support configuration source could not be loaded."""
 
 

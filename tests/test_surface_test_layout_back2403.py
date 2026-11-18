@@ -146,13 +146,16 @@ def test_cli_api_and_registered_mcp_match(tmp_path):
 
 @pytest.mark.parametrize('query', ['source_only=true', 'type=http'])
 def test_required_configuration_read_failure_preserved(tmp_path, query):
-    from reveal.errors import TestLayoutConfigError
+    from reveal.errors import ConfigLoadError
     project(tmp_path)
     env(tmp_path, 'app.py', 'APP')
     write(tmp_path, '.reveal.yaml', 'test_layout: [\n')
-    with pytest.raises(TestLayoutConfigError, match='ParserError'):
+    with pytest.raises(ConfigLoadError, match='ParserError'):
         SurfaceAdapter(str(tmp_path), query).get_structure()
-    assert names(SurfaceAdapter(str(tmp_path), 'type=env').get_structure()) == {'APP'}
+    # A scan that does not read test_layout still walks under the config's ignore patterns, which are unknown:
+    # it fails too (COMMAND_MODEL "Configuration failures", BACK-2677), rather than answering a fuller tree.
+    with pytest.raises(ConfigLoadError, match='ParserError'):
+        SurfaceAdapter(str(tmp_path), 'type=env').get_structure()
 
 
 @pytest.mark.parametrize('present', [False, True])

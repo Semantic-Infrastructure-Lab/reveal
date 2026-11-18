@@ -1,6 +1,6 @@
 """Independent public-consumer controls for contextual suite selection."""
 import json
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from urllib.parse import quote
 
 import pytest
@@ -8,7 +8,7 @@ import pytest
 from conftest import _run_reveal_direct as run
 from reveal.api import query
 from reveal.config import RevealConfig
-from reveal.errors import NotApplicableError, RequestValidationError, TestLayoutConfigError as ConfigFailure
+from reveal.errors import ConfigLoadError as ConfigFailure, NotApplicableError, RequestValidationError
 
 
 def _write(path, text):
@@ -164,31 +164,31 @@ def test_child_root_order_and_new_requests_see_policy_edits_without_mutating_old
 
 
 @pytest.mark.parametrize('columns', ['40', '80'])
-def test_trusted_suite_bypasses_required_missing_config_through_registered_sdk(project, tmp_path, monkeypatch, columns):
+def test_an_explicit_suite_does_not_excuse_a_missing_selected_config(project, tmp_path, monkeypatch, columns):
+    """An explicit ``tests=`` suite once bypassed the missing selected config (BACK-2418). The selected file
+    also sets what the walk ignores, so a missing one is an invalid request on every noun, explicit suite
+    or not (COMMAND_MODEL "Configuration failures", Scott 2026-11-17, BACK-2677): exit 2 on the CLI, the
+    library raises, and MCP answers one error block naming the file."""
     pytest.importorskip('mcp')
+    from reveal.errors import ConfigValidationError
     from test_mcp_expected_errors_back1992 import _run, _text
     monkeypatch.setenv('COLUMNS', columns)
     monkeypatch.setenv('REVEAL_CONFIG', str(tmp_path / 'missing-policy.yaml'))
     explicit = 'tests=' + quote((project / 'suite').as_posix(), safe='')
     for scheme in ('patches', 'testability'):
         uri = _pressure(project / 'src', scheme, explicit)
-        assert query(uri)['summary']['total_patch_uses'] == 2
+        with pytest.raises(ConfigValidationError, match='missing-policy.yaml'):
+            query(uri)
         cli = run(uri, '--format', 'json')
-        assert cli.returncode == 0, cli.stderr
+        assert cli.returncode == 2, cli.stderr
+        assert 'missing-policy.yaml' in json.loads(cli.stdout)['error']
 
     async def scenario(session):
         for scheme in ('patches', 'testability'):
             result = await session.call_tool('reveal_query', {
                 'uri': _pressure(project / 'src', scheme, explicit), 'provenance': True})
-            assert not result.is_error, _text(result)
-            # One block, the CLI's JSON exactly: the missing config file is a config_warning in it (BACK-2659),
-            # no longer a second stderr block (BACK-2650's interim).
-            assert len(result.content) == 1, [block.text for block in result.content[1:]]
-            answer = json.loads(result.content[0].text)
-            missing = [w for w in answer['meta']['warnings'] if w.get('code') == 'config_file_missing']
-            assert [PurePosixPath(w['path']).name for w in missing] == ['missing-policy.yaml']  # path is POSIX by contract
-            assert answer['summary']['total_patch_uses'] == 2
-            assert answer['test_scope']['rule'] == 'tests='
+            assert result.is_error and len(result.content) == 1, [block.text for block in result.content]
+            assert 'REVEAL_CONFIG names' in _text(result) and 'missing-policy.yaml' in _text(result)
 
     _run(project, scenario)
 

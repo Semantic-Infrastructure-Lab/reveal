@@ -8,7 +8,7 @@ import pytest
 from conftest import _run_reveal_direct as run
 from reveal import api
 from reveal.config import RevealConfig
-from reveal.errors import TestLayoutValidationError as LayoutValidationError, TestLayoutConfigError as LayoutConfigError
+from reveal.errors import TestLayoutValidationError as LayoutValidationError, ConfigLoadError as LayoutConfigError
 from reveal.rules import RuleRegistry
 from reveal.utils.request_cache import host_request
 

@@ -84,7 +84,8 @@ Filters and selections repeat and combine; settings take one value (twice, diffe
 One answer per request (two: exit 2); an option the selected answer does not use is named in a note.
 An unknown option or field exits 2 naming the ones the noun takes (a field the data defines warns).
 Old spellings still work until 1.0 and print their replacement.
-Config files and environment set defaults; what you pass overrides them.
+Config files and environment set defaults; what you pass overrides them (config ignore always applies).
+Config that cannot be used fails the request: missing or invalid exits 2, unreadable exits 3.
 ```
 
 ---

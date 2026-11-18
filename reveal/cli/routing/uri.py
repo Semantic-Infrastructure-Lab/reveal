@@ -13,8 +13,8 @@ from contextlib import ExitStack, contextmanager, nullcontext
 from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable, Iterator, List, NoReturn, Optional, Tuple, cast
 
-from ...errors import (MissingResourceError, NotApplicableError, RequestValidationError, TestLayoutValidationError,
-                       TestLayoutConfigError)
+from ...errors import (ConfigLoadError, ConfigValidationError, MissingResourceError, NotApplicableError,
+                       RequestValidationError, TestLayoutValidationError)
 from ...rendering.base import emit_rendered
 from ...reveal_types import CONTRACT_VERSION, RevealResult
 from ...utils import print_json_result, write_also_json
@@ -109,14 +109,16 @@ def _call_adapter(call: Callable[[], Any], scheme: str, resource: str,
         _decline(scheme, resource, e.reason, adapter_class)
     except Exception as e:  # boundary-ok: broad-except -- the router's boundary for every adapter: the query ends as a failed result via _fail, exit 1
         logger.debug('%s:// adapter call raised', scheme, exc_info=True)
-        invalid = (isinstance(e, (TestLayoutValidationError, MissingResourceError))
+        # A setting that cannot be used is the request's fault (2) or unknown input (3) on every operation, legacy
+        # ones included (COMMAND_MODEL "Configuration failures", BACK-2677), as test_layout's already were.
+        invalid = (isinstance(e, (TestLayoutValidationError, ConfigValidationError, MissingResourceError))
                    or (classify_validation and isinstance(e, RequestValidationError)))
         code = 'invalid_request' if invalid else 'adapter_error'
         _fail(scheme, resource, _exception_message(e), adapter_class=adapter_class,
-              test_layout_failure=isinstance(e, (TestLayoutValidationError, TestLayoutConfigError)),
+              test_layout_failure=isinstance(e, (TestLayoutValidationError, ConfigValidationError, ConfigLoadError)),
               exception=None if code == 'invalid_request' else e, code=code,
               failure_cause=(FailureCause.INVALID_REQUEST if invalid else
-                             FailureCause.ANALYSIS if isinstance(e, TestLayoutConfigError) else None))
+                             FailureCause.ANALYSIS if isinstance(e, ConfigLoadError) else None))
 
 
 def _exception_message(e: Exception) -> str:
