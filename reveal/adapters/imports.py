@@ -225,9 +225,9 @@ _IMPORTERS = ParamSpec(
 _FORMAT = ParamSpec(
     'format', 'string',
     'URI output override for ?importers on a directory: dot draws one importer -> module edge per '
-    'listed importer as Graphviz (pipe to dot -Tsvg); text and json follow --format',
+    'listed importer as Graphviz (pipe to dot -Tsvg); text and json follow --format. Any other view refuses it',
     None, _choice_value, examples=('imports://src?importers&scope=path&format=dot',),
-    choices=('text', 'json', 'dot'), role='presentation',
+    choices=('text', 'json', 'dot'), role='presentation', answers=('importer_summary',),
 )
 
 
@@ -287,9 +287,9 @@ def _detail_value(value: Any) -> str:
     return str(value)
 
 
-# The answer types detail=full expands (the renderers that take it).
-_VERBOSE_VIEWS = frozenset({'unused_imports', 'circular_dependencies', 'layer_violations',
-                           'module_importers', 'importer_summary', 'external_packages'})
+# The answer types detail=full expands (the renderers that take it): the answers that read detail (BACK-2656).
+_VERBOSE_VIEW_TYPES = ('unused_imports', 'circular_dependencies', 'layer_violations', 'module_importers',
+                       'importer_summary', 'external_packages')
 
 
 _UNUSED = _flag('unused', 'Find unused imports in the codebase')
@@ -310,19 +310,21 @@ _EXTERNAL = ParamSpec(
     role='operation', cli=CliBinding(('--external',), action='store_true'))
 _DETAIL = ParamSpec('detail', 'string', 'How much of the answer: normal (a summary) or full (every file in a cycle '
                     'group plus its cycle edges, all unused imports, all violations, every package; JSON adds '
-                    '"verbose": true). Legacy verbose and the global --verbose mean full', 'normal', _detail_value,
+                    '"verbose": true). Legacy verbose and the global --verbose mean full. The default, ranking, '
+                    'component and entry-point views refuse it', 'normal', _detail_value,
                     ('imports://src?circular&detail=full',), choices=_DETAIL_LEVELS, role='presentation',
                     legacy=(verbose_legacy('full', 'detail=full (--detail full)'),),
-                    cli=CliBinding(('--detail',), metavar='LEVEL'))
+                    cli=CliBinding(('--detail',), metavar='LEVEL'), answers=_VERBOSE_VIEW_TYPES)
 _SORT = ParamSpec('sort', 'string', 'Rank files by fan-in, most imported first: the count of files that import each '
                   'file (higher = more central; 0 = entry point or dead code). One value: -fan-in (legacy rank=fan-in)',
                   None, _sort_value, ('imports://src?sort=-fan-in', 'imports://src?sort=-fan-in&limit=20'),
                   choices=_SORT_FIELDS, role='operation', legacy=(LegacySpelling('rank', codec=_rank_value, flag='--rank'),),
                   cli=CliBinding(('--sort',), dest='sort', metavar='-fan-in'))
 _LIMIT = ParamSpec('limit', 'integer', 'Ranking rows to show (default: all; 0 = all); the total is kept and other '
-                   'views leave it unread with a warning. Legacy top is the same cap', None, _limit_value,
+                   'views refuse it. Legacy top is the same cap', None, _limit_value,
                    ('imports://src?sort=-fan-in&limit=20',), minimum=0, zero_policy='all', role='analysis',
-                   legacy=(LegacySpelling('top', flag='--top'),), cli=CliBinding(('--limit',), dest='top', metavar='N'))
+                   legacy=(LegacySpelling('top', flag='--top'),), cli=CliBinding(('--limit',), dest='top', metavar='N'),
+                   answers=('fan_in_ranking',))
 
 # The declaration the `reveal imports` subcommand and the declared URI route bind (BACK-1054, D6):
 # every parameter imports:// reads. A view flag selects its view when its value is on (_selects):
@@ -1592,7 +1594,7 @@ class ImportsAdapter(ResourceAdapter):
         if result.get('type') == 'importer_summary' and _FORMAT.read(query_params) == 'dot':
             result['_format'] = 'dot'
         # Read where the view expands: on any other view the flag is unread, and says so.
-        if result.get('type') in _VERBOSE_VIEWS and _DETAIL.read(query_params) == 'full':
+        if result.get('type') in _VERBOSE_VIEW_TYPES and _DETAIL.read(query_params) == 'full':
             result['verbose'] = True
         return result
 

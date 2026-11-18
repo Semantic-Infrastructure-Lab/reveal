@@ -102,6 +102,11 @@ TARGETS = {'claude': 'sessions', 'codex': '', 'json': 'proj/data.json'}
 # A control that answers only on another target than its noun's default (Claude's turn slice reads one session):
 # the legacy-word probes (1b, 6, 16) send its spellings there, so they compare answers rather than two rejections.
 CONTROL_TARGETS = {('claude', 'tail'): 'session/my-session'}
+# The answer a probe of a control's spelling selects when the default one does not read the control (rule 20,
+# BACK-2656: there it is refused, which is applicability's subject, not the spelling's): (subcommand argv, URI query).
+CONTROL_BASES = {('calls', 'kind'): (['--uncalled'], '?uncalled'), ('calls', 'external'): (['--modules'], '?modules'),
+                 ('imports', 'limit'): (['--sort=-fan-in'], '?sort=-fan-in'),
+                 ('imports', 'detail'): (['--circular'], '?circular')}
 
 # The shared controls (rule 7: the one declared list, query_parser.SHARED_CONTROL_NAMES), each probed with a value a
 # supporting noun would accept. Left out: view (the deferred row, D18). Not shared controls: format/output (global
@@ -187,16 +192,11 @@ RULED_EXEMPT_NOUNS = {'stats': 'rule 9: the retired stats:// scheme is deleted a
 NOT_YET = {
     # Rule 20 measured on every answer since BACK-2656 Step 1 (operation selections and the resources ANSWER_TARGETS
     # lists): each answer with the controls it answered without reading, warned (ledger, own warning or stderr note).
-    ('calls', '20'): 'warned, exit 0: callers/default: kind, external, builtins, test-framework; callees and root: kind, '
-                     'external, test-framework; modules: kind, builtins, depth, test-framework; sort=-callers: kind, '
-                     'external, depth, format; uncalled: external, builtins, depth',
     ('codex', '20'): 'warned, exit 0: catalog: since, until, key, last, tokens, goal, matches, full; session overview, '
                      'messages and tools: filter, search, since, until, key, matches, full; config: all but key; info: all',
     ('git', '20'): 'warned, exit 0 (the view-scoped parameters on stderr only): every view: context, detail, ignore, '
                    'merges, bucket or element outside the views that read them; file default, blame and diff: sort, '
                    'limit, offset, since, until; ownership: no_merges, since, until',
-    ('imports', '20'): 'warned, exit 0: format on every answer; limit on all but sort=-fan-in; detail on default, '
-                       'components, entrypoints and sort=-fan-in',
     ('markdown', '20'): 'warned, exit 0: sort, limit, offset on view=links and view=lint',
     ('metrics', '20'): 'warned, exit 0: directory default: top, churn, since, merges, tests; view=hotspots: sort; '
                        'provenance: every control but view; file default: also limit, offset, exclude; file hotspots: '
@@ -206,7 +206,7 @@ NOT_YET = {
 }
 
 NOT_YET_BASELINE = {'1a': 0, '1b': 0, '1c': 0, '1d': 0, '2': 0, '3': 0, '3b': 0, '4': 0, '5': 0, '6': 0,
-                    '8a': 0, '8b': 0, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 7, '14': 0, '21j': 0, '22': 0}
+                    '8a': 0, '8b': 0, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 5, '14': 0, '21j': 0, '22': 0}
 
 
 # --- the fixture -------------------------------------------------------------------------------------------
@@ -281,16 +281,17 @@ def _spec_for(noun, key):
 
 def _uri(noun, *pairs, base=True, control=None):
     """The noun's default URI plus *pairs*; ``base=False`` drops its default operation (an operation control
-    under test would otherwise be a second mode). *control* names the control under test (CONTROL_TARGETS)."""
-    query = BASE[noun][1].lstrip('?') if base else ''
+    under test would otherwise be a second mode). *control* names the control under test (CONTROL_TARGETS,
+    CONTROL_BASES)."""
+    query = CONTROL_BASES.get((noun, control), BASE[noun])[1].lstrip('?') if base else ''
     parts = [part for part in (query, *pairs) if part]
     target = CONTROL_TARGETS.get((noun, control), TARGETS.get(noun, 'proj'))
     return f'{noun}://{target}' + ('?' + '&'.join(parts) if parts else '')
 
 
-def _sub(noun, *extra, base=True):
+def _sub(noun, *extra, base=True, control=None):
     """The subcommand argv, or None when the noun has no subcommand."""
-    cli = BASE[noun][0]
+    cli = BASE[noun][0] if BASE[noun][0] is None else CONTROL_BASES.get((noun, control), BASE[noun])[0]
     return None if cli is None else [noun, TARGETS.get(noun, 'proj'), *(cli if base else ()), *extra]
 
 
@@ -820,11 +821,12 @@ def _verbose_owner(noun):
     return next((spec for spec in _specs(noun) if 'verbose' in spec.spellings), None)
 
 
-def _verbose_forms(noun):
-    """{form: argv without --verbose}: the noun's default URI and, where it has one, its subcommand."""
-    forms = {'URI': [_uri(noun)]}
+def _verbose_forms(noun, control=None):
+    """{form: argv without --verbose}: the noun's default URI and, where it has one, its subcommand (on the answer
+    that reads *control*, CONTROL_BASES)."""
+    forms = {'URI': [_uri(noun, control=control)]}
     if _sub(noun) is not None:
-        forms['subcommand'] = _sub(noun)
+        forms['subcommand'] = _sub(noun, control=control)
     return forms
 
 
@@ -841,9 +843,9 @@ def _verbose_as_declared(noun, owner):
     """The global --verbose is the noun's declared spelling ``verbose``: the same answer as ``?verbose=true``, with
     that spelling's own note (its RETIREMENTS row) on CLI JSON."""
     key = f'param:{noun}.verbose'
-    declared = _run(_uri(noun, 'verbose=true'), '--format', 'json')
+    declared = _run(_uri(noun, 'verbose=true', control=owner.name), '--format', 'json')
     cases = [Case(f'{key} row', key in RETIREMENTS, f'no RETIREMENTS row {key} for the legacy word verbose')]
-    for form, argv in _verbose_forms(noun).items():
+    for form, argv in _verbose_forms(noun, owner.name).items():
         verbose = _run(*argv, '--verbose', '--format', 'json')
         doc = json.loads(verbose.out) if verbose.out.strip().startswith('{') else None
         ok = (verbose.rc != 2 and _read_answer(verbose, noun) == _read_answer(declared, noun)
@@ -856,10 +858,12 @@ def _verbose_as_declared(noun, owner):
     entry = next(entry for entry in owner.legacy if entry.name == 'verbose')
     if owner.cli is not None and owner.validate(other) != owner.validate(entry.translate(True)[owner.name]):
         flag = owner.cli.flags[0]
-        cases.append(_conflict_case(f'?{owner.name}= vs ?verbose=', _run(_uri(noun, f'{owner.name}={other}', 'verbose=true'),
+        cases.append(_conflict_case(f'?{owner.name}= vs ?verbose=', _run(_uri(noun, f'{owner.name}={other}', 'verbose=true',
+                                                                              control=owner.name),
                                                                      '--format', 'json'), (owner.name, 'verbose')))
         if _sub(noun) is not None:
-            cases.append(_conflict_case(f'{flag} vs --verbose', _run(*_sub(noun, flag, other), '--verbose', '--format', 'json'),
+            cases.append(_conflict_case(f'{flag} vs --verbose', _run(*_sub(noun, flag, other, control=owner.name),
+                                                                    '--verbose', '--format', 'json'),
                                         (flag, '--verbose')))
     return cases
 

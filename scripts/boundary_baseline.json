@@ -70,7 +70,6 @@
  "oserror-cause": {},
  "print": {
   "reveal/adapters/ast/analysis.py": 1,
-  "reveal/adapters/calls/adapter.py": 2,
   "reveal/adapters/domain/adapter.py": 1,
   "reveal/adapters/git/adapter.py": 4,
   "reveal/adapters/nginx/adapter.py": 1,

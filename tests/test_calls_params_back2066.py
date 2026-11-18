@@ -151,15 +151,17 @@ def test_callers_rejects_a_file_selector(project, query):
 
 @pytest.mark.parametrize('query', ['callers=helper&detail', 'target=helper&detail=true', 'rank=callers&detail'])
 def test_detail_outside_callees_is_rejected(project, query):
+    # detail is declared read by the callees answer only (BACK-2656): the shared refusal names where it is read.
     result, answer = jrun(f'calls://proj?{query}')
     assert result.returncode == 2, result.stderr
-    assert 'detail applies to callees only' in answer['error']
+    assert "control 'detail' is not read by this answer" in answer['error']
+    assert 'detail is read by: calls_callees' in answer['error']
 
 
 def test_callers_detail_subcommand_is_rejected(project):
     result = run('calls', 'proj', '--callers', 'helper', '--detail')
     assert result.returncode == 2, result.stderr
-    assert 'detail applies to callees only' in result.stderr
+    assert "control 'detail' is not read by this answer" in result.stderr
 
 
 # --- callees at depth -----------------------------------------------------------------------
@@ -359,7 +361,7 @@ def test_mcp_absent_name_keeps_its_empty_answer_and_a_present_one_answers(projec
     as_json = json.loads(reveal_query(f'calls://{project.as_posix()}?callers=nothere', provenance=True))
     assert as_json['error'] == f"Function 'nothere' not found in {project.as_posix()}"
     usage = reveal_query(f'calls://{project.as_posix()}?callers=helper&detail')
-    assert isinstance(usage, _ToolFailure) and 'detail applies to callees only' in str(usage)
+    assert isinstance(usage, _ToolFailure) and "control 'detail' is not read by this answer" in str(usage)
     present = reveal_query(f'calls://{project.as_posix()}?callers=helper')
     assert not isinstance(present, _ToolFailure)
     assert 'Callers of: helper' in present
@@ -396,12 +398,13 @@ def test_shorthand_alone_still_selects_callers(project):
     assert (answer['type'], answer['target'], answer['total_callers']) == ('calls_query', 'helper', 2)
 
 
-# --- the depth warning (BACK-1504) now covers only the modes that take no depth ----------------
+# --- depth on a mode that takes none (BACK-1504 warned; BACK-2656 refuses it) ----------------
 
-def test_depth_with_a_mode_that_takes_none_still_warns(project):
+def test_depth_with_a_mode_that_takes_none_is_refused(project):
     result = run('calls://proj?rank=callers&depth=2', '--respect-gitignore=off')
-    assert result.returncode == 0, result.stderr
-    assert "Query param 'depth' for calls:// applies to ?callers, ?callees and ?root only" in result.stderr
+    assert result.returncode == 2, result.stderr
+    assert "control 'depth' is not read by this answer (calls_ranking" in result.stderr
+    assert 'depth is read by: calls_query, calls_callees, calls_callees_recursive' in result.stderr
 
 
 # --- the preferred option: a rule on every callers and callees answer ------------------------

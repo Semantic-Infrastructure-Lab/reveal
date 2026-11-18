@@ -754,7 +754,7 @@ Use `?flag` syntax for operations:
 | `circular` | Detect circular dependencies | `imports://src?circular` |
 | `violations` | Check layer violations | `imports://src?violations` |
 | `sort=-fan-in` | Rank all files by fan-in (importer count), most imported first | `imports://src?sort=-fan-in` |
-| `limit=N` | Ranking rows to show (default: all; `0` = all); `total` keeps the full count. Other views leave it unread with a warning | `imports://src?sort=-fan-in&limit=20` |
+| `limit=N` | Ranking rows to show (default: all; `0` = all); `total` keeps the full count. Other views refuse it (exit 2) | `imports://src?sort=-fan-in&limit=20` |
 | `entrypoints` | Files with fan-in=0 — entry points, scripts, or dead code; sorted by fan-out | `imports://src?entrypoints` |
 | `components` | Per-directory cohesion + coupling scores; top bridge file | `imports://src?components` |
 | `external` | Package table: unresolved (third-party or unresolved-local) and stdlib packages by use, the languages importing each, import statements per file (`external_packages`; the deps dashboard's table, now JSON) | `imports://src?external` |

@@ -145,17 +145,13 @@ class TestPreservation:
             assert needle in answer['error']
 
     @pytest.mark.parametrize('view', ['entrypoints', 'importers', 'components'])
-    def test_row_cap_on_unranked_views_is_unread_with_one_diagnostic(self, project, view):
-        base = query(uri(project, view))
-        result, typed = cli_json('imports', str(project), f'--{view}', '--top', '1')
-        assert result.returncode == 0
-        assert [w['fields'] for w in unread(typed)] in (
-            [['--top']], [['--limit']]), f'one unread warning naming the typed flag: {unread(typed)}'
-        assert _without(typed, SPELLING_WARNINGS + UNREAD_WARNINGS) == _without(base, SPELLING_WARNINGS)
-        result, spelled = cli_json(uri(project, f'{view}&top=1'))
-        assert result.returncode == 0
-        assert [w['fields'] for w in unread(spelled)] in ([['top']], [['limit']]), unread(spelled)
-        assert _without(spelled, SPELLING_WARNINGS + UNREAD_WARNINGS) == _without(base, SPELLING_WARNINGS)
+    def test_row_cap_on_unranked_views_is_refused_on_both_forms(self, project, view):
+        # The row cap is the ranking's: another view refuses it (BACK-2656; it answered with an unread warning).
+        for result, answer in (cli_json('imports', str(project), f'--{view}', '--top', '1'),
+                               cli_json(uri(project, f'{view}&top=1'))):
+            assert result.returncode == 2, result.stderr
+            assert "control 'limit' is not read by this answer" in answer['error']
+            assert not unread(answer)
 
     def test_scan_budget_cut_is_incomplete_exit_three(self, project):
         typed_result, typed = cli_json('imports', str(project), '--rank', 'fan-in', '--max-files', '3')
@@ -209,9 +205,8 @@ class TestPreservation:
         # Cycle members print relative to the group's directory.
         assert 'cycle: a.py → b.py → a.py' not in plain.stdout
         assert 'cycle: a.py → b.py → a.py' in expanded.stdout
-        result, answer = cli_json(uri(project, 'rank=fan-in&verbose'))
-        assert result.returncode == 0 and 'verbose' not in answer
-        assert [w['fields'] for w in unread(answer)] == [['verbose']]
+        result, answer = cli_json(uri(project, 'rank=fan-in&verbose'))  # verbose is detail's word; not the ranking's
+        assert result.returncode == 2 and "control 'detail' is not read by this answer (fan_in_ranking" in answer['error']
 
     def test_lazy_tests_scope_and_root_keep_their_answers(self, project):
         assert query(uri(project, 'circular'))['cycles'] == [['pkg/a.py', 'pkg/b.py']]
@@ -265,9 +260,8 @@ class TestPreservation:
             assert result.returncode == 0 and answer == plain
         subcommand = run('imports', str(project), '--importers', '--format', 'dot')
         assert subcommand.returncode == 2 and 'invalid choice' in subcommand.stderr
-        result, answer = cli_json(uri(project, 'rank=fan-in&format=dot'))
-        assert result.returncode == 0 and ranking(answer) == RANKING
-        assert [w['fields'] for w in unread(answer)] == [['format']]
+        result, answer = cli_json(uri(project, 'rank=fan-in&format=dot'))  # format is ?importers' (BACK-2656)
+        assert result.returncode == 2 and "control 'format' is not read by this answer (fan_in_ranking" in answer['error']
 
     def test_findings_gate_only_on_findings_views(self, project):
         result, answer = cli_json('imports', str(project), '--entrypoints', '--fail-on', 'findings')

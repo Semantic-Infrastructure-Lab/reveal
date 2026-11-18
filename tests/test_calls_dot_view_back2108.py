@@ -31,8 +31,7 @@ def root(tmp_path):
 
 
 @pytest.mark.parametrize('query', ['callees=a&format=dot', 'callees=a&depth=1&format=dot',
-                                   'callees=m.py:a&format=dot', 'rank=callers&format=dot',
-                                   'uncalled&format=dot'])
+                                   'callees=m.py:a&format=dot', 'uncalled&format=dot'])
 def test_dot_on_a_view_without_a_graph_exits_2_and_says_why(root, query):
     result = run(f'calls://{root}?{query}')
     assert result.returncode == 2, (result.stdout, result.stderr)
@@ -63,8 +62,16 @@ def test_graph_views_still_render_dot(root, query):
     assert result.stdout.startswith('digraph ')
 
 
-@pytest.mark.parametrize('query', ['callees=a', 'callees=a&format=json', 'callees=a&format=text',
-                                   'rank=callers&format=json'])
+@pytest.mark.parametrize('query', ['rank=callers&format=dot', 'rank=callers&format=json'])
+def test_the_ranking_does_not_read_format(root, query):
+    # The ranking never read format (format=json answered as if unset): it is refused there (BACK-2656).
+    result = run(f'calls://{root}?{query}')
+    assert result.returncode == 2, (result.stdout, result.stderr)
+    assert "control 'format' is not read by this answer (calls_ranking" in result.stderr
+    assert 'Most-called functions:' not in result.stdout
+
+
+@pytest.mark.parametrize('query', ['callees=a', 'callees=a&format=json', 'callees=a&format=text'])
 def test_depth_1_text_and_json_still_answer(root, query):
     result = run(f'calls://{root}?{query}')
     assert result.returncode == 0, (result.stdout, result.stderr)

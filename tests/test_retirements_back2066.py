@@ -258,7 +258,7 @@ PRODUCTION_CASES = {
     # pins its edges, shape and exit codes. ?external is spelled with callers here, where it never applied, so the
     # row is its one note (with ?modules it is the second).
     'param:calls.modules': lambda f: [f'calls://{Path(f).parent}?modules'],
-    'param:calls.external': lambda f: [f'calls://{Path(f).parent}?callers=auth_gate&external'],
+    'param:calls.external': lambda f: [f'calls://{Path(f).parent}?modules&external'],  # external is modules' (BACK-2656)
     # BACK-2195 (D8): ?uncalled is retired; every spelling is in tests/test_retired_call_spellings_back2066.py.
     'param:calls.uncalled': lambda f: [f'calls://{Path(f).parent}?uncalled'],
     'param:claude.summary': lambda f: ['claude://session/my-session?summary'],
@@ -312,7 +312,7 @@ PRODUCTION_CASES = {
 ALSO_NOTED = {'param:hotspots.functions_only': 'scheme:hotspots', 'param:hotspots.files_only': 'subcommand:hotspots',
               'param:architecture.verbose': 'scheme:architecture', 'param:hotspots.verbose': 'scheme:hotspots',
               'param:testability.verbose': 'scheme:testability', 'param:deps.verbose': 'scheme:deps',
-              'param:calls.type': 'param:calls.uncalled'}
+              'param:calls.type': 'param:calls.uncalled', 'param:calls.external': 'param:calls.modules'}
 
 
 def test_every_production_row_is_well_formed():

@@ -215,10 +215,10 @@ def test_shorthand_with_an_explicit_mode_is_two_modes(project):
     assert 'one mode per request' in answer['error']
 
 
-def test_ignored_depth_warning_names_the_modes_that_walk(project):
+def test_unread_depth_names_the_modes_that_walk(project):
     for result in uri_first(['--rank', 'callers', '--depth', '3'], 'rank=callers&depth=3'):
-        assert result.returncode == 0, result.stderr
-        assert "Query param 'depth' for calls:// applies to ?callers, ?callees and ?root only" in result.stderr
+        assert result.returncode == 2, result.stderr  # refused on both forms (BACK-2656)
+        assert 'depth is read by: calls_query, calls_callees, calls_callees_recursive' in result.stderr
 
 
 @pytest.mark.parametrize('gate,expected', [('none', 0), ('findings', 2)])

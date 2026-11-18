@@ -363,9 +363,21 @@ def _own_scheme_note(field, surface):
     note is that scheme's or that control's row."""
     kind, _, name = field.partition(':')
     if kind == 'param':
-        return surface == 'help://schemas/{} {}'.format(*name.split('.', 1))
+        noun, _, param = name.partition('.')
+        return surface == f'help://schemas/{noun} {param}' or _read_only_under(noun, surface, param)
     return kind in ('scheme', 'subcommand') and name in _RETIRED_SCHEMES and re.search(
         rf'(?:help://(?:schemas/)?{name}\b|^{name}(?:://|\s))', surface)
+
+
+def _read_only_under(noun, surface, operation):
+    """Whether the control whose schema example *surface* is, is read only by the answer the legacy *operation*
+    selects (calls ``kind`` by ``uncalled``, ``external`` by ``modules``; BACK-2656): its example can only run there, and
+    that operation's own note is the honest answer."""
+    prefix = f'help://schemas/{noun} '
+    control = _spec(noun, surface[len(prefix):]) if surface.startswith(prefix) else None
+    adapter = declared_adapter_class(noun) if noun in COMMANDS else get_adapter_class(noun)
+    selected = getattr(adapter, 'result_type_for', None)
+    return bool(control and control.answers and selected and set(control.answers) == {selected({operation: True})})
 
 
 def _raw_problems(harness, argv):
@@ -402,7 +414,8 @@ _CLAUDE_RESOURCES = ('session/infernal-earth-0118', 'sessions', 'search', 'histo
                      'session/infernal-earth-0118/files')
 # A control example of a noun that needs an operation runs beside one of its operations (calls ``detail`` reads
 # callees only, ``limit`` the ranking).
-_OPERATIONS = {'calls': ('callers=main', 'callees=main'), 'trace': ('from=main',)}
+# Every calls mode: a control example runs on the first answer that reads it (BACK-2656 refuses it elsewhere).
+_OPERATIONS = {'calls': ('callers=main', 'callees=main', 'sort=-callers', 'uncalled', 'modules'), 'trace': ('from=main',)}
 
 
 def _candidates(printed, examples=False):

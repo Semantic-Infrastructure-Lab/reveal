@@ -24,11 +24,13 @@ def pkg(tmp_path):
     return tmp_path
 
 
-def test_calls_depth_on_rank_warns(pkg, capsys):
-    # ?callees takes depth since BACK-2066 (a level-by-level walk); rank still ignores it.
-    CallsAdapter(str(pkg), 'rank=callers&depth=3').get_structure()
-    err = capsys.readouterr().err
-    assert "'depth'" in err and 'applies to ?callers, ?callees and ?root only' in err
+def test_calls_depth_on_rank_is_refused(pkg):
+    # ?callees takes depth since BACK-2066 (a level-by-level walk); rank does not read it, so the request is refused
+    # before the adapter is built (BACK-2656), no longer warned on stderr.
+    from reveal import api
+    from reveal.errors import RequestValidationError
+    with pytest.raises(RequestValidationError, match="control 'depth' is not read by this answer"):
+        api.query(f'calls://{pkg}?rank=callers&depth=3')
 
 
 @pytest.mark.parametrize('query', ['target=leaf&depth=2', 'root=top&depth=2', 'callees=top',

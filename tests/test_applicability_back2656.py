@@ -325,12 +325,15 @@ def test_every_declared_noun_refuses_before_its_adapter_is_built(workspace, monk
 
 
 def test_the_rule_20_probe_counts_a_refusal_as_conforming(workspace, monkeypatch):  # noqa: F811
-    """A probe that could only fail would measure nothing: with imports' limit declared read by the fan-in ranking
-    alone, the conformance probe sees every other answer refuse it, and still sees format answered unread."""
+    """A probe that could only fail would measure nothing: with Markdown's limit declared (test-only; Markdown
+    declares in group 2d) read by the default query answer alone, the conformance probe sees the links and lint views
+    refuse it, and still sees offset answered unread there."""
+    from reveal.adapters.markdown.adapter import MarkdownQueryAdapter as adapter
     from test_vocabulary_conformance_back2654 import probe_applicability
-    _imports_limit_read_by_the_ranking(monkeypatch)
-    cases = probe_applicability('imports')
+    monkeypatch.setattr(adapter, 'PARAM_SPECS', tuple(
+        replace(spec, answers=('markdown_query',)) if spec.name == 'limit' else spec for spec in adapter.PARAM_SPECS))
+    cases = probe_applicability('markdown')
     refused = [case for case in cases if case.label.endswith('?limit= refused')]
-    assert len(refused) == 8 and all(case.ok for case in refused), refused  # every answer but sort=-fan-in
+    assert len(refused) == 2 and all(case.ok for case in refused), refused  # view=links and view=lint
     assert not [case for case in cases if case.label.endswith('?limit= unread')]
-    assert [case.ok for case in cases if case.label == 'proj default ?format= unread'] == [False]
+    assert [case.ok for case in cases if case.label.endswith('view=links ?offset= unread')] == [False]

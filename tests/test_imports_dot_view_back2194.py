@@ -91,10 +91,12 @@ def test_dot_prints_meta_warnings_on_stderr(capsys):
     assert 'lost evidence' in captured.err
 
 
-def test_dot_on_another_view_is_named_a_no_op(pkg):
+def test_dot_on_another_view_is_refused(pkg):
+    # format is read by the directory ?importers answer only (BACK-2656; it was a no-op note, exit 0).
     result = _run_reveal_direct(f'imports://{pkg}?circular&format=dot')
+    assert result.returncode == 2
     assert 'digraph' not in result.stdout
-    assert "'format' has no effect" in result.stdout + result.stderr
+    assert "control 'format' is not read by this answer (circular_dependencies" in result.stderr
 
 
 def test_unknown_format_value_is_a_usage_error(pkg):

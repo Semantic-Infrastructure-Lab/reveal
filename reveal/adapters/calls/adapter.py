@@ -19,7 +19,6 @@ Limitations (static analysis):
 """
 
 import os
-import sys
 from pathlib import Path
 from dataclasses import replace
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -85,15 +84,22 @@ def _calls_detail(value: Any) -> bool:
     return boolean_value(value)
 
 
+# The answer each mode selects (_MODE_TYPES); a control declares the ones that read it (COMMAND_MODEL "Applicability",
+# BACK-2656). The callers answer is also what a request with no mode is typed as (it answers the missing-mode error).
+_Q, _C, _R = 'calls_query', 'calls_callees', 'calls_callees_recursive'
+_K, _U, _M = 'calls_ranking', 'calls_uncalled', 'calls_module_graph'
+
+
 def _name_spec(name: str, description: str, example: str) -> ParamSpec:
     return ParamSpec(name, 'string', description, None, _name_value(name), examples=(example,),
                      role='operation', uri_codec='percent', names='symbol',
                      cli=CliBinding((f'--{name}',), metavar='NAME'))
 
 
-def _flag_spec(name: str, description: str, role: str = 'analysis', dest: Optional[str] = None) -> ParamSpec:
+def _flag_spec(name: str, description: str, role: str = 'analysis', dest: Optional[str] = None,
+               answers: Tuple[str, ...] = ()) -> ParamSpec:
     return ParamSpec(name, 'boolean', description, False, boolean_value, examples=(f'{name}=true',),
-                     role=role, cli=CliBinding((f'--{name}',), dest=dest, action='store_true'))
+                     role=role, cli=CliBinding((f'--{name}',), dest=dest, action='store_true'), answers=answers)
 
 
 _CALLERS = _name_spec('callers', 'Function name to find callers of (reverse lookup): a bare NAME, since the '
@@ -113,40 +119,41 @@ _ROOT = _name_spec('root', 'Retired (use callees=NAME&depth=N, the same walk; pr
                    'included, also counted in total_ambiguous) + total_unresolved', 'root=main')
 _DEPTH = ParamSpec('depth', 'integer', 'Levels to walk, a signed whole integer clamped 1-5: callers (default 1), '
                    'callees (default 1; beyond 1 is not measured, W-CALLS-9), the retired root '
-                   '(default 2); other modes ignore it with a warning',
+                   '(default 2); other modes refuse it',
                    None, _calls_depth, examples=('depth=2',), role='analysis',
-                   cli=CliBinding(('--depth',), metavar='N'))
+                   cli=CliBinding(('--depth',), metavar='N'), answers=(_Q, _C, _R))
 _RANK = ParamSpec('sort', 'string', 'Select caller ranking, most-called first: -callers (legacy --rank callers)', None,
                   _calls_sort, examples=('sort=-callers',), choices=('-callers',), role='operation',
                   legacy=(LegacySpelling('rank', codec=_calls_rank, flag='--rank'),),
                   cli=CliBinding(('--sort',), metavar='-callers'))
 _TOP = ParamSpec('limit', 'integer', 'Max entries for rank (default 10) or uncalled (default all); 0 = all; '
-                 'other modes ignore it with a warning', None, _calls_top, examples=('limit=20',), minimum=0,
+                 'other modes refuse it', None, _calls_top, examples=('limit=20',), minimum=0,
                  zero_policy='all', role='analysis', legacy=(LegacySpelling('top', codec=_calls_top, flag='--top'),),
-                 cli=CliBinding(('--limit',), dest='top', metavar='N'))
+                 cli=CliBinding(('--limit',), dest='top', metavar='N'), answers=(_K, _U))
 _UNCALLED = _flag_spec('uncalled', 'List every function/method with no callers (retired, D8: ?callers=NAME for one '
                        'function, the language\'s own dead-code tool for the rest; prints no confidence)',
                        role='operation')
 _TYPE = ParamSpec('kind', 'string', 'For uncalled: function selects module-level functions; '
                  'legacy method keeps the unfiltered function-and-method population', None,
                   nonempty_scalar, examples=('kind=function',), choices=('function', 'method'), role='analysis',
-                  legacy=(LegacySpelling('type', flag='--type'),), cli=CliBinding(('--kind',), dest='type', metavar='KIND'))
+                  legacy=(LegacySpelling('type', flag='--type'),), cli=CliBinding(('--kind',), dest='type', metavar='KIND'),
+                  answers=(_U,))
 _MODULES = _flag_spec('modules', 'Module-level dependency graph: one edge per import that resolves under the path '
                       '(retired: imports://<path>?importers&scope=path answers the same edges)', role='operation')
 _EXTERNAL = _flag_spec('external', 'With modules: also count importers from the rest of the project root '
-                       '(imports scope=root; retired with modules)')
+                       '(imports scope=root; retired with modules)', answers=(_M,))
 _BUILTINS = _flag_spec('builtins', 'Include language builtins (len, str, ValueError, ...) in callees (every '
                        'depth), root and rank output; in rank, also names the scan does not define '
-                       '(library methods such as dict.get) (default: false)')
+                       '(library methods such as dict.get) (default: false)', answers=(_C, _R, _K))
 _DETAIL = ParamSpec('detail', 'boolean', 'Callees only: normal or full; full adds params/effects '
                    '(not measured, W-CALLS-9). Bare --detail and true/false remain supported.',
                    False, _calls_detail, examples=('detail=normal', 'detail=full', 'detail=true'),
-                   role='analysis', cli=CliBinding(('--detail',), nargs='?', const=True, metavar='LEVEL'))
+                   role='analysis', cli=CliBinding(('--detail',), nargs='?', const=True, metavar='LEVEL'), answers=(_C,))
 _TEST_FRAMEWORK = _flag_spec('test-framework', 'Include test-framework entrypoints: as callers in rank, and as '
-                             'dead-code candidates in uncalled (default: false)', dest='test_framework')
+                             'dead-code candidates in uncalled (default: false)', dest='test_framework', answers=(_K, _U))
 _FORMAT = ParamSpec('format', 'string', 'URI output override: text, json or dot (Graphviz; dot has no --format '
                     'spelling; it draws callers, a callees walk, root and modules, and exits 2 on the other views)', None, nonempty_scalar, examples=('format=dot',), choices=('text', 'json', 'dot'),
-                    role='presentation')
+                    role='presentation', answers=(_Q, _C, _R, _U, _M))
 
 _RESOURCE = ResourceSpec(uri_codec='existing-path-first')
 _PARAM_SPECS = (_CALLERS, _CALLEES, _ROOT, _DEPTH, _DETAIL, _RANK, _TOP, _UNCALLED, _TYPE, _MODULES,
@@ -192,7 +199,7 @@ def _dot_rejection(mode: str, supplied: Dict[str, Any]) -> Optional[str]:
         walked = ('detail' in supplied and _selects('detail', supplied['detail'])
                   or 'depth' in supplied and _calls_depth(supplied['depth']) > 1)
         return None if walked else _DOT_REJECTION.format(view='callees at depth 1')
-    if mode in ('rank', 'uncalled'):
+    if mode == 'uncalled':  # the ranking does not read format at all (its declaration refuses it)
         return _DOT_REJECTION.format(view=mode)
     return None
 
@@ -674,8 +681,8 @@ class CallsAdapter(ResourceAdapter):
     @staticmethod
     def validate_request(params: Any, args: Any = None) -> None:
         """Exactly one mode per request: two used to resolve by a hidden precedence (BACK-2066).
-        callers takes no FILE:NAME and detail belongs to callees: both would be new capabilities.
-        format=dot on a view with no graph is rejected, not answered in text (BACK-2108)."""
+        callers takes no FILE:NAME, a new capability. format=dot on a view with no graph is rejected, not answered in
+        text (BACK-2108). Which answers read detail, depth, limit and the rest is their declaration's (BACK-2656)."""
         modes = _selected_modes(params)  # one mode per request is the binder's (role='operation', BACK-2654)
         supplied = dict(peek_query_items(params))
         for key in ('callers',):
@@ -683,9 +690,6 @@ class CallsAdapter(ResourceAdapter):
             if isinstance(value, str) and _split_root(value)[0]:
                 raise ValueError(f'{key}={value}: callers takes a bare NAME, not FILE:NAME; the callers index '
                                  f'has no file filter (callees=FILE:NAME selects one file\'s definitions)')
-        if modes and modes[0] != 'callees' and 'detail' in supplied and _selects('detail', supplied['detail']):
-            raise ValueError(f'detail applies to callees only, not {modes[0]}: '
-                             f'calls://<path>?callees=NAME&detail adds params and effects')
         dot_rejection = _dot_rejection(modes[0], supplied) if modes and supplied.get('format') == 'dot' else None
         if dot_rejection:
             raise ValueError(dot_rejection)
@@ -752,24 +756,6 @@ class CallsAdapter(ResourceAdapter):
         not reject the shorthand (BACK-1499)."""
         return cls._split_name_shorthand(os.path.expanduser(resource))[0]
 
-    def _warn_top_ignored(self) -> None:
-        """top= caps only ?rank=callers and ?uncalled; say so instead of ignoring it in
-        silence -- `--limit N` arrives as top=N in every mode (BACK-1496). --all's own
-        top= is exempt: lifting a cap the mode does not have is not worth a warning."""
-        top = _TOP.read(self.query_params)
-        if top is None or str(top) == type(self).CLI_QUERY_FLAGS['all'].partition('=')[2]:
-            return
-        print("⚠ Query param 'top' (--limit) for calls:// only caps ?rank=callers and "
-              "?uncalled — ignored; every result is shown.", file=sys.stderr)
-
-    def _warn_depth_ignored(self, mode: str) -> None:
-        """depth= walks callers, callees and ?root only; in any other mode it was dropped
-        in silence (BACK-1504)."""
-        if self.query_params.get('depth') is None:
-            return
-        print(f"⚠ Query param 'depth' for calls:// applies to ?callers, ?callees and ?root only, "
-              f"not ?{mode} — ignored.", file=sys.stderr)
-
     def get_structure(self) -> RevealResult:
         with self.composition_run():
             return self._get_structure()
@@ -795,7 +781,6 @@ class CallsAdapter(ResourceAdapter):
         if not callers and not callees_target:
             return self._usage(_MISSING_MODE)
         query_format = _FORMAT.read(params) or ''
-        self._warn_top_ignored()
         if callees_target:
             return self._callees(callees_target, query_format, detail)
         return self._callers(callers, query_format)
@@ -851,8 +836,6 @@ class CallsAdapter(ResourceAdapter):
         call-extraction estimate, and these edges are imports'."""
         from ..imports import ImportsAdapter
         from ...analyzers.imports import service as import_analysis
-        self._warn_top_ignored()
-        self._warn_depth_ignored('modules')
         params = self.query_params
         directory = to_posix(self._directory())  # every path out of here is '/'-spelled, an error's too (BACK-2188)
         external = _EXTERNAL.read(params)
@@ -886,7 +869,6 @@ class CallsAdapter(ResourceAdapter):
         )
 
     def _ranking(self) -> RevealResult:
-        self._warn_depth_ignored('rank')
         params = self.query_params
         top = _TOP.read(params)
         data = rank_by_callers(self.path, top=10 if top is None else top,
@@ -900,7 +882,6 @@ class CallsAdapter(ResourceAdapter):
         return result
 
     def _uncalled(self) -> RevealResult:
-        self._warn_depth_ignored('uncalled')
         params = self.query_params
         top = _TOP.read(params)
         data = find_uncalled(self.path, only_functions=_TYPE.read(params) == 'function',
@@ -912,7 +893,6 @@ class CallsAdapter(ResourceAdapter):
         return result
 
     def _callee_walk(self, root: str) -> RevealResult:
-        self._warn_top_ignored()
         params = self.query_params
         depth = _DEPTH.read(params)
         source = callee_source(self.path)

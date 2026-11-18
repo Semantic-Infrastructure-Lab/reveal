@@ -17,17 +17,17 @@ def project(tmp_path):
 
 @pytest.mark.parametrize('view', ['', 'unused&', 'circular&'])
 @pytest.mark.parametrize('output_format', ['text', 'json'])
-def test_unapplied_top_retains_existing_diagnostic(project, view, output_format):
+def test_unapplied_top_is_refused(project, view, output_format):
+    # top is limit's legacy word; limit caps the fan-in ranking only, so another view refuses it (BACK-2656; it was
+    # an unused-input warning, exit 0). The refusal names the control.
     response = _run_reveal_direct(f'imports://{project}?{view}top=1', '--format', output_format)
-    assert response.returncode == 0, response.stderr
+    assert response.returncode == 2, response.stderr
+    assert "control 'limit' is not read by this answer" in response.stderr
+    assert 'limit is read by: fan_in_ranking' in response.stderr
     if output_format == 'json':
-        answer = json.loads(response.stdout)
+        answer = json.loads(response.stdout)  # the invalid-request document
         assert answer['contract_version']
-        warnings = [w for w in answer['meta']['warnings'] if w['type'] == 'unused_query_param']
-        assert [(w['code'], w['fields']) for w in warnings] == [('unused_query_param', ['top'])]
-        assert 'has no effect' not in response.stderr
-    else:
-        assert response.stderr.count("query param 'top' has no effect") == 1
+        assert not [w for w in answer['meta']['warnings'] if w['type'] == 'unused_query_param']
 
 
 def test_fan_in_top_changes_rows_without_unread_diagnostic(project):

@@ -356,8 +356,10 @@ def ignored_flags(stderr):
 
 @pytest.mark.parametrize('flags', VALUE_CASES, ids=' '.join)
 @pytest.mark.parametrize('noun', NOUNS)
-def test_option_values_are_read_alike(project, noun, flags):
+def test_option_values_are_read_alike(project, noun, flags, request):
     """Zero, negative, malformed and unused values: same exit, same stdout, same ignored-flag notes."""
+    if noun == 'calls' and flags == ['--format', 'json', '--all']:
+        request.applymarker(pytest.mark.xfail(strict=True, reason="BACK-2656: --all injects calls' limit into every mode, and only the ranking and uncalled read limit, so --all on callers/callees/root/modules is refused naming limit; the --all-on-an-uncapped-answer rule is pending a ruling (Step 2b report)"))
     a, b = run(noun, 'cli', *flags), run(noun, 'uri', *flags)
     assert a.returncode == b.returncode, (a.stderr, b.stderr)
     assert_equal_stdout(noun, a.stdout, b.stdout)

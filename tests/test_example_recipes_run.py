@@ -498,12 +498,10 @@ def test_the_recipe_gate_bites(harness):
     assert '--expiring-within' not in err
     with pytest.raises(AssertionError, match='meta.warnings'):
         _assert_runs_as_written(harness, 'reveal ast://proj --expiring-within 30', 'ast_query')
-    # limit (canonical since BACK-2620; legacy top would print its retirement note first) caps only the ranking.
-    _, out, err, _ = harness.run_subcommand('imports://proj?limit=1', '--format', 'json')
-    warnings = [w for w in json.loads(out)['meta']['warnings'] if w['type'] == 'unused_query_param']
-    assert [(w['code'], w['fields']) for w in warnings] == [('unused_query_param', ['limit'])]
-    assert 'has no effect' not in err
-    with pytest.raises(AssertionError, match='meta.warnings'):
+    # limit (canonical since BACK-2620) caps only the ranking: elsewhere it is refused (BACK-2656), which fails a recipe.
+    code, _, err, _ = harness.run_subcommand('imports://proj?limit=1', '--format', 'json')
+    assert code == 2 and "control 'limit' is not read by this answer" in err
+    with pytest.raises(AssertionError, match='stderr|exit 2'):
         _assert_runs_as_written(harness, "reveal 'imports://proj?limit=1'", None)
     with pytest.raises(AssertionError, match='meta.warnings'):
         _assert_runs_as_written(harness, "reveal 'ast://proj?no_such_key=1'", 'ast_query')

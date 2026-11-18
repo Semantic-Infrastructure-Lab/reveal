@@ -104,13 +104,11 @@ class TestPreservation:
         assert {k: cuts[0][k] for k in ('field', 'shown', 'total', 'exact', 'cause')} == {
             'field': 'entries', 'shown': 1, 'total': 14, 'exact': True, 'cause': 'limit'}
 
-    def test_top_is_ignored_with_warning_on_walks_today(self, project):
-        full = query(uri(project, 'callers=sink&depth=2'))
-        result, cut = cli_json('calls', str(project), '--callers', 'sink', '--depth', '2', '--limit', '1')
-        assert result.returncode == 0
-        assert_equal_answer(cut, full)
-        assert cut['total_callers'] == 2
-        assert "only caps ?rank=callers" in result.stderr and 'ignored' in result.stderr
+    def test_limit_on_a_walk_is_refused(self, project):
+        # limit caps the ranking and uncalled only; on a walk it is refused, no longer ignored with a note (BACK-2656).
+        result, _cut = cli_json('calls', str(project), '--callers', 'sink', '--depth', '2', '--limit', '1')
+        assert result.returncode == 2
+        assert "control 'limit' is not read by this answer (calls_query" in result.stderr
 
     def test_max_items_zero_is_an_empty_output_page_not_native_uncapped(self, project):
         full = query(uri(project, 'rank=callers&top=0'))
