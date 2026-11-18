@@ -415,8 +415,10 @@ class ParamSpec:
     # an answer that matches no entry is an invalid request, refused before analysis.
     answers: Tuple[str, ...] = ()
     # The values of other controls this one needs, each ``name=value`` (``churn=on``: Metrics ``since`` bounds the churn
-    # walk). Given beside a different value of that control, the request conflicts with itself: an invalid request
-    # naming both, refused before analysis by the same check as ``answers`` (Scott 2026-11-18, BACK-2656).
+    # walk) or a bare ``name`` (that control given), with ``|`` between alternatives (``filter|search``: Codex ``since``
+    # bounds a filtered or searched catalog). Given beside a different value of that control, or with none of the
+    # alternatives, the request conflicts with itself: an invalid request naming both, refused before analysis by the
+    # same check as ``answers`` (Scott 2026-11-18, BACK-2656).
     requires: Tuple[str, ...] = ()
 
     def __post_init__(self) -> None:

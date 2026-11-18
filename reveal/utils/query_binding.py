@@ -519,17 +519,32 @@ def reject_unread_controls(declarations: Iterable[ParamSpec], params: Mapping[st
 
 
 def _unmet_requirements(declarations: tuple, spec: ParamSpec, params: Mapping[str, Any]) -> list:
-    """Each ``requires`` entry of *spec* (``churn=on``) the request's value of that control does not meet, as the
-    message naming both: the given or default value, compared after the control's own conversion."""
+    """Each ``requires`` entry of *spec* the request does not meet, as the message naming both. An entry is met when
+    one of its ``|`` alternatives is: ``name=value`` by the given or default value, compared after the control's own
+    conversion (``churn=on``); a bare ``name`` by that control being given (``filter|search``)."""
     problems = []
+    given = given_controls(params)
     for requirement in spec.requires:
-        name, _, wanted = requirement.partition('=')
-        other = next(declaration for declaration in declarations if declaration.name == name)
-        actual = _bound_value(other, params)
-        if actual != other.validate(wanted):
+        alternatives = requirement.split('|')
+        if any(_requirement_met(declarations, alternative, params, given) for alternative in alternatives):
+            continue
+        name, valued, wanted = requirement.partition('=')
+        if len(alternatives) == 1 and valued:
+            actual = _bound_value(next(declaration for declaration in declarations if declaration.name == name), params)
             problems.append(f"control {_as_typed(params, spec.name)} requires {requirement}; this request gives "
                             f"{name}={_shown(actual, wanted)}: give one or the other")
+        else:
+            problems.append(f"control {_as_typed(params, spec.name)} requires {' or '.join(alternatives)}; this "
+                            f"request gives none of them: give one, or drop {spec.name}")
     return problems
+
+
+def _requirement_met(declarations: tuple, alternative: str, params: Mapping[str, Any], given: set) -> bool:
+    name, valued, wanted = alternative.partition('=')
+    if not valued:
+        return name in given
+    other = next(declaration for declaration in declarations if declaration.name == name)
+    return bool(_bound_value(other, params) == other.validate(wanted))
 
 
 def _bound_value(spec: ParamSpec, params: Mapping[str, Any]) -> Any:
