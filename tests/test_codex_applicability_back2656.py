@@ -75,13 +75,17 @@ def test_codex_catalog_bounds_require_a_filter_or_a_search(codex, argv):
     assert 'requires filter or search' in run.stderr, run.stderr
 
 
-def test_codex_refuses_a_flag_on_a_named_resource_that_selects_its_own_answer(codex):
-    """memories answers itself whatever last says (predicted a session's messages before, so last went unread with
-    the ledger's note). The generic route exits 1 for a construction-time refusal on a resource without execution
-    facts (memories, rules, skills, plugins: the Step 1 policy for unqualified resources), 2 on a qualified one."""
-    run, _doc = _run('codex://memories?last')
-    assert run.returncode == 1, (run.returncode, run.stderr)
-    assert "control 'last' is not read by this answer (codex_memories, default" in run.stderr, run.stderr
+@pytest.mark.parametrize('resource,answer', [('memories', 'codex_memories'), ('memories/pipeline',
+                                                                         'codex_memories_pipeline'),
+                                             ('rules', 'codex_rules'), ('skills', 'codex_skills'),
+                                             ('plugins', 'codex_plugins')])
+def test_codex_refuses_a_flag_on_a_named_resource_that_selects_its_own_answer(codex, resource, answer):
+    """A named resource answers itself whatever last says (predicted a session's messages before, so last went unread
+    with the ledger's note). The refusal is an invalid request, exit 2, like every applicability refusal, although
+    these resources have no execution facts on the generic route (which exits 1 for its other construction errors)."""
+    run, _doc = _run(f'codex://{resource}?last')
+    assert run.returncode == 2, (run.returncode, run.stderr)
+    assert f"control 'last' is not read by this answer ({answer}, default" in run.stderr, run.stderr
 
 
 def test_codex_api_refuses_the_same_request(codex):
