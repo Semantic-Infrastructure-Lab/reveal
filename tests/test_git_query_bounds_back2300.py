@@ -13,11 +13,13 @@ space-separated timestamp.
 """
 import json
 import os
+import re
 import subprocess
 
 import pytest
 
 from reveal.adapters.git.adapter import GitAdapter
+from reveal.adapters.git.queries import commit_clock
 
 from conftest import _run_reveal_direct
 
@@ -46,7 +48,9 @@ def _messages(repo, query):
 
 def test_fixture_dates_are_what_the_test_assumes(repo):
     history = GitAdapter(f'{repo}?type=log').get_structure()['history']
-    assert sorted(c['date'] for c in history) == [when for _, when in _COMMITS]
+    # Each date carries the host's UTC offset (BACK-2643); the bounds compare its clock part.
+    assert all(re.fullmatch(r'.* [+-]\d{4}', c['date']) for c in history), history
+    assert sorted(commit_clock(c['date']) for c in history) == [when for _, when in _COMMITS]
 
 
 # Bare key: presence.

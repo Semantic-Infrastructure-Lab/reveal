@@ -171,8 +171,9 @@ reveal 'imports://src?circular&detail=full'   # Cycle paths
     before the start of P, and `date>=`/`date<=` (and a range) include all of it. A full
     timestamp bound (`date>2026-02-01 12:00:00`, or with a `T`: `2026-02-01T12:00:00`) compares
     the timestamp.
-  - A commit's `date` is written in the local time of the machine running reveal, with no
-    zone, and a bound with no zone is read in it too. A bound with a zone (`Z`, `+02:00`,
+  - A commit's `date` is written in the local time of the machine running reveal, followed by
+    its UTC offset (`2026-02-01 04:00:00 -0800`); a bound compares the clock part, and a bound
+    with no zone is read in that local time too. A bound with a zone (`Z`, `+02:00`,
     `-0700`) is converted to that local time first, so it names the same instant everywhere.
     Write `+` as itself; git:// does not percent-decode query values.
   - `since=D` is `date>=D` and `until=D` is `date<=D`

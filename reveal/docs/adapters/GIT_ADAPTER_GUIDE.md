@@ -267,9 +267,9 @@ Branches: 24
 Tags: 5
   • v1.2.0               mno7890 2025-01-13 Release v1.2.0
 Recent Commits:
-  abc1234 2025-02-13 15:42:30 John Doe
+  abc1234 2025-02-13 15:42:30 -0800 John Doe
     feat: Add new feature
-  def5678 2025-02-11 09:12:44 Jane Smith
+  def5678 2025-02-11 09:12:44 -0800 Jane Smith
     fix: Bug fix in auth
 ⚠ Truncated commits.recent: showing 10 of 11+ — raise ?limit=N or page with ?offset=N
 ⚠ Truncated branches.recent: showing 10 of 24 — raise ?limit=N, or --all
@@ -304,13 +304,13 @@ reveal git://.@develop
 Ref: main
 Commit: abc1234567890abcdef1234567890abcdef12345
 Author: John Doe <john@example.com>
-Date: 2025-02-13 15:42:30
+Date: 2025-02-13 15:42:30 -0800
 feat: Add new feature
 
 History:
-  abc1234 2025-02-13 15:42:30 John Doe
+  abc1234 2025-02-13 15:42:30 -0800 John Doe
     feat: Add new feature
-  def5678 2025-02-11 09:12:44 Jane Smith
+  def5678 2025-02-11 09:12:44 -0800 Jane Smith
     fix: Bug fix in auth module
 ⚠ Truncated history: showing 20 of 21+ — raise ?limit=N or page with ?offset=N
 ```
@@ -424,9 +424,9 @@ reveal 'git://src/auth?type=history'              # a directory — every commit
 File History: src/app.py @ HEAD
 Commits: 50
 
-  abc1234 2026-10-26 12:54:13 John Doe
+  abc1234 2026-10-26 12:54:13 -0700 John Doe
     feat: Add authentication
-  def5678 2026-10-24 09:10:02 Jane Smith
+  def5678 2026-10-24 09:10:02 -0700 Jane Smith
     refactor: Extract config loading
   ...
 
@@ -534,13 +534,13 @@ reveal 'git://src/app.py?type=blame'
 File Blame Summary: src/app.py (89 lines, 12 hunks)
 
 Contributors (by lines owned):
-  John Doe                         45 lines (50.6%)  Last: 2026-10-26 12:54:13
-  Jane Smith                       28 lines (31.5%)  Last: 2026-10-24 09:10:02
+  John Doe                         45 lines (50.6%)  Last: 2026-10-26 12:54:13 -0700
+  Jane Smith                       28 lines (31.5%)  Last: 2026-10-24 09:10:02 -0700
 
 Key hunks (largest continuous blocks):
-  Lines 18- 42 ( 25 lines)  def5678 2026-10-24 09:10:02 Jane Smith
+  Lines 18- 42 ( 25 lines)  def5678 2026-10-24 09:10:02 -0700 Jane Smith
     feat: Add authentication
-  Lines  1- 15 ( 15 lines)  abc1234 2026-04-02 10:00:00 John Doe
+  Lines  1- 15 ( 15 lines)  abc1234 2026-04-02 10:00:00 -0700 John Doe
     feat: Initial implementation
   ... and 10 more (--format json lists all)
 
@@ -562,11 +562,11 @@ File Blame (Detailed): src/app.py @ HEAD
 Lines: 89
 
 Lines 1-4:
-  abc1234 2026-04-02 10:00:00 John Doe
+  abc1234 2026-04-02 10:00:00 -0700 John Doe
   feat: Initial implementation
 
 Lines 5-5:
-  def5678 2026-10-24 09:10:02 Jane Smith
+  def5678 2026-10-24 09:10:02 -0700 Jane Smith
   feat: Add authentication
 ...
 ```
@@ -599,13 +599,13 @@ Element Blame: src/app.py → create_app
 Lines 5-9 (3 hunks)
 
 Contributors (by lines owned):
-  Jane Smith                        3 lines (60.0%)  Last: 2026-10-24 09:10:02
-  John Doe                          2 lines (40.0%)  Last: 2026-04-02 10:00:00
+  Jane Smith                        3 lines (60.0%)  Last: 2026-10-24 09:10:02 -0700
+  John Doe                          2 lines (40.0%)  Last: 2026-04-02 10:00:00 -0700
 
 Key hunks (largest continuous blocks):
-  Lines 5-7 (3 lines)  def5678 2026-10-24 09:10:02 Jane Smith
+  Lines 5-7 (3 lines)  def5678 2026-10-24 09:10:02 -0700 Jane Smith
     feat: Add authentication
-  Lines 8-9 (2 lines)  abc1234 2026-04-02 10:00:00 John Doe
+  Lines 8-9 (2 lines)  abc1234 2026-04-02 10:00:00 -0700 John Doe
     feat: Initial implementation
 
 Use: reveal 'git://src/app.py?type=blame&detail=full' for line-by-line view
@@ -748,13 +748,13 @@ that shares are limited to the fetched history. Run `git fetch --unshallow` firs
 | `until` | ISO date | `=` only | Ergonomic alias for `date<=` (`until=2026-01` includes January) |
 
 **Dates and zones.** A commit's `date` is its commit time written in the local time of the machine
-running reveal, with no zone (`2026-10-27 15:46:04`). A bound with no zone is read in that same
-local time. A bound with a zone is converted to local time first, so it names the same instant
+running reveal, followed by that zone's UTC offset (`2026-10-27 15:46:04 -0700`, BACK-2643). A bound
+compares the clock part; a bound with no zone is read in that same local time. A bound with a zone is converted to local time first, so it names the same instant
 on every machine: in Pacific daylight time `date>2026-10-27T22:00:00Z` and
 `date>2026-10-27T15:00:00-07:00` both mean after 15:00 local. Write `+` as itself
 (`+02:00`) or percent-encode it (`%2B02:00`); literal `+` is not decoded as a space. In the hour a daylight-saving change
-repeats, two instants print the same local time, in the commit dates and in a converted bound
-alike. Zoned fractional seconds use microsecond precision on all supported Python
+repeats, two instants print the same local clock time (their offsets differ), and a bound, which
+compares the clock part, cannot tell them apart. Zoned fractional seconds use microsecond precision on all supported Python
 versions: short fractions are padded and digits beyond six are truncated.
 
 **A filter field no commit has exits 2.** The fields of a commit are `hash`, `author`, `email`,
@@ -999,7 +999,7 @@ reveal 'git://.?message~=bug&limit=100'
   },
   "commits": {
     "recent": [
-      {"hash": "abc1234", "author": "John Doe", "email": "john@example.com", "date": "2026-10-26 23:55:53", "timestamp": 1793084153, "message": "feat: Add new feature"}
+      {"hash": "abc1234", "author": "John Doe", "email": "john@example.com", "date": "2026-10-26 23:55:53 -0700", "timestamp": 1793084153, "message": "feat: Add new feature"}
     ]
   },
   "stats": {"is_bare": false, "is_empty": false, "head_detached": false},
@@ -1023,13 +1023,13 @@ Only the newest 10 branches, tags and commits are listed (`?limit=N` or `--all` 
   "ref": "main",
   "commit": {
     "hash": "abc1234", "author": "John Doe", "email": "john@example.com",
-    "date": "2026-10-26 23:55:53", "timestamp": 1793084153,
+    "date": "2026-10-26 23:55:53 -0700", "timestamp": 1793084153,
     "message": "feat: Add new feature", "full_hash": "abc1234567890abcdef...",
     "full_message": "feat: Add new feature\n\nBody...", "parents": ["def5678"],
     "committer": "John Doe", "committer_email": "john@example.com"
   },
   "history": [
-    {"hash": "abc1234", "author": "John Doe", "email": "john@example.com", "date": "2026-10-26 23:55:53", "timestamp": 1793084153, "message": "feat: Add new feature"}
+    {"hash": "abc1234", "author": "John Doe", "email": "john@example.com", "date": "2026-10-26 23:55:53 -0700", "timestamp": 1793084153, "message": "feat: Add new feature"}
   ],
   "filter_applied": false,
   "meta": {"warnings": []}
@@ -1096,7 +1096,7 @@ History items carry no per-commit file or line statistics.
   "path": "src/app.py",
   "ref": "HEAD",
   "commits": [
-    {"hash": "abc1234", "author": "John Doe", "email": "john@example.com", "date": "2026-10-26 23:55:53", "timestamp": 1793084153, "message": "feat: Add authentication"}
+    {"hash": "abc1234", "author": "John Doe", "email": "john@example.com", "date": "2026-10-26 23:55:53 -0700", "timestamp": 1793084153, "message": "feat: Add authentication"}
   ],
   "count": 50,
   "total_matches": null,
@@ -1122,7 +1122,7 @@ History items carry no per-commit file or line statistics.
   "hunks": [
     {
       "lines": {"start": 1, "count": 4},
-      "commit": {"hash": "abc1234", "author": "John Doe", "email": "john@example.com", "date": "2026-10-26 23:55:53", "message": "feat: Initial implementation"}
+      "commit": {"hash": "abc1234", "author": "John Doe", "email": "john@example.com", "date": "2026-10-26 23:55:53 -0700", "message": "feat: Initial implementation"}
     }
   ],
   "file_content": ["\"\"\"Application entry point.\"\"\"", "import os"],

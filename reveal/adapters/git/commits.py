@@ -334,13 +334,21 @@ def disclose_timeline_cut(result: Any, walk: HistoryWalk) -> None:
 COMMIT_FIELDS = ('hash', 'author', 'email', 'date', 'timestamp', 'message')
 
 
+def commit_time_text(timestamp: int) -> str:
+    """A commit time as git:// writes it: the wall-clock time of the machine running reveal and its UTC
+    offset, ``2026-01-03 04:00:00 -0800``. Without the offset a reader comparing it with the commit's own
+    metadata was off by the host's zone (BACK-2643). The ``date`` filter compares the clock part
+    (``queries.commit_clock``)."""
+    return datetime.fromtimestamp(timestamp).astimezone().strftime('%Y-%m-%d %H:%M:%S %z')
+
+
 def format_commit(commit: 'pygit2.Commit', detailed: bool = False) -> Dict[str, Any]:
     """Format commit information."""
     basic_info = {
         'hash': str(commit.id)[:7],
         'author': commit.author.name,
         'email': commit.author.email,
-        'date': datetime.fromtimestamp(commit.commit_time).strftime('%Y-%m-%d %H:%M:%S'),
+        'date': commit_time_text(commit.commit_time),
         'timestamp': commit.commit_time,
         'message': commit.message.split('\n')[0][:100],
     }

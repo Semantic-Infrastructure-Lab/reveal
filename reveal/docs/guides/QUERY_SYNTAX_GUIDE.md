@@ -396,7 +396,8 @@ outside it, `date>P` is after the end of P, `date<P` before its start, and `date
 and a range `date=P1..P2` include all of P, so `date>2026-01` starts in February,
 `until=2026-01` includes January and `date<=2025` includes all of 2025. A full timestamp bound
 (`date>2026-02-01 12:00:00`, or `2026-02-01T12:00:00`) compares the timestamp. Commit dates are
-written in the local time of the machine running reveal, without a zone; a bound with a zone
+written in the local time of the machine running reveal with its UTC offset (`2026-02-01 04:00:00 -0800`),
+and a bound compares the clock part; a bound with a zone
 (`Z`, `+02:00`) is converted to that local time first, and `+` is written as itself.
 
 A filter on a field no commit has (`git://.?authr~=Scott`, bare or in `where=`) is an invalid request: exit 2,

@@ -12,7 +12,7 @@ from ...utils.path_utils import failure_of
 from ...utils.results import ResultBuilder, note_truncation
 from .params import LIMIT
 from .qualification import text_evidence
-from .commits import (commit_filter, resolve_commit, disclose_timeline_cut, history_sort, timeline_fields,
+from .commits import (commit_time_text, commit_filter, resolve_commit, disclose_timeline_cut, history_sort, timeline_fields,
                       walk_history)
 from reveal.utils.lines import normalize_newlines, split_lines
 
@@ -209,7 +209,7 @@ def get_file_diff(
     commit_info = {
         'hash': short_hash,
         'author': commit.author.name,
-        'date': datetime.fromtimestamp(commit.commit_time).strftime('%Y-%m-%d %H:%M:%S'),
+        'date': commit_time_text(commit.commit_time),
         'message': commit.message.split('\n')[0].strip(),
     }
 
@@ -570,7 +570,7 @@ def _format_blame_hunks(repo: 'pygit2.Repository', blame: Any) -> List[Dict[str,
                 'hash': str(hunk.final_commit_id)[:7],
                 'author': committer.name,
                 'email': committer.email,
-                'date': datetime.fromtimestamp(committer.time).strftime('%Y-%m-%d %H:%M:%S'),
+                'date': commit_time_text(committer.time),
                 'message': commit_obj.message.split('\n')[0],
             },
         })

@@ -30,11 +30,20 @@ def _at_bound_precision(commit_date: str, bound: str) -> str:
     return commit_date[:len(bound)] if _PERIOD.fullmatch(bound) else commit_date
 
 
+_UTC_OFFSET = re.compile(r' [+-]\d{4}$')
+
+
+def commit_clock(commit_date: str) -> str:
+    """A commit's ``date`` without the UTC offset ``commit_time_text`` appends (BACK-2643): the local
+    wall-clock time the bounds are compared with."""
+    return _UTC_OFFSET.sub('', commit_date)
+
+
 def _local_time(zoned: 're.Match[str]') -> str:
     """A zoned timestamp as the local wall-clock time the commit dates are written in.
 
-    ``format_commit`` writes ``date`` with ``datetime.fromtimestamp``: the local time of the
-    machine running reveal, with no zone. So `date>2026-02-01T12:00:00Z` compared the digits
+    ``format_commit`` writes ``date`` as the local time of the machine running reveal (with its
+    UTC offset since BACK-2643, which ``commit_clock`` drops before comparing). So `date>2026-02-01T12:00:00Z` compared the digits
     '12:00:00' with local times (BACK-2309); converted, it names the same instant. One hour a
     year is ambiguous: in the hour a DST change repeats, two instants print the same local
     time, in the commit dates and in the converted bound alike.
@@ -119,7 +128,7 @@ def compare(
     coerce_numeric = field_name != 'date'
     # A year bound parses as a number (`date>2026` is 2026): it is a period all the same.
     if field_name == 'date' and isinstance(field_value, str) and isinstance(target_value, (str, int)):
-        day_aware = _compare_date(field_value, operator, str(target_value))
+        day_aware = _compare_date(commit_clock(field_value), operator, str(target_value))
         if day_aware is not None:
             return day_aware
     return compare_values(
