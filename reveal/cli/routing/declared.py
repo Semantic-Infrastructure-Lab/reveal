@@ -15,6 +15,7 @@ from ...config import require_selected_config
 from ...errors import ConfigLoadError
 from ...utils.severity import CHECK_GATES
 from ...utils.path_utils import to_posix
+from ...adapters.factory import predicted_result_type, scope_path_of
 from ...utils.query_parser import ParamSpec
 from ..invocation import typed_spelling
 
@@ -349,7 +350,7 @@ def run_declared_uri(uri: str, element: str | None, args, consumed=(), *, answer
     path, _, query = resource.partition('?')
     if element:
         # One stderr line and an empty stdout left --format json with no answer (BACK-2526).
-        from .uri import unread_element_message
+        from ...adapters.base import unread_element_message
         adapter = declared_adapter_class(name)
         (answer_consumer or (lambda answer: answer.emit()))(_invalid_answer(
             adapter, name, path, unread_element_message(adapter, name, element), args))
@@ -488,8 +489,7 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
             except ValueError as exc:
                 consume(_invalid_prepared_answer(adapter, name, path, query_resource, str(exc), args))
                 return
-            select_type = getattr(adapter, 'result_type_for', None)
-            expected_type = select_type(source) if select_type else adapter.RESULT_TYPE
+            expected_type = predicted_result_type(adapter, source)
             try:
                 path = bind_resource_path(adapter.RESOURCE_SPEC, os.path.expanduser(path), transport=transport,
                                           resolve=getattr(adapter, 'resource_path', None))
@@ -500,8 +500,8 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
             except OSError as exc:
                 consume(_invalid_answer(adapter, name, path, str(exc), args, _resource_failure_cause(exc), result_type=expected_type))
                 return
-            scope_path = _scope_path(adapter, path)
-            expected_type = _result_type_at(adapter, expected_type, source, scope_path)
+            scope_path = scope_path_of(adapter, path)
+            expected_type = predicted_result_type(adapter, source, scope_path)
             try:
                 root, excludes = _walk_scope(adapter, scope_path, args)
             except (OSError, ValueError, ConfigLoadError) as exc:  # the walk's settings included (BACK-2677)
@@ -564,24 +564,6 @@ def _invalid_prepared_answer(adapter, name, path, resource, message, args, *, de
         expected_type = adapter.RESULT_TYPE
     return _invalid_answer(adapter, name, path, message, args, result_type=expected_type,
                            default_fail_on=default_fail_on)
-
-
-def _result_type_at(adapter_class, expected_type: str, params: Any, scope_path: str) -> str:
-    """The answer type once the path is known: an adapter whose type depends on what the path is
-    (metrics answers a file with ``stats_file`` and a directory with ``stats_summary``) declares
-    ``result_type_at(params, path)``; ``result_type_for(params)`` cannot see the path."""
-    refine = getattr(adapter_class, 'result_type_at', None)
-    if refine is None:
-        return expected_type
-    result_type: str = refine(params, scope_path)
-    return result_type
-
-
-def _scope_path(adapter_class, path: str) -> str:
-    """The filesystem path a resource names: calls' `path:name` shorthand names `path` (BACK-1499).
-    The adapter receives the resource as spelled; scope, the stat and `source` use this path."""
-    resolve = getattr(adapter_class, 'resource_path', None)
-    return str(resolve(path)) if resolve is not None else path
 
 
 def _typed_spellings(adapter) -> set:

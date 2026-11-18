@@ -50,6 +50,16 @@ from .registry import (  # noqa: F401
 logger = logging.getLogger(__name__)
 
 
+def unread_element_message(adapter_class: Any, scheme: str, element: str) -> str:
+    """The refusal of a positional element no view reads, naming the URI form (BACK-2522, BACK-2526). Adapter-level, so
+    every transport that refuses an element (the CLI's positional element, ``api.query``'s ``element_name``) says the
+    same without importing routing."""
+    schema = adapter_class.get_schema() if hasattr(adapter_class, 'get_schema') else None
+    syntax = schema.get('uri_syntax') if isinstance(schema, dict) else None
+    form = f'; name it in the URI: {syntax}' if syntax else ''
+    return f"{scheme}:// takes no positional element ('{element}'){form}"
+
+
 class Stability(str, Enum):
     """Maturity of an adapter, surfaced as a badge in ``help://``.
 

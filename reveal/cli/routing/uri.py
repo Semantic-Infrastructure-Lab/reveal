@@ -15,6 +15,7 @@ from typing import Any, Callable, Iterable, Iterator, List, NoReturn, Optional, 
 
 from ...errors import (ConfigLoadError, ConfigValidationError, MissingResourceError, NotApplicableError,
                        RequestValidationError, TestLayoutValidationError)
+from ...adapters.base import unread_element_message
 from ...rendering.base import emit_rendered
 from ...reveal_types import CONTRACT_VERSION, RevealResult
 from ...utils import print_json_result, write_also_json
@@ -573,12 +574,12 @@ def _inject_exclude_flag(resource: str, scheme: str, args: 'Namespace', *,
     scope_path = resource.partition('?')[0]
     if adapter_class is not None:
         from ...utils.query_binding import bind_resource_path
-        from .declared import _scope_path
+        from ...adapters.factory import scope_path_of
         spec = getattr(adapter_class, 'RESOURCE_SPEC', None)
         if spec is not None:
             scope_path = bind_resource_path(spec, scope_path, transport='uri',
                                             resolve=getattr(adapter_class, 'resource_path', None), validate_kind=False)
-        scope_path = _scope_path(adapter_class, scope_path)
+        scope_path = scope_path_of(adapter_class, scope_path)
     walk_root, combined_values = dispatch_scope(os.path.expanduser(scope_path), exclude_values)
 
     if not combined_values:
@@ -989,14 +990,6 @@ def _print_help_not_found_hints(adapter, element_name: str, section: Optional[st
         "Lost? reveal 'help://quick' for orientation, or reveal 'help://' for the full index.",
         file=sys.stderr,
     )
-
-
-def unread_element_message(adapter_class: Any, scheme: str, element: str) -> str:
-    """The refusal of a positional element no view reads, naming the URI form (BACK-2522, BACK-2526)."""
-    schema = adapter_class.get_schema() if hasattr(adapter_class, 'get_schema') else None
-    syntax = schema.get('uri_syntax') if isinstance(schema, dict) else None
-    form = f'; name it in the URI: {syntax}' if syntax else ''
-    return f"{scheme}:// takes no positional element ('{element}'){form}"
 
 
 def _fail_unread_element(adapter_class: Any, scheme: str, resource: str, element: str) -> NoReturn:

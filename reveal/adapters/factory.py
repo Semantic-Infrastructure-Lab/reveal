@@ -117,6 +117,26 @@ def uses_bound_query_call(adapter_class: type) -> bool:
     return isinstance(adapter_class, type) and adapter_class.__dict__.get('BOUND_QUERY_CALL') is True
 
 
+def scope_path_of(adapter_class: type, path: str) -> str:
+    """The filesystem path a resource names: calls' `path:name` shorthand names `path` (BACK-1499).
+    The adapter receives the resource as spelled; scope, the stat and `source` use this path."""
+    resolve = getattr(adapter_class, 'resource_path', None)
+    return str(resolve(path)) if resolve is not None else path
+
+
+def predicted_result_type(adapter_class: type, params: Any, path: Optional[str] = None) -> str:
+    """The type of the answer a request selects, known before analysis: ``result_type_for(params)`` (or the noun's
+    ``RESULT_TYPE``), then, once the scope *path* is known, ``result_type_at(params, path)`` for an adapter whose
+    type depends on what the path is (metrics answers a file with ``stats_file`` and a directory with
+    ``stats_summary``); ``result_type_for`` cannot see the path."""
+    select = getattr(adapter_class, 'result_type_for', None)
+    result_type: str = select(params) if select is not None else getattr(adapter_class, 'RESULT_TYPE')
+    refine = getattr(adapter_class, 'result_type_at', None)
+    if path is not None and refine is not None:
+        result_type = refine(params, path)
+    return result_type
+
+
 def _canonical_init(adapter_class: type, resource: str, *, params: Optional[Any] = None,
                     overrides: Optional[Mapping[str, Any]] = None) -> Any:
     """Construct a canonically-migrated adapter directly (BACK-907).
