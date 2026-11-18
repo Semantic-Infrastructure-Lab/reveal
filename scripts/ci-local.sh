@@ -16,8 +16,9 @@
 #   - parser counts        -> the primary leg also qualifies the bounded cold serial command fixture
 #                             (scripts/check_parse_counts.py), including with --no-tests
 #   - local caches/env     -> REVEAL_DISK_CACHE=0 (CI starts cold; keep ~/.reveal/cache out),
-#                             PYTHONPYCACHEPREFIX unset (stale bytecode), and XDG_CONFIG_HOME
-#                             pointed at an empty dir (no ~/.config/reveal user config)
+#                             PYTHONPYCACHEPREFIX unset (stale bytecode), XDG_CONFIG_HOME
+#                             pointed at an empty dir (no ~/.config/reveal user config), and pytest
+#                             in a fresh HOME/XDG home keeping only toolchain caches (BACK-2678)
 #   - Windows text encoding -> PYTHONWARNDEFAULTENCODING=1, so reveal/ text I/O without encoding=
 #                             fails its test (pyproject filterwarnings), and V041 (reveal:// --check).
 #                             Console output under a non-UTF-8 stream: tests/test_console_encoding.py.
@@ -356,6 +357,22 @@ unset PYTHONPYCACHEPREFIX PYTHONPATH
 # failed on every CI job. Point user-config discovery at an empty dir.
 export XDG_CONFIG_HOME="${REVEAL_CI_VENV_ROOT:-$HOME/.cache/reveal-ci}/empty-xdg-config"
 rm -rf "$XDG_CONFIG_HOME" && mkdir -p "$XDG_CONFIG_HOME"
+# BACK-2678: the suite runs in a fresh home, as CI's does. The developer's home also holds the one-time
+# hint store (~/.local/share/reveal/seen_hints.json: a green gate, then 14/14 red CI on 5be5feca), files
+# read through Path.home() rather than XDG (~/.config/reveal/<adapter>.yaml, ~/.reveal/plugins) and a
+# global git identity CI does not have. Only the toolchain stores are kept: the grammar cache (CI restores
+# it too; a fresh one downloads and warns), rustup/cargo and Go's module and build caches.
+ISO_HOME="${REVEAL_CI_VENV_ROOT:-$HOME/.cache/reveal-ci}/isolated-home"
+rm -rf "$ISO_HOME" && mkdir -p "$ISO_HOME/.config" "$ISO_HOME/.local/share" "$ISO_HOME/.cache"
+GRAMMAR_CACHE="$("$PY" -c 'import pathlib, tree_sitter_language_pack as p; print(pathlib.Path(p.cache_dir()).parents[1])')" \
+    || fail "grammar cache location"
+ln -s "$GRAMMAR_CACHE" "$ISO_HOME/.cache/$(basename "$GRAMMAR_CACHE")"
+ISOLATED_HOME=(env HOME="$ISO_HOME" XDG_CONFIG_HOME="$ISO_HOME/.config" XDG_DATA_HOME="$ISO_HOME/.local/share"
+               XDG_CACHE_HOME="$ISO_HOME/.cache" RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rustup}"
+               CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}")
+if command -v go >/dev/null 2>&1; then
+    ISOLATED_HOME+=(GOPATH="$(go env GOPATH)" GOMODCACHE="$(go env GOMODCACHE)" GOCACHE="$(go env GOCACHE)")
+fi
 
 step "CLI basics"
 "$VENV/bin/reveal" --version >>"$LOG" 2>&1 && "$VENV/bin/reveal" --list-supported >>"$LOG" 2>&1 || fail "CLI basics"
@@ -449,7 +466,7 @@ if [[ $RUN_TESTS -eq 1 ]]; then
     CPU_LOAD1=$("$PY" -c 'import os; print(os.getloadavg()[0])' 2>/dev/null || echo 0)
     echo "host load at suite start: ${CPU_LOAD1} (1-min average, $(nproc 2>/dev/null || echo '?') CPUs)" | tee -a "$LOG"
     TIME_CMD=(); command -v /usr/bin/time >/dev/null 2>&1 && TIME_CMD=(/usr/bin/time -f '%U %S' -o "$LOG.cpu")
-    "${TIME_CMD[@]}" "$PY" -m pytest "${PYTEST_TARGETS[@]}" -q -p no:cacheprovider -n auto \
+    "${TIME_CMD[@]}" "${ISOLATED_HOME[@]}" "$PY" -m pytest "${PYTEST_TARGETS[@]}" -q -p no:cacheprovider -n auto \
         --durations=0 --durations-min=0.5 >>"$LOG" 2>&1 \
         || { grep -E '^FAILED |^ERROR ' "$LOG" | head -30; fail "pytest"; }
     tail -1 "$LOG"
