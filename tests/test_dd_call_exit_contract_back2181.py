@@ -139,7 +139,7 @@ def test_depends_json_exits_0_with_the_partial_verdict_in_meta_warnings(partial)
     assert {'target', 'dependents', 'count', 'edge_rule', 'metadata', '_meta', 'undercount_possible'} <= set(doc)
     assert all(set(d) == DEPENDENT_KEYS for d in doc['dependents'])  # no imports-only row field leaks in
     assert sorted(d['file'] for d in doc['dependents']) == ['src/b.js', 'src/bad.js']
-    assert {'partial_parse', 'retired_spelling'} <= _warning_types(doc)
+    assert {'parse_recovered', 'retired_spelling'} <= _warning_types(doc)
     assert 'parsed with errors' in doc['warning']
     assert result.stderr.count(NOTE) == 0  # the JSON carries it (retired_spelling above; BACK-2659)
 
@@ -152,7 +152,7 @@ def test_depends_directory_json_exits_0_with_its_shape(partial):
     assert {'modules', 'total_modules', 'edge_rule', 'metadata', '_meta'} <= set(doc)
     assert '_format' not in doc  # renderer routing, not part of the shape (BACK-2282)
     assert all(set(m) == {'module', 'dependent_count', 'dependents'} for m in doc['modules'])
-    assert 'partial_parse' in _warning_types(doc)
+    assert 'parse_recovered' in _warning_types(doc)
 
 
 def test_depends_text_names_the_partial_verdict(partial):

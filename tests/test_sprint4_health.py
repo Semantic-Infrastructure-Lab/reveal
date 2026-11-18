@@ -11,7 +11,7 @@ pytestmark = pytest.mark.component
     ({}, 0, 'ok'),
     ({'error': 'cannot answer'}, 1, 'failed'),
     ({'applicable': False}, 0, 'not_applicable'),
-    ({'meta': {'warnings': [{'type': 'parse_degraded'}]}}, 0, 'partial'),
+    ({'meta': {'warnings': [{'type': 'parse_recovered'}]}}, 0, 'partial'),
     ({'meta': {'errors': ['broken']}}, 0, 'partial'),
     ({}, -9, 'failed'),
     ({}, 2, 'failed'),

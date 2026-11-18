@@ -96,7 +96,7 @@ def test_metrics_json_names_the_failed_file_and_cause(degraded):
     """Metrics said only '2 file(s) did not parse cleanly'; which file, and why, reached stderr alone."""
     result = _run_reveal_in(degraded, _uri('metrics', '', degraded), '--format', 'json')
     assert result.returncode == 3
-    entry = next(w for w in json.loads(result.stdout)['meta']['warnings'] if w['type'] == 'parse_degraded')
+    entry = next(w for w in json.loads(result.stdout)['meta']['warnings'] if w['type'] == 'parse_recovered')
     assert 'b.py' in entry['files']
     assert 'b.py' in entry['message']
 
@@ -138,7 +138,7 @@ def test_stdin_aggregate_batch_counts_an_incomplete_answer(degraded):
 def test_metrics_text_answer_over_mcp_names_the_failed_file(degraded):
     from reveal import mcp_server
     text = mcp_server.reveal_query(_uri('metrics', '', degraded))
-    assert 'b.py' in text and 'did not parse cleanly' in text
+    assert 'b.py' in text and 'syntax the parser could not read' in text
 
 
 @pytest.mark.mcp

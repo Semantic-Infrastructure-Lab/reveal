@@ -85,7 +85,6 @@ def test_recovered_file_keeps_the_graph_and_is_named_once(project):
     assert _fan_in(answer)['helper.py'] >= 2
     (recovered,) = _warnings(answer, 'parse_recovered')
     assert [Path(f).name for f in recovered['files']] == ['bad.py']
-    assert not _warnings(answer, 'partial_parse')
     assert code == 3
     assert 'relevance_warning' not in answer['meta']
 

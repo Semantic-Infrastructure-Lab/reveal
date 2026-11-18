@@ -35,7 +35,7 @@ def test_degraded_metrics_health_stays_incomplete(tmp_path, scheme):
     child = run(uri, '--format', 'json')
     # stats:// retains its legacy process policy; health still reads its parse loss.
     assert child.returncode == (3 if scheme == 'metrics' else 0)
-    assert any(warning['type'] == 'parse_degraded'
+    assert any(warning['type'] == 'parse_recovered'
                for warning in json.loads(child.stdout)['meta']['warnings'])
     response = run('health', uri, '--format', 'json')
     assert response.returncode == 3

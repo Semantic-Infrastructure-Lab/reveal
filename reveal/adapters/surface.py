@@ -47,7 +47,7 @@ from .ast.surface_matrix import CATEGORIES, RECOVERED_KEY, UNPARSED_KEY, coverag
 from .surface_file_cache import scan_file_cached
 from .ast.nav_surface_common import ROUTE_CLASSES_KEY, resolve_inherited_route_prefixes
 from .ast.nav_surface_rails import resolve_engine_mounts
-from ..utils.results import ResultBuilder
+from ..utils.results import PARSE_RECOVERED, ResultBuilder
 from ..reveal_types import PathFailure
 
 
@@ -571,7 +571,7 @@ class SurfaceAdapter(ResourceAdapter):
         if report['unparsed_files']:
             warnings.append({'type': 'unparsed_files', 'code': 'W-SURFACE-2', 'message': _unparsed_note(report['unparsed_files'])})
         if report['recovered_files']:
-            warnings.append({'type': 'parse_recovered', 'code': 'W-SURFACE-3', 'message': _recovered_note(
+            warnings.append({'type': PARSE_RECOVERED, 'code': 'W-SURFACE-3', 'message': _recovered_note(
                 report['recovered_files'], _count_error_region(report['surfaces']))})
 
         return ResultBuilder.create(

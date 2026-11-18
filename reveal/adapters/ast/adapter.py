@@ -347,13 +347,12 @@ class AstAdapter(ResourceAdapter):
     @staticmethod
     def execution_facts(result):
         """Classify required source loss from each AST operation's evidence."""
-        from ...utils.results import AnalysisCompleteness, result_execution_facts
+        from ...utils.results import AnalysisCompleteness, lost_evidence, result_execution_facts
         if isinstance(result, dict) and result.get('type') in ('ast_dict_heatmap', 'ast_dict_schemas', 'ast_reveal_type'):
             return _dedicated_execution_facts(result)
         if isinstance(result, dict):
             meta = result.get('meta', {})
-            lost = any(entry.get('type') in ('analysis_failed', 'analysis_incomplete', 'parse_recovered')
-                       for entry in meta.get('warnings', []))
+            lost = lost_evidence(meta.get('warnings'))
         else:
             lost = False
         state = AnalysisCompleteness.INCOMPLETE if lost else AnalysisCompleteness.COMPLETE

@@ -486,7 +486,7 @@ long-lived MCP server reports a broken plugin in every answer, not only the firs
 
 A `--format json` answer is the whole answer: nothing is printed on stderr beside it, and an MCP
 `reveal_query` JSON result is one content block, the CLI's JSON exactly (BACK-2659). Per-file
-failures are in the JSON (`analysis_failed`, `parse_degraded`, a rule's `unavailable` outcome, a
+failures are in the JSON (`analysis_failed`, `parse_recovered`, a rule's `unavailable` outcome, a
 file's `check_rules_failed`), so the per-file lines a text answer prints (`Warning: Failed to analyze
 <file>: <cause>`, `AST parse failed ... for <file>`, I003's `layer config ... could not be used`,
 `Check rules failed for <file>`, diff's `Skipping <file>@<ref> in directory scan`) are not printed in
@@ -506,8 +506,8 @@ text the text answer's per-file lines print.
   path inside `reason` is replaced by this one, so an absolute path does not leak through an error text.
 - `cause`: the class of the reason, the text before its first colon (`PermissionError`,
   `invalid Python source`); for a warning whose subjects share one cause and record no per-file text it
-  is the warning's kind (`worker_lost`, `partial_parse`, `parse_recovered`, `check_rules_failed`;
-  `parse_degraded`'s reason is Python's parse message and line for a `.py` file, as in
+  is the warning's kind (`worker_lost`, `parse_recovered`, `check_rules_failed`; metrics'
+  `parse_recovered` reason is Python's parse message and line for a `.py` file, as in
   `invalid syntax (line 4)`, else the line of the parse error). Metrics also puts that text on the
   file's own row as `parse_error` (a string), including on a file tree-sitter still reads, where it is
   the only trace and the exit code does not change.
@@ -515,7 +515,7 @@ text the text answer's per-file lines print.
   recorded.
 
 The warnings that carry it: `analysis_failed`, `analysis_incomplete` (one entry per directory and
-cause, plus each unlocated event), `worker_lost`, `partial_parse`, `parse_recovered`, `parse_degraded`,
+cause, plus each unlocated event), `worker_lost`, `parse_recovered`,
 `check_rules_failed`, `unreadable_files`, `entries_skipped` (entry names), `sheets_unsearched` (sheet
 names) and `file_measurement_failed` (the operation in parentheses after the reason). Entries are sorted
 by `path`. The field is additive: no exit code, count or completeness changes.
@@ -919,7 +919,7 @@ and no cycle seen, `metadata.has_cycles` is `null` (not determined); a cycle tha
 Hotspots defaults to `none` and supports `findings` using the owner's pre-cap
 `summary.has_findings`: quality below 70 or complexity above 20. Stats coverage
 is required in every mode; AST coverage/results are required unless `files_only`.
-Missing/malformed proof, errors and `parse_degraded`, `check_rules_failed`,
+Missing/malformed proof, errors and `check_rules_failed`,
 `analysis_failed`, `parse_recovered` or `analysis_incomplete` warnings prevent successful execution.
 With known required loss, positive uncapped Stats file coverage or surviving requested
 function observations establishes usable partial work; without either, analysis is

@@ -4,7 +4,7 @@ A file parsed with errors made ``?components``, ``?entrypoints``, ``?rank=fan-in
 exit 3 with nothing in the text and nothing in ``meta.warnings``: only ``metadata.files_failed_count``
 carried the loss. The base view, ``?circular``, ``?unused`` and ``?external`` printed it from three
 different text helpers, and no view put it in ``meta.warnings``. The disclosure is now the answer's
-meta warning (``partial_parse``, ``analysis_failed``, ``worker_lost``), shown once by the shared
+meta warning (``parse_recovered``, ``analysis_failed``, ``worker_lost``), shown once by the shared
 warning renderer, and scoped like the answer's own failure counts: a ``?external``/``?unused``/base
 answer lists only the files under the path, so a failure outside it is counted apart (BACK-2438) and
 is not a warning.
@@ -62,7 +62,7 @@ def _warnings(result, kind):
 def test_json_names_the_partial_parse_once_in_meta_warnings(broken_project, view):
     code, result = _json(f'imports://{broken_project}{view}')
     assert code == 3, result.get('metadata')
-    partial = _warnings(result, 'partial_parse')
+    partial = _warnings(result, 'parse_recovered')
     assert len(partial) == 1, result.get('meta')
     assert partial[0]['count'] == result['metadata']['files_failed_count'] == 1
     assert [f.rsplit('/', 1)[-1] for f in partial[0]['files']] == ['broken.py']
@@ -89,7 +89,7 @@ def test_clean_input_has_no_loss_warning_and_exits_0(clean_project, view):
     """Control: passes before and after the fix."""
     code, result = _json(f'imports://{clean_project}{view}')
     assert code == 0, result.get('meta')
-    assert not _warnings(result, 'partial_parse')
+    assert not _warnings(result, 'parse_recovered')
     response = _run_reveal_direct(f'imports://{clean_project}{view}')
     assert 'parsed with errors' not in response.stdout
 
@@ -110,7 +110,7 @@ def test_a_failure_outside_the_path_is_no_warning_where_it_cannot_change_the_ans
     assert code == 0, result.get('metadata')
     assert result['metadata']['files_failed_count'] == 0
     assert result['metadata']['files_failed_outside_target_count'] == 1
-    assert not _warnings(result, 'partial_parse')
+    assert not _warnings(result, 'parse_recovered')
 
 
 @pytest.mark.parametrize('view', WHOLE_GRAPH_VIEWS)
@@ -118,7 +118,7 @@ def test_a_failure_outside_the_path_is_named_where_it_can_hide_an_importer(outsi
     code, result = _json(f'imports://{outside_failure}{view}&scope=root')
     assert code == 3, result.get('metadata')
     assert result['metadata']['files_failed_count'] == 1
-    assert len(_warnings(result, 'partial_parse')) == 1, result.get('meta')
+    assert len(_warnings(result, 'parse_recovered')) == 1, result.get('meta')
 
 
 @pytest.mark.skipif(sys.platform == 'win32' or (hasattr(os, 'geteuid') and os.geteuid() == 0),
@@ -134,18 +134,18 @@ def test_an_unreadable_file_is_named_under_its_own_cause(broken_project):
     assert code == 3
     failed = _warnings(result, 'analysis_failed')
     assert len(failed) == 1 and [f.rsplit('/', 1)[-1] for f in failed[0]['files']] == ['secret.py']
-    assert len(_warnings(result, 'partial_parse')) == 1
+    assert len(_warnings(result, 'parse_recovered')) == 1
 
 
 def test_calls_modules_carries_one_partial_parse_not_two(broken_project):
     """calls ?modules composes the imports answer: the warning must not arrive twice."""
     code, result = _json(f'calls://{broken_project}?modules')
-    assert code == 0, result.get('meta')
-    assert len(_warnings(result, 'partial_parse')) == 1, result.get('meta')
+    assert code == 3, result.get('meta')  # a recovered file is lost evidence on every noun (BACK-2664)
+    assert len(_warnings(result, 'parse_recovered')) == 1, result.get('meta')
 
 
 def test_deps_carries_one_partial_parse_from_its_three_views(broken_project):
     """deps:// composes three views of one imports build; one loss is one warning."""
     code, result = _json(f'deps://{broken_project}')
     assert code == 3
-    assert len(_warnings(result, 'partial_parse')) == 1, result.get('meta')
+    assert len(_warnings(result, 'parse_recovered')) == 1, result.get('meta')

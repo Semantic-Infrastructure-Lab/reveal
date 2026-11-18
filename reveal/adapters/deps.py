@@ -18,7 +18,8 @@ from ..analyzers.imports import service as import_analysis
 from ..utils.query_parser import CliBinding, ParamSpec, QueryParams, ResourceSpec, nonnegative_display_limit, param_schema
 from ..utils.query_binding import bind_declared_params, boolean_value, verbose_legacy
 from ..rendering.adapters.deps import DepsRenderer
-from ..utils.results import AnalysisCompleteness, ExecutionFacts, ResultBuilder, merge_execution_facts, result_execution_facts
+from ..utils.results import (AnalysisCompleteness, ExecutionFacts, ResultBuilder, lost_evidence, merge_execution_facts,
+                             result_execution_facts)
 
 # BACK-1190: the stdlib list, local-package heuristic, and classifier itself
 # now live in reveal/analyzers/imports/classify.py -- shared with
@@ -141,8 +142,7 @@ def _component_state(name: str, result: Dict[str, Any], counts: Optional[Tuple[i
                      meta: Dict[str, Any]) -> AnalysisCompleteness:
     if result.get('error') or counts is None or not _valid_component_payload(name, result):
         return AnalysisCompleteness.FAILED
-    missing = any(w.get('type') in ('partial_parse', 'worker_lost', 'analysis_failed', 'parse_recovered', 'analysis_incomplete')
-                  for w in meta.get('warnings', []))
+    missing = lost_evidence(meta.get('warnings'))
     if any(counts) or meta.get('errors') or missing:
         return AnalysisCompleteness.INCOMPLETE
     return AnalysisCompleteness.COMPLETE
@@ -349,9 +349,7 @@ class DepsAdapter(ResourceAdapter):
         facts = merge_execution_facts(*(ExecutionFacts(AnalysisCompleteness(component['completeness']))
                                         for component in analysis['components'].values()))
         meta = result.get('meta') or {}
-        missing = bool(meta.get('errors')) or any(
-            warning.get('type') in ('partial_parse', 'worker_lost', 'analysis_failed', 'parse_recovered', 'analysis_incomplete')
-            for warning in meta.get('warnings', []))
+        missing = bool(meta.get('errors')) or lost_evidence(meta.get('warnings'))
         if missing:
             facts = merge_execution_facts(facts, ExecutionFacts(AnalysisCompleteness.INCOMPLETE))
         return result_execution_facts(

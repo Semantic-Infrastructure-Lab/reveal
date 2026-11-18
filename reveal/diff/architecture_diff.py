@@ -59,6 +59,8 @@ from ..defaults import (
 
 from ..reveal_types import ErrorEntry, RevealMeta, WarningEntry
 from ..adapters.base import ResourceAdapter
+# Warning types that mean required snapshot evidence is missing; the execution facts read the same set.
+from ..utils.results import LOST_EVIDENCE as _MISSING_EVIDENCE, PARSE_RECOVERED
 from ..utils.entry_points import active_entry_points
 from ..utils.path_utils import TestLayout, to_posix
 
@@ -443,15 +445,9 @@ def _snapshot(root: Path, top_n: int, *, test_layout: Optional[TestLayout] = Non
 def _complexity_state(meta: Dict[str, Any]) -> str:
     if meta.get('errors'):
         return 'failed'
-    missing = {'analysis_failed', 'parse_recovered'}
-    if any(w.get('type') in missing for w in meta.get('warnings', [])):
+    if any(w.get('type') in _MISSING_EVIDENCE for w in meta.get('warnings', [])):
         return 'incomplete'
     return 'complete'
-
-
-# Warning types that mean required snapshot evidence is missing; the execution facts read the same set.
-_MISSING_EVIDENCE = frozenset({'analysis_failed', 'parse_recovered', 'partial_parse', 'worker_lost',
-                               'analysis_incomplete'})
 
 
 def _sole_recovered_files(raw: Dict[str, Any]) -> Optional[List[str]]:
@@ -468,7 +464,7 @@ def _sole_recovered_files(raw: Dict[str, Any]) -> Optional[List[str]]:
         if warning.get('type') not in _MISSING_EVIDENCE:
             continue
         listed = warning.get('files') or []
-        if (warning.get('type') != 'parse_recovered' or warning.get('component') != 'complexity'
+        if (warning.get('type') != PARSE_RECOVERED or warning.get('component') != 'complexity'
                 or warning.get('count') != len(listed)):
             return None
         for file_str in listed:
@@ -499,7 +495,7 @@ def _recovered_listing(raw: Dict[str, Any]) -> Tuple[Set[str], int]:
     listed: Set[str] = set()
     count = 0
     for warning in (raw.get('meta') or {}).get('warnings', []):
-        if warning.get('type') == 'parse_recovered' and warning.get('component') == 'complexity':
+        if warning.get('type') == PARSE_RECOVERED and warning.get('component') == 'complexity':
             count += warning.get('count') or 0
             listed.update(rel for rel in (_relpath_or_none(f, raw['root']) for f in warning.get('files') or [])
                           if rel is not None)
@@ -547,7 +543,8 @@ def _exclude_unchanged_recovery(base_raw: Dict[str, Any], head_raw: Dict[str, An
         raw['complex_fns'] = kept[side]
         raw['completeness']['complexity'] = 'complete'
         meta = raw.get('meta') or {}
-        meta['warnings'] = [w for w in meta.get('warnings', []) if w.get('type') != 'parse_recovered']
+        meta['warnings'] = [w for w in meta.get('warnings', [])
+                            if not (w.get('type') == PARSE_RECOVERED and w.get('component') == 'complexity')]
     return base_files
 
 

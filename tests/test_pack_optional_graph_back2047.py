@@ -75,7 +75,7 @@ def assert_native_loss(observed, loss):
     assert native['graph'] is not None and native['warnings']
     types = {warning['type'] for warning in native['warnings']}
     if loss in ('parse', 'combined-known', 'combined-unknown'):
-        assert native['failed'] and 'partial_parse' in types
+        assert native['failed'] and 'parse_recovered' in types
     if loss != 'parse':
         assert observed['events'] == [observed['denied']]
         directory = next(w for w in native['warnings'] if w.get('unit') == 'directories')
@@ -155,16 +155,15 @@ def test_both_requested_signals_keep_existing_two_builds_and_deduplicate_origina
     assert all(row['fan_in'] == 0 for row in result['files'])
     assert {row['relative']: row['graph_relevance'] for row in result['files']} == {
         'core/worker.py': 1.0, 'bad.py': 0.0, 'included/helper.py': 0.0}
-    # Two builds, one loss each: named once. The recovered file is Pack's parse_recovered, not partial_parse too.
+    # Two builds, one loss each: named once. The recovered file is named in one parse_recovered warning.
     meta_warnings = result['meta']['warnings']
     messages = '\n'.join(w['message'] for w in meta_warnings)
     for entry in observed['builds'][0]['warnings']:
-        if entry['type'] == 'partial_parse':
+        if entry['type'] == 'parse_recovered':
             (recovered,) = [w for w in meta_warnings if w['type'] == 'parse_recovered']
             assert [Path(f).name for f in recovered['files']] == ['bad.py']
         else:
             assert messages.count(entry['message']) == 1
-    assert not any(w['type'] == 'partial_parse' for w in meta_warnings)
     assert 'relevance_warning' not in result['meta']
 
 

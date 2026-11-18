@@ -70,7 +70,7 @@ def test_attributed_preanalysis_rejection_stays_usage(identity, top_error):
 
 
 @pytest.mark.parametrize('identity', IDENTITIES)
-@pytest.mark.parametrize('warning', ['analysis_failed', 'parse_recovered', 'partial_parse',
+@pytest.mark.parametrize('warning', ['analysis_failed', 'parse_recovered', 'scan_capped',
                                     'worker_lost', 'analysis_incomplete'])
 def test_independent_required_loss_beats_usage_even_without_analysis(identity, warning):
     result = _result(identity, errors=[{'code': 'invalid_request', 'message': 'invalid entry'}],

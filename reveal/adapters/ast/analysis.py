@@ -18,7 +18,7 @@ from ...utils.path_utils import (
     analysis_skipped_warning as analysis_skipped_warning,
 )
 from ...utils.invocation_log import json_answer_running
-from ...utils.results import outcome_of
+from ...utils.results import PARSE_RECOVERED, outcome_of
 
 logger = logging.getLogger(__name__)
 
@@ -64,10 +64,10 @@ def recovered_files_warning(paths: Sequence[str]) -> Optional[WarningEntry]:
     shown = paths[:5]
     more = f" and {len(paths) - len(shown)} more" if len(paths) > len(shown) else ''
     return {
-        'type': 'parse_recovered',
+        'type': PARSE_RECOVERED,
         'count': len(paths),
         'files': shown,
-        'failures': failure_records([(f, None) for f in paths], cause='parse_recovered'),
+        'failures': failure_records([(f, None) for f in paths], cause=PARSE_RECOVERED),
         'message': f"{len(paths)} file(s) contain syntax tree-sitter could not read; their "
                    f"elements may be incomplete or wrong: {', '.join(shown)}{more}",
     }

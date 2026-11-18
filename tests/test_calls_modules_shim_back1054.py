@@ -228,13 +228,13 @@ def test_other_calls_modes_print_no_note_and_keep_their_answer(fx2):
     assert doc['type'] == 'calls_query' and doc['total_callers'] == 1
 
 
-def test_a_file_parsed_with_errors_is_disclosed_and_still_exits_0(tmp_path):
-    """calls ?modules exited 0 here (calls never treated a partial parse as loss), while imports exits 3
-    (D6). The shim keeps 0 and discloses the file under the warning imports builds for it."""
+def test_a_file_parsed_with_errors_is_disclosed_and_exits_3(tmp_path):
+    """calls ?modules exited 0 here while imports exits 3 (D6); a recovered file is degraded input on every
+    noun (BACK-2664), so the shim exits 3 too and names the file under the warning imports builds for it."""
     root = _write(tmp_path / 'partial', PARTIAL)
     run, doc = _json(f'calls://{(root / "src").as_posix()}?modules')
-    assert run.returncode == 0, run.stderr
-    (warning,) = [w for w in doc['meta']['warnings'] if w.get('type') == 'partial_parse']
+    assert run.returncode == 3, run.stderr
+    (warning,) = [w for w in doc['meta']['warnings'] if w.get('type') == 'parse_recovered']
     assert warning['files'] == ['bad.js'] and warning['count'] == 1
     assert ('a.js', 'b.js') in {(Path(e['from']).name, Path(e['to']).name) for e in doc['edges']}
     imports = _run_reveal_direct(f'imports://{(root / "src").as_posix()}?importers&scope=path', '--format', 'json')
@@ -342,17 +342,17 @@ def test_the_three_kinds_of_failed_file_are_told_apart(tmp_path):
         unread: ImportExtraction(parse_failed=True, read_error='PermissionError',
                                  diagnostics={'parse': {'status': 'unavailable', 'reason': 'denied'}})})
     warnings = {w['type']: w for w in file_loss_warnings(analysis, tmp_path)}
-    assert set(warnings) == {'partial_parse', 'worker_lost', 'analysis_failed'}
-    assert warnings['partial_parse']['files'] == ['partial.js']
+    assert set(warnings) == {'parse_recovered', 'worker_lost', 'analysis_failed'}
+    assert warnings['parse_recovered']['files'] == ['partial.js']
     assert warnings['worker_lost']['files'] == ['lost.py']
     assert warnings['analysis_failed']['files'] == ['unread.py'] and 'PermissionError' in warnings['analysis_failed']['message']
 
 
-@pytest.mark.parametrize('kind,exit_state', [('partial_parse', 'complete'), ('worker_lost', 'incomplete'),
+@pytest.mark.parametrize('kind,exit_state', [('parse_recovered', 'incomplete'), ('worker_lost', 'incomplete'),
                                              ('scan_capped', 'incomplete'), ('analysis_failed', 'incomplete')])
 def test_which_imports_warning_is_lost_evidence(fx2, kind, exit_state):
-    """A partial parse leaves the answer complete (exit 0); a lost worker, a capped walk and an unread file
-    make it incomplete (exit 3), as calls ?modules' own loss did."""
+    """A recovered parse, a lost worker, a capped walk and an unread file each make the answer incomplete
+    (exit 3): the one shared lost-evidence list (BACK-2664)."""
     from reveal.adapters.calls.adapter import CallsAdapter as Adapter
     result = Adapter(str(fx2), 'modules').get_structure()
     result['meta']['warnings'].append({'type': kind, 'message': 'controlled'})
@@ -361,13 +361,13 @@ def test_which_imports_warning_is_lost_evidence(fx2, kind, exit_state):
 
 def test_the_imports_answers_metadata_cut_is_not_repeated(tmp_path):
     """imports keeps the first 50 failed files in metadata and says so; this answer has no metadata, so
-    that cut note is dropped (the partial_parse warning counts them all)."""
+    that cut note is dropped (the parse_recovered warning counts them all)."""
     files = {'package.json': '{"name": "fx"}\n', 'src/a.js': 'export const a = 1;\n'}
     files.update({f'src/bad{i}.js': "import { a } from './a';\nfunction broken( {\n" for i in range(51)})
     root = _write(tmp_path / 'many', files)
     result = CallsAdapter(str(root / 'src'), 'modules').get_structure()
     assert not [w for w in result['meta']['warnings'] if str(w.get('field', '')).startswith('metadata.')]
-    (warning,) = [w for w in result['meta']['warnings'] if w.get('type') == 'partial_parse']
+    (warning,) = [w for w in result['meta']['warnings'] if w.get('type') == 'parse_recovered']
     assert warning['count'] == 51
     assert len(result['edges']) == 51
 

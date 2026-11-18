@@ -67,7 +67,7 @@ def test_lost_files_have_their_own_cause_in_metadata_and_warning(tmp_path, pools
     assert sorted(meta['files_lost']) == sorted(str(fp) for fp in lost)
     kinds = {w['type']: w for w in adapter.integrity_warnings(root)}
     assert kinds['worker_lost']['count'] == len(lost)
-    assert 'partial_parse' not in kinds, 'a lost file was never parsed; it is not a parse error'
+    assert 'parse_recovered' not in kinds, 'a lost file was never parsed; it is not a parse error'
     assert 'pool worker died' in kinds['worker_lost']['message']
 
 
@@ -76,7 +76,7 @@ def test_a_real_parse_failure_stays_a_partial_parse(tmp_path, pools):
     adapter = _build(root, pools, _Healthy)
     adapter.analysis.files_failed = [root / 'm0.py']  # what a tree-sitter error records
     kinds = {w['type'] for w in adapter.integrity_warnings(root)}
-    assert kinds == {'partial_parse'}
+    assert kinds == {'parse_recovered'}
 
 
 def test_imports_text_render_says_lost_not_parsed_with_errors(tmp_path, pools, capsys):

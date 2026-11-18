@@ -30,7 +30,7 @@ from ..utils.path_utils import (
 from ..utils.query_binding import bind_declared_params, boolean_value
 from ..utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSpec,
                                   nonnegative_display_limit, param_schema)
-from ..utils.results import ResultBuilder
+from ..utils.results import PARSE_RECOVERED, ResultBuilder
 from ..rendering.adapters.contracts import ContractsRenderer
 from ..reveal_types import PathFailure
 
@@ -1086,7 +1086,7 @@ class ContractsAdapter(ResourceAdapter):
             warnings.append(failed)
         recovered = report.get('recovered_files', [])
         if recovered:
-            warnings.append({'type': 'parse_recovered', 'count': len(recovered), 'files': recovered,
+            warnings.append({'type': PARSE_RECOVERED, 'count': len(recovered), 'files': recovered,
                              'message': f"{len(recovered)} file(s) contain recovered syntax; their contracts may be incomplete: {', '.join(recovered)}"})
         errors: List[ErrorEntry] = [
             {'code': 'E_CONTRACTS_ANALYSIS', 'file': file, 'message': cause}

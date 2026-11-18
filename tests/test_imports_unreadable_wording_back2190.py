@@ -44,11 +44,11 @@ def test_unreadable_file_is_named_unreadable_not_parsed_with_errors(tmp_path):
     assert 'PermissionError' in warnings['analysis_failed']['message']
     assert 'imports are missing' in warnings['analysis_failed']['message']
     # The syntax-error file keeps its own wording, and the unreadable one is not in it.
-    assert warnings['partial_parse']['files'] == ['bad.js']
-    assert 'parsed with errors' in warnings['partial_parse']['message']
+    assert warnings['parse_recovered']['files'] == ['bad.js']
+    assert 'parsed with errors' in warnings['parse_recovered']['message']
 
 
 def test_readable_tree_has_no_unreadable_warning(tmp_path):
     warnings = _warnings(_tree(tmp_path / 'fx'))
     assert 'analysis_failed' not in warnings
-    assert warnings['partial_parse']['files'] == ['bad.js']
+    assert warnings['parse_recovered']['files'] == ['bad.js']

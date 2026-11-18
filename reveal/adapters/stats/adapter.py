@@ -29,7 +29,8 @@ from ...utils.query_binding import bind_declared_params, boolean_value, switch_v
 from ...utils.gitignore import respect_gitignore_param
 from ...utils.path_utils import (TestLayout, failure_of, failure_records, provenance_for_display_path,
                                  to_relative_display)
-from ...utils.results import AnalysisCompleteness, ResultBuilder, note_truncation, note_warning, result_execution_facts
+from ...utils.results import (PARSE_RECOVERED, AnalysisCompleteness, lost_evidence, ResultBuilder, note_truncation,
+                              note_warning, result_execution_facts)
 from ...utils.validation import require_path_exists
 from ...utils.parallel import pool_worker_count, submit_each
 
@@ -257,9 +258,6 @@ def _validate_request(params: Any) -> None:
             raise RequestValidationError(message)
 
 
-# The warning types _disclose_failures emits that say the answer lacks files it should have counted.
-REQUIRED_WARNINGS = frozenset({'analysis_failed', 'analysis_incomplete', 'parse_degraded', 'check_rules_failed'})
-
 _SCHEMA_OUTPUT_TYPES = [
     {
         'type': 'stats_summary',
@@ -470,7 +468,7 @@ class MetricsAdapter(ResourceAdapter):
         meta = result.get('meta') or {}
         if result.get('error') or meta.get('errors'):
             return result_execution_facts(result, completeness=AnalysisCompleteness.FAILED)
-        lost = any(warning.get('type') in REQUIRED_WARNINGS for warning in meta.get('warnings', []))
+        lost = lost_evidence(meta.get('warnings'))
         summary = result.get('summary')
         return result_execution_facts(
             result, completeness=AnalysisCompleteness.INCOMPLETE if lost else AnalysisCompleteness.COMPLETE,
@@ -611,7 +609,7 @@ class MetricsAdapter(ResourceAdapter):
         (min_complexity is an average), ?tests= ranking scope, page or top cut moves it (BACK-2149).
         """
         self._analysis_failures = [s for s in all_stats
-                                   if is_failure(s) or s and (s.get('parse_degraded')
+                                   if is_failure(s) or s and (s.get(PARSE_RECOVERED)
                                                               or s.get('check_rules_failed'))]
         analysed = [s for s in all_stats if s and not is_failure(s)]
         self._analyzed_count = len(analysed)
@@ -707,10 +705,10 @@ class MetricsAdapter(ResourceAdapter):
         """Directory loss has an unknown missing file population."""
         self._traversal_failures.append(failure_of(error))
 
-    def _parse_degraded_warning(self) -> Optional[Dict[str, Any]]:
+    def _parse_recovered_warning(self) -> Optional[Dict[str, Any]]:
         """The files the parser read only with error recovery, named with the line where known: stderr
         alone carried which files and why before (COMMAND_MODEL 'Transports', BACK-2650)."""
-        degraded = sorted((s for s in self._analysis_failures if s.get('parse_degraded')), key=lambda s: s['file'])
+        degraded = sorted((s for s in self._analysis_failures if s.get(PARSE_RECOVERED)), key=lambda s: s['file'])
         if not degraded:
             return None
         shown = [to_relative_display(s['file'], self.path) for s in degraded[:5]]
@@ -720,10 +718,10 @@ class MetricsAdapter(ResourceAdapter):
         lines = [(s['file'], s.get('parse_error') or (f"parse error at line {s['parse_error_line']}"
                                                        if s.get('parse_error_line') else None))
                  for s in degraded]
-        return {'type': 'parse_degraded', 'count': len(degraded), 'files': shown,
-                'failures': failure_records(lines, self.path, cause='parse_degraded'),
-                'message': (f"{len(degraded)} file(s) did not parse cleanly; statistics may be incomplete: "
-                            f"{', '.join(places)}{more}")}
+        return {'type': PARSE_RECOVERED, 'count': len(degraded), 'files': shown,
+                'failures': failure_records(lines, self.path, cause=PARSE_RECOVERED),
+                'message': (f"{len(degraded)} file(s) contain syntax the parser could not read; statistics may be "
+                            f"incomplete: {', '.join(places)}{more}")}
 
     def _disclose_failures(self, result: dict) -> None:
         """Disclose directory and file analysis loss without treating totals as complete."""
@@ -731,7 +729,7 @@ class MetricsAdapter(ResourceAdapter):
         note_warning(result, cast(Optional[Dict[str, Any]],
                                   traversal_failed_warning(self._traversal_failures, self.path)))
         self._disclose_issue_count(result)
-        note_warning(result, self._parse_degraded_warning())
+        note_warning(result, self._parse_recovered_warning())
         rules_failed = sorted(s['file'] for s in self._analysis_failures if s.get('check_rules_failed'))
         if rules_failed:
             shown = rules_failed[:5]

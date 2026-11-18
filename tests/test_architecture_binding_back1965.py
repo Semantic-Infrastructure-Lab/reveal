@@ -65,7 +65,7 @@ def test_expansion_changes_only_the_canonical_map(tmp_path, query, keywords):
 
 
 @pytest.mark.parametrize('warning,incomplete', [
-    ('partial_parse', True), ('worker_lost', True), ('analysis_failed', True),
+    ('scan_capped', True), ('worker_lost', True), ('analysis_failed', True),
     ('parse_recovered', True), ('complexity_is_unweighted', False), ('truncated', False),
 ])
 def test_explicit_missing_evidence_taxonomy(warning, incomplete):
@@ -109,7 +109,7 @@ def test_schema_preserves_existing_parameter_examples():
 
 
 @pytest.mark.parametrize('identity', ['overview_diff'])
-@pytest.mark.parametrize('warning', ['analysis_failed', 'partial_parse', 'worker_lost', 'parse_recovered'])
+@pytest.mark.parametrize('warning', ['analysis_failed', 'scan_capped', 'worker_lost', 'parse_recovered'])
 def test_missing_evidence_wins_over_usage_without_analysis_record(identity, warning):
     from reveal.utils.results import ResultBuilder, execution_exit_code
     result = ResultBuilder.create(identity, '.',

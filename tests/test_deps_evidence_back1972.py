@@ -99,7 +99,7 @@ def test_unused_only_lost_inputs_and_diagnostic_cap_survive_projection(tmp_path,
     assert warning['field'] in warning['message']
 
 
-@pytest.mark.parametrize('warning', ['partial_parse', 'worker_lost', 'analysis_failed', 'parse_recovered'])
+@pytest.mark.parametrize('warning', ['scan_capped', 'worker_lost', 'analysis_failed', 'parse_recovered'])
 def test_explicit_child_missing_evidence_warning_is_retained(tmp_path, monkeypatch, warning):
     result = child('unused')
     result['meta'] = {'warnings': [{'type': warning, 'message': 'known missing input'}], 'errors': []}

@@ -12,7 +12,7 @@ from ..global_flags import add_gitignore_arguments, rule_patterns
 from ..routing.ledger import complete
 from ..routing.subcommand import emit_subcommand_result
 from ...utils.git_range import changed_files as _changed_files, git_range_error as _git_range_error
-from ...utils.results import RESULT_CONTROL_WARNINGS, note_truncation, requested_fail_on
+from ...utils.results import RESULT_CONTROL_WARNINGS, lost_evidence, note_truncation, requested_fail_on
 from ...utils.warning_render import collect_meta_warnings, render_meta_warnings
 
 # Hotspots and complex functions each list their top this-many (BACK-1543 records the rest).
@@ -167,8 +167,7 @@ def _add_top_section(report: Dict[str, Any], name: str, ranked: List[Dict[str, A
 
 def _lost_analysis(report: Dict[str, Any]) -> bool:
     """True when hotspot or complexity analysis lost required files or directories."""
-    return any(w.get('type') in {'analysis_failed', 'analysis_incomplete'}
-               for w in report.get('meta', {}).get('warnings', []))
+    return lost_evidence(report.get('meta', {}).get('warnings'))
 
 
 def _review_outcome(violations: List[Dict[str, Any]], errors: List[str],

@@ -3,7 +3,7 @@
 With a sibling that failed to parse, ``?circular`` exited 3 and its JSON listed ``files_failed``, but
 the text printed "✅ No circular dependencies found!" and named no file: the green line the BACK-1245
 class was about. The base ``imports://`` view already listed the failed files; both now print the
-same block: since BACK-2524 the answer's one ``partial_parse`` meta warning, which names the files.
+same block: since BACK-2524 the answer's one ``parse_recovered`` meta warning, which names the files.
 """
 from conftest import _run_reveal_direct
 

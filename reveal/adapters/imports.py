@@ -50,7 +50,7 @@ from ..registry import get_code_extensions
 from ..utils.path_utils import (TestLayout, hidden_entries_warning, to_posix, to_relative_display,
                                 named_path_candidates as _named_candidates)
 from ..utils.query_control import ScanBudget
-from ..utils.results import ResultBuilder, note_truncation
+from ..utils.results import ResultBuilder, lost_evidence, note_truncation
 from ..utils.warning_render import meta_warning_lines
 
 def _discovery_incomplete(result: Dict[str, Any]) -> bool:
@@ -1405,8 +1405,7 @@ def _incomplete(result: Dict[str, Any]) -> bool:
         return True
     if (metadata.get('scan_budget') or {}).get('capped'):
         return True
-    return any(w.get('type') in ('analysis_incomplete', 'scan_capped')
-               for w in (result.get('meta') or {}).get('warnings', []))
+    return lost_evidence((result.get('meta') or {}).get('warnings'))
 
 
 @register_adapter('imports')

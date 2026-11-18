@@ -28,7 +28,7 @@ from ..utils.query_parser import (CliBinding, ParamSpec, ParamValueError, QueryP
                                   exclude_param, nonempty_scalar, nonnegative_display_limit, param_schema,
                                   split_exclude_param)
 from ..utils.query_parser import peek_query_items
-from ..utils.results import ResultBuilder, note_truncation
+from ..utils.results import ResultBuilder, lost_evidence, note_truncation
 
 logger = logging.getLogger(__name__)
 
@@ -164,8 +164,7 @@ def _run_imports_analysis(adapter: 'OverviewAdapter', path: Path, top: int, *, s
                 'message': 'Required import discovery failed and no relationship observations survived.'}]})
             return facts, 'failed'
         incomplete = (bool(metadata['files_failed_count']) or bool(metadata['files_lost_count'])
-                      or budget['exact'] is not True or any(w['type'] in (
-                          'analysis_incomplete', 'analysis_failed', 'partial_parse', 'worker_lost', 'scan_capped') for w in warnings))
+                      or budget['exact'] is not True or lost_evidence(warnings))
         return facts, 'incomplete' if incomplete else 'complete'
     except Exception as exc:  # boundary-ok: broad-except -- required import-service composition boundary; extraction, resolution, view validation and pool failures must be attributed before a failed map is returned
         adapter.record_composed_error('ImportsAdapter', path, exc)

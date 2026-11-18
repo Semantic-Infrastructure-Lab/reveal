@@ -6,6 +6,7 @@ from .types import ImportAnalysis
 from ...reveal_types import PathFailure, WarningEntry
 from ...utils.parallel import worker_lost_warning as _worker_lost_warning
 from ...utils.path_utils import failure_records, respell_reason, to_posix, to_relative_display
+from ...utils.results import PARSE_RECOVERED
 
 def worker_lost_warning(lost_files: List[str], base: Optional[Path] = None) -> Optional[WarningEntry]:
     """One meta warning for the files a dead pool worker took down before they were
@@ -28,10 +29,10 @@ def parse_failure_warning(failed_files: List[str], base: Optional[Path] = None) 
     shown = [to_relative_display(f, base) if base else to_posix(f) for f in sorted(failed_files)[:5]]
     more = f" and {len(failed_files) - len(shown)} more" if len(failed_files) > len(shown) else ''
     return {
-        'type': 'partial_parse',
+        'type': PARSE_RECOVERED,
         'count': len(failed_files),
         'files': shown,
-        'failures': failure_records([(f, None) for f in failed_files], base, cause='partial_parse'),
+        'failures': failure_records([(f, None) for f in failed_files], base, cause=PARSE_RECOVERED),
         'message': (
             f"{len(failed_files)} file(s) parsed with errors -- their imports may be incomplete, "
             f"so import-graph results can under-report: {', '.join(shown)}{more}"
@@ -45,7 +46,7 @@ def file_loss_warnings(analysis: ImportAnalysis, base: Optional[Path] = None, *,
     """The per-file facts of one import build, each under its own cause (BACK-2190).
 
     ``files_failed`` holds three different things, and the user's next step differs: a file
-    tree-sitter recovered with ERROR nodes (``partial_parse``: its recovered imports are edges), a
+    tree-sitter recovered with ERROR nodes (``parse_recovered``: its recovered imports are edges), a
     file never parsed because it could not be read (``analysis_failed``, named by the OSError type:
     no tree, its imports are missing) and a file a dead pool worker took (``worker_lost``).
     ``spell`` names each file as the answer does (imports' ``_path_display``) instead of ``base``.
@@ -73,7 +74,7 @@ def file_loss_warnings(analysis: ImportAnalysis, base: Optional[Path] = None, *,
 
 
 def recovered_paths(analysis: ImportAnalysis, *, within: Optional[Callable[[Path], bool]] = None) -> List[Any]:
-    """The files of one import build that tree-sitter read only through error recovery (``partial_parse``),
+    """The files of one import build that tree-sitter read only through error recovery (``parse_recovered``),
     in build order: failed, but neither unreadable nor taken by a dead worker. ``within`` keeps only the
     files the answer counts as its own (see ``file_loss_warnings``)."""
     counted = (lambda path: True) if within is None else within

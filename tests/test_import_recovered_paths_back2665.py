@@ -1,6 +1,6 @@
 """recovered_paths: the files one import build read only through error recovery (BACK-2665).
 
-One owner for the set ``file_loss_warnings`` names as ``partial_parse``, so a consumer that needs the
+One owner for the set ``file_loss_warnings`` names as ``parse_recovered``, so a consumer that needs the
 paths (Pack's parse_recovered disclosure) reads them instead of re-deriving the three-way split.
 """
 from pathlib import Path
@@ -43,7 +43,7 @@ def test_matches_the_partial_parse_warning_of_a_real_build(tmp_path):
     analysis = import_service.analyze(import_service.path_scope(tmp_path.resolve())).analysis
     paths = recovered_paths(analysis)
     assert [Path(p).name for p in paths] == ['b.py']
-    (partial,) = [w for w in file_loss_warnings(analysis) if w['type'] == 'partial_parse']
+    (partial,) = [w for w in file_loss_warnings(analysis) if w['type'] == 'parse_recovered']
     assert partial['count'] == len(paths) and partial['files'] == [Path(p).as_posix() for p in paths]
 
 

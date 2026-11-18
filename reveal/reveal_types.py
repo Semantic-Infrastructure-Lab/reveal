@@ -40,7 +40,7 @@ class _DiagnosticFields(TypedDict, total=False):
     message: str
     file: str
     fallback: str
-    # A disclosure about a set of files ('partial_parse', BACK-1598): its size
+    # A disclosure about a set of files ('parse_recovered', BACK-1598): its size
     # and the first few, relative to the target.
     count: int
     files: List[str]

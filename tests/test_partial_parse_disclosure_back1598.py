@@ -5,7 +5,7 @@ extraction pass: a cold `reveal overview` of Redis src/ printed 364 such stderr
 lines (each file three times, plus one I001 line per file), and a warm run
 printed none, because extraction is cached and stdout never said it. Now the
 extractor only sets parse_failed, and each command that builds an import graph
-states the failed set once: a `partial_parse` meta warning for overview and
+states the failed set once: a `parse_recovered` meta warning for overview and
 architecture (rendered under "Caveats"), a warning line for depends://.
 """
 
@@ -52,7 +52,7 @@ def test_disclosed_once_in_the_result_cold_and_warm(tree, tmp_path, command):
         assert text.stdout.count('parsed with errors') == 1, f"{run}: disclosed more than once"
 
         data = _run([*command, str(tree), '--format', 'json'], cache)
-        warnings = [w for w in json.loads(data.stdout)['meta']['warnings'] if w['type'] == 'partial_parse']
+        warnings = [w for w in json.loads(data.stdout)['meta']['warnings'] if w['type'] == 'parse_recovered']
         assert len(warnings) == 1, f"{run}: {warnings}"
         assert warnings[0]['count'] == 3
         assert warnings[0]['files'] == ['broken_0.c', 'broken_1.c', 'broken_2.c']
@@ -71,4 +71,4 @@ def test_clean_tree_says_nothing(tmp_path):
     (src / 'ok.c').write_text('int ok(void) { return 1; }\n', encoding='utf-8')
     data = _run(['overview', str(src), '--format', 'json'], tmp_path / 'cache')
     meta = json.loads(data.stdout).get('meta') or {}
-    assert not [w for w in meta.get('warnings') or [] if w['type'] == 'partial_parse']
+    assert not [w for w in meta.get('warnings') or [] if w['type'] == 'parse_recovered']

@@ -23,7 +23,7 @@ from ..rendering.adapters.testability import TestabilityRenderer
 from ..utils.query_binding import bind_declared_params, boolean_value, verbose_legacy
 from ..utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSpec,
                                   param_schema, peek_query_items, whole_number)
-from ..utils.results import AnalysisCompleteness, result_execution_facts
+from ..utils.results import AnalysisCompleteness, lost_evidence, result_execution_facts
 
 
 def _whole_control(value: Any) -> int:
@@ -64,10 +64,7 @@ def _string_list(value: Any) -> bool:
 
 def _required_loss(result: Dict[str, Any]) -> bool:
     meta = result.get('meta', {})
-    kinds = {'analysis_failed', 'parse_recovered', 'analysis_incomplete', 'partial_parse', 'worker_lost'}
-    return bool(meta.get('errors')) or any(
-        isinstance(warning, dict) and warning.get('type') in kinds
-        for warning in meta.get('warnings', []))
+    return bool(meta.get('errors')) or lost_evidence(meta.get('warnings'))
 
 
 def _ranked_patch_valid(row: Any) -> bool:

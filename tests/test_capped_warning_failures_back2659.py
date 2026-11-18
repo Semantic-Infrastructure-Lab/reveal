@@ -81,8 +81,8 @@ def test_analysis_incomplete_lists_every_directory_and_unlocated_event(tmp_path)
 
 @pytest.mark.parametrize('build,kind', [
     (lambda paths, base: worker_lost_warning(paths, 'their results are missing', base), 'worker_lost'),
-    (lambda paths, base: parse_failure_warning(paths, base), 'partial_parse'),
-], ids=['worker_lost', 'partial_parse'])
+    (lambda paths, base: parse_failure_warning(paths, base), 'parse_recovered'),
+], ids=['worker_lost', 'parse_recovered'])
 def test_a_single_cause_warning_lists_every_file_under_its_own_kind(tmp_path, build, kind):
     warning = build([str(tmp_path / name) for name in NAMES], tmp_path)
     _assert_capped_and_complete(warning, 7, NAMES)
@@ -160,15 +160,15 @@ def test_metrics_failures_list_every_file(tmp_path):
     adapter = StatsAdapter(str(tmp_path))
     adapter._traversal_failures = []
     adapter._analysis_failures = (
-        [{'file': f'p{n}.py', 'parse_degraded': True, 'parse_error_line': n + 1} for n in range(7)]
+        [{'file': f'p{n}.py', 'parse_recovered': True, 'parse_error_line': n + 1} for n in range(7)]
         + [{'file': f'r{n}.py', 'check_rules_failed': True} for n in range(7)]
         + [{'path': str(tmp_path / f'x{n}.py'), 'analysis_failed': f'ValueError: broken {n}'} for n in range(7)])
     result = {'summary': {}}
     adapter._disclose_failures(result)
     warnings = {w['type']: w for w in result['meta']['warnings']}
-    degraded, rules, failed = warnings['parse_degraded'], warnings['check_rules_failed'], warnings['analysis_failed']
+    degraded, rules, failed = warnings['parse_recovered'], warnings['check_rules_failed'], warnings['analysis_failed']
     _assert_capped_and_complete(degraded, 7, [f'p{n}.py' for n in range(7)])
-    assert degraded['failures'][6] == {'path': 'p6.py', 'cause': 'parse_degraded', 'reason': 'parse error at line 7'}
+    assert degraded['failures'][6] == {'path': 'p6.py', 'cause': 'parse_recovered', 'reason': 'parse error at line 7'}
     _assert_capped_and_complete(rules, 7, [f'r{n}.py' for n in range(7)])
     _assert_capped_and_complete(failed, 7, [f'x{n}.py' for n in range(7)])
     assert failed['failures'][6] == {'path': 'x6.py', 'cause': 'ValueError', 'reason': 'ValueError: broken 6'}
@@ -299,15 +299,15 @@ def test_a_broken_python_file_carries_pythons_parse_message_and_line(tmp_path, n
     (root / 'ok.py').write_text('def a():\n    return 1\n', encoding='utf-8')
     result = _cli(tmp_path, f'{noun}://{root.as_posix()}', '--format', 'json')
     assert result.stderr == ''
-    (warning,) = [w for w in json.loads(result.stdout)['meta']['warnings'] if w['type'] == 'parse_degraded']
-    assert warning['failures'] == [{'path': 'b.py', 'cause': 'parse_degraded', 'reason': _python_reason(BROKEN_PY)}]
+    (warning,) = [w for w in json.loads(result.stdout)['meta']['warnings'] if w['type'] == 'parse_recovered']
+    assert warning['failures'] == [{'path': 'b.py', 'cause': 'parse_recovered', 'reason': _python_reason(BROKEN_PY)}]
     text = _cli(tmp_path, f'{noun}://{root.as_posix()}')
     assert _python_reason(BROKEN_PY).split(' (line')[0] in text.stderr  # the line the JSON now carries
 
 
 @pytest.mark.cli
 def test_a_file_only_python_rejects_carries_the_message_on_its_row_and_keeps_its_exit(tmp_path):
-    """tree-sitter reads ``a := 1``, so the file is not parse_degraded and the exit is unchanged; the
+    """tree-sitter reads ``a := 1``, so the file is not parse_recovered and the exit is unchanged; the
     rules that parse it with Python skipped it, and the text answer's log line said why: the row says it."""
     root = tmp_path / 'proj'
     root.mkdir()
@@ -317,7 +317,7 @@ def test_a_file_only_python_rejects_carries_the_message_on_its_row_and_keeps_its
     assert result.returncode == 0 and result.stderr == ''
     rows = {row['file']: row for row in json.loads(result.stdout)['files']}
     assert rows['w.py']['parse_error'] == _python_reason(WALRUS_PY)
-    assert not rows['w.py'].get('parse_degraded')
+    assert not rows['w.py'].get('parse_recovered')
     assert 'parse_error' not in rows['ok.py']  # negative control: a clean file has no such field
 
 

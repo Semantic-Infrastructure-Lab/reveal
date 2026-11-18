@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, cast
 
-from reveal.reveal_types import CONTRACT_VERSION
+from reveal.reveal_types import CONTRACT_VERSION, WarningEntry
 
 from .base import ResourceAdapter, register_adapter, register_renderer
 from .stats.aggregation import has_findings as _has_findings
@@ -18,7 +18,7 @@ from ..utils.path_utils import EVIDENCE, resolve_project_root, walk_tree
 from ..utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSpec,
                                   nonnegative_display_limit, param_schema, whole_number)
 from ..utils.query_binding import bind_declared_params, boolean_value, verbose_legacy
-from ..utils.results import AnalysisCompleteness, ResultBuilder, result_execution_facts
+from ..utils.results import LOST_EVIDENCE, PARSE_RECOVERED, AnalysisCompleteness, ResultBuilder, result_execution_facts
 
 
 def _hotspots_top(value: Any) -> int:
@@ -59,8 +59,6 @@ _FILES_ONLY = ParamSpec('files_only', 'boolean', 'Skip function analysis', False
                        boolean_value, ('files_only=true',), role='analysis',
                        cli=CliBinding(('--files-only',), action='store_true'))
 _COMPOSE_FAILED = object()
-_REQUIRED_WARNINGS = {'parse_degraded', 'check_rules_failed', 'analysis_failed', 'parse_recovered',
-                      'analysis_incomplete'}
 
 
 def _is_count(value: Any) -> bool:
@@ -200,10 +198,31 @@ def _run_file_hotspots(adapter: 'HotspotsAdapter', path: Path, top: int) -> List
     return _rank_entries(data.get('hotspots'), 'quality_score')
 
 
+def _one_recovered_warning(warnings: List[WarningEntry], base: Path) -> List[WarningEntry]:
+    """Keep one ``parse_recovered`` warning per answer: metrics' (first, with each file's parse line) and
+    ast's name the same recovered files in their own words and spellings (metrics relative to *base*, ast
+    as the path was given). A later one is dropped only when every file it names is in an earlier one, so
+    a file only one side saw is still named (BACK-2664)."""
+    def places(name: str) -> Set[str]:
+        return {Path(name).resolve().as_posix(), (base / name).resolve().as_posix()}
+
+    kept: List[WarningEntry] = []
+    seen: Set[str] = set()
+    for warning in warnings:
+        if warning.get('type') == PARSE_RECOVERED:
+            named = [record.get('path') for record in warning.get('failures') or []] or warning.get('files') or []
+            if seen and all(places(str(name)) & seen for name in named):
+                continue
+            for name in named:
+                seen |= places(str(name))
+        kept.append(warning)
+    return kept
+
+
 def _record_function_scan_coverage(adapter: 'HotspotsAdapter', path: Path) -> None:
     """--functions-only runs no stats scan, so nothing says how many files the function
     scan covered or which did not parse (BACK-1839 F4). Take the same coverage record the
-    default mode has, from stats' summary and its parse_degraded warning, without ranking files."""
+    default mode has, from stats' summary and its parse_recovered warning, without ranking files."""
     _compose_stats(adapter, path, summary_only=True)
 
 
@@ -362,7 +381,7 @@ class HotspotsAdapter(ResourceAdapter):
             return result_execution_facts(result, completeness=AnalysisCompleteness.FAILED)
         meta = result.get('meta') or {}
         missing = bool(meta.get('errors')) or any(
-            warning.get('type') in _REQUIRED_WARNINGS for warning in meta.get('warnings', []))
+            warning.get('type') in LOST_EVIDENCE for warning in meta.get('warnings', []))
         usable = result['summary']['total_files'] > 0 or bool(result['function_hotspots'])
         state = AnalysisCompleteness.COMPLETE
         if missing:
@@ -494,7 +513,7 @@ class HotspotsAdapter(ResourceAdapter):
 
             meta = self.composed_meta()
             from reveal.adapters.overview import without_internal_filter_warnings
-            warnings = without_internal_filter_warnings(meta)
+            warnings = _one_recovered_warning(without_internal_filter_warnings(meta), Path(path))
             if unknown_families:
                 warnings.append({
                     'type': 'test_convention_unknown',

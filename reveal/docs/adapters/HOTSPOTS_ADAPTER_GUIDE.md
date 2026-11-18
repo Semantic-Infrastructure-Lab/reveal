@@ -106,8 +106,8 @@ replaces the former automatic CLI text findings gate.
 Stats coverage is required in every mode, including both only-flags together.
 AST coverage/results are required unless `files_only` is enabled. Missing or
 malformed child proof and failed parse/check analysis remain failures before
-ranking or field projection. `parse_degraded`, `check_rules_failed`,
-`analysis_failed` and `parse_recovered` indicate incomplete required work;
+ranking or field projection. `check_rules_failed`, `analysis_failed` and
+`parse_recovered` (named once, though metrics and AST both see the file) indicate incomplete required work;
 optional churn/test conventions, confidence alone and ranking cuts do not.
 Surviving observations and attributed diagnostics remain available.
 

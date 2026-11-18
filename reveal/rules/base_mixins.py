@@ -40,7 +40,7 @@ def _cached_ast_outcome(content: str, file_path: str) -> Tuple[Optional[ast.AST]
     maxsize=4 keeps memory bounded while covering all rules on one file.
     ``why`` is the parser's message with its line (``invalid syntax (line 4)``).
     """
-    # The answer records the file as not parsed (metrics' parse_degraded and the row's parse_error, check's
+    # The answer records the file as not parsed (metrics' parse_recovered and the row's parse_error, check's
     # rule outcomes), so beside a JSON answer the log line would only repeat it (BACK-2659).
     level = logging.DEBUG if json_answer_running() else logging.WARNING
     try:

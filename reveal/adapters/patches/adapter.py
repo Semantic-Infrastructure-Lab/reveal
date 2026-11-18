@@ -14,16 +14,13 @@ from reveal.utils.path_utils import TestLayout, to_posix
 from reveal.utils.query_binding import bind_declared_params, boolean_value
 from reveal.utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSpec, param_schema,
                                        peek_query_items, whole_number)
-from reveal.utils.results import AnalysisCompleteness, ResultBuilder, note_truncation, result_execution_facts
+from reveal.utils.results import AnalysisCompleteness, lost_evidence, ResultBuilder, note_truncation, result_execution_facts
 from reveal.utils.validation import require_path_exists
 
 from ...rendering.adapters.patches import PatchesRenderer
 from ...errors import NotApplicableError
 from ..testability import PRESSURE_SPECS, TestabilityAdapter, _report_error, testability_report
 
-
-# The warning types a patch scan emits when it lost files it should have read.
-_REQUIRED_WARNINGS = frozenset({'analysis_failed', 'analysis_incomplete', 'parse_recovered'})
 
 # The declaration `reveal patches` and patches:// are both generated from (BACK-2160). The default view is the raw
 # scan of a test root; ?view=pressure is testability's report (was testability://), whose path is the production
@@ -118,7 +115,7 @@ class PatchesAdapter(ResourceAdapter):
         if isinstance(result, dict) and result.get('type') == TestabilityAdapter.RESULT_TYPE:
             return TestabilityAdapter.execution_facts(result)
         meta = result.get('meta') or {} if isinstance(result, dict) else {}
-        lost = any(w.get('type') in _REQUIRED_WARNINGS for w in meta.get('warnings', []) if isinstance(w, dict))
+        lost = lost_evidence(meta.get('warnings'))
         return result_execution_facts(
             result, completeness=AnalysisCompleteness.INCOMPLETE if lost else AnalysisCompleteness.COMPLETE)
 

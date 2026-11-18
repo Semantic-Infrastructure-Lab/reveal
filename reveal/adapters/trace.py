@@ -37,7 +37,7 @@ from ..utils.query_binding import bind_declared_params
 from ..utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSpec, clamped_whole,
                                   nonempty_scalar, param_schema, peek_query_items)
 from ..utils.path_utils import to_posix
-from ..utils.results import ResultBuilder
+from ..utils.results import ResultBuilder, lost_evidence
 from ..reveal_types import PathFailure
 
 
@@ -500,10 +500,8 @@ def _trace_missing_evidence(result: Dict[str, Any]) -> bool:
         return True
     if any(not isinstance(entry, dict) for entry in [*errors, *warnings]):
         return True
-    required = {'analysis_failed', 'parse_recovered', 'partial_parse', 'parse_degraded',
-                'worker_lost', 'check_rules_failed', 'analysis_incomplete'}
     return (any(entry.get('code') != 'trace_root_not_found' for entry in errors)
-            or any(entry.get('type') in required for entry in warnings))
+            or lost_evidence(warnings))
 
 
 def _trace_absent(result: Dict[str, Any]) -> bool:

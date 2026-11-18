@@ -76,7 +76,7 @@ def _assert_native_loss(state, profile):
     assert state['builds'], state
     warnings = state['builds'][-1][1]
     if profile in ('parse', 'combined'):
-        assert any(w['type'] == 'partial_parse' for w in warnings), warnings
+        assert any(w['type'] == 'parse_recovered' for w in warnings), warnings
     if profile != 'parse':
         assert state['events'], state
         directories = [w for w in warnings if w.get('unit') == 'directories']
@@ -135,7 +135,6 @@ def test_two_requested_signals_keep_primary_rows_and_deduplicate_native_causes(
     expected = [[(tmp_path / 'bad.py').as_posix()]] if profile in ('parse', 'combined') else []
     meta_warnings = answer['meta'].get('warnings', [])
     assert [w['files'] for w in meta_warnings if w['type'] == 'parse_recovered'] == expected
-    assert not any(w['type'] == 'partial_parse' for w in meta_warnings)
     directories = _directory_losses(answer)
     native_directories = [w for w in warnings if w.get('unit') == 'directories']
     assert len(directories) == len(native_directories) == (0 if profile == 'parse' else 1)
@@ -169,7 +168,6 @@ def test_public_legacy_success_reports_optional_fallback_with_healthy_candidates
         assert answer['files'] and not answer.get('error')
         (recovered,) = [w for w in answer['meta']['warnings'] if w['type'] == 'parse_recovered']
         assert [f.rsplit('/', 1)[-1] for f in recovered['files']] == ['bad.py']
-        assert not any(w['type'] == 'partial_parse' for w in answer['meta']['warnings'])
         assert 'relevance_warning' not in answer['meta']
         note = '\n'.join(w['message'] for w in answer['meta']['warnings'])
     else:

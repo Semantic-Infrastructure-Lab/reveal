@@ -140,7 +140,7 @@ notes:
   - 'where takes the operator filters on both spellings: --where ''lines>50'' and ?where=lines>50 (or the bare key ?lines>50)'
   - 'view=hotspots ranks the whole filtered population; limit and offset page the ranked rows'
   - 'Explicit tests=include|exclude reports test_scope with the selected policy basis, anchor/source and ranking-only files_excluded. Ordinary overview does not request this ranking'
-  - 'Exit codes: 0 complete, 1 with view=hotspots and --fail-on findings when summary.has_findings is true, 2 rejected request, 3 files lost or not analyzed (analysis_failed, parse_degraded, check_rules_failed, an unreadable directory)'
+  - 'Exit codes: 0 complete, 1 with view=hotspots and --fail-on findings when summary.has_findings is true, 2 rejected request, 3 files lost or not analyzed (analysis_failed, parse_recovered, check_rules_failed, an unreadable directory)'
   - 'view=hotspots adds summary.has_findings: some analysed file has quality below 70 or a function with complexity above 20 (fixed thresholds). It is taken over every analysed file, before where, tests= and the limit/offset cuts. --fail-on findings (default none) exits 1 on it; the other views have no findings and exit 2 under it'
   - 'Combine filters and result control: ?lines>100&sort=-complexity&limit=10'
   - 'stats:// and classify:// are retired spellings: they answer the same as metrics:// and metrics://?view=provenance and print a replaced-by note'

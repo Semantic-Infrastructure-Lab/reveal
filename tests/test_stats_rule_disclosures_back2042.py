@@ -158,7 +158,7 @@ def test_cross_file_rule_owner_loss_never_reaches_stats_counts_or_scores(
         checked = next(row for row in result['files'] if row['file'] == 'checked.py')
         assert checked['quality']['local_check_issues'] == 0 and checked['quality']['score'] == 100.0
         if mode == 'hidden_parse' and target == 'directory':
-            assert next(row for row in result['files'] if row['file'] == 'included/hidden.py')['parse_degraded']
+            assert next(row for row in result['files'] if row['file'] == 'included/hidden.py')['parse_recovered']
         else:
             assert all(row['quality']['local_check_issues'] == 0 for row in result['files'])
     assert not result.get('check_rules_failed')

@@ -5,6 +5,7 @@ from typing import Callable, Dict, Any, Optional, List, Iterator, cast
 
 from ...registry import DECLARATION_ONLY_EXTENSIONS, get_analyzer
 from ...utils.path_utils import _walk_code_files
+from ...utils.results import PARSE_RECOVERED, outcome_of
 
 
 def _is_excluded_code_only(file_path: Path) -> bool:
@@ -104,11 +105,16 @@ def analyze_file(file_path: Path, calculate_file_stats_func) -> Optional[Dict[st
         # Analyze structure
         analyzer = analyzer_class(str(file_path))
         structure_dict = analyzer.get_structure()
+        if outcome_of(structure_dict) == 'failed':
+            # The analyzer returned a failure (a notebook that is not JSON): nothing was parsed, so it is
+            # analysis_failed with the analyzer's cause, as ast:// reports it, never a recovered parse.
+            # Its _has_errors flag is set too, which once labelled it parse_degraded (BACK-2664).
+            return {'analysis_failed': str(structure_dict['error']), 'path': str(file_path)}
 
         # Calculate statistics (analyzer has content)
         stats = calculate_file_stats_func(file_path, structure_dict, analyzer.content)
         if structure_dict.get('_has_errors'):
-            stats['parse_degraded'] = True
+            stats[PARSE_RECOVERED] = True
             locate = getattr(analyzer, 'first_parse_error_position', None)
             position = locate() if callable(locate) else None
             if position is not None:

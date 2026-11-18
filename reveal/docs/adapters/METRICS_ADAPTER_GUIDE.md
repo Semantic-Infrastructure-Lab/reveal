@@ -309,13 +309,15 @@ are accepted once.
 Exit codes: 0 when every file was counted, 1 with `--view hotspots --fail-on findings` when
 `summary.has_findings` is true (see [Findings gate](#findings-gate)), 2 for a rejected request (an unknown
 `view`, a negative `limit`, an invalid `since`, a missing path, `--fail-on findings` without the hotspot
-ranking), 3 when files were lost or not analyzed (an `analysis_failed`, `parse_degraded`,
-`check_rules_failed` or unreadable-directory warning in `meta.warnings`). The retired `stats://` spelling
+ranking), 3 when files were lost or not analyzed (an `analysis_failed`, `parse_recovered`,
+`check_rules_failed` or unreadable-directory warning in `meta.warnings`). A file the parser read only
+through error recovery is `parse_recovered`, as on every noun; one its analyzer could not read at all
+(a notebook that is not JSON) is `analysis_failed` with the analyzer's cause. The retired `stats://` spelling
 keeps its older exit 0 on those until the cut.
 
 A `.py` file Python's parser rejects carries `parse_error` on its row (`invalid syntax (line 4)`): the
 check rules that read it with Python skipped it, so its `local_check_issues` is a lower bound. The same
-text is the `reason` of its `parse_degraded` entry in `failures`. A file tree-sitter still reads
+text is the `reason` of its `parse_recovered` entry in `failures`. A file tree-sitter still reads
 (`a := 1`) carries only the row field and does not change the exit code.
 
 ### Unified Query Syntax (Recommended)

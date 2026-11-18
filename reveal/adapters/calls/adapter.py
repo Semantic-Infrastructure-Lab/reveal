@@ -39,7 +39,7 @@ from ...utils.query_parser import (CliBinding, LegacySpelling, ParamSpec, ParamV
                                    peek_query_items)
 from ...utils.path_utils import to_posix, named_path_candidates, to_relative_display
 from ...errors import RequestValidationError
-from ...utils.results import ResultBuilder, note_truncation
+from ...utils.results import LOST_EVIDENCE, ResultBuilder, note_truncation
 
 
 def _name_value(name: str):
@@ -256,8 +256,8 @@ _HELP: Dict[str, Any] = {
         'naming the parameter; names are never coerced (callers=123 is the name 123).',
         '?modules is retired (BACK-1054): it answers from imports://<path>?importers&scope=path, one edge per '
         'import that resolves under the path (an import used without a call counts too; no call_count), and '
-        '&external counts importers from the whole project root (scope=root). A file parsed with errors is '
-        'disclosed (partial_parse) and still exits 0, as before.',
+        '&external counts importers from the whole project root (scope=root). A file tree-sitter read only '
+        'through error recovery is named in a parse_recovered warning and exits 3, as on every noun.',
         'Exit codes: 0 complete; 2 rejected before analysis (bad request, missing path) or a name that names '
         'nothing (callees: no definition; callers: no definition and no call site); 3 required analysis '
         'or output incomplete (a file or directory could not be read; the answer is still printed). '
@@ -475,8 +475,8 @@ _SCHEMA: Dict[str, Any] = {
         '?uncalled (retired, D8): no meta.confidence in any language; over JS/TS/TSX, Java or PHP W-CALLS-11 names the language and the measured precision.',
         '?modules is retired (BACK-1054): it answers from imports://<path>?importers&scope=path, one edge per '
         'import that resolves under the path (an import used without a call counts too; no call_count), and '
-        '&external counts importers from the whole project root (scope=root). A file parsed with errors is '
-        'disclosed (partial_parse) and still exits 0, as before.',
+        '&external counts importers from the whole project root (scope=root). A file tree-sitter read only '
+        'through error recovery is named in a parse_recovered warning and exits 3, as on every noun.',
         'Exactly one mode per request (callers, callees, rank, uncalled, modules, or the retired target and '
         'root), else exit 2 '
         'naming both. Exit 0 complete, 2 rejected before analysis or a name with no definition (callers: and '
@@ -496,10 +496,6 @@ _ANSWER_FIELDS: Dict[str, Tuple[Tuple[str, ...], Tuple[str, ...], Tuple[str, ...
     'calls_uncalled': ((), ('entries',), ('total_uncalled',)),
     'calls_module_graph': ((), ('nodes', 'edges'), ('total_nodes', 'total_edges')),
 }
-# Required evidence lost to an unreadable file or directory, or partial input from a file tree-sitter read only
-# through error recovery (confidence.build_meta; COMMAND_MODEL 'Degraded input', BACK-2658); for ?modules, also
-# the imports engine's own loss: files a dead pool worker took and a walk the file cap cut short.
-_LOSS_WARNINGS = frozenset({'analysis_failed', 'analysis_incomplete', 'worker_lost', 'scan_capped', 'parse_recovered'})
 
 
 # A name answer that can prove absence: the field it names and its observation count.
@@ -580,7 +576,7 @@ def _calls_missing_evidence(result: Dict[str, Any]) -> bool:
     errors, warnings = meta.get('errors', []), meta.get('warnings', [])
     if not isinstance(errors, list) or not isinstance(warnings, list):
         return True
-    return bool(errors) or any(isinstance(w, dict) and w.get('type') in _LOSS_WARNINGS for w in warnings)
+    return bool(errors) or any(isinstance(w, dict) and w.get('type') in LOST_EVIDENCE for w in warnings)
 
 
 def _calls_absent(result: Any) -> bool:
@@ -829,7 +825,7 @@ class CallsAdapter(ResourceAdapter):
         if rule is not None:
             declined: List[str] = next((w['languages'] for w in meta['warnings'] if w.get('code') == 'W-CALLS-10'), [])
             data['walk_rule'] = rule(declined)
-        clean = not any(w.get('type') in (*_LOSS_WARNINGS, 'scope_hidden') for w in meta['warnings'])
+        clean = not any(w.get('type') in (*LOST_EVIDENCE, 'scope_hidden') for w in meta['warnings'])
         # A queried name the function-value rule left out is declared, just not listed: absence is not claimable (BACK-2229).
         clean = clean and not (dropped and data.get('target') in dropped['names'])
         if 'path' in data:
@@ -848,10 +844,11 @@ class CallsAdapter(ResourceAdapter):
         """A shim over imports ?importers (BACK-1054 slice S5, Q4/Q8): the import edges under the scanned
         directory, resolved there (``scope=path``); ``&external`` counts importers from the whole project
         root (``scope=root``). One import build, no call structures; the imports answer's warnings and
-        errors are the envelope, and a file parsed with errors is disclosed (``partial_parse``) without
-        counting as lost evidence, so the exit codes are calls ?modules' own (D6: 3 on a lost directory
-        or file). parse_mode says partial on a loss, as every calls answer does; there is no confidence:
-        calls' is its call-extraction estimate, and these edges are imports'."""
+        errors are the envelope, and a file tree-sitter read only through error recovery is lost evidence
+        (``parse_recovered``, COMMAND_MODEL 'Degraded input', BACK-2664), so the exit codes are calls
+        ?modules' own (D6: 3 on a lost directory, an unreadable or a recovered file). parse_mode says
+        partial on a loss, as every calls answer does; there is no confidence: calls' is its
+        call-extraction estimate, and these edges are imports'."""
         from ..imports import ImportsAdapter
         from ...analyzers.imports import service as import_analysis
         self._warn_top_ignored()
@@ -872,13 +869,12 @@ class CallsAdapter(ResourceAdapter):
         if query_format:
             data['_query_format'] = query_format
         # The imports answer's warnings name its lost directories and each failed file under its cause
-        # (BACK-2524): a file tree-sitter recovered with ERROR nodes is a disclosure (``partial_parse``:
-        # its recovered imports are edges), so only an unreadable file, a lost worker or directory, or a
-        # capped walk is lost evidence here (_LOSS_WARNINGS), where imports exits 3 on all of them.
+        # (BACK-2524): a recovered file (its recovered imports are edges), an unreadable file, a lost worker
+        # or directory, or a capped walk is lost evidence here (LOST_EVIDENCE), as imports exits 3 on all.
         composed = self.composed_meta()
         warnings: List[WarningEntry] = list(composed.get('warnings', [])) if composed else []
         errors: List[ErrorEntry] = list(composed.get('errors', [])) if composed else []
-        lost = bool(errors) or any(w.get('type') in _LOSS_WARNINGS for w in warnings)
+        lost = bool(errors) or any(w.get('type') in LOST_EVIDENCE for w in warnings)
         return ResultBuilder.create(
             result_type='calls_module_graph',
             source=self.path,

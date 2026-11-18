@@ -179,7 +179,7 @@ def test_manifest_hashes_and_variants_must_match_real_text(ledger):
 
 
 @pytest.mark.parametrize('kind', ['overview', 'hotspots', 'hotspots_scan', 'stats_summary'])
-@pytest.mark.parametrize('failure', ['parse_degraded', 'check_rules_failed', 'analysis_failed', 'truncated'])
+@pytest.mark.parametrize('failure', ['parse_recovered', 'check_rules_failed', 'analysis_failed', 'truncated'])
 def test_partial_command_results_cannot_qualify(kind, failure):
     result = {'type': kind, 'summary': {'total_files': 3, 'excluded': 0},
               'stats': {'summary': {'total_files': 3, 'excluded': 0}},

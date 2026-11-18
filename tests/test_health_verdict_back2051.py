@@ -39,7 +39,7 @@ def test_verdict_set_is_closed():
     (_FILE_CERT_FAIL, 2, 'finding', 2),                      # an expired file cert is a finding, not INCOMPLETE
     (_FILE_CERT_FAIL, 0, 'finding', 2),
     ({'applicable': False}, 0, 'not_applicable', 1),
-    ({'meta': {'warnings': [{'type': 'parse_degraded'}]}}, 0, 'incomplete', 1),
+    ({'meta': {'warnings': [{'type': 'parse_recovered'}]}}, 0, 'incomplete', 1),
     ({'meta': {'errors': ['broken']}}, 0, 'incomplete', 1),
     ({'error': 'cannot answer'}, 1, 'failed', 1),
     ({}, 2, 'failed', 2),                                    # exit 2, no verdict: a crash or usage error

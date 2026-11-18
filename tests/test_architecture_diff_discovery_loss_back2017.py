@@ -178,7 +178,7 @@ def test_mixed_actual_parse_and_discovery_loss_preserves_existing_failed_compari
     assert attempts and response.returncode == 3
     assert result['deltas'] is None and not result['analysis']['complete']
     kinds = {warning.get('type') for warning in result['meta']['warnings']}
-    assert {'analysis_incomplete', 'partial_parse', 'parse_recovered'} <= kinds
+    assert {'analysis_incomplete', 'parse_recovered', 'parse_recovered'} <= kinds
 
 
 def test_unknown_directory_event_rejects_comparison_and_repair_restores_clean_output(tmp_path, monkeypatch):

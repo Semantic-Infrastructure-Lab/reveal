@@ -55,6 +55,24 @@ _CONTRACT_FIELDS: frozenset = frozenset(
 
 Outcome = Literal['ok', 'truncated', 'not_applicable', 'failed']
 
+# The one warning type for a file the parser read only through error recovery: its tree has
+# syntax the grammar could not read, so what survived may be incomplete (COMMAND_MODEL
+# 'Degraded input', BACK-2664). Every noun spells it this way; a file never parsed at all
+# is ``analysis_failed`` instead.
+PARSE_RECOVERED = 'parse_recovered'
+
+# The warning types that mean required evidence is missing, so the answer is incomplete
+# (exit 3). One list for every noun (BACK-2664); a type a noun never emits costs nothing.
+LOST_EVIDENCE: frozenset = frozenset({
+    'analysis_failed', 'analysis_incomplete', PARSE_RECOVERED, 'worker_lost', 'scan_capped',
+    'check_rules_failed', 'file_measurement_failed',
+})
+
+
+def lost_evidence(warnings: Any) -> bool:
+    """True when *warnings* (an answer's ``meta.warnings``) name any missing required evidence."""
+    return any(isinstance(w, dict) and w.get('type') in LOST_EVIDENCE for w in warnings or ())
+
 # How to see what a cut left out, by what cut it. An adapter names the cause; the
 # URI router prints the message once (cli/routing/uri._emit_result).
 _TRUNCATION_HINTS = {

@@ -125,7 +125,7 @@ def test_two_root_owner_loss_changes_no_measured_row_in_any_view(tmp_path, actua
     result = StatsAdapter(str(tmp_path), f'{query}&code_only=true').get_structure()
     nothing_ran_for_the_owner(actual)
     measured = [row for path, row in actual['measured'] if path.suffix == '.py']
-    assert len(measured) == 6 and all(not row.get('parse_degraded') for row in measured)
+    assert len(measured) == 6 and all(not row.get('parse_recovered') for row in measured)
     assert {row['quality']['score'] for row in measured} == {100.0}
     assert owner.get_scan_disclosures([first]) == [] and owner.get_scan_disclosures([second]) == []
     # quality<99 matched the 3 D005-penalised files before; nothing is penalised now.

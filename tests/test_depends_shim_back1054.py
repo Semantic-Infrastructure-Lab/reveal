@@ -241,6 +241,6 @@ def test_every_record_and_warning_names_its_file_with_forward_slashes(monkeypatc
     dir_answer = adapter._format_directory_summary(root / 'pkg', None, 'text')
     assert dir_answer['modules'] == [{'module': 'pkg/core.py', 'dependent_count': 1, 'dependents': ['pkg/a.py']}]
     for answer in (file_answer, dir_answer):
-        files = [w['files'] for w in answer['meta']['warnings'] if w.get('type') in ('partial_parse', 'worker_lost')]
+        files = [w['files'] for w in answer['meta']['warnings'] if w.get('type') in ('parse_recovered', 'worker_lost')]
         assert files == [['pkg/a.py'], ['pkg/a.py']]
         assert '\\' not in answer['warning']

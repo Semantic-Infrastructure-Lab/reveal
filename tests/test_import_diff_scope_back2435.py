@@ -67,7 +67,7 @@ def test_identical_partial_file_has_different_recovered_target_edges(tmp_path):
     assert result['analysis']['complete'] is False
     assert result['deltas'] is None
     assert {w['snapshot'] for w in result['meta']['warnings']
-            if w['type'] == 'partial_parse' and w['component'] == 'imports'
+            if w['type'] == 'parse_recovered' and w['component'] == 'imports'
             and w['files'] == ['app.ts']} == {'base', 'head'}
 
 

@@ -34,7 +34,7 @@ from ..utils.path_utils import (
 from ..utils.query_binding import bind_declared_params, boolean_value, verbose_legacy
 from ..utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSpec, exclude_param, param_schema,
                                   split_exclude_param)
-from ..utils.results import AnalysisCompleteness, ResultBuilder, result_execution_facts
+from ..utils.results import LOST_EVIDENCE, PARSE_RECOVERED, AnalysisCompleteness, ResultBuilder, result_execution_facts
 from reveal.utils.lines import split_lines
 
 logger = logging.getLogger(__name__)
@@ -503,7 +503,7 @@ def _record_graph_loss_warnings(
                                       'files it read; ' + directories['message'])})
         found.extend(dict(warning) for warning in file_loss_warnings(analysis, path,
                                                                      within=lambda f: key(f) not in measured)
-                     if warning['type'] != 'partial_parse')
+                     if warning['type'] != PARSE_RECOVERED)
     for warning in {(w['type'], w['message']): w for w in found}.values():
         meta.setdefault('warnings', []).append(warning)
 
@@ -891,10 +891,6 @@ _ARCHITECTURE = ParamSpec('architecture', 'boolean', 'Boost high fan-in files; i
                           cli=CliBinding(('--architecture',), action='store_true'))
 
 
-# A kept import graph's losses (worker_lost, analysis_failed, analysis_incomplete) are required too (BACK-2666).
-_REQUIRED_WARNINGS = {'analysis_incomplete', 'file_measurement_failed', 'parse_recovered', 'worker_lost',
-                      'analysis_failed'}
-
 _HELP_EPILOG = (
     "Examples:\n"
     "  reveal pack ./src                      # Default 2000-token budget\n"
@@ -992,7 +988,8 @@ class PackAdapter(ResourceAdapter):
         if _pack_proof_error(result):
             return result_execution_facts(result, completeness=AnalysisCompleteness.FAILED)
         meta = result['meta']
-        lost = any(w.get('type') in _REQUIRED_WARNINGS for w in meta.get('warnings', []))
+        # A kept import graph's losses are required too (BACK-2666): the shared list (BACK-2664).
+        lost = any(w.get('type') in LOST_EVIDENCE for w in meta.get('warnings', []))
         if lost:
             usable = meta['total_candidates'] > 0
             return result_execution_facts(

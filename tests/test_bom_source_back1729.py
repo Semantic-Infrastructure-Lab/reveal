@@ -140,7 +140,7 @@ def test_a_broken_file_still_reports_its_parse_failure(tmp_path, prefix):
     # A JSON answer names the file and prints nothing beside it (BACK-2659); the text answer prints the
     # parse failure's own line.
     document = json.loads(_reveal(tmp_path, 'stats://broken.py', '--format', 'json').stdout)
-    assert [w['files'] for w in document['meta']['warnings'] if w['type'] == 'parse_degraded'] == [['broken.py']]
+    assert [w['files'] for w in document['meta']['warnings'] if w['type'] == 'parse_recovered'] == [['broken.py']]
     proc = _reveal(tmp_path, 'stats://broken.py')
     assert PARSE_FAILED in proc.stderr
     assert 'U+FEFF' not in proc.stderr, 'the failure is the real syntax error, not the BOM'

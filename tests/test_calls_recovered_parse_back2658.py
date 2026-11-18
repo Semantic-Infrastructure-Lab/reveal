@@ -115,9 +115,10 @@ def test_text_output_names_the_file(tmp_path):
     assert 'could not read' in result.stdout + result.stderr and 'b.c' in result.stdout + result.stderr
 
 
-def test_modules_shim_keeps_its_exit_code_and_disclosure(tmp_path):
-    # BACK-2181 (Q8): the retired ?modules shim keeps exit 0 until the cut; it already names the file.
+def test_modules_shim_names_the_recovered_file_and_exits_3(tmp_path):
+    # BACK-2664 (reversing the BACK-2181 exit 0): a recovered file is degraded input on every noun, the
+    # retired ?modules shim too, under the one warning type.
     root = _tree(tmp_path, 'c', broken=True)
     code, answer, result = _calls(root, 'modules')
-    assert code == 0, result.stderr[-500:]
-    assert _warnings(answer, 'partial_parse') and not _warnings(answer, 'parse_recovered')
+    assert code == 3, result.stderr[-500:]
+    assert len(_warnings(answer, 'parse_recovered')) == 1

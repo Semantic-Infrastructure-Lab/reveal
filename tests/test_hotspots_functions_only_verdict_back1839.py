@@ -96,13 +96,13 @@ def test_functions_only_discloses_a_parse_failure_and_is_not_clean(syntax_tree, 
             else (f'hotspots://{syntax_tree}?functions_only=true',))
     result = _run(*args)
     assert result.returncode == 3, result.stderr
-    assert '1 file(s) did not parse cleanly' in result.stdout
+    assert '1 file(s) contain syntax' in result.stdout and 'bad.py' in result.stdout
     assert CLEAN_VERDICT not in result.stdout
 
 
 def test_default_mode_parse_failure_disclosure_is_unchanged(syntax_tree):
     result = _run('hotspots', syntax_tree)
-    assert '1 file(s) did not parse cleanly' in result.stdout
+    assert '1 file(s) contain syntax' in result.stdout and 'bad.py' in result.stdout
     assert CLEAN_VERDICT not in result.stdout
 
 

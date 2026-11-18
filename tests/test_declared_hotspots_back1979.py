@@ -303,7 +303,7 @@ def test_required_returned_and_raised_failures(project, monkeypatch, transport, 
     assert json.loads(result.stdout)['type'] == 'hotspots_scan'
 
 
-@pytest.mark.parametrize('warning', ['parse_degraded', 'analysis_failed', 'parse_recovered'])
+@pytest.mark.parametrize('warning', ['check_rules_failed', 'analysis_failed', 'parse_recovered'])
 def test_required_ast_diagnostics_and_files_only_skip(project, monkeypatch, warning):
     original = AstAdapter.get_structure
     calls = []
