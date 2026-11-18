@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Wait for the GitHub "Tests" run of a commit, then report every job and, for each failed
-# job, the pytest failures from its log. Exit 0 when the run is green, 1 when it is not.
+# job, the pytest failures from its log. Exit 0 when the run is green, 1 when it is not,
+# 2 when the commit has no run, 3 when GitHub stays unreachable: a transient API error is
+# retried (CI_WATCH_RETRIES, default 5), never read as a red run (BACK-2679).
 #
 # Usage:
 #   scripts/ci-watch.sh              # the run for HEAD
@@ -24,10 +26,25 @@ done
 SHA="$(git rev-parse "${SHA:-HEAD}")"
 POLL="${CI_WATCH_POLL:-30}"
 API='repos/{owner}/{repo}/actions'
+RETRIES="${CI_WATCH_RETRIES:-5}"
+
+# One gh call, retried on failure: a dropped connection mid-run is not a red run (BACK-2679).
+ghr() {
+    local attempt out err
+    err="$(mktemp)"
+    for attempt in $(seq 1 "$RETRIES"); do
+        if out="$(gh "$@" 2>"$err")"; then rm -f "$err"; printf '%s\n' "$out"; return 0; fi
+        echo "$(date +%H:%M:%S)  gh failed (attempt $attempt/$RETRIES): $(tail -1 "$err")" >&2
+        sleep "${CI_WATCH_RETRY_SLEEP:-15}"
+    done
+    rm -f "$err"
+    echo "GitHub unreachable after $RETRIES attempts; the run's state is unknown" >&2
+    exit 3
+}
 
 run_id=""
 for _ in $(seq 1 20); do  # a just-pushed commit takes a few seconds to get a run
-    run_id="$(gh api "$API/workflows/test.yml/runs?head_sha=$SHA&per_page=1" --jq '.workflow_runs[0].id // empty')"
+    run_id="$(ghr api "$API/workflows/test.yml/runs?head_sha=$SHA&per_page=1" --jq '.workflow_runs[0].id // empty')"
     [[ -n "$run_id" || $WAIT -eq 0 ]] && break
     sleep 10
 done
@@ -35,20 +52,20 @@ done
 echo "Tests run $run_id for ${SHA:0:8}"
 
 while :; do
-    status="$(gh api "$API/runs/$run_id" --jq '.status')"
+    status="$(ghr api "$API/runs/$run_id" --jq '.status')"
     [[ "$status" == "completed" || $WAIT -eq 0 ]] && break
-    done_jobs="$(gh api "$API/runs/$run_id/jobs?per_page=50" --jq '[.jobs[] | select(.status == "completed")] | length')"
-    total_jobs="$(gh api "$API/runs/$run_id/jobs?per_page=50" --jq '.jobs | length')"
+    done_jobs="$(ghr api "$API/runs/$run_id/jobs?per_page=50" --jq '[.jobs[] | select(.status == "completed")] | length')"
+    total_jobs="$(ghr api "$API/runs/$run_id/jobs?per_page=50" --jq '.jobs | length')"
     printf '%s  %s/%s jobs done\n' "$(date +%H:%M:%S)" "$done_jobs" "$total_jobs"
     sleep "$POLL"
 done
 
-conclusion="$(gh api "$API/runs/$run_id" --jq '.conclusion // .status')"
-gh api "$API/runs/$run_id/jobs?per_page=50" \
+conclusion="$(ghr api "$API/runs/$run_id" --jq '.conclusion // .status')"
+ghr api "$API/runs/$run_id/jobs?per_page=50" \
     --jq '.jobs[] | "\(.conclusion // .status)\t\(.name)\t\(((.completed_at // .started_at) | fromdate) - (.started_at | fromdate))s"' \
     | sort | column -t -s $'\t'
 
-failed_jobs="$(gh api "$API/runs/$run_id/jobs?per_page=50" --jq '.jobs[] | select(.conclusion == "failure") | "\(.id)\t\(.name)"')"
+failed_jobs="$(ghr api "$API/runs/$run_id/jobs?per_page=50" --jq '.jobs[] | select(.conclusion == "failure") | "\(.id)\t\(.name)"')"
 if [[ -n "$failed_jobs" ]]; then
     while IFS=$'\t' read -r job_id name; do
         printf '\n== %s (job %s)\n' "$name" "$job_id"
@@ -59,5 +76,5 @@ if [[ -n "$failed_jobs" ]]; then
 fi
 
 printf '\nRun %s: %s  https://github.com/%s/actions/runs/%s\n' "$run_id" "$conclusion" \
-    "$(gh repo view --json nameWithOwner --jq .nameWithOwner)" "$run_id"
+    "$(ghr repo view --json nameWithOwner --jq .nameWithOwner)" "$run_id"
 [[ "$conclusion" == "success" ]]
