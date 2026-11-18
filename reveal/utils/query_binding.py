@@ -506,7 +506,7 @@ def reject_unread_controls(declarations: Iterable[ParamSpec], params: Mapping[st
     answer's type before analysis; it is asked only when a given control declares its answers."""
     declarations = tuple(declarations)
     given = given_controls(params)
-    scoped = [spec for spec in declarations if spec.answers and spec.role != 'operation' and spec.name in given]
+    scoped = _judged_controls(declarations, params, given)
     if scoped:
         facets = answer_facets(declarations, params, result_type())
         unread = [spec for spec in scoped if not _reads(spec, facets)]
@@ -516,6 +516,14 @@ def reject_unread_controls(declarations: Iterable[ParamSpec], params: Mapping[st
              for problem in _unmet_requirements(declarations, spec, params)]
     if unmet:
         raise RequestValidationError('; '.join(unmet))
+
+
+def _judged_controls(declarations: tuple, params: Mapping[str, Any], given: set) -> list:
+    """The given controls that declare their answers. A presence flag given off (typed False, ``?flag=false`` where
+    its codec reads off) selects nothing, as when omitted, so it is not judged (Codex last/tokens/goal)."""
+    supplied = dict(peek_query_items(params))
+    return [spec for spec in declarations if spec.answers and spec.role != 'operation' and spec.name in given
+            and (spec.type != 'flag' or _selects(spec, supplied.get(spec.name)))]
 
 
 def _unmet_requirements(declarations: tuple, spec: ParamSpec, params: Mapping[str, Any]) -> list:
