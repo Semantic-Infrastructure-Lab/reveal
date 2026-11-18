@@ -16,6 +16,10 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ## [Unreleased]
 
+## [0.135.0] - 2026-11-18
+
+Read "Behavior changes" first. Every declared noun now takes one vocabulary of options on its subcommand, its URI and `reveal.api.query` (`--limit/--offset`, `--sort`, `--where`, `--match`, `--detail`, `--view`, switches as `on|off`); old spellings still answer with a note until 1.0, and an unknown key, flag or field now exits 2 instead of being ignored. Configuration that cannot be used fails the request instead of answering from the defaults. A file read only through parser recovery is one `parse_recovered` warning on every noun, `check` included, and the answer is incomplete (exit 3). MCP, `--stdin` and the Python API now answer exactly as the CLI does.
+
 ### Behavior changes
 
 - Config that cannot be used fails the request instead of answering from the defaults: `REVEAL_CONFIG` naming no file exits 2 on every noun; a config file that cannot be read or parsed exits 3 on every noun that reads configuration (every walk reads `ignore`); a schema-invalid value (`ignore: 5`) or a non-integer `REVEAL_C901_THRESHOLD` exits 2 naming the file or variable and key, on the nouns that read it. Each was a warning over a defaults-built answer, exit 0, so a broken `.reveal.yaml` walked the trees it hid. `reveal://config` lists `invalid_values`; the library raises `ConfigValidationError` or `ConfigLoadError` (BACK-2677).

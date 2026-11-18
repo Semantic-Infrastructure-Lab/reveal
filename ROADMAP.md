@@ -178,6 +178,15 @@ The release process adds an entry here for each version; the three most recent a
 Everything is in [CHANGELOG.md](CHANGELOG.md), and unreleased work on master is under its
 `[Unreleased]` heading.
 
+### v0.135.0 — One option vocabulary per noun, unusable config fails the request, recovered parses are incomplete everywhere
+
+- ✅ Every declared noun takes the same options on its subcommand, URI and Python API (`--limit/--offset`, `--sort`, `--where`, `--match`, `--detail`, `--view`, `on|off` switches); an unknown key, flag or field exits 2 naming what the noun takes (BACK-2621, 2654, 2655).
+- ✅ A config that cannot be found, read or validated fails the request (exit 2 or 3) instead of a defaults-built answer with a warning (BACK-2677).
+- ✅ A file read only through parser recovery is one `parse_recovered` warning on every noun and makes the answer incomplete (exit 3); `check` names its lost evidence in `meta.warnings`, and a rule module that does not load makes it incomplete (BACK-2664, 2682, 2668).
+- ✅ One answer on every transport: an MCP JSON answer is exactly the CLI's JSON, and a `--stdin` line answers and exits as the direct command (BACK-2659, 2325).
+- ✅ `git://` commit times carry their UTC offset; `metrics` gains `--view hotspots` and `--where` (BACK-2643).
+- ⚠️ Scripts that passed unknown keys, relied on a broken config being ignored, matched `partial_parse`/`parse_degraded`, or parsed `git://` dates without a zone need the changes under "Behavior changes" in CHANGELOG.md.
+
 ### v0.134.0 — Exit 2 for "not there", exit 3 for incomplete, accurate imports for Kotlin, Scala, Java, Go and Rust
 
 - ✅ Commands agree on exit codes: `2` means the path, element, topic or request is not there or cannot be answered, `3` means the answer is incomplete, including an unreadable file under `--grep` (BACK-2528, 2527, 2492, 2533).
@@ -195,15 +204,6 @@ Everything is in [CHANGELOG.md](CHANGELOG.md), and unreleased work on master is 
 - ✅ `calls ?rank=callers` ranks only functions defined under the path; test layout follows `test_layout.additional_paths` (BACK-2433, 2417, 2398).
 - ✅ Element navigation has new names: `--flow`, `--inputs`, `--outputs`, `--callsites`; old spellings run with a note (BACK-2364, 2363).
 - ⚠️ Scripts that relied on the old exit codes, on `has_cycles` being a boolean, or on `architecture` output need the changes under "Behavior changes" in CHANGELOG.md.
-
-### v0.132.0 — One exit contract, one imports engine, named command forms, retired names noted
-
-- ✅ One exit contract on the declared commands: 0 complete, 1 gated findings, 2 invalid invocation, 3 required analysis or output failed or incomplete; `--fail-on none|findings` on `check`, `review` and `health` (BACK-2051, 2052, 2066).
-- ✅ `imports` is the one import-graph engine: `depends://`, `deps` and `calls ?modules` read it, function-level imports are edges tagged with their scope, every count states its edge rule (BACK-1054, 2077, 2078).
-- ✅ `calls`, `imports`, `metrics`, `patches`, `pack`, `overview`, `hotspots`, `contracts`, `architecture`, `surface` and `testability` answer the same through `reveal NOUN` and `NOUN://` (equal JSON and exit code); `check --changed RANGE` checks a git range.
-- ✅ Measured: the pinned-corpus recall gate scores imports and Python callers through the public request path, and `scripts/graph_invariants.py` checks oracle-free graph invariants on all 24 pinned corpora.
-- ✅ Old spellings (`trace`, `deps`, `calls ?root=` and `?target=`, `stats://`, `classify://`, `health` on a code path) still run and print a replaced-by note from the one `RETIREMENTS` table; they error at the cut release.
-- ⚠️ Exit codes of `review`, `health`, `calls` and `check --also-json` changed, `imports` and `calls` count some edges differently, and the nine `reveal.cli.commands.<noun>` modules moved to `reveal.adapters.<noun>` — see the "Behavior changes" section of CHANGELOG.md.
 
 ## Validation
 
