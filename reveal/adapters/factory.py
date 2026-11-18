@@ -161,6 +161,9 @@ def _canonical_init(adapter_class: type, resource: str, *, params: Optional[Any]
         raise TypeError('params and overrides cannot be supplied together')
     if params is not None:
         # Already-bound input keeps literal '?' paths out of URI serialization.
+        if getattr(adapter_class, 'SOURCE_BEFORE_CONTROLS', False):
+            return _checked(adapter_class(resource, params=params), resource)
+        _reject_unread_controls(adapter_class, params, resource)
         return adapter_class(resource, params=params)
     empty_default = getattr(adapter_class, 'CANONICAL_EMPTY_RESOURCE', '.')
     if resource and '?' in resource:
@@ -176,18 +179,51 @@ def _canonical_init(adapter_class: type, resource: str, *, params: Optional[Any]
         path = bind_resource_path(spec, path, transport='uri',
                                   resolve=getattr(adapter_class, 'resource_path', None))
         if getattr(adapter_class, 'SOURCE_BEFORE_CONTROLS', False):
-            return adapter_class(path, query, overrides=overrides)
+            return _checked(adapter_class(path, query, overrides=overrides), path)
         validate = getattr(adapter_class, 'validate_original_request', None)
         bound = bind_declared_params(getattr(adapter_class, 'PARAM_SPECS'), query or '', transport='uri',
                                      overrides=overrides,
                                      validate=(lambda bound: validate(bound, path)) if validate else None)
+        _reject_unread_controls(adapter_class, bound, path)
         return adapter_class(path, params=bound)
     spec = getattr(adapter_class, 'RESOURCE_SPEC', None)
     if spec is not None:
         from ..utils.query_binding import bind_resource_path
         path = bind_resource_path(spec, path, transport='uri',
                                   resolve=getattr(adapter_class, 'resource_path', None))
+    if getattr(adapter_class, 'SOURCE_BEFORE_CONTROLS', False):
+        return _checked(adapter_class(path, query), path)
+    if _declares_answers(adapter_class):  # the adapter binds its own query; the check reads the same binding first
+        from ..utils.query_binding import bind_declared_params
+        _reject_unread_controls(adapter_class, bind_declared_params(
+            getattr(adapter_class, 'PARAM_SPECS'), query or '', transport='uri'), path)
     return adapter_class(path, query)
+
+
+def _declares_answers(adapter_class: type) -> bool:
+    """A noun's own ``PARAM_SPECS`` (as ``api.query``'s unsupported-control check reads it) with a control that names
+    its answers: only then is there an applicability check to run. A plugin subclass that inherits the declaration
+    keeps its own behaviour."""
+    declarations = vars(adapter_class).get('PARAM_SPECS') if isinstance(adapter_class, type) else None
+    return bool(declarations) and any(getattr(spec, 'answers', ()) for spec in declarations)
+
+
+def _reject_unread_controls(adapter_class: type, params: Any, path: str) -> None:
+    """Applicability (COMMAND_MODEL, BACK-2656), once for every transport: the CLI's declared dispatch, ``api.query``,
+    the generic URI route and MCP all construct a declared adapter here. A control the selected answer does not read
+    is an invalid request, raised before the adapter is built, so before any analysis."""
+    if not _declares_answers(adapter_class):
+        return
+    from ..utils.query_binding import reject_unread_controls
+    reject_unread_controls(getattr(adapter_class, 'PARAM_SPECS'), params,
+                           lambda: predicted_result_type(adapter_class, params, scope_path_of(adapter_class, path)))
+
+
+def _checked(adapter: Any, path: str) -> Any:
+    """A source that must be read before its controls bind (``SOURCE_BEFORE_CONTROLS``: JSON) binds them in its
+    constructor; the check reads that binding before the adapter answers, so still before any analysis."""
+    _reject_unread_controls(type(adapter), getattr(adapter, 'query_params', {}), path)
+    return adapter
 
 
 def _default_from_uri(adapter_class: type, scheme: str, resource: str,

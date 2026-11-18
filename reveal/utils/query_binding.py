@@ -501,12 +501,12 @@ def reject_unread_controls(declarations: Iterable[ParamSpec], params: Mapping[st
     unread = [spec for spec in scoped if not _reads(spec, facets)]
     if not unread:
         return
-    supplied = set(getattr(params, '_supplied_aliases', set()))
-    spelled = [next((name for name in spec.spellings[1:] if name in supplied), spec.name) for spec in unread]
+    # Named by the control, whatever spelling carried it: a URI key, a flag injected into the query (--limit can reach
+    # a URI as a legacy key) and a legacy flag all name one control; its retirement note names the old spelling.
     reads = ', '.join(spec.name for spec in declarations if spec.role != 'operation' and _reads(spec, facets))
-    where = '; '.join(f"{name} is read by: {', '.join(spec.answers)}" for name, spec in zip(spelled, unread))
+    where = '; '.join(f"{spec.name} is read by: {', '.join(spec.answers)}" for spec in unread)
     raise RequestValidationError(
-        f"control{'s' if len(unread) > 1 else ''} {', '.join(repr(name) for name in spelled)} "
+        f"control{'s' if len(unread) > 1 else ''} {', '.join(repr(spec.name) for spec in unread)} "
         f"{'are' if len(unread) > 1 else 'is'} not read by this answer ({', '.join(facets)}); {where}; "
         f"controls this answer reads: {reads or '(none)'}")
 
