@@ -101,3 +101,202 @@ def test_a_control_only_the_data_shows_unread_is_one_shared_warning_that_counts_
                        'message': "'beta' has no effect on this data: the value at this path is not a list"}
     assert 'beta' in log.used
     assert unread_by_data_warning(params, [], 'x') is None
+
+
+# --- the seam: every transport refuses before the adapter is built ---------------------------------------------
+
+import json  # noqa: E402
+from dataclasses import replace  # noqa: E402
+
+from conftest import _run_reveal_direct  # noqa: E402
+from reveal.adapters.base import ResourceAdapter  # noqa: E402
+from reveal.adapters.registry import _ADAPTER_REGISTRY, _RENDERER_REGISTRY  # noqa: E402
+from reveal.utils.query_binding import bind_declared_params  # noqa: E402
+from reveal.utils.query_parser import ResourceSpec  # noqa: E402
+from reveal.utils.results import ResultBuilder  # noqa: E402
+
+
+def _fixture_classes(declared: bool):
+    built = []
+
+    class Adapter(ResourceAdapter):
+        """A test-only declared noun: view a/b, alpha read by view=a, gamma by the fixture_b answer, beta by all."""
+        LEGACY_INIT = False
+        BOUND_QUERY_CALL = True
+        RESOURCE_SPEC = ResourceSpec(uri_default='', walks=False, filesystem=False)
+        PARAM_SPECS = SPECS
+        RESULT_TYPE = 'fixture_a'
+        DEFAULT_FAIL_ON = 'none'
+        FINDINGS_POLICIES = ('none',)
+
+        def __init__(self, resource='', query=None, *, params=None):
+            built.append(resource)
+            self.resource = resource
+            self.params = params if params is not None else bind_declared_params(SPECS, query or '', transport='uri')
+
+        @staticmethod
+        def result_type_for(params):
+            return _type(params)
+
+        @staticmethod
+        def uri_result_type(resource):
+            return 'fixture_b' if 'view=b' in resource.partition('?')[2].split('&') else 'fixture_a'
+
+        @classmethod
+        def uri_execution_facts(cls, resource):  # a qualified operation, as every declared noun is
+            return cls.execution_facts
+
+        @staticmethod
+        def execution_facts(result):
+            from reveal.utils.results import AnalysisCompleteness, result_execution_facts
+            return result_execution_facts(result, completeness=AnalysisCompleteness.COMPLETE)
+
+        def get_structure(self, **kwargs):
+            return ResultBuilder.create(_type(self.params), self.resource, source_type='resource',
+                                        data={'read': sorted(key for key, value in self.params.items()
+                                                             if value is not None)})
+
+    class Plugin(Adapter):
+        """An undeclared adapter: a plugin subclass inherits the declarations, not their contract."""
+
+    class Renderer:
+        @staticmethod
+        def render_structure(result, format='text'):
+            print(json.dumps(result))
+
+    return (Adapter if declared else Plugin), Renderer, built
+
+
+@pytest.fixture(params=[True, False], ids=['declared', 'undeclared'])
+def fixture_noun(request, monkeypatch):
+    adapter, renderer, built = _fixture_classes(declared=request.param)
+    monkeypatch.setitem(_ADAPTER_REGISTRY, 'applicability-fixture', adapter)
+    monkeypatch.setitem(_RENDERER_REGISTRY, 'applicability-fixture', renderer)
+    return request.param, built
+
+
+def _cli_uri(query):
+    return _run_reveal_direct(f'applicability-fixture://r?{query}', '--format', 'json')
+
+
+def _api(query='', **kwargs):
+    from reveal import api
+    return api.query(f'applicability-fixture://r?{query}', **kwargs)
+
+
+@pytest.mark.parametrize('query', ['alpha=1', 'view=b&alpha=1', 'view=a&gamma=1'])
+def test_the_cli_uri_and_api_refuse_an_unread_control_before_construction(fixture_noun, query):
+    declared, built = fixture_noun
+    run = _cli_uri(query)
+    if not declared:  # an undeclared adapter (a plugin subclass) keeps answering as before
+        assert run.returncode == 0, run.stderr
+        assert _api(query)['type'] in ('fixture_a', 'fixture_b')
+        return
+    assert run.returncode == 2, (run.returncode, run.stdout, run.stderr)
+    assert 'is not read by this answer' in run.stderr and 'controls this answer reads:' in run.stderr, run.stderr
+    with pytest.raises(RequestValidationError, match='is not read by this answer'):
+        _api(query)
+    control, _, value = query.rpartition('&')[2].partition('=')
+    with pytest.raises(RequestValidationError, match=f"'{control}' is not read by this answer"):
+        _api(query.rpartition('&')[0], **{control: int(value)})
+    assert built == [], built  # refused before the adapter was built
+
+
+@pytest.mark.parametrize('query', ['view=a&alpha=1', 'view=b&gamma=1', 'beta=1', 'view=b&beta=1', 'delta=1'])
+def test_a_control_the_answer_reads_still_answers_on_every_transport(fixture_noun, query):
+    run = _cli_uri(query)
+    assert run.returncode == 0, run.stderr
+    answer = json.loads(run.stdout)
+    assert answer['type'] == ('fixture_b' if 'view=b' in query else 'fixture_a')
+    assert _api(query)['type'] == answer['type']
+
+
+def _imports_limit_read_by_the_ranking(monkeypatch):
+    """A test-only declaration on a real declared noun (no noun declares answers in this step): imports' limit caps
+    only the fan-in ranking, so the default answer does not read it."""
+    from reveal.adapters.imports import ImportsAdapter
+    specs = tuple(replace(spec, answers=('fan_in_ranking',)) if spec.name == 'limit' else spec
+                  for spec in ImportsAdapter.PARAM_SPECS)
+    monkeypatch.setattr(ImportsAdapter, 'PARAM_SPECS', specs)
+
+
+@pytest.fixture
+def project(tmp_path, monkeypatch):
+    (tmp_path / 'a.py').write_text('import b\n', encoding='utf-8')
+    (tmp_path / 'b.py').write_text('X = 1\n', encoding='utf-8')
+    monkeypatch.chdir(tmp_path)
+    _imports_limit_read_by_the_ranking(monkeypatch)
+    return tmp_path
+
+
+@pytest.mark.parametrize('argv,spelled', [
+    (('imports://.?limit=1',), 'limit'),                  # the URI
+    (('imports://.', '--limit', '1'), 'limit'),           # the URI and a flag
+    (('imports', '.', '--limit', '1'), 'limit'),          # the subcommand
+    (('imports', '.', '--top', '1'), 'limit'),            # the subcommand, a legacy spelling: named as its control
+])
+def test_a_declared_noun_refuses_on_every_cli_form(project, argv, spelled):
+    run = _run_reveal_direct(*argv, '--format', 'json')
+    assert run.returncode == 2, (run.returncode, run.stderr)
+    assert (f"control '{spelled}' is not read by this answer (imports, default); {spelled} is read by: fan_in_ranking"
+            in run.stderr), run.stderr
+    answer = json.loads(run.stdout)  # the invalid-request document, as every invalid request answers in JSON mode
+    assert answer['type'] == 'imports'
+    assert not [w for w in answer['meta'].get('warnings', []) if w.get('code') in ('unused_query_param', 'unused_flag')]
+
+
+def test_a_declared_noun_refuses_on_the_api_and_mcp(project):
+    from reveal import api
+    for call in (lambda: api.query('imports://.?limit=1'), lambda: api.query('imports://.', limit=1)):
+        with pytest.raises(RequestValidationError, match=r"'limit' is not read by this answer \(imports, default\)"):
+            call()
+    pytest.importorskip('mcp')
+    from reveal.mcp_server import reveal_query
+    assert "'limit' is not read by this answer" in reveal_query('imports://.?limit=1')
+
+
+@pytest.mark.parametrize('argv', [('imports://.?sort=-fan-in&limit=1',), ('imports', '.', '--sort=-fan-in', '--limit',
+                                                                          '1')])
+def test_a_declared_noun_answers_where_the_control_is_read(project, argv):
+    run = _run_reveal_direct(*argv, '--format', 'json')
+    assert run.returncode == 0, run.stderr
+    assert json.loads(run.stdout)['type'] == 'fan_in_ranking'
+
+
+# Every declared noun refuses before its adapter is built: one control per noun is given a test-only declaration that
+# no answer matches. JSON reads its source before its controls bind (SOURCE_BEFORE_CONTROLS), so its constructor runs
+# first; no noun answers (get_structure) either way. The value is one each noun accepts on its default request.
+from test_vocabulary_conformance_back2654 import BASE, NOUNS, TARGETS, _adapter, workspace  # noqa: E402,F401
+
+REFUSED_CONTROL = {'architecture': ('top', '2'), 'ast': ('limit', '2'), 'calls': ('limit', '2'),
+                   'claude': ('limit', '2'), 'codex': ('matches', '2'), 'contracts': ('impls', '2'),
+                   'deps': ('top', '2'), 'git': ('limit', '2'), 'hotspots': ('top', '2'), 'imports': ('limit', '2'),
+                   'json': ('limit', '2'), 'markdown': ('limit', '2'), 'metrics': ('limit', '2'),
+                   'overview': ('top', '2'), 'pack': ('budget', '2000'), 'patches': ('limit', '2'),
+                   'surface': ('top', '2'), 'testability': ('top', '2'), 'trace': ('depth', '2')}
+
+
+def test_every_declared_noun_with_a_refusal_case():
+    assert set(REFUSED_CONTROL) == set(NOUNS) - {'stats'}  # stats:// is metrics' retired scheme (rule 9)
+
+
+@pytest.mark.parametrize('noun', sorted(REFUSED_CONTROL))
+def test_every_declared_noun_refuses_before_its_adapter_is_built(workspace, monkeypatch, noun):  # noqa: F811
+    from reveal import api
+    adapter = _adapter(noun)
+    control, value = REFUSED_CONTROL[noun]
+    monkeypatch.setattr(adapter, 'PARAM_SPECS', tuple(
+        replace(spec, answers=('no-such-answer',)) if spec.name == control else spec for spec in adapter.PARAM_SPECS))
+    calls = []
+    for method in ('__init__', 'get_structure'):
+        original = getattr(adapter, method)
+        monkeypatch.setattr(adapter, method, lambda *a, _m=method, _o=original, **k: (calls.append(_m), _o(*a, **k))[1])
+    base = BASE[noun][1].lstrip('?')
+    uri = f"{noun}://{TARGETS.get(noun, 'proj')}?" + '&'.join(part for part in (base, f'{control}={value}') if part)
+    run = _run_reveal_direct(uri, '--format', 'json')
+    assert run.returncode == 2 and f"control '{control}' is not read by this answer" in run.stderr, (run.returncode,
+                                                                                                    run.stderr)
+    with pytest.raises(RequestValidationError, match=f"'{control}' is not read by this answer"):
+        api.query(uri)
+    before = ['__init__'] * 2 if getattr(adapter, 'SOURCE_BEFORE_CONTROLS', False) else []
+    assert calls == before, calls
