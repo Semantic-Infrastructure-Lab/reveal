@@ -300,3 +300,15 @@ def test_every_declared_noun_refuses_before_its_adapter_is_built(workspace, monk
         api.query(uri)
     before = ['__init__'] * 2 if getattr(adapter, 'SOURCE_BEFORE_CONTROLS', False) else []
     assert calls == before, calls
+
+
+def test_the_rule_20_probe_counts_a_refusal_as_conforming(workspace, monkeypatch):  # noqa: F811
+    """A probe that could only fail would measure nothing: with imports' limit declared read by the fan-in ranking
+    alone, the conformance probe sees every other answer refuse it, and still sees format answered unread."""
+    from test_vocabulary_conformance_back2654 import probe_applicability
+    _imports_limit_read_by_the_ranking(monkeypatch)
+    cases = probe_applicability('imports')
+    refused = [case for case in cases if case.label.endswith('?limit= refused')]
+    assert len(refused) == 8 and all(case.ok for case in refused), refused  # every answer but sort=-fan-in
+    assert not [case for case in cases if case.label.endswith('?limit= unread')]
+    assert [case.ok for case in cases if case.label == 'proj default ?format= unread'] == [False]
