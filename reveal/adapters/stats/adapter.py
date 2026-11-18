@@ -149,6 +149,7 @@ TEST_CHOICES = ('include', 'exclude')
 # view, and legacy hotspots beside its ranking) read sort and detail; only a directory is walked.
 _DIRECTORY, _FILE = 'stats_summary', 'stats_file'
 _RANKINGS, _PER_FILE_ROWS = ('hotspots', 'view=hotspots'), ('default', 'hotspots')
+_CHURN_ON = ('churn=on',)  # since and merges bound the churn walk: with churn off they conflict with the request
 
 # The declaration `reveal metrics` and metrics:// are both generated from (BACK-2146, BACK-2621). Operator
 # filters (`lines>50`, `complexity=5..15`) are where's terms: the binder folds a bare URI key into it.
@@ -210,12 +211,13 @@ _CHURN = ParamSpec('churn', 'boolean', 'Fold commit-touch counts into the hotspo
                                           flag='--no-churn', flag_value=True),), answers=_RANKINGS)
 _SINCE = ParamSpec('since', 'string', 'Bound the churn walk to commits on/after this ISO date (default: full history). Only affects churn scoring, not the file list itself.',
                    None, _iso_date('since'), ('view=hotspots&since=2026-01-01',), role='analysis',
-                   cli=CliBinding(('--since',), metavar='DATE'), answers=_RANKINGS)
+                   cli=CliBinding(('--since',), metavar='DATE'), answers=_RANKINGS, requires=_CHURN_ON)
 _MERGES = ParamSpec('merges', 'boolean', 'Count merge commits in the churn tally: on (default) or off', None,
                     switch_value, ('view=hotspots&merges=off',), role='analysis',
                     cli=CliBinding(('--merges',), metavar='on|off'),
                     legacy=(LegacySpelling('no_merges', codec=_legacy_switch('no_merges', 'off', 'on'),
-                                           flag='--no-merges', flag_value=True),), answers=_RANKINGS)
+                                           flag='--no-merges', flag_value=True),), answers=_RANKINGS,
+                    requires=_CHURN_ON)
 _TESTS = ParamSpec('tests', 'string',
                    'Test/support files in the hotspot ranking, selected by conventional names plus project test_layout.additional_paths: '
                    'include them (default) or exclude them from the ranking. Only the ranking changes; totals and files still count them',

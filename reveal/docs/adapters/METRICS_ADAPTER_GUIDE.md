@@ -287,7 +287,8 @@ Each control is read by the answers it applies to, and any other answer exits 2 
 `sort` and `detail` by the per-file rows (the default view, and legacy `hotspots=true` beside its ranking);
 `code-only` and `exclude` by a directory (a file is not walked); `limit` and `offset` by a directory and by
 `view=hotspots`; `view=provenance` reads only the walk's `respect_gitignore`. Where the files have no git
-history, a ranking leaves `since` and `merges` unread and says so in one `control_unread_by_data` warning, exit 0.
+history, a ranking leaves `since` and `merges` unread and says so in one `control_unread_by_data` warning, exit 0;
+given with `churn off` (or `--no-churn`) they conflict with the request and exit 2 naming both.
 `match`, `kind`, `depth` and `until` are not metrics controls: they exit 2 naming `where` and the supported
 controls.
 
