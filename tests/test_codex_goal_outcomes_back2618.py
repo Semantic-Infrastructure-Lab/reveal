@@ -176,9 +176,10 @@ def test_goal_selector_has_no_false_unused_warning_and_preserves_legacy_priority
     selected = _run_reveal_in(codex.parent, 'codex://' + DOC_SESSION_ID + '?goal', '--format', 'json')
     assert selected.returncode == 0
     assert 'has no effect' not in selected.stderr
+    # last still selects the messages over goal; goal is then a control that answer does not read (BACK-2656).
     overridden = _run_reveal_in(codex.parent, 'codex://' + DOC_SESSION_ID + '?last&goal', '--format', 'json')
-    assert overridden.returncode == 0
-    assert json.loads(overridden.stdout)['type'] == 'codex_messages'
+    assert overridden.returncode == 2
+    assert "control 'goal' is not read by this answer (codex_messages" in overridden.stderr
 
 
 def test_goal_fixture_releases_windows_sharing_lock(codex, monkeypatch):

@@ -47,6 +47,14 @@ complete strings. The Codex subcommand and vocabulary migration remain open. Dir
 URI execution, optional goals and SQLite catalog reads are qualified below;
 memory and workspace resource policies remain separate.
 
+Each control is read by the answers that use it, and a control on another answer is refused
+before any session is read, naming where it is read. The catalog reads `filter` (the session
+list) and `search` (the content search); `matches` is the search's; `since` and `until` bound a
+filtered or searched catalog, so on the bare list they exit 2 asking for `filter` or `search`.
+`key` is config's, `full` the exchanges'. `last`, `tokens` and `goal` select a session's last
+message, token breakdown or goal: given with one another, the first of them (in that order)
+selects the answer and the others are refused; off (`last=False`) they select nothing.
+
 
 ```bash
 # List recent sessions

@@ -55,7 +55,7 @@ def _unread(doc):
     ((f'codex://{S}/tools?until=2030-01-01',), 'until', 'codex_tools, default'),
     (('codex://config?since=2020-01-01',), 'since', 'codex_config, default'),
     (('codex://info?key=model',), 'key', 'codex_info, default'),
-    (('codex://memories?last',), 'last', 'codex_memories, default'),                  # predicted an overview before
+    (('codex://info?last',), 'last', 'codex_info, default'),
     ((f'codex://{S}/messages', '--since', '2020-01-01'), 'since', 'codex_messages, default'),  # URI and a flag
 ])
 def test_codex_refuses_a_control_its_answer_does_not_read(codex, argv, control, answer):
@@ -73,6 +73,15 @@ def test_codex_catalog_bounds_require_a_filter_or_a_search(codex, argv):
     run, _doc = _run(*argv)
     assert run.returncode == 2, (run.returncode, run.stderr)
     assert 'requires filter or search' in run.stderr, run.stderr
+
+
+def test_codex_refuses_a_flag_on_a_named_resource_that_selects_its_own_answer(codex):
+    """memories answers itself whatever last says (predicted a session's messages before, so last went unread with
+    the ledger's note). The generic route exits 1 for a construction-time refusal on a resource without execution
+    facts (memories, rules, skills, plugins: the Step 1 policy for unqualified resources), 2 on a qualified one."""
+    run, _doc = _run('codex://memories?last')
+    assert run.returncode == 1, (run.returncode, run.stderr)
+    assert "control 'last' is not read by this answer (codex_memories, default" in run.stderr, run.stderr
 
 
 def test_codex_api_refuses_the_same_request(codex):

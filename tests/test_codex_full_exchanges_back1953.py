@@ -148,42 +148,34 @@ def test_registered_sdk_preserves_full_text_and_json_pairing(session, tmp_path):
 
 
 @pytest.mark.parametrize('view', ['messages', 'digest', 'sessions'])
-@pytest.mark.parametrize('entry', ['native', 'api', 'cli'])
-def test_full_still_warns_when_selected_mode_does_not_use_it(session, view, entry, capsys):
+@pytest.mark.parametrize('entry', ['api', 'cli'])
+def test_full_is_refused_when_selected_mode_does_not_use_it(session, view, entry):
+    """BACK-2656: full is the paired exchanges' control (COMMAND_MODEL "Applicability"); on another answer the request
+    is refused before the adapter is built, on every transport, no longer answered with Codex's own warning."""
+    from reveal.errors import RequestValidationError
     resource = 'sessions' if view == 'sessions' else f'{SESSION_UUID}/{view}'
     uri = f'codex://{resource}?full'
     if entry == 'cli':
         result = run(uri)
-        assert result.returncode == 0, result.stderr
-        warning = result.stderr
-    elif entry == 'api':
-        result = api.query(uri)
-        assert 'full' not in result
-        warning = capsys.readouterr().err
+        assert result.returncode == 2, result.stderr
+        assert "control 'full' is not read by this answer" in result.stderr
     else:
-        adapter = CodexAdapter(resource, 'full')
-        assert 'full' not in adapter.get_structure()
-        warning = capsys.readouterr().err
-    assert "'full'" in warning
-    assert 'ignored' in warning or 'has no effect' in warning
+        with pytest.raises(RequestValidationError, match="control 'full' is not read by this answer"):
+            api.query(uri)
 
 
 @pytest.mark.parametrize('override', ['last', 'tokens', 'goal'])
-def test_query_route_override_does_not_claim_full_was_applied(session, override, capsys):
-    api.query(f'{session}?full&{override}')
-    warning = capsys.readouterr().err
-    assert "'full'" in warning and 'ignored' in warning
+def test_query_route_override_refuses_full(session, override):
+    """last, tokens and goal select another answer than the exchanges, which full is read by."""
+    from reveal.errors import RequestValidationError
+    with pytest.raises(RequestValidationError, match="control 'full' is not read by this answer"):
+        api.query(f'{session}?full&{override}')
 
 
-def test_non_exchange_json_preserves_one_full_warning(session):
+def test_non_exchange_json_refuses_full_once(session):
     result = run(session.replace('/exchanges', '/messages') + '?full', '--format', 'json')
-    assert result.returncode == 0, result.stderr
-    answer = json.loads(result.stdout)
-    ignored = [warning for warning in answer.get('meta', {}).get('warnings', [])
-               if warning.get('type') in ('unknown_query_param', 'unused_query_param')
-               and 'full' in warning.get('fields', [])]
-    assert len(ignored) == 1
-    assert 'full' not in result.stderr
+    assert result.returncode == 2, result.stderr
+    assert result.stderr.count("control 'full' is not read by this answer") == 1
 
 
 @pytest.fixture

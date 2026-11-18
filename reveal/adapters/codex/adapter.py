@@ -14,8 +14,7 @@ from ..base import ResourceAdapter, register_adapter, register_renderer
 from .renderer import CodexRenderer
 from ...utils.jsonl_records import TranscriptRecords
 from ...utils.results import note_warning
-from ...utils.query import warn_unknown_query_params
-from ...utils.query_parser import ResourceSpec, param_schema, peek_query_items
+from ...utils.query_parser import ResourceSpec, param_schema
 from .params import PARAM_SPECS, _MATCHES, _FULL, bind_query
 from .lookup import SessionLookup, attach_lookup_evidence
 from .catalog import CATALOG_PATHS
@@ -119,6 +118,11 @@ class CodexAdapter(ResourceAdapter):
         from .qualification import uri_result_type
         return uri_result_type(resource)
 
+    @classmethod
+    def result_type_at(cls, params, resource):
+        """The answer the resource and the selecting flags pick (the shared predictor's per-path step, BACK-2656)."""
+        return selected_type(resource, params)
+
     @staticmethod
     def execution_facts(result):
         from .qualification import execution_facts
@@ -171,15 +175,9 @@ class CodexAdapter(ResourceAdapter):
         self._lookup_error_message = None
         self._request_index_error = None
         self.query = query if query is not None else getattr(params, '_source_query', None)
+        # Unknown keys never reach here (the binder rejects them, rule 3), and a control the selected answer does not
+        # read (full outside /exchanges) is refused before construction by its declaration (rule 20, BACK-2656).
         self.query_params = bind_query(query, params)
-        # Unknown keys never reach here (the binder rejects them, rule 3); what remains is the applicability
-        # disclosure for full on a mode that does not read it (rule 20, BACK-2656), on every transport.
-        known = set(self.get_schema()['query_params'])
-        query_keys = {key for key, _ in peek_query_items(self.query_params)}
-        if (self._session_id_from_resource() is None or self._session_sub_path() != 'exchanges'
-                or query_keys.intersection(('last', 'tokens', 'goal'))):
-            known.discard('full')
-        warn_unknown_query_params(self.query_params, known, adapter='codex')
 
     # ------------------------------------------------------------------
     # Helpers

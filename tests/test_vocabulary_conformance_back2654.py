@@ -70,6 +70,7 @@ REVEAL_CONFORMANCE_REPORT=<path>: each cell appends one JSON line (state, case c
 import json
 import os
 from dataclasses import dataclass
+from functools import partial
 
 import pytest
 
@@ -101,14 +102,19 @@ BASE = {**CASES, 'stats': (None, ''), 'codex': (None, '')}
 TARGETS = {'claude': 'sessions', 'codex': '', 'json': 'proj/data.json'}
 # A control that answers only on another target than its noun's default (Claude's turn slice reads one session):
 # the legacy-word probes (1b, 6, 16) send its spellings there, so they compare answers rather than two rejections.
-CONTROL_TARGETS = {('claude', 'tail'): 'session/my-session', ('git', 'detail'): 'proj/app.py'}
+CONTROL_TARGETS = {('claude', 'tail'): 'session/my-session', ('git', 'detail'): 'proj/app.py',
+                   # Codex: the resource whose answer reads the control (BACK-2656; the catalog reads few of them)
+                   ('codex', 'key'): 'config', ('codex', 'full'): '019e5cc5-0000-7000-8000-000000000001/exchanges',
+                   **{('codex', flag): '019e5cc5-0000-7000-8000-000000000001' for flag in ('last', 'tokens', 'goal')}}
 # The answer a probe of a control's spelling selects when the default one does not read the control (rule 20,
 # BACK-2656: there it is refused, which is applicability's subject, not the spelling's): (subcommand argv, URI query).
 CONTROL_BASES = {('calls', 'kind'): (['--uncalled'], '?uncalled'), ('calls', 'external'): (['--modules'], '?modules'),
                  ('calls', 'limit'): (['--sort=-callers'], '?sort=-callers'),
                  ('imports', 'limit'): (['--sort=-fan-in'], '?sort=-fan-in'),
                  ('imports', 'detail'): (['--circular'], '?circular'),
-                 ('git', 'detail'): (['--view', 'blame'], '?view=blame')}
+                 ('git', 'detail'): (['--view', 'blame'], '?view=blame'),
+                 ('codex', 'matches'): (None, '?search=auth'),
+                 **{('codex', bound): (None, '?filter=auth') for bound in ('since', 'until')}}
 
 # The shared controls (rule 7: the one declared list, query_parser.SHARED_CONTROL_NAMES), each probed with a value a
 # supporting noun would accept. Left out: view (the deferred row, D18). Not shared controls: format/output (global
@@ -191,15 +197,10 @@ RULED_EXEMPT_NOUNS = {'stats': 'rule 9: the retired stats:// scheme is deleted a
 
 # Cells that do not conform yet: (noun, rule) -> the behaviour observed at fac0718b. May only shrink; every
 # entry reaches zero before the cut.
-NOT_YET = {
-    # Rule 20 measured on every answer since BACK-2656 Step 1 (operation selections and the resources ANSWER_TARGETS
-    # lists): each answer with the controls it answered without reading, warned (ledger, own warning or stderr note).
-    ('codex', '20'): 'warned, exit 0: catalog: since, until, key, last, tokens, goal, matches, full; session overview, '
-                     'messages and tools: filter, search, since, until, key, matches, full; config: all but key; info: all',
-}
+NOT_YET: dict = {}  # rule 20 (BACK-2656) conforms on every noun since Step 2d (codex was the last cell)
 
 NOT_YET_BASELINE = {'1a': 0, '1b': 0, '1c': 0, '1d': 0, '2': 0, '3': 0, '3b': 0, '4': 0, '5': 0, '6': 0,
-                    '8a': 0, '8b': 0, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 1, '14': 0, '21j': 0, '22': 0}
+                    '8a': 0, '8b': 0, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 0, '14': 0, '21j': 0, '22': 0}
 
 
 # --- the fixture -------------------------------------------------------------------------------------------
@@ -604,12 +605,14 @@ def probe_repeated_spelling(noun):
         a, b = _distinct_values(spec)
         base = spec.role != 'operation' and not _in_base(noun, spec)
         label = f'?{spec.name}= twice'
+        # on the answer that reads the control (CONTROL_BASES/CONTROL_TARGETS): elsewhere it is refused (rule 20)
+        uri = partial(_uri, noun, base=base, control=spec.name)
         if b is not None:
-            cases.append(_conflict_case(label, _run(_uri(noun, f'{spec.name}={a}', f'{spec.name}={b}', base=base),
-                                                    '--format', 'json'), (spec.name, a, b)))
-        twice = _uri(noun, f'{spec.name}={a}', f'{spec.name}={a}', base=base)
+            cases.append(_conflict_case(label, _run(uri(f'{spec.name}={a}', f'{spec.name}={b}'), '--format', 'json'),
+                                        (spec.name, a, b)))
+        twice = uri(f'{spec.name}={a}', f'{spec.name}={a}')
         cases.append(_equal_case(label, noun, _run(twice, '--format', 'json'),
-                                 _run(_uri(noun, f'{spec.name}={a}', base=base), '--format', 'json')))
+                                 _run(uri(f'{spec.name}={a}'), '--format', 'json')))
         flag = spec.cli.flags[0] if spec.cli is not None else None
         if _sub(noun) is None or flag is None:
             continue

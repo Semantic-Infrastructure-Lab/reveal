@@ -42,9 +42,28 @@ COUNTS = {'codex_session_overview': ('user_turns', 'agent_turns', 'tool_calls', 
 RESULT_VARIANTS = {kind: ('codex_error', 'codex_not_installed') for kind in (*CONTAINERS, 'codex_goal')}
 
 
+# The named resources, as the adapter routes them (a resource or its sub-path): their answer is the path's, whatever the
+# query says (CodexAdapter._NAMED_RESOURCES; memories/pipeline before memories).
+_NAMED_TYPES = (('memories/pipeline', 'codex_memories_pipeline', 'codex_memories_pipeline'),
+                ('info', 'codex_info', 'codex_info'), ('history', 'codex_history', 'codex_history'),
+                ('config', 'codex_config', 'codex_config'), ('memories', 'codex_memories', 'codex_memories'),
+                ('rules', 'codex_rules', 'codex_rules'), ('skills', 'codex_skills', 'codex_skill'),
+                ('plugins', 'codex_plugins', 'codex_plugin'))
+
+
+def _named_type(resource):
+    for prefix, whole, item in _NAMED_TYPES:
+        if resource == prefix:
+            return whole
+        if resource.startswith(prefix + '/'):
+            return item
+    return None
+
+
 def selected_type(resource, params):
-    if resource in ('config', 'history', 'info'):
-        return 'codex_' + resource
+    named = _named_type(resource)
+    if named is not None:
+        return named
     values = dict(peek_query_items(params))
     if resource in CATALOG_PATHS:
         return 'codex_content_search' if values.get('search') else 'codex_session_list'
