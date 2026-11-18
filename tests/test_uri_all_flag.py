@@ -29,7 +29,7 @@ def test_hotspots_declares_top():
 
 
 @pytest.mark.parametrize('scheme,fragment', [
-    ('ast', 'limit=1000000'), ('calls', 'limit=1000000'), ('patches', 'limit=1000000'),
+    ('ast', 'limit=1000000'), ('patches', 'limit=1000000'),
     ('testability', 'top=1000000'), ('stats', 'limit=1000000'), ('metrics', 'limit=1000000'), ('git', 'limit=1000000'),
     ('overview', 'all=true'),  # Constructor-bound map expansion; does not request assessments.
 ])
@@ -37,6 +37,16 @@ def test_back1379_adapters_declare_all(scheme, fragment):
     from reveal import adapters  # noqa: F401
     assert adapters_base.get_adapter_class(scheme).CLI_QUERY_FLAGS['all'] == fragment
     assert inject_query_flags('src', scheme, _args(all=True)) == f'src?{fragment}'
+
+
+def test_calls_all_reaches_only_the_answers_that_read_its_cap():
+    """--all lifts the selected answer's cap only (Scott 2026-11-18, BACK-2656): calls' ranking and uncalled read
+    limit; a callers request has no cap, so --all is satisfied there and nothing is injected."""
+    from reveal import adapters  # noqa: F401
+    assert adapters_base.get_adapter_class('calls').CLI_QUERY_FLAGS['all'] == 'limit=1000000'
+    assert inject_query_flags('src?sort=-callers', 'calls', _args(all=True)) == 'src?sort=-callers&limit=1000000'
+    assert inject_query_flags('src?uncalled', 'calls', _args(all=True)) == 'src?uncalled&limit=1000000'
+    assert inject_query_flags('src?callers=main', 'calls', _args(all=True)) == 'src?callers=main'
 
 
 def test_all_injects_fragment():
