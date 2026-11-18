@@ -42,9 +42,6 @@ def _without_volatile(doc):
 NOT_YET = {
     ('architecture', 'proj', 'against=HEAD'): '2e: architecture declares which answers read all',
     ('overview', 'proj', 'against=HEAD'): '2e: overview declares which answers read all',
-    ('git', 'proj/app.py', 'default'): '2d: git declares which answers read limit',
-    ('git', 'proj/app.py', 'view=blame'): '2d: git declares which answers read limit',
-    ('git', 'proj/app.py', 'view=diff'): '2d: git declares which answers read limit',
 }
 
 

@@ -40,44 +40,58 @@ def detail(value: Any) -> str:
     return 'normal' if name == 'summary' else name
 
 
-def string(name, description, *, legacy=(), choices=(), role=None):
+def string(name, description, *, legacy=(), choices=(), role=None, answers=()):
     return ParamSpec(name, 'string', description, None, nonempty_scalar, legacy=legacy, choices=choices, role=role,
-                     cli=CliBinding(('--' + name,)))
+                     cli=CliBinding(('--' + name,)), answers=answers)
 
+
+# The answers each control is read by (COMMAND_MODEL "Applicability", BACK-2656). The repository overview, a ref's
+# history, a path's history and a timeline walk commits: they read the commit filter and the merge policy; ownership
+# reads the row controls and merges but aggregates unfiltered; scan-limit budgets the aggregates' commit input; blame
+# reads detail and ignore, a diff context, and the element narrows a file's history, blame, diff and timeline. A file's
+# content reads raw (detail=raw selects it). The repository's timeline is the timeline type too: its element check is
+# validate_resource_controls' (a repository has no element).
+_COMMITS = ('git_repository', 'git_ref', 'git_file_history', 'git_directory_history', 'git_timeline')
+_ROWS = (*_COMMITS, 'git_ownership')
+_AGGREGATES = ('git_ownership', 'git_timeline')
+_BLAME, _DIFF = 'git_file_blame', 'git_file_diff'
 
 VIEW = string('view', 'history, blame, diff or ownership; omitted preserves resource-dependent inspection',
               legacy=(LegacySpelling('type'),), choices=('history', 'log', 'blame', 'diff', 'ownership'), role='operation')
 WHERE = ParamSpec('where', 'array', 'Existing commit predicates; repeat to AND (Git DSL percent-decodes values)',
                   [], predicates, role='filter-expression', repeatable=True, cli=CliBinding(('--where',)),
-                  fields=('author', 'email', 'date', 'hash', 'message', 'timestamp', 'content'))
+                  fields=('author', 'email', 'date', 'hash', 'message', 'timestamp', 'content'), answers=_COMMITS)
 DETAIL = ParamSpec('detail', 'string', 'normal, full blame, or raw historical file content', None, detail,
                    choices=('normal', 'full', 'raw'), cli=CliBinding(('--detail',)),
-                   legacy=(verbose_legacy('full', 'detail=full (--detail full)'),))
+                   legacy=(verbose_legacy('full', 'detail=full (--detail full)'),), answers=(_BLAME, 'git_file'))
 # One on/off switch on every view (COMMAND_MODEL "Switches"): a legacy boolean spelling (merges=0/1) is its value.
 MERGES = ParamSpec('merges', 'boolean', 'Include or exclude merge commits; omitted preserves each view default',
-                   None, switch_value, cli=CliBinding(('--merges',)))
-NO_MERGES = ParamSpec('no_merges', 'boolean', 'Legacy exclusion of merge commits in history', None, boolean_value)
-RAW = ParamSpec('raw', 'boolean', 'Legacy raw historical file content', None, boolean_value)
-SORT = string('sort', 'Commit field; prefix - for descending')
+                   None, switch_value, cli=CliBinding(('--merges',)), answers=_ROWS)
+NO_MERGES = ParamSpec('no_merges', 'boolean', 'Legacy exclusion of merge commits in history', None, boolean_value,
+                      answers=_COMMITS)
+RAW = ParamSpec('raw', 'boolean', 'Legacy raw historical file content', None, boolean_value,
+                answers=('git_file', 'git_file_structure'))
+SORT = string('sort', 'Commit field; prefix - for descending', answers=_ROWS)
 LIMIT = ParamSpec('limit', 'integer', 'Returned rows; 0 = no cap (legacy type= aggregate requests retain input-window limits)', None,
                   lambda v: nonnegative_display_limit(v, name='limit'), minimum=0,
-                  zero_policy='no cap', cli_flags=(('all', '1000000'),), cli=CliBinding(('--limit',)))
+                  zero_policy='no cap', cli_flags=(('all', '1000000'),), cli=CliBinding(('--limit',)), answers=_ROWS)
 SCAN_LIMIT = ParamSpec('scan-limit', 'integer', 'Commit-input budget for ownership or timeline; required loss exits 3',
                        None, lambda v: nonnegative_display_limit(v, name='scan-limit'), minimum=0,
                        aliases=('scan_limit',), zero_policy='count no commits',
-                       cli=CliBinding(('--scan-limit',), dest='scan_limit'))
+                       cli=CliBinding(('--scan-limit',), dest='scan_limit'), answers=_AGGREGATES)
 OFFSET = ParamSpec('offset', 'integer', 'Rows skipped after sorting', 0,
                    lambda v: nonnegative_display_limit(v, name='offset'), minimum=0,
-                   cli=CliBinding(('--offset',)))
+                   cli=CliBinding(('--offset',)), answers=_ROWS)
 CONTEXT = ParamSpec('context', 'integer', 'Context lines for a diff', None,
                     lambda v: nonnegative_display_limit(v, name='context'), minimum=0,
-                    cli=CliBinding(('--context',)))
+                    cli=CliBinding(('--context',)), answers=(_DIFF,))
 PARAM_SPECS = (VIEW, WHERE, DETAIL, MERGES, NO_MERGES, RAW, SORT, LIMIT, SCAN_LIMIT, OFFSET, CONTEXT,
-               *(string(name, description) for name, description in (
-                   ('ref', 'Starting branch, tag or commit'), ('element', 'Semantic element name'),
-                   ('bucket', 'Timeline period: week or month'), ('ignore', 'Blame commit hash prefixes to suppress'))),
+               string('ref', 'Starting branch, tag or commit'),
+               string('element', 'Semantic element name', answers=('git_file_history', _BLAME, _DIFF, 'git_timeline')),
+               string('bucket', 'Timeline period: week or month', answers=('git_timeline',)),
+               string('ignore', 'Blame commit hash prefixes to suppress', answers=(_BLAME,)),
                # since/until are settings (one bound each, COMMAND_MODEL "Conflicting values"), carried as a list
-               *(ParamSpec(name, 'array', description, [], expressions, cli=CliBinding(('--' + name,)))
+               *(ParamSpec(name, 'array', description, [], expressions, cli=CliBinding(('--' + name,)), answers=_COMMITS)
                  for name, description in (('since', 'Inclusive starting date'), ('until', 'Inclusive ending date'))))
 
 
@@ -121,9 +135,11 @@ def validate_resource_controls(params, subpath):
     _validate_content_scope(values, subpath)
     if values.get('detail') == 'raw' and (not subpath or view is not None):
         raise RequestValidationError('detail=raw requires a file-content request (omit view)')
-    aggregate = view == 'ownership' or (view in ('history', 'log') and values.get('bucket'))
-    if values.get('scan-limit') is not None and not aggregate:
-        raise RequestValidationError('scan-limit requires ownership or a bucketed history view')
+    # Which answers read scan-limit, element and the rest is their declaration's (BACK-2656); a repository's timeline
+    # shares the timeline type with a path's, so only this resource check can tell that it has no element to narrow to.
+    if values.get('element') is not None and not subpath:
+        raise RequestValidationError("element names an element of a file: give the file's path "
+                                     '(git://PATH/FILE?view=history&element=NAME)')
     if values.get('detail') is not None and values.get('raw') is not None:
         raise RequestValidationError('detail and legacy raw cannot be supplied together')
     if values.get('merges') is not None and values.get('no_merges') is not None:

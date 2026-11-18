@@ -64,16 +64,19 @@ def repo(tmp_path):
     return tmp_path
 
 
-def test_git_file_filter_without_history_warns(repo, capsys, monkeypatch):
-    from reveal.adapters.git.adapter import GitAdapter
+def test_git_file_filter_without_history_is_refused(repo, monkeypatch):
+    # A file's content reads no commit filter: the request is refused before the adapter is built (BACK-2656), no
+    # longer warned on stderr; the filter is named as typed beside the control it reached.
+    from reveal import api
+    from reveal.errors import RequestValidationError
     monkeypatch.chdir(repo)
-    GitAdapter('a.py', query={'message~': 'fix'})
-    err = capsys.readouterr().err
-    assert "'message'" in err and 'add ?type=history' in err
+    with pytest.raises(RequestValidationError,
+                       match=r"control 'where' \(message~=fix\) is not read by this answer \(git_file_structure"):
+        api.query('git://a.py?message~=fix')
 
 
-def test_git_file_filter_with_history_is_silent(repo, capsys, monkeypatch):
-    from reveal.adapters.git.adapter import GitAdapter
+def test_git_file_filter_with_history_answers(repo, monkeypatch):
+    from reveal import api
     monkeypatch.chdir(repo)
-    GitAdapter('a.py', query={'type': 'history', 'message~': 'fix'})
-    assert 'add ?type=history' not in capsys.readouterr().err
+    result = api.query('git://a.py?view=history&message~=fix')
+    assert result['type'] == 'git_file_history' and [row['message'] for row in result['commits']] == ['fix: first']

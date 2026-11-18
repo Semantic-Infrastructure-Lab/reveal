@@ -30,7 +30,7 @@ def test_hotspots_declares_top():
 
 @pytest.mark.parametrize('scheme,fragment', [
     ('ast', 'limit=1000000'), ('patches', 'limit=1000000'),
-    ('testability', 'top=1000000'), ('stats', 'limit=1000000'), ('metrics', 'limit=1000000'), ('git', 'limit=1000000'),
+    ('testability', 'top=1000000'), ('stats', 'limit=1000000'), ('metrics', 'limit=1000000'),
     ('overview', 'all=true'),  # Constructor-bound map expansion; does not request assessments.
 ])
 def test_back1379_adapters_declare_all(scheme, fragment):
@@ -47,6 +47,16 @@ def test_calls_all_reaches_only_the_answers_that_read_its_cap():
     assert inject_query_flags('src?sort=-callers', 'calls', _args(all=True)) == 'src?sort=-callers&limit=1000000'
     assert inject_query_flags('src?uncalled', 'calls', _args(all=True)) == 'src?uncalled&limit=1000000'
     assert inject_query_flags('src?callers=main', 'calls', _args(all=True)) == 'src?callers=main'
+
+
+def test_git_all_reaches_only_the_answers_that_read_its_cap():
+    """git's commit lists and aggregates read limit; a file's content (a bare relative path such as ``src``) has no
+    row cap, so --all is satisfied there and nothing is injected (BACK-2656)."""
+    from reveal import adapters  # noqa: F401
+    assert adapters_base.get_adapter_class('git').CLI_QUERY_FLAGS['all'] == 'limit=1000000'
+    assert inject_query_flags('.', 'git', _args(all=True)) == '.?limit=1000000'
+    assert inject_query_flags('src?view=history', 'git', _args(all=True)) == 'src?view=history&limit=1000000'
+    assert inject_query_flags('src', 'git', _args(all=True)) == 'src'
 
 
 def test_all_injects_fragment():

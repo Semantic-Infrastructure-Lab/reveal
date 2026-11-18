@@ -236,7 +236,7 @@ PRODUCTION_CASES = {
     'flag:--no-group': lambda f: ['check', f, '--no-group'],
     'flag:--no-snippets': lambda f: ['check', f, '--no-snippets'],
     'flag:--no-gitignore': lambda f: [str(Path(f).parent), '--no-gitignore'],
-    'param:git.verbose': lambda f: [f'git://{Path(f).parent}?verbose'],
+    'param:git.verbose': lambda f: [f'git://{f}?view=blame&verbose'],  # detail is blame's (BACK-2656)
     'param:pack.verbose': lambda f: [f'pack://{Path(f).parent}?verbose'],
     'param:overview.verbose': lambda f: [f'overview://{Path(f).parent}?verbose'],
     'param:architecture.verbose': lambda f: [f'architecture://{Path(f).parent}?verbose'],

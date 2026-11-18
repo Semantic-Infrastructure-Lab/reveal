@@ -2803,81 +2803,73 @@ class TestOwnership:
         assert 'commit-share' in out.lower()
 
 
-class TestViewScopedParamWarnings:
-    """BACK-1127: a recognized param that's inert on the resolved view must
-    warn, same as an unrecognized param does (BACK-909) -- otherwise a
-    semantically-wrong-but-valid param produces a clean-looking result with
-    no signal that it was ignored."""
+class TestViewScopedParamApplicability:
+    """BACK-1127 warned on stderr when a recognized param was inert on the resolved view; since BACK-2656 each control
+    declares the answers that read it (COMMAND_MODEL "Applicability") and a control on another answer is an invalid
+    request before the adapter is built, through ``api.query`` as through the CLI. A control on an answer that reads it
+    answers as before."""
+
+    @staticmethod
+    def _query(repo, target='', **controls):
+        from reveal import api
+        return api.query(f"git://{repo}/{target}".rstrip('/'), **controls)
+
+    @staticmethod
+    def _refused(repo, control, answer, target='', **controls):
+        from reveal.errors import RequestValidationError
+        with pytest.raises(RequestValidationError, match=rf"control '{control}'.* is not read by this answer \({answer}"):
+            TestViewScopedParamApplicability._query(repo, target, **controls)
 
     @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
-    def test_merges_on_default_view_is_the_switch(self, git_repo_ownership, capsys):
-        """BACK-2656: legacy merges=1 is merges=on on every view (COMMAND_MODEL "Switches"); the default view's
-        recent commits read it, so it is no longer noted as ownership-only."""
-        GitAdapter(path=str(git_repo_ownership), query={'merges': '1'})
-        assert "'merges'" not in capsys.readouterr().err
+    def test_merges_on_default_view_is_the_switch(self, git_repo_ownership):
+        """Legacy merges=1 is merges=on on every view (COMMAND_MODEL "Switches"); the recent commits read it."""
+        assert self._query(git_repo_ownership, merges='1')['type'] == 'git_repository'
 
     @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
-    def test_merges_on_ownership_view_silent(self, git_repo_ownership, capsys):
-        GitAdapter(path=str(git_repo_ownership), query={'type': 'ownership', 'merges': '1'})
-        assert capsys.readouterr().err == ''
+    def test_merges_on_ownership_view_answers(self, git_repo_ownership):
+        assert self._query(git_repo_ownership, view='ownership', merges='1')['type'] == 'git_ownership'
 
     @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
-    def test_element_on_default_view_warns(self, git_repo_ownership, capsys):
-        GitAdapter(path=str(git_repo_ownership), query={'element': 'foo'})
-        err = capsys.readouterr().err
-        assert "'element'" in err
-        assert 'blame' in err
+    def test_element_on_default_view_is_refused(self, git_repo_ownership):
+        self._refused(git_repo_ownership, 'element', 'git_repository, default', element='foo')
 
     @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
-    def test_element_on_blame_view_silent(self, git_repo_ownership, capsys):
-        GitAdapter(path=str(git_repo_ownership), subpath='src/app.py',
-                   query={'type': 'blame', 'element': 'foo'})
-        assert capsys.readouterr().err == ''
+    def test_element_on_blame_view_answers(self, git_repo_ownership):
+        result = self._query(git_repo_ownership, 'src/app.py', view='blame', element='app')
+        assert result['type'] == 'git_file_blame'
 
     @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
-    @pytest.mark.parametrize('query', [
-        {'type': 'history', 'element': 'foo'}, {'type': 'log', 'element': 'foo'},
-        {'type': 'diff', 'element': 'foo'}, {'type': 'log', 'bucket': 'month'},
+    @pytest.mark.parametrize('controls', [
+        {'view': 'history', 'element': 'app'}, {'view': 'log', 'element': 'app'},
+        {'view': 'diff', 'element': 'app'}, {'view': 'log', 'bucket': 'month'},
     ], ids=lambda q: '&'.join(f'{k}={v}' for k, v in q.items()))
-    def test_param_on_a_view_that_reads_it_is_silent(self, git_repo_ownership, capsys, query):
-        """BACK-1604: history/log narrow to an element's commits and diff to its hunks;
-        naming blame alone warned "no effect" over a correct element history."""
-        GitAdapter(path=str(git_repo_ownership), subpath='src/app.py', query=query)
-        assert capsys.readouterr().err == ''
+    def test_param_on_a_view_that_reads_it_answers(self, git_repo_ownership, controls):
+        """BACK-1604: history/log narrow to an element's commits and diff to its hunks."""
+        assert self._query(git_repo_ownership, 'src/app.py', **controls)['type'].startswith('git_')
 
     @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
-    def test_element_on_a_file_without_type_names_the_file_view(self, git_repo_ownership, capsys):
-        GitAdapter(path=str(git_repo_ownership), subpath='src/app.py', query={'element': 'foo'})
-        err = capsys.readouterr().err
-        assert "view 'file content'" in err
-        assert '?type=history' in err
+    def test_element_on_a_file_without_a_view_names_the_file_answer(self, git_repo_ownership):
+        self._refused(git_repo_ownership, 'element', 'git_file_structure, default', 'src/app.py', element='foo')
 
     @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
-    def test_since_on_ownership_view_warns(self, git_repo_ownership, capsys):
-        GitAdapter(path=str(git_repo_ownership), query={'type': 'ownership', 'since': '2020-01-01'})
-        err = capsys.readouterr().err
-        assert 'ownership' in err
-        assert "'since'" in err  # named as typed, not as the 'date' filter it becomes
+    def test_since_on_ownership_view_is_refused(self, git_repo_ownership):
+        """Named as typed, not as the 'date' filter it becomes."""
+        self._refused(git_repo_ownership, 'since', 'git_ownership', view='ownership', since='2020-01-01')
 
     @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
-    def test_since_on_default_view_silent(self, git_repo_ownership, capsys):
-        GitAdapter(path=str(git_repo_ownership), query={'since': '2020-01-01'})
-        assert capsys.readouterr().err == ''
+    def test_since_on_default_view_answers(self, git_repo_ownership):
+        assert self._query(git_repo_ownership, since='2020-01-01')['type'] == 'git_repository'
 
     @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
-    def test_no_merges_on_ownership_view_warns(self, git_repo_ownership, capsys):
-        GitAdapter(path=str(git_repo_ownership), query={'type': 'ownership', 'no_merges': '1'})
-        err = capsys.readouterr().err
-        assert "'no_merges'" in err
-        assert 'ownership' in err
+    def test_no_merges_on_ownership_view_is_refused(self, git_repo_ownership):
+        """Ownership excludes merge commits by default and reads merges=on|off, never the legacy no_merges."""
+        self._refused(git_repo_ownership, 'no_merges', 'git_ownership', view='ownership', no_merges='1')
 
     @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
-    def test_ownership_query_still_succeeds_despite_inert_params(self, git_repo_ownership):
-        adapter = GitAdapter(path=str(git_repo_ownership),
-                              query={'type': 'ownership', 'since': '2020-01-01'})
-        r = adapter.get_structure()
+    def test_ownership_query_answers_without_inert_params(self, git_repo_ownership):
+        r = self._query(git_repo_ownership, view='ownership')
         assert r['type'] == 'git_ownership'
-        assert r['total_commits'] == 5  # 'since' had no effect -- warning is additive, not an error
+        assert r['total_commits'] == 5
 
 
 class TestDateFilterCorrectness:

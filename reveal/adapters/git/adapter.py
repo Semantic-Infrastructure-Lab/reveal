@@ -4,7 +4,6 @@ Progressive disclosure for Git repositories with token-efficient output.
 """
 
 import os
-import sys
 from pathlib import Path
 
 from typing import Dict, Any, List, Optional, Set, Tuple, Union
@@ -456,7 +455,6 @@ class GitAdapter(ResourceAdapter):
         self._initialize_result_control(result_control_parts)
         self._initialize_query_filters(filter_parts)
 
-        self._warn_view_scoped_query_params()
         self._unknown_filter_fields = self._find_unknown_filter_fields()
 
     def _find_unknown_filter_fields(self) -> List[str]:
@@ -483,74 +481,6 @@ class GitAdapter(ResourceAdapter):
                         f"compares a missing value -- this may be a typo. Fields: "
                         f"{', '.join(commits.COMMIT_FIELDS)}"),
         }
-
-    # Params only meaningful when `type=` resolves to this exact value —
-    # accepted (they're in the schema) but silently inert on any other view.
-    # Each names every view that reads it: ?element= is the blame target, narrows
-    # history/log to the commits touching that element and diff to its hunks, so naming
-    # blame alone warned "no effect" over a correct element history (BACK-1604).
-    _VIEW_SCOPED_PARAMS = {
-        'merges': ('ownership',),
-        'detail': ('blame',),
-        'element': ('blame', 'history', 'log', 'diff'),
-        'context': ('diff',),
-        'ignore': ('blame',),
-        'bucket': ('history', 'log'),
-    }
-
-    def _warn_view_scoped_query_params(self) -> None:
-        """BACK-1127: warn when a recognized param has no effect on the
-        resolved view — same silent-failure shape as BACK-909's
-        unknown-param warning, but for a param name that IS in the schema,
-        just not for this ``type=``. Without this, a typo shouts
-        (_warn_unknown_query_params) while a semantically-wrong-but-valid
-        param says nothing — the signal is inverted relative to risk.
-        """
-        query_type = self.query.get('type')
-        resolved = query_type or ('file content' if self.subpath else 'default (log)')
-
-        # BACK-1504: on a file or directory, commit filters are applied only by
-        # ?type=history; the default view shows the file at the ref and never
-        # reads them, so `git://f.py?message~=fix` answered with no filter at all.
-        if self.subpath and query_type not in ('history', 'log', 'ownership') and self.query_filters:
-            fields = ', '.join(f"'{key}'" for key in sorted(set(self._filter_keys)))
-            view = f"type={query_type}" if query_type else 'file content'
-            print(
-                f"⚠ Filter param(s) {fields} have no effect on git:// view '{view}' -- "
-                f"add ?type=history to filter this path's commits. "
-                f"Result does not reflect them.",
-                file=sys.stderr,
-            )
-
-        for key, valid_types in self._VIEW_SCOPED_PARAMS.items():
-            if key in self.query and query_type not in valid_types:
-                applies = ', '.join(f'?type={t}' for t in valid_types)
-                print(
-                    f"⚠ Query param '{key}' has no effect on git:// view "
-                    f"'{resolved}' — only applies to {applies}. "
-                    f"Result does not reflect it.",
-                    file=sys.stderr,
-                )
-
-        if query_type == 'ownership':
-            if 'no_merges' in self.query:
-                print(
-                    "⚠ Query param 'no_merges' has no effect on git:// view "
-                    "'ownership' — ownership already excludes merge commits "
-                    "by default; use ?merges=1 to include them. Result does "
-                    "not reflect it.",
-                    file=sys.stderr,
-                )
-            # Ownership aggregates unfiltered; operational keys are separated above.
-            inert_keys = set(self._filter_keys)
-            if inert_keys:
-                fields = ', '.join(f"'{key}'" for key in sorted(inert_keys))
-                print(
-                    f"⚠ Filter param(s) {fields} have no effect on git:// "
-                    f"view 'ownership' — ownership aggregates commit-share "
-                    f"unfiltered. Result does not reflect them.",
-                    file=sys.stderr,
-                )
 
     @staticmethod
     def _parse_resource_string(resource: str, *, inline_query=True, literal_paths=False) -> Dict[str, Any]:

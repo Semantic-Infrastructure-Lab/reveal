@@ -83,8 +83,19 @@ control defaults. `view` is an alias of the existing `type` selector, with `log`
 retained as history. URI `view=history&where=author%3DScott` uses the same owner.
 
 Typed `merges=True/False` and URI `merges=on/off` explicitly include/exclude merge
-commits. Omission preserves each view's default. Existing numeric/string boolean
-`merges=1` remains ownership-only, including its unused-control note on other views.
+commits. Omission preserves each view's default (ownership excludes merges, every other
+commit list includes them). A numeric/string boolean (`merges=1`, `merges=0`) is the same
+switch on every view.
+
+Each control is read by the answers that use it, and a control on another answer exits 2
+before the repository is read, naming where it is read and the controls the answer reads.
+Commit lists (repository overview, a ref's history, a file or directory history, a timeline)
+read `where`, `since`, `until`, `sort`, `limit`, `offset`, `merges` and `no_merges`; ownership
+reads `sort`, `limit`, `offset`, `merges` and `scan-limit` (it aggregates unfiltered); a
+timeline also reads `scan-limit`; blame reads `detail` and `ignore`, a diff `context`; `element`
+narrows a file's history, blame, diff or timeline (a repository has none: exit 2); a file's
+content reads `raw` (or `detail=raw`). So a row cap on a file's content, or a commit filter
+on ownership, exits 2 rather than answering with a note.
 Canonical `limit` and `offset` cap returned authors or time buckets after aggregation;
 aggregate totals retain the input population. `scan-limit` bounds aggregate commit
 input (timeline default 20,000; ownership default unbounded). A known input-window

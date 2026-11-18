@@ -101,13 +101,14 @@ BASE = {**CASES, 'stats': (None, ''), 'codex': (None, '')}
 TARGETS = {'claude': 'sessions', 'codex': '', 'json': 'proj/data.json'}
 # A control that answers only on another target than its noun's default (Claude's turn slice reads one session):
 # the legacy-word probes (1b, 6, 16) send its spellings there, so they compare answers rather than two rejections.
-CONTROL_TARGETS = {('claude', 'tail'): 'session/my-session'}
+CONTROL_TARGETS = {('claude', 'tail'): 'session/my-session', ('git', 'detail'): 'proj/app.py'}
 # The answer a probe of a control's spelling selects when the default one does not read the control (rule 20,
 # BACK-2656: there it is refused, which is applicability's subject, not the spelling's): (subcommand argv, URI query).
 CONTROL_BASES = {('calls', 'kind'): (['--uncalled'], '?uncalled'), ('calls', 'external'): (['--modules'], '?modules'),
                  ('calls', 'limit'): (['--sort=-callers'], '?sort=-callers'),
                  ('imports', 'limit'): (['--sort=-fan-in'], '?sort=-fan-in'),
-                 ('imports', 'detail'): (['--circular'], '?circular')}
+                 ('imports', 'detail'): (['--circular'], '?circular'),
+                 ('git', 'detail'): (['--view', 'blame'], '?view=blame')}
 
 # The shared controls (rule 7: the one declared list, query_parser.SHARED_CONTROL_NAMES), each probed with a value a
 # supporting noun would accept. Left out: view (the deferred row, D18). Not shared controls: format/output (global
@@ -195,13 +196,10 @@ NOT_YET = {
     # lists): each answer with the controls it answered without reading, warned (ledger, own warning or stderr note).
     ('codex', '20'): 'warned, exit 0: catalog: since, until, key, last, tokens, goal, matches, full; session overview, '
                      'messages and tools: filter, search, since, until, key, matches, full; config: all but key; info: all',
-    ('git', '20'): 'warned, exit 0 (the view-scoped parameters on stderr only): every view: context, detail, ignore, '
-                   'merges, bucket or element outside the views that read them; file default, blame and diff: sort, '
-                   'limit, offset, since, until; ownership: no_merges, since, until',
 }
 
 NOT_YET_BASELINE = {'1a': 0, '1b': 0, '1c': 0, '1d': 0, '2': 0, '3': 0, '3b': 0, '4': 0, '5': 0, '6': 0,
-                    '8a': 0, '8b': 0, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 2, '14': 0, '21j': 0, '22': 0}
+                    '8a': 0, '8b': 0, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 1, '14': 0, '21j': 0, '22': 0}
 
 
 # --- the fixture -------------------------------------------------------------------------------------------
@@ -287,7 +285,8 @@ def _uri(noun, *pairs, base=True, control=None):
 def _sub(noun, *extra, base=True, control=None):
     """The subcommand argv, or None when the noun has no subcommand."""
     cli = BASE[noun][0] if BASE[noun][0] is None else CONTROL_BASES.get((noun, control), BASE[noun])[0]
-    return None if cli is None else [noun, TARGETS.get(noun, 'proj'), *(cli if base else ()), *extra]
+    target = CONTROL_TARGETS.get((noun, control), TARGETS.get(noun, 'proj'))
+    return None if cli is None else [noun, target, *(cli if base else ()), *extra]
 
 
 @dataclass(frozen=True)
