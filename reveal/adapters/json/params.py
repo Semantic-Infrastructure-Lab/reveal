@@ -3,7 +3,7 @@ from typing import Any, Dict, Optional
 
 from ...errors import RequestValidationError
 from ...utils.query_binding import boolean_value, given_controls, unread_by_data_warning
-from ...utils.query_parser import (CliBinding, LegacySpelling, ParamSpec, ParamValueError, QueryParams, mark_query_keys,
+from ...utils.query_parser import (CliBinding, LegacySpelling, ParamSpec, ParamValueError, QueryParams,
                                    parse_query_params, peek_query_items)
 from ...utils.query_control import declared_result_control as result_control, parse_result_control
 from ...utils.query import parse_query_filters
@@ -84,7 +84,8 @@ def legacy_raw(params: QueryParams) -> bool:
     if not raw:
         return False
     params.mark('data-only')
-    if len(raw) == len(terms):  # the legacy word is the flatten answer's own; any other term is where's, unread here
+    params._folded = tuple(key for key in params._folded if key != 'data-only')  # the flatten answer's word, not where's
+    if len(raw) == len(terms):  # any other term is where's, which flatten does not read
         params._given.discard('where')
     return True
 
@@ -93,8 +94,6 @@ def array_controls_unread_by_data(params: Dict[str, Any], value: Any, path: str)
     """The value answer's array controls given for a value that is not a list: only the data shows they are unread, so
     the answer carries the one shared warning, exit 0 (COMMAND_MODEL "Applicability", Scott 2026-11-18 Q2)."""
     given = [spec.name for spec in ARRAY_CONTROLS if spec.name in given_controls(params)]
-    if WHERE.name in given:
-        mark_query_keys(params, *getattr(params, '_folded', ()))  # bare field keys are where's spellings
     return unread_by_data_warning(params, given, f'the value at {path} is {_json_kind(value)}, not a list')
 
 

@@ -505,16 +505,34 @@ def reject_unread_controls(declarations: Iterable[ParamSpec], params: Mapping[st
     facets = answer_facets(declarations, params, result_type())
     unread = [spec for spec in scoped if not _reads(spec, facets)]
     if unread:
-        raise RequestValidationError(_unread_controls_message(declarations, unread, facets))
+        raise RequestValidationError(_unread_controls_message(declarations, unread, facets, params))
 
 
-def _unread_controls_message(declarations: tuple, unread: list, facets: tuple) -> str:
+def _folded_terms(params: Mapping[str, Any], name: str) -> list:
+    """The terms of control *name* that arrived as bare field keys (``?bogus=1`` folds into ``where``), as typed."""
+    folded = set(getattr(params, '_folded', ()))
+    value = dict(peek_query_items(params)).get(name)
+    if not folded or not isinstance(value, list):
+        return []
+    parts = (part.strip() for part in (getattr(params, '_source_query', None) or '').split('&'))
+    return [part for part in parts if part and query_key(part) in folded and part in value]
+
+
+def _as_typed(params: Mapping[str, Any], name: str) -> str:
+    """A control named canonically, followed by the bare field keys that spelled it (``'where' (bogus=1)``), so a
+    disclosure names what the request said as well as the control it reached."""
+    terms = _folded_terms(params, name)
+    return f"'{name}'" + (f" ({', '.join(terms)})" if terms else '')
+
+
+def _unread_controls_message(declarations: tuple, unread: list, facets: tuple, params: Mapping[str, Any]) -> str:
     """Named by the control, whatever spelling carried it: a URI key, a flag injected into the query (--limit can
-    reach a URI as a legacy key) and a legacy flag all name one control; its retirement note names the old spelling."""
+    reach a URI as a legacy key) and a legacy flag all name one control; its retirement note names the old spelling.
+    Bare field keys folded into the filter expression are named as typed beside it."""
     reads = ', '.join(spec.name for spec in declarations if spec.role != 'operation' and _reads(spec, facets))
     where = '; '.join(f"{spec.name} is read by: {', '.join(spec.answers)}" for spec in unread)
     several = len(unread) > 1
-    return (f"control{'s' if several else ''} {', '.join(repr(spec.name) for spec in unread)} "
+    return (f"control{'s' if several else ''} {', '.join(_as_typed(params, spec.name) for spec in unread)} "
             f"{'are' if several else 'is'} not read by this answer ({', '.join(facets)}); {where}; "
             f"controls this answer reads: {reads or '(none)'}")
 
@@ -523,12 +541,13 @@ def unread_by_data_warning(params: Dict[str, Any], names: Iterable[str], reason:
     """The one disclosure of a control only the data can show to be unread (COMMAND_MODEL "Applicability", Scott
     2026-11-18 Q2: JSON ``sort``/``limit``/``offset`` on a value that is not a list), shaped like the open field sets'
     ``unknown_filter_field``: a ``meta.warnings`` entry, exit 0. It counts the controls as read (the disclosure is
-    their use), so the unused-input ledger does not name them a second time. None when *names* is empty."""
+    their use), so the unused-input ledger does not name them a second time, bare field keys folded into one of them
+    included; the message names those as typed. None when *names* is empty."""
     fields = list(dict.fromkeys(names))
     if not fields:
         return None
-    mark_query_keys(params, *fields)
-    named = ', '.join(f"'{field}'" for field in fields)
+    named = ', '.join(_as_typed(params, field) for field in fields)
+    mark_query_keys(params, *fields, *(query_key(term) for field in fields for term in _folded_terms(params, field)))
     return {'type': 'control_unread_by_data', 'code': 'control_unread_by_data', 'fields': fields,
             'message': f"{named} {'has' if len(fields) == 1 else 'have'} no effect on this data: {reason}"}
 

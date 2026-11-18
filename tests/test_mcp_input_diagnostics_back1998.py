@@ -59,7 +59,7 @@ def test_cli_json_and_text_preserve_unknown_and_unused_inputs(resources):
     assert [(w['type'], w['fields']) for w in json.loads(out)['meta']['warnings']] == [('control_unread_by_data',
                                                                                         ['where'])]
     code, out, err = _cli(json_uri, '--format', 'text')
-    assert code == 0 and "'where' has no effect on this data" in out and 'bogus' not in err, (out, err)
+    assert code == 0 and "'where' (bogus=1) has no effect on this data" in out and 'bogus' not in err, (out, err)
     for uri, field, options in (
         (f'sqlite://{resources / "data.db"}?bogus=1', 'bogus', ()),
         (f'sqlite://{resources / "data.db"}?limit=1', 'limit', ()),
