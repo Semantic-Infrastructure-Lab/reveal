@@ -91,9 +91,11 @@ table mirrors those groups; verified live against reveal-cli 0.129.0.
 ```
 > `--format` and `--output json=PATH` are honored or rejected per target (BACK-1425):
 > each adapter's declared `output_formats` (`help://schemas/<adapter>`) is
-> enforced, and any other value exits 2 with the supported list. `--sort`,
-> `--limit` and `--head`/`--tail`/`--range` print a `Note: ... has no effect`
-> on a target that cannot apply them (BACK-1385, BACK-1497).
+> enforced, and any other value exits 2 with the supported list. On a noun that
+> declares its controls, `--sort` or `--limit` its selected answer does not read
+> exits 2 naming the answers that read it ([Ignored inputs](OUTPUT_CONTRACT.md#ignored-inputs),
+> BACK-2656); on other targets `--sort`, `--limit` and `--head`/`--tail`/`--range`
+> print a `Note: ... has no effect` where they cannot apply (BACK-1385, BACK-1497).
 
 **`--check` is universal; its own options are file-target-scoped** (`Quality
 checks` group):

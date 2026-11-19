@@ -349,6 +349,15 @@ it honest:
 `tests/test_flag_ledger.py` runs every adapter with each probe flag, and fails when a flag
 is neither honored nor named.
 
+A noun that declares its controls (`PARAM_SPECS`) goes further: each `ParamSpec` names the
+answers that read it in `answers` (empty means every answer), and a control the selected answer
+does not read is refused before analysis, exit 2, by the shared check, so the noun itself never
+writes an applicability check or a "has no effect" note. A control that needs another control's
+value declares `requires`. On such a noun the ledger is the suite's backstop:
+`tests/test_ledger_backstop_back2656.py` gives every declared-applicable control on every answer and
+fails if the ledger reports one unread, which means the declaration is wrong. The contract is in
+[OUTPUT_CONTRACT](reveal/docs/development/OUTPUT_CONTRACT.md#ignored-inputs).
+
 Subcommands (`reveal <name>`) get the same ledger and walk scope from
 `reveal/cli/routing/subcommand.py`. A runner reads its flags from `args` as usual; a runner
 that exits nonzero *after* printing its result (a findings exit code) calls
@@ -600,8 +609,9 @@ Flag-ledger fixtures must contain enough matching data to exercise a cut or excl
 `tests/test_flag_ledger.py` uses ranking-mode calls, several dependency targets and
 patch groups, and test files that contribute real edges. Its strict `KNOWN_SILENT`
 list shrinks when these controls expose an effect. Read a query key only in the view
-that applies it: the ledger can then name a bound such as `codex:// --since` that the
-bare session-list view does not use.
+that applies it, and on a declared noun declare it (`answers`, `requires`): `codex://
+--since` without a `filter` or `search` is then refused before analysis instead of being
+named after it.
 
 The first `ParamSpec` pilot lives in `utils/query_parser.py` and patches' `limit`/`min`
 controls. Frozen records derive numeric parsing, schema/default/zero-policy details
