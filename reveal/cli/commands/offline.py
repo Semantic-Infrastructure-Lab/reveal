@@ -8,11 +8,12 @@ deliberately, instead of hitting it silently mid-task on an air-gapped host.
 import argparse
 import sys
 from argparse import Namespace
+from ..argparsing import RevealArgumentParser
 
 
 def create_offline_parser() -> argparse.ArgumentParser:
     """Create and return the argument parser for 'reveal offline'."""
-    parser = argparse.ArgumentParser(
+    parser = RevealArgumentParser(
         prog='reveal offline',
         description='Pre-download tree-sitter grammars so reveal works without network access.',
         formatter_class=argparse.RawDescriptionHelpFormatter,

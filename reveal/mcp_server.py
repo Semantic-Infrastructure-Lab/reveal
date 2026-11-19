@@ -1110,9 +1110,9 @@ def resource_help_schema(adapter: str) -> str:
 
 def create_mcp_parser():
     """The ``reveal-mcp`` command's argument parser."""
-    import argparse
+    from .cli.argparsing import RevealArgumentParser
 
-    parser = argparse.ArgumentParser(
+    parser = RevealArgumentParser(
         prog='reveal-mcp',
         description='Reveal MCP server — progressive disclosure for AI agents',
     )

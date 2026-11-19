@@ -6,6 +6,7 @@ from argparse import Namespace
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import List, Optional
+from ..argparsing import RevealArgumentParser
 from ...utils.query_control import ScanBudget, BudgetAccounting
 from ...utils.results import (AnalysisCompleteness, ExecutionFacts, execution_exit_code, outcome_of,
                               requested_fail_on)
@@ -21,7 +22,7 @@ def create_health_parser() -> argparse.ArgumentParser:
     """Create parser for reveal health subcommand."""
     from reveal.cli.parser import _build_global_options_parser
     from reveal.cli.invocation import exit_codes_text
-    parser = argparse.ArgumentParser(
+    parser = RevealArgumentParser(
         prog='reveal health',
         parents=[_build_global_options_parser()],
         description='Ops health check across SSL, databases, DNS and nginx (code quality: reveal check).',

@@ -10,6 +10,7 @@ from contextlib import nullcontext
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from ..argparsing import RevealArgumentParser
 from .ledger import FlagLedger, complete, delegate, ledger_of, mark, peek
 from ...config import require_selected_config
 from ...errors import ConfigLoadError
@@ -40,22 +41,14 @@ class _LenientParseFailed(Exception):
     """A re-parse that only recovers the request's format and target met a usage error of its own."""
 
 
-class JsonUsageParser(argparse.ArgumentParser):
+class JsonUsageParser(RevealArgumentParser):
     """A parser whose usage errors, in a request that asks for JSON (``--format json`` or the ``--output json``
     stdout sink), answer with the invalid-request JSON document the declared route builds for an invalid value
     (COMMAND_MODEL "Transports"; exit 2, the message in the document and on stderr). The one seam for the main parser
     and every noun's declared parser; in text mode each keeps its own usage error. A subclass names the document's
-    target in ``invalid_request``.
-
-    A long option is spelled in full: argparse's unique-prefix expansion is off on every such parser (BACK-2705), so an
-    abbreviation (``--lim``, ``--no-git``) is an unknown option with the same refusal as any other, never a second,
-    undeclared spelling of a flag (COMMAND_MODEL "Spellings")."""
+    target in ``invalid_request``. A long option is spelled in full (``RevealArgumentParser``, BACK-2705)."""
     _argv: list | None = None
     _lenient: bool = False
-
-    def __init__(self, *args, **kwargs):
-        kwargs['allow_abbrev'] = False
-        super().__init__(*args, **kwargs)
 
     def parse_known_args(self, args=None, namespace=None):
         if not self._lenient:  # the request as typed (main passes it), for a usage error to recover format and target

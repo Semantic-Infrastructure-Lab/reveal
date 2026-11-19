@@ -8,6 +8,7 @@ import sys
 from argparse import Namespace
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
+from ..argparsing import RevealArgumentParser
 from ..global_flags import add_gitignore_arguments, rule_patterns
 from ..routing.ledger import complete
 from ..routing.subcommand import emit_subcommand_result
@@ -23,7 +24,7 @@ def create_review_parser() -> argparse.ArgumentParser:
     """Create parser for reveal review subcommand."""
     from reveal.cli.parser import _build_global_options_parser
     from reveal.cli.invocation import exit_codes_text
-    parser = argparse.ArgumentParser(
+    parser = RevealArgumentParser(
         prog='reveal review',
         parents=[_build_global_options_parser()],
         description='Retired: use `reveal check --changed RANGE` for the rules and the diff:// adapter '

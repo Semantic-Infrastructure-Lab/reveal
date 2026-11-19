@@ -12,6 +12,7 @@ from typing import Optional
 # shadowing the editable dev checkout (BACK-1014) shows up immediately as
 # an unexpected site-packages path instead of silently resolving.
 _PACKAGE_DIR = Path(__file__).resolve().parent.parent
+from .argparsing import RevealArgumentParser
 from .global_flags import add_exclude_argument, add_gitignore_arguments, add_switch_argument, rule_patterns
 from ..utils.query_binding import ScalarOnceAction
 from .routing.declared import JsonUsageParser, invalid_uri_request, uri_flag_message
@@ -272,7 +273,7 @@ def _build_global_options_parser() -> argparse.ArgumentParser:
 
     Call this function once per consumer (argparse parents= consumes the instance).
     """
-    p = argparse.ArgumentParser(add_help=False)
+    p = RevealArgumentParser(add_help=False)
     scalar_settings(p)
     _add_global_options(p)
     return p

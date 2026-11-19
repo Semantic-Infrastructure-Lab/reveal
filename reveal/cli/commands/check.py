@@ -15,6 +15,7 @@ import argparse
 import textwrap
 from pathlib import Path
 from argparse import Namespace
+from ..argparsing import RevealArgumentParser
 from ..global_flags import add_exclude_argument, add_gitignore_arguments, add_switch_argument, rule_patterns
 from ...rules.base import category_legend
 from ..routing.ledger import complete
@@ -29,7 +30,7 @@ def create_check_parser() -> argparse.ArgumentParser:
     from reveal.cli.parser import _build_global_options_parser
     from reveal.cli.invocation import exit_codes_text
     global_opts = _build_global_options_parser()
-    parser = argparse.ArgumentParser(
+    parser = RevealArgumentParser(
         prog='reveal check',
         parents=[global_opts],
         description=(

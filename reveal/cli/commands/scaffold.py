@@ -2,11 +2,12 @@
 
 import argparse
 from argparse import Namespace
+from ..argparsing import RevealArgumentParser
 
 
 def create_scaffold_parser() -> argparse.ArgumentParser:
     """Create and return the argument parser for 'reveal scaffold'."""
-    parser = argparse.ArgumentParser(
+    parser = RevealArgumentParser(
         prog='reveal scaffold',
         description='Scaffold new reveal components (adapters, analyzers, rules)',
         formatter_class=argparse.RawDescriptionHelpFormatter,

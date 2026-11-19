@@ -3,11 +3,12 @@
 import argparse
 from argparse import Namespace
 from typing import Any, Dict
+from ..argparsing import RevealArgumentParser
 
 
 def create_dev_parser() -> argparse.ArgumentParser:
     """Create and return the argument parser for 'reveal dev'."""
-    parser = argparse.ArgumentParser(
+    parser = RevealArgumentParser(
         prog='reveal dev',
         description='Developer tooling: scaffold adapters, analyzers, and rules; inspect config.',
         formatter_class=argparse.RawDescriptionHelpFormatter,

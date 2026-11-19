@@ -79,11 +79,12 @@ Create `reveal/cli/commands/stats.py` with a parser factory and a runner:
 import argparse
 from argparse import Namespace
 
+from ..argparsing import RevealArgumentParser
 from ..parser import _build_global_options_parser
 
 
 def create_stats_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+    parser = RevealArgumentParser(
         prog='reveal stats',
         description='Show reveal statistics and metrics',
         parents=[_build_global_options_parser()],  # --format, --copy, --provenance, ...
@@ -95,6 +96,10 @@ def create_stats_parser() -> argparse.ArgumentParser:
 def run_stats(args: Namespace) -> None:
     ...  # render the result for args.format
 ```
+
+Build the parser with `RevealArgumentParser` (`reveal/cli/argparsing.py`), never `argparse.ArgumentParser`: it
+refuses an abbreviated long option as an unknown option (BACK-2705), and
+`tests/test_flag_abbreviation_back2705.py` fails on a parser built any other way.
 
 Take `--format`, `--copy`, `--provenance` and the other global options from
 `_build_global_options_parser()`; never re-declare them. If the command walks a tree, also
