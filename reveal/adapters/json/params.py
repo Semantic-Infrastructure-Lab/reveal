@@ -1,5 +1,5 @@
 """JSON controls distinguish dataset predicates from legacy first-word inspection modes."""
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from ...errors import RequestValidationError
 from ...utils.query_binding import boolean_value, given_controls, unread_by_data_warning
@@ -51,7 +51,7 @@ LIMIT = ParamSpec('limit', 'integer', 'Array rows; 0 = no cap', None, lambda v: 
 OFFSET = ParamSpec('offset', 'integer', 'Array rows skipped after sorting', 0, lambda v: nonnegative('offset', v), minimum=0,
                    cli=CliBinding(('--offset',)), answers=_VALUE)
 ARRAY_CONTROLS = (WHERE, SORT, LIMIT, OFFSET)
-PARAM_SPECS = (VIEW, WHERE, DETAIL, SORT, LIMIT, OFFSET)
+PARAM_SPECS: Tuple[ParamSpec, ...] = (VIEW, WHERE, DETAIL, SORT, LIMIT, OFFSET)
 # --head/--tail/--range slice this noun's rows today: flag-only legacy modifiers until the cut, read by the answers named
 # (BACK-2673; their notes are the flag:<noun>.<flag> RETIREMENTS rows).
 LEGACY_SLICES = legacy_slices(head=('json_value',), tail=('json_value',), range=('json_value',))

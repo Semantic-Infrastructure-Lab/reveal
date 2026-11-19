@@ -156,7 +156,7 @@ _FORMAT = ParamSpec('format', 'string', 'URI output override: text, json or dot 
                     role='presentation', answers=(_Q, _C, _R, _U, _M))
 
 _RESOURCE = ResourceSpec(uri_codec='existing-path-first')
-_PARAM_SPECS = (_CALLERS, _CALLEES, _ROOT, _DEPTH, _DETAIL, _RANK, _TOP, _UNCALLED, _TYPE, _MODULES,
+_PARAM_SPECS: Tuple[ParamSpec, ...] = (_CALLERS, _CALLEES, _ROOT, _DEPTH, _DETAIL, _RANK, _TOP, _UNCALLED, _TYPE, _MODULES,
                 _EXTERNAL, _BUILTINS, _TEST_FRAMEWORK, _FORMAT)
 # --head/--tail/--range slice this noun's rows today: flag-only legacy modifiers until the cut, read by the answers named
 # (BACK-2673; their notes are the flag:<noun>.<flag> RETIREMENTS rows).

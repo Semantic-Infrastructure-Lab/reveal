@@ -10,7 +10,7 @@ import os
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, Dict, Any, List, Optional, cast
+from typing import Callable, Dict, Any, List, Optional, cast, Tuple
 from reveal.reveal_types import CONTRACT_VERSION
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
@@ -247,7 +247,7 @@ _RESPECT_GITIGNORE = ParamSpec('respect_gitignore', 'string', 'false includes fi
 
 # Every control metrics takes; a shared control it does not take (match, kind, depth, until, ...) is rejected by the
 # binder and the declared parser from the one shared list (BACK-2654 rule 7), never declared here to reject it.
-PARAM_SPECS = (_VIEW, _WHERE, _HOTSPOTS, _TOP, _CODE_ONLY, _CHURN, _SINCE, _MERGES, _TESTS, _DETAIL,
+PARAM_SPECS: Tuple[ParamSpec, ...] = (_VIEW, _WHERE, _HOTSPOTS, _TOP, _CODE_ONLY, _CHURN, _SINCE, _MERGES, _TESTS, _DETAIL,
                _SORT, _LIMIT, _OFFSET, _EXCLUDE, _RESPECT_GITIGNORE)
 # --head/--tail/--range slice this noun's rows today: flag-only legacy modifiers until the cut, read by the answers named
 # (BACK-2673; their notes are the flag:<noun>.<flag> RETIREMENTS rows).

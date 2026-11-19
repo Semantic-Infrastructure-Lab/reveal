@@ -589,7 +589,9 @@ def _bind_global_verbose(name, adapter, args, source, spelled=None) -> None:
 
 
 def _delegate_typed_parameters(name, adapter, args, source, transport: str, spelled=None) -> None:
-    """Forward declaration accounting only after the receiving ledger exists."""
+    """Forward declaration accounting only after the receiving ledger exists. An inert flag-only modifier never shaped
+    an answer: its retirement note is its whole effect, so it counts as read (ParamSpec.flag_only)."""
+    mark(args, *((spec.cli.dest or spec.name) for spec in adapter.PARAM_SPECS if spec.flag_only == 'inert' and spec.cli))
     if transport != 'typed':
         return
     from ...utils.query_binding import legacy_flag_dests
@@ -637,8 +639,6 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
         args = ledger.track(args)
     mark(args, *consumed)
     _delegate_typed_parameters(name, adapter, args, source, transport, spelled)
-    # An inert flag-only modifier never shaped an answer: its retirement note is its whole effect (ParamSpec.flag_only).
-    mark(args, *((spec.cli.dest or spec.name) for spec in adapter.PARAM_SPECS if spec.flag_only == 'inert'))
     query_resource = _flagged_query(adapter, name, path, source, transport, args, consume, spelled, uri_query)
     if query_resource is None:
         return

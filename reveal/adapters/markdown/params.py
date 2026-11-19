@@ -1,5 +1,5 @@
 """Markdown controls bind directly; existing operations keep selection and source ownership."""
-from typing import Any
+from typing import Any, Tuple
 
 from ...utils.query_parser import CliBinding, LegacySpelling, ParamSpec, QueryParams, peek_query_items, legacy_slices
 from ...utils.query_binding import boolean_value
@@ -55,7 +55,7 @@ LIMIT = ParamSpec('limit', 'integer', 'Answer rows; 0 = no cap', None, int, mini
                   zero_policy='no cap', cli=CliBinding(('--limit',)), answers=(_LIST,))
 OFFSET = ParamSpec('offset', 'integer', 'Answer rows skipped after sorting', 0, int, minimum=0,
                    cli=CliBinding(('--offset',)), answers=(_LIST,))
-PARAM_SPECS = (WHERE, MATCH, VIEW, FIELD, BACKLINKS, AGGREGATE, LINKS, LINT, LINT_FIELDS,
+PARAM_SPECS: Tuple[ParamSpec, ...] = (WHERE, MATCH, VIEW, FIELD, BACKLINKS, AGGREGATE, LINKS, LINT, LINT_FIELDS,
                FIELDS, EXPLAIN, SORT, LIMIT, OFFSET)
 # --head/--tail/--range slice this noun's rows today: flag-only legacy modifiers until the cut, read by the answers named
 # (BACK-2673; their notes are the flag:<noun>.<flag> RETIREMENTS rows).

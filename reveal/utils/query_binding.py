@@ -726,14 +726,15 @@ def declined_controls_warning(declarations: Iterable[ParamSpec], params: Mapping
                                   'the answer does not apply to this target (see not_applicable)')
 
 
-def withhold_flag_only(declarations: Iterable[ParamSpec], params: Mapping[str, Any]) -> None:
+def withhold_flag_only(declarations: Iterable[ParamSpec], params: Dict[str, Any]) -> None:
     """Drop the flag-only modifiers from bound *params* once applicability has judged them: a CLI layer reads them
     from the namespace (``ParamSpec.flag_only``), and an adapter that hands its params on whole (Git's view readers)
     must not meet a key no URI can spell."""
     for spec in declarations:
         if spec.flag_only:
             dict.pop(params, spec.name, None)
-            getattr(params, '_given', set()).discard(spec.name)
+            given: set = getattr(params, '_given', set())
+            given.discard(spec.name)
             getattr(params, '_normalized', {}).pop(spec.name, None)
 
 
@@ -887,7 +888,7 @@ def convert_flag_only(specs: Iterable[ParamSpec], args: Any) -> None:
     layer that reads it (the router's slice) gets ``3`` and ``(2, 4)``. A value the control rejects stays as typed: the
     binder refuses it with the request's diagnostics, as it refuses any control's value."""
     for spec in specs:
-        if spec.flag_only != 'applied':
+        if spec.flag_only != 'applied' or spec.cli is None:  # a flag-only modifier always has its binding
             continue
         dest = spec.cli.dest or spec.name
         raw = getattr(args, dest, None)
