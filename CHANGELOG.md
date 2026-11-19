@@ -38,6 +38,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 - `reveal.api.query(uri, element_name=...)` on a declared noun (all 20, `stats://` included) now raises `RequestValidationError` with the CLI's message before the adapter is built, `json:// takes no positional element ('k'); name it in the URI: json://<file>[/path/to/key][?query]`; name the element in the URI (`json://f.json/k`). Before, `json://`, `markdown://` and `metrics://` answered it without the envelope, others raised `ValueError` "not found", and an element let an unknown keyword through. Plugins and undeclared adapters are unchanged (BACK-2687, BACK-2656).
 
+- A long option must be spelled in full: reveal no longer expands an abbreviation (`--lim` for `--limit`, `--no-git` for `--no-gitignore`, `--sel` for `--select`) on any command, the path and URI forms, every noun's subcommand, `check`, `review`, `health`, `dev`, `offline`, `scaffold` and `reveal-mcp` alike. It exits 2 as an unknown option (on a declared noun the message names the options the noun takes); spell the option in full. On a URI `--no-git` used to mean `--no-gitignore` while `reveal overview P --no-git` meant overview's retired `no_git` (BACK-2705).
+
 ### Fixed
 
 - The `overview` comparison now leaves the request's `exclude` out of both snapshots on every transport: `overview://P?against=HEAD&exclude=vendor`, `reveal.api.query('overview://P', against='HEAD', exclude=['vendor'])` and the MCP query tool answered as if no exclude was given, while `reveal overview P --against HEAD --exclude vendor` applied it (BACK-2693).
