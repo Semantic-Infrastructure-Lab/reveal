@@ -243,10 +243,15 @@ def _built(adapter_class: type, path: str, bound: Callable[[], Any], construct: 
 
 
 def _declares_applicability(adapter_class: type) -> bool:
-    """A noun's own ``PARAM_SPECS`` (as ``api.query``'s unsupported-control check reads it) with a control that names
-    its answers or the values of others it requires: only then is there an applicability check to run. A plugin
-    subclass that inherits the declaration keeps its own behaviour."""
-    declarations = vars(adapter_class).get('PARAM_SPECS') if isinstance(adapter_class, type) else None
+    """A noun's own ``PARAM_SPECS`` (as ``api.query``'s unsupported-control check reads it), or the declaration a
+    retired spelling adopts with a class-local ``BOUND_QUERY_CALL`` (``uses_bound_query_call``: ``stats://``,
+    Architecture), with a control that names its answers or the values of others it requires: only then is there an
+    applicability check to run. A plugin subclass that inherits the declaration keeps its own behaviour."""
+    if not isinstance(adapter_class, type):
+        return False
+    own = vars(adapter_class)
+    adopted = 'PARAM_SPECS' in own or own.get('BOUND_QUERY_CALL') is True
+    declarations = getattr(adapter_class, 'PARAM_SPECS', None) if adopted else None
     return any(getattr(spec, 'answers', ()) or getattr(spec, 'requires', ()) for spec in declarations or ())
 
 
