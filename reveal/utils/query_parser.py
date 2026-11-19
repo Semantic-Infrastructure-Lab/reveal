@@ -411,8 +411,10 @@ class ParamSpec:
     cap: Optional[str] = None
     # The answers that read this control (COMMAND_MODEL "Applicability", BACK-2656); empty: every answer. Each entry
     # names an answer by its predicted result type (``stats_file``) or by the selection that picks it: an operation's
-    # name (``hotspots``), ``name=value`` (``view=hotspots``) or ``default`` (no operation given). A control given to
-    # an answer that matches no entry is an invalid request, refused before analysis.
+    # name (``hotspots``), ``name=value`` (``view=hotspots``) or ``default`` (no operation given); parts joined with
+    # ``+`` name one answer by all of them (``claude_messages+default``: that type when no operation picks it, so not
+    # Claude's tail slice of the same type). A control given to an answer that matches no entry is an invalid request,
+    # refused before analysis.
     answers: Tuple[str, ...] = ()
     # The values of other controls this one needs, each ``name=value`` (``churn=on``: Metrics ``since`` bounds the churn
     # walk) or a bare ``name`` (that control given), with ``|`` between alternatives (``filter|search``: Codex ``since``

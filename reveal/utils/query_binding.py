@@ -489,7 +489,9 @@ def given_controls(params: Mapping[str, Any]) -> set:
 
 
 def _reads(spec: ParamSpec, facets: tuple) -> bool:
-    return not spec.answers or bool(set(spec.answers).intersection(facets))
+    """An entry names the answer when every ``+`` part of it does (``claude_messages+default``: that type, no
+    operation); empty answers: every answer."""
+    return not spec.answers or any(set(entry.split('+')) <= set(facets) for entry in spec.answers)
 
 
 def answer_reads(declarations: Iterable[ParamSpec], spec: ParamSpec, params: Mapping[str, Any],
