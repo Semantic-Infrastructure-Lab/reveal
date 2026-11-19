@@ -408,6 +408,16 @@ def _uri_terms(spec: ParamSpec, value: Any) -> tuple:
     return raw, [f'{spec.name}={raw}']
 
 
+def _same_scalar(spec: ParamSpec, uri_value: Any, typed_value: Any) -> bool:
+    """Two values of one scalar control, compared as the control reads them; a value it rejects is compared as typed,
+    so two different values name both spellings (rule 1) before either is rejected, and two equal ones are rejected
+    once, when the request binds."""
+    try:
+        return bool(_comparable(spec, uri_value) == _comparable(spec, typed_value))
+    except ValueError:
+        return str(uri_value) == str(typed_value)
+
+
 def join_uri_and_flags(declarations: Iterable[ParamSpec], uri_params: QueryParams, typed_params: QueryParams, *,
                        spelled: Optional[Mapping[str, str]] = None) -> QueryParams:
     """One request from a URI and the flags typed after it (COMMAND_MODEL "Flags after a URI", BACK-2673).
@@ -437,8 +447,7 @@ def join_uri_and_flags(declarations: Iterable[ParamSpec], uri_params: QueryParam
         prepared, spelled_parts = _uri_terms(spec, value)
         if spec.name in dict.keys(joined) and not spec.repeatable:  # a routing check, not a read
             key, raw = _uri_spelling(spec, uri_params)
-            uri_value = _comparable(spec, _decode_value(spec, dict.get(joined, spec.name)))
-            if uri_value != _comparable(spec, value):
+            if not _same_scalar(spec, _decode_value(spec, dict.get(joined, spec.name)), value):
                 raise ValueError(flag_conflicts_with_uri_message(_typed_flag(spec, spelled), key, raw))
             continue
         given = dict.get(joined, spec.name)
