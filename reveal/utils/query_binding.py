@@ -9,7 +9,8 @@ from urllib.parse import quote, unquote
 
 from ..errors import RequestValidationError, UnreadControlError, UnsupportedOverrideError
 from .query_parser import (SHARED_CONTROL_NAMES, LegacySpelling, ParamSpec, ParamValueError, QueryParams, ResourceSpec,
-                           mark_query_keys, parse_query_params, peek_query_items, query_key)
+                           mark_query_keys, parse_query_params, peek_query_items, query_key,
+                           query_key_recorder)
 
 
 def boolean_value(value: Any) -> bool:
@@ -614,6 +615,22 @@ def unread_by_data_warning(params: Dict[str, Any], names: Iterable[str], reason:
     mark_query_keys(params, *fields, *(query_key(term) for field in fields for term in _folded_terms(params, field)))
     return {'type': 'control_unread_by_data', 'code': 'control_unread_by_data', 'fields': fields,
             'message': f"{named} {'has' if len(fields) == 1 else 'have'} no effect on this data: {reason}"}
+
+
+def declined_controls_warning(declarations: Iterable[ParamSpec], params: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
+    """The given controls an answer that declined on the data never read (not applicable, exit 0: a patches scan with
+    no test file, git outside a repository): only the data showed they had nothing to shape, so they are named in the
+    one ``unread_by_data_warning`` (COMMAND_MODEL "Applicability", Q2), never by the unused-input ledger. A control the
+    answer read before declining (git ``since``) and the operation selection that chose the answer are not named.
+    None outside a dispatch that records reads (there the ledger names nothing either) or when nothing is left."""
+    used = query_key_recorder()
+    if used is None:
+        return None
+    given = given_controls(params)
+    unread = [spec.name for spec in declarations
+              if spec.name in given and spec.role != 'operation' and query_key(spec.name) not in used]
+    return unread_by_data_warning(dict(params) if not isinstance(params, dict) else params, unread,
+                                  'the answer does not apply to this target (see not_applicable)')
 
 
 def reject_unsupported_overrides(declarations: Iterable[ParamSpec], overrides: Mapping[str, Any]) -> None:
