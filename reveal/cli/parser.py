@@ -216,11 +216,14 @@ def _format_default() -> str:
     return value
 
 
-def _add_global_options(target) -> None:
+def _add_global_options(target, *, main_modes: bool = True) -> None:
     """Add global output flags to a parser or argument group.
 
     Called by both _build_global_options_parser() (for subcommand inheritance)
-    and create_argument_parser() (for the main parser's named group).
+    and create_argument_parser() (for the main parser's named group). *main_modes* False leaves out the
+    main command's modes that answer no request of their own (``--disable-breadcrumbs`` writes the user's
+    config): a declared noun's parser does not take them, so they exit 2 there as any unknown option
+    (BACK-2673; a URI's flags are its noun's).
     """
     target.add_argument('--format', choices=['text', 'json', 'typed', 'grep'], default=_format_default(),
                         help='Output format (text, json, typed [typed JSON with types/relationships], grep). '
@@ -250,8 +253,9 @@ def _add_global_options(target) -> None:
     target.add_argument('--verbose', '-v', action='store_true',
                         help='Show detailed output (e.g., all results instead of truncated summary for imports://)')
     add_switch_argument(target, 'breadcrumbs')
-    target.add_argument('--disable-breadcrumbs', action='store_true',
-                        help='Permanently disable breadcrumbs in user config')
+    if main_modes:
+        target.add_argument('--disable-breadcrumbs', action='store_true',
+                            help='Permanently disable breadcrumbs in user config')
     target.add_argument('--provenance', action='store_true',
                         help='Attach an "execution" block (reveal_version, repo commit/dirty '
                              'state, config digest, platform) to JSON adapter results')
@@ -264,18 +268,19 @@ def _add_global_options(target) -> None:
                              'only so it shows up in --help.')
 
 
-def _build_global_options_parser() -> argparse.ArgumentParser:
+def _build_global_options_parser(*, main_modes: bool = True) -> argparse.ArgumentParser:
     """Build a parent parser with flags inherited by all subcommands.
 
     These flags are universal — they make sense for every subcommand and for
     the main path-based interface. Using parents=[_build_global_options_parser()]
-    ensures subcommands inherit them without re-declaration.
+    ensures subcommands inherit them without re-declaration. A declared noun's parser passes
+    ``main_modes=False`` (``_add_global_options``).
 
     Call this function once per consumer (argparse parents= consumes the instance).
     """
     p = RevealArgumentParser(add_help=False)
     scalar_settings(p)
-    _add_global_options(p)
+    _add_global_options(p, main_modes=main_modes)
     return p
 
 

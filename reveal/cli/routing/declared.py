@@ -215,7 +215,7 @@ def create_declared_parser(name: str) -> argparse.ArgumentParser:
     exits = exit_codes_text(name, getattr(adapter, 'FINDINGS_POLICIES', ('none',)))
     epilog = '\n\n'.join(part for part in (help_info.get('epilog'), exits) if part)
     parser = _DeclaredParser(
-        prog=f'reveal {name}', parents=[_build_global_options_parser()],
+        prog=f'reveal {name}', parents=[_build_global_options_parser(main_modes=False)],
         description=help_info['description'], epilog=epilog,
         formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.declarations = tuple(adapter.PARAM_SPECS)
