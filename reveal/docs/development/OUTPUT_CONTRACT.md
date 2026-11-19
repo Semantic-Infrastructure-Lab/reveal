@@ -399,10 +399,11 @@ judged. `--all` lifts the selected answer's cap; on an answer with no row cap it
 satisfied and answers as without it, exit 0, with no note.
 
 A control that only the data shows to be unread (JSON's `where`, `sort`, `limit` and `offset` on a
-value that is not a list; Metrics `since` and `merges` on a ranking whose files have no git history)
-answers, exit 0, with one `control_unread_by_data` warning whose `fields` are the controls and
-whose `message` says why ("'limit' has no effect on this data: the value at (root) is an object,
-not a list").
+value that is not a list; Metrics `since` and `merges` on a ranking whose files have no git history;
+every control the answer had not read when it declined as not applicable, such as a Patches scan
+with no test files or Git outside a repository) answers, exit 0, with one `control_unread_by_data`
+warning whose `fields` are the controls and whose `message` says why ("'limit' has no effect on this
+data: the value at (root) is an object, not a list").
 
 On an adapter without declared parameters the parser owns unknown keys (`unknown_query_param`), and
 the flag ledger names inputs that were accepted but not used by this operation (`unused_query_param`
