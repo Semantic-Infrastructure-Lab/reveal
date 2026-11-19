@@ -1,0 +1,89 @@
+"""Flags after a URI are the subcommand's flags (COMMAND_MODEL "Flags after a URI", BACK-2673 Step 3b-2).
+
+A declared noun's URI is parsed by that noun's own parser, so ``reveal NOUN://T --flag v`` is the request
+``reveal NOUN T --flag v`` is. Conformance column '23' (tests/test_vocabulary_conformance_back2654.py) compares
+the two spellings flag by flag; this file pins what the column cannot see: a main-only mode refused on a declared
+noun, the paths the change must leave alone (an element after the URI, a ``--stdin`` batch, the legacy spellings
+waiting for their RETIREMENTS rows, the flagless MCP answer).
+"""
+import io
+import json
+
+import pytest
+
+from test_vocabulary_conformance_back2654 import BASE, TARGETS, _answer, _run, _uri, workspace  # noqa: F401
+
+from reveal.cli.invocation import COMMANDS
+from reveal.cli.routing.declared import declared_adapter_class
+
+SUBCOMMAND_NOUNS = sorted(noun for noun, spec in COMMANDS.items() if spec.declared_adapter)
+
+
+@pytest.fixture
+def config_writes(monkeypatch):
+    """Every call of the main-only mode that writes the user's config, recorded instead of written."""
+    calls = []
+    monkeypatch.setattr('reveal.main.disable_breadcrumbs_permanently', lambda: calls.append(1) or True)
+    return calls
+
+
+@pytest.mark.parametrize('form', ['subcommand', 'uri'])
+@pytest.mark.parametrize('extra', [(), ('--format', 'json')])
+def test_disable_breadcrumbs_is_not_an_option_of_a_declared_noun(workspace, config_writes, form, extra):
+    """``--disable-breadcrumbs`` is a main-command mode that writes the user's config: a declared noun does not take
+    it, so both spellings exit 2 naming it, and nothing is written (it used to be accepted and noted unused)."""
+    argv = ('ast', 'proj') if form == 'subcommand' else ('ast://proj',)
+    run = _run(*argv, '--disable-breadcrumbs', *extra)
+    assert run.rc == 2, run.brief()
+    message = json.loads(run.out)['error'] if extra else run.err
+    assert "unsupported control '--disable-breadcrumbs'" in message, run.brief()
+    assert config_writes == []
+
+
+def test_the_main_command_keeps_disable_breadcrumbs(workspace, config_writes):
+    """Control: the main command's mode still runs."""
+    run = _run('--disable-breadcrumbs')
+    assert run.rc == 0 and config_writes == [1], run.brief()
+
+
+@pytest.mark.parametrize('extra', [(), ('--format', 'json')])
+def test_an_element_after_a_declared_uri_is_refused_naming_the_uri_form(workspace, extra):
+    """Control: an element after a declared noun's URI keeps its one refusal (BACK-2526, BACK-2687)."""
+    from reveal.adapters.base import unread_element_message
+    run = _run('ast://proj', 'serve', *extra)
+    expected = unread_element_message(declared_adapter_class('ast'), 'ast', 'serve')
+    assert run.rc == 2, run.brief()
+    assert expected in (json.loads(run.out)['error'] if extra else run.err), run.brief()
+
+
+def test_a_stdin_batch_line_still_binds_the_command_lines_flags(workspace, monkeypatch):
+    """Control: a ``--stdin`` batch parses the command line once with the main parser (its per-line parse is its own
+    task); ``--limit`` still reaches each declared line."""
+    monkeypatch.setattr('sys.stdin', io.StringIO('ast://proj\n'))
+    run = _run('--stdin', '--limit', '1', '--format', 'json')
+    assert run.rc == 0, run.brief()
+    assert len(json.loads(run.out)['results']) == 1
+
+
+def test_a_pending_legacy_slice_still_answers_after_the_uri(workspace):
+    """Control: ``--head`` after an AST URI keeps slicing until its RETIREMENTS row lands (Scott 2026-11-19,
+    BACK-2706; step 3b-3), while the subcommand does not take it yet."""
+    sliced = _run('ast://proj', '--head', '1', '--format', 'json')
+    assert sliced.rc == 0 and len(json.loads(sliced.out)['results']) == 1, sliced.brief()
+    assert _run('ast', 'proj', '--head', '1').rc == 2
+
+
+def _without_execution(document):
+    return {key: value for key, value in document.items() if key != 'execution'}
+
+
+@pytest.mark.parametrize('noun', SUBCOMMAND_NOUNS)
+def test_the_flagless_mcp_answer_is_the_cli_json(workspace, noun):
+    """Control: the change is on the CLI parse only; a real ``reveal_query`` call answers each noun's default URI with
+    the CLI's JSON document (COMMAND_MODEL "Transports"), the provenance block aside (it names the command)."""
+    from reveal.mcp_server import reveal_query
+    uri = _uri(noun)
+    cli = _run(uri, '--format', 'json', '--provenance')
+    assert cli.rc in (0, 1, 3), cli.brief()
+    mcp = json.loads(reveal_query(uri, provenance=True))
+    assert _without_execution(mcp) == _without_execution(json.loads(cli.out))
