@@ -11,6 +11,7 @@ from conftest import _run_reveal_direct as run
 from reveal import api
 from reveal.adapters.json import JsonAdapter
 from reveal.cli.defaults import _default_args
+from reveal.errors import RequestValidationError
 from reveal.cli.routing.uri import _uri_execution_facts, resolve_uri
 from reveal.utils.results import AnalysisCompleteness, FailureCause
 
@@ -163,7 +164,10 @@ def test_element_remains_legacy_and_stdin_batches_exit_like_the_request(files, m
     # The JSON renderer has no element route: the element is refused, not dropped (BACK-2522).
     assert element.result['meta']['errors'][0]['code'] == 'invalid_request'
     assert "json://<file>[/path/to/key]" in element.result['error']
-    assert api.query(uri(files / 'object.json'), 'scalar')['value'] == 7
+    # api.query's element is the CLI's positional element: refused the same way; the URI names it (BACK-2687).
+    with pytest.raises(RequestValidationError, match=r"json:// takes no positional element \('scalar'\)"):
+        api.query(uri(files / 'object.json'), 'scalar')
+    assert api.query(uri(files / 'object.json') + '/scalar')['value'] == 7
     # Both batch forms exit as the direct request does, a source failure (COMMAND_MODEL 'Transports', BACK-2325).
     for options, code in ((['--stdin'], 3), (['--stdin', '--batch'], 3)):
         with monkeypatch.context() as context:

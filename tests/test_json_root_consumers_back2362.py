@@ -173,7 +173,9 @@ def test_element_and_check_keep_legacy_policy_and_stdin_answers_like_the_request
     path = tmp_path / 'excluded.json'
     path.write_text('{"answer":42}', encoding='utf-8')
     uri = f'json://{path.as_posix()}'
-    assert api.query(uri, element_name='answer') == {'name': 'answer', 'value': 42, 'type': 'int'}
+    # The element is named in the URI; api.query's element_name is refused on a declared noun (BACK-2687).
+    keyed = api.query(f'{uri}/answer')
+    assert (keyed['type'], keyed['path'], keyed['value_type'], keyed['value']) == ('json_value', 'answer', 'int', 42)
     checked = run(uri, '--check', '--format', 'json')
     assert checked.returncode == 0, checked.stderr
     warnings = [w for w in json.loads(checked.stdout)['meta']['warnings'] if w['type'] == 'unused_flag']

@@ -189,7 +189,9 @@ def query(
         uri: Full URI of the form ``scheme://resource[?params]``.
             Examples: ``"ast://mydir/"``, ``"claude://sessions/"``,
             ``"nginx:///etc/nginx/nginx.conf"``.
-        element_name: Optional element to extract from the resource.
+        element_name: Optional element for an adapter whose ``get_element`` reads one (plugins and undeclared
+            adapters). A declared noun reads no positional element: it is refused as an invalid request
+            (``RequestValidationError``) naming the URI form, as at the CLI; name the element in the URI instead.
         **kwargs: Declared typed query controls for constructor-bound structure
             adapters; otherwise forwarded to ``get_structure()`` or ``get_element()``.
             Surface accepts type, source_only, by, depth and top; Contracts accepts
@@ -246,6 +248,14 @@ def query(
             f"Supported schemes: {supported}"
         )
 
+    from .adapters.factory import _canonical_init, uses_bound_query_call
+    if element_name and uses_bound_query_call(adapter_class):
+        # A declared noun reads no positional element: the CLI's refusal, before the adapter is built, never in
+        # get_element (V020: a missing element is None there). Plugin subclasses keep forwarding (BACK-2687).
+        from .adapters.base import unread_element_message
+        from .errors import RequestValidationError
+        raise RequestValidationError(unread_element_message(adapter_class, scheme, element_name))
+
     from .utils.request_cache import host_request
     from .utils.invocation_log import log_scope
 
@@ -254,8 +264,7 @@ def query(
     # One invocation log for the whole call, so a config problem met while the adapter is
     # built reaches the answer as the CLI's JSON carries it (BACK-2659).
     with host_request(), log_scope(to_stderr=False), gitignore_scope(respect_gitignore):
-        from .adapters.factory import _canonical_init, uses_bound_query_call
-        if not element_name and uses_bound_query_call(adapter_class):
+        if uses_bound_query_call(adapter_class):
             bound = _canonical_init(adapter_class, resource, overrides=kwargs)
             def bound_answer(bound=bound):
                 result = bound.get_structure()
