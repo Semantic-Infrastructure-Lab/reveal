@@ -16,6 +16,28 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ## [Unreleased]
 
+### Behavior changes
+
+- An option the selected answer does not read now exits 2 before any analysis, on every declared noun and form (subcommand, URI, URI plus flag, `reveal.api.query`, MCP, `--stdin`), with one message naming the answers that read it: `control 'limit' is not read by this answer (imports, default); limit is read by: fan_in_ranking; controls this answer reads: lazy, scope, tests, root, scan-limit`. It answered exit 0 with an `unused_query_param` or `unused_flag` note, or with no word. `reveal.api.query` raises `reveal.errors.UnreadControlError`, a `RequestValidationError` (BACK-2656).
+
+- The refusals a script is most likely to meet: `imports` `--limit` outside `--sort=-fan-in` and `?format=dot` outside `?importers`; `calls` `--limit` on a callers or callees walk; `git` `sort`, `limit` and `offset` on a file's content, blame and diff, `context` outside a diff, filters and dates on ownership; `markdown` result controls on `view=links` and `lint`; `metrics` (and the retired `stats://`) `top`, `churn` and `since` outside `view=hotspots`; `patches` `top` on the default scan; Codex and Claude options outside the answers that read them, on every resource (`codex://memories?filter=x` answered) (BACK-2656).
+
+- Options that answered unchanged with no word now exit 2: every unread `reveal.api.query` keyword (`api.query('metrics://src', top=3)`); git's "has no effect" notes, which reached stderr only and never `--format json` (`git://.?context=2`); Claude `contains`, `full` and `raw` on answers that do not read them (`claude://session/NAME?contains=x`); Codex `filter` beside `search`; Markdown `where` on `?backlinks`; Metrics `detail` on `view=hotspots` and `code-only` on a file (BACK-2656).
+
+- Where only the data can tell, the answer stays exit 0 and names the options once in a `control_unread_by_data` warning instead of `unused_query_param`: JSON `sort`, `limit`, `offset` and `where` on a value that is not a list (an explicit `?where=` was silent; a bare `?key=value` is named as typed, `'where' (bogus=1) has no effect on this data`), and Metrics `since` and `merges` on a ranking whose files have no git history (BACK-2656).
+
+- `--all` lifts the selected answer's cap only. On an answer with no cap (an Imports summary, a Git blame, a Markdown link view, a Metrics file) it answers as without it, exit 0, where it added an `unused_flag` note; `overview PATH --against REF --all` (and `overview://`/`architecture://` with `against=`) now answers the comparison instead of exiting 2, and `patches://PATH?view=pressure --all` lifts the view's `top` (BACK-2656).
+
+- An option another option's value leaves unread is a conflicting request, exit 2 naming both: Metrics `since` or `merges` with `churn off` ("control 'since' requires churn=on; this request gives churn=off: give one or the other"; it was a note), and Codex `since` or `until` without `filter` or `search` (BACK-2656).
+
+- The `overview` and `architecture` comparison (`against=REF`) refuses `no_imports`, `all` and `verbose` with the same message as every other unread option, still exit 2, where it said "overview comparison does not support no_imports, all or verbose"; a typed `api.query(..., verbose=False)` on a comparison now answers instead of raising (BACK-2656).
+
+- `reveal.api.query` typed keywords on `deps://`, `hotspots://`, `pack://`, `patches://` and `testability://` now bind as their URI keys do and meet the same checks: deps and patches dropped them (`api.query('patches://src', group='file')` answered the default grouping), and hotspots, pack and testability raised Python's unexpected-keyword `TypeError` (BACK-2656).
+
+- `git://` legacy numeric `merges=0` (and `merges=false`) now drops merge commits on every view, as `merges=off` does; outside `view=ownership` it changed nothing and printed a note on stderr (BACK-2656).
+
+- `reveal.api.query(uri, element_name=...)` on a declared noun (all 20, `stats://` included) now raises `RequestValidationError` with the CLI's message before the adapter is built, `json:// takes no positional element ('k'); name it in the URI: json://<file>[/path/to/key][?query]`; name the element in the URI (`json://f.json/k`). Before, `json://`, `markdown://` and `metrics://` answered it without the envelope, others raised `ValueError` "not found", and an element let an unknown keyword through. Plugins and undeclared adapters are unchanged (BACK-2687, BACK-2656).
+
 ## [0.135.0] - 2026-11-18
 
 Read "Behavior changes" first. Every declared noun now takes one vocabulary of options on its subcommand, its URI and `reveal.api.query` (`--limit/--offset`, `--sort`, `--where`, `--match`, `--detail`, `--view`, switches as `on|off`); old spellings still answer with a note until 1.0, and an unknown key, flag or field now exits 2 instead of being ignored. Configuration that cannot be used fails the request instead of answering from the defaults. A file read only through parser recovery is one `parse_recovered` warning on every noun, `check` included, and the answer is incomplete (exit 3). MCP, `--stdin` and the Python API now answer exactly as the CLI does.
