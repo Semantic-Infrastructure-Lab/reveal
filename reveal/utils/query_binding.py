@@ -432,7 +432,7 @@ def join_uri_and_flags(declarations: Iterable[ParamSpec], uri_params: QueryParam
         if value is None:
             continue
         prepared, spelled_parts = _uri_terms(spec, value)
-        if dict.__contains__(joined, spec.name) and not spec.repeatable:  # a routing check, not a read
+        if spec.name in dict.keys(joined) and not spec.repeatable:  # a routing check, not a read
             key, raw = _uri_spelling(spec, uri_params)
             uri_value = _comparable(spec, _decode_value(spec, dict.get(joined, spec.name)))
             if uri_value != _comparable(spec, value):
