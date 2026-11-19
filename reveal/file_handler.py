@@ -294,8 +294,6 @@ def _note_nav_retirements() -> None:
         option = token.partition('=')[0]
         if not option.startswith('--'):
             continue
-        # argparse has already rejected ambiguous prefixes. Its accepted unique
-        # abbreviations must obey the same retirement stage as the full spelling.
         key = retired_flag_key(option)
         if (key is not None and RETIREMENTS[key].replacement.split()[0].partition('=')[0]
                 in {'--inputs', '--outputs', '--callsites', '--flow', '--exits', '--effects'}):

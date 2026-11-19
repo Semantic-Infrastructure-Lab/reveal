@@ -1,4 +1,4 @@
-"""Retirement lookup builds a parser only to resolve an actual prefix candidate."""
+"""Retirement lookup is an exact key lookup: it builds no parser (BACK-2705; it once built one to resolve a prefix)."""
 import json
 
 import pytest
@@ -23,20 +23,20 @@ def _count_builds(monkeypatch):
     return builds
 
 
-@pytest.mark.parametrize('option,expected,builds', [
-    ('--exits', None, 0), ('--format', None, 0), ('--depth', None, 0),
-    ('--returns', 'flag:--returns', 0),
-    ('--flow', None, 1), ('--flowt', 'flag:--flowto', 1),
+@pytest.mark.parametrize('option,expected', [
+    ('--exits', None), ('--format', None), ('--depth', None), ('--returns', 'flag:--returns'),
+    ('--flow', None),    # a live option that is a prefix of the retired --flowto is not it
+    ('--flowt', None),   # nor is a prefix of a retired flag: it is an unknown option to the parser
 ])
-def test_only_prefix_candidates_need_parser_identity(monkeypatch, option, expected, builds):
+def test_retired_flag_lookup_is_exact_and_builds_no_parser(monkeypatch, option, expected):
     observed = _count_builds(monkeypatch)
     assert retired_flag_key(option) == expected
-    assert len(observed) == builds
+    assert not observed
 
 
 @pytest.mark.parametrize('flag,expected_builds,canonical', [
     ('--exits', 0, 'exits'), ('--returns', 0, 'exits'),
-    ('--flow', 1, 'flow'), ('--flow=if', 1, 'flow'),  # --flowt is an unknown option since BACK-2705
+    ('--flow', 0, 'flow'), ('--flow=if', 0, 'flow'),  # --flowt is an unknown option since BACK-2705
 ])
 def test_actual_navigation_avoids_unrelated_option_parser_rebuilds(
         tmp_path, monkeypatch, flag, expected_builds, canonical):

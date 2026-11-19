@@ -581,18 +581,10 @@ def _validate_effects_controls(selected: str, transitive: bool, depth: Optional[
 
 
 def retired_flag_key(option: str) -> Optional[str]:
-    """Resolve a parsed option's retirement, respecting exact live option names."""
+    """The ``flag:`` RETIREMENTS key of a typed long option, or None. Exact: a long option is spelled in full, so an
+    abbreviation never reaches here (BACK-2705)."""
     key = 'flag:' + option
-    if key in RETIREMENTS:
-        return key
-    matches = [name for name in RETIREMENTS
-               if name.startswith('flag:') and name[5:].startswith(option)]
-    if not matches:
-        return None
-    from .parser import create_argument_parser
-    if option in create_argument_parser('')._option_string_actions:
-        return None
-    return matches[0] if len(matches) == 1 else None
+    return key if key in RETIREMENTS else None
 
 
 # dest -> the option string the user typed for it, for controls with several spellings (a switch's --NAME, its legacy
@@ -607,21 +599,15 @@ def record_spelling(dest: str, option: str) -> None:
         typed.setdefault(dest, option)
 
 
-def _long_option(token: str, actions: Dict[str, Any], allow_abbrev: bool) -> list:
-    name, eq, _ = token.partition('=')
-    if name not in actions and allow_abbrev:
-        matches = [option for option in actions if option.startswith('--') and option.startswith(name)]
-        name = matches[0] if len(matches) == 1 else name
-    return [(name, bool(eq))] if name in actions else []
-
-
-def _typed_options(token: str, actions: Dict[str, Any], allow_abbrev: bool) -> list:
+def _typed_options(token: str, actions: Dict[str, Any]) -> list:
     """The (option string, value attached) pairs *token* spells, as argparse resolves it: an exact option, ``--x=v``,
-    a unique long prefix, or a cluster of short options (``-ic``; a value-taking short option ends it)."""
+    or a cluster of short options (``-ic``; a value-taking short option ends it). A long option is spelled in full on
+    every reveal parser (BACK-2705), so no prefix is resolved."""
     if not token.startswith('-') or token == '-':
         return []
     if token.startswith('--'):
-        return _long_option(token, actions, allow_abbrev)
+        name, eq, _ = token.partition('=')
+        return [(name, bool(eq))] if name in actions else []
     if token in actions:
         return [(token, False)]
     found, rest = [], token[1:]
@@ -649,7 +635,7 @@ def record_typed_spellings(parser: ArgumentParser, argv: Sequence[str]) -> None:
         if expect_value:
             expect_value = False
             continue
-        for option, attached in _typed_options(token, actions, parser.allow_abbrev):
+        for option, attached in _typed_options(token, actions):
             action = actions[option]
             if count.get(action.dest, 0) > 1:
                 record_spelling(action.dest, option)
