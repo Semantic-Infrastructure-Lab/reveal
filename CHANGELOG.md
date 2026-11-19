@@ -42,6 +42,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 - The `overview` comparison now leaves the request's `exclude` out of both snapshots on every transport: `overview://P?against=HEAD&exclude=vendor`, `reveal.api.query('overview://P', against='HEAD', exclude=['vendor'])` and the MCP query tool answered as if no exclude was given, while `reveal overview P --against HEAD --exclude vendor` applied it (BACK-2693).
 
+- An answer that does not apply to its target now names the options it could not use in one `control_unread_by_data` warning, in JSON and text: `patches://pkg?limit=0` (or `--all`, `--min`, `--target`) on a directory with no test files, and `git://DIR?view=log&limit=2` outside a repository, answered exit 0 with an `unused_query_param` or `unused_flag` warning (text: a stderr note) instead. The exit code is unchanged (BACK-2696).
+
 ## [0.135.0] - 2026-11-18
 
 Read "Behavior changes" first. Every declared noun now takes one vocabulary of options on its subcommand, its URI and `reveal.api.query` (`--limit/--offset`, `--sort`, `--where`, `--match`, `--detail`, `--view`, switches as `on|off`); old spellings still answer with a note until 1.0, and an unknown key, flag or field now exits 2 instead of being ignored. Configuration that cannot be used fails the request instead of answering from the defaults. A file read only through parser recovery is one `parse_recovered` warning on every noun, `check` included, and the answer is incomplete (exit 3). MCP, `--stdin` and the Python API now answer exactly as the CLI does.
