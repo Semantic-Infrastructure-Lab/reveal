@@ -105,6 +105,26 @@ def test_a_presence_flag_given_off_selects_nothing_and_is_not_judged():
                                                            transport='uri'), lambda: 'fixture_a')
 
 
+PAIRED = ParamSpec('paired', 'integer', 'read by fixture_a when no operation picks it, and by fixture_b under view=b',
+                   None, int, answers=('fixture_a+default', 'fixture_b+view=b'))
+
+
+@pytest.mark.parametrize('query,reads', [('paired=1', True), ('view=b&paired=1', True), ('view=a&paired=1', False),
+                                         ('mode&paired=1', False)])
+def test_an_entry_joined_with_plus_names_one_answer_by_its_type_and_its_selection(query, reads):
+    """An answer is its predicted type together with its selection (Scott 2026-11-18, Q1), so ``type+selection`` names
+    exactly that pair: Claude reads ``contains`` on the ``claude_messages`` of ``/messages``, not on tail's slice of
+    the same type. Every ``+`` part must name the answer; the type alone (view=a, mode: fixture_a) is not enough."""
+    specs = (VIEW, MODE, PAIRED)
+    params = bind_prepared_params(specs, prepare_declared_params(specs, query, 'uri'), transport='uri')
+    if reads:
+        reject_unread_controls(specs, params, lambda: _type(params))
+        return
+    with pytest.raises(RequestValidationError, match="'paired' is not read by this answer .*; paired is read by: "
+                                                     r"fixture_a\+default, fixture_b\+view=b;"):
+        reject_unread_controls(specs, params, lambda: _type(params))
+
+
 def test_the_declaration_is_published_in_the_schema():
     assert ALPHA.schema()['answers'] == ['view=a']
     assert 'answers' not in BETA.schema()
