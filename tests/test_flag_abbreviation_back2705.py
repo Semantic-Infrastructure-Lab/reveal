@@ -129,3 +129,17 @@ FULL = [('ast://proj', '--limit', '1'), ('ast', 'proj', '--limit', '1'), ('ast',
 def test_a_full_spelling_still_answers(workspace, argv):  # noqa: F811
     run = _run(*argv)
     assert run.rc == 0, run.brief()
+
+
+@pytest.mark.parametrize('extra,flag', [(('--output', 'text', '--inputs'), '--inputs'),
+                                        (('--state', '--effects'), '--effects')],
+                         ids=['--output before --inputs', '--state before --effects'])
+def test_the_depth_diagnostic_names_the_navigation_flag_typed_not_a_prefix_of_one(tmp_path, extra, flag):
+    """The recursion-limit diagnostic (BACK-2529) names the element flag as typed. It matched every token that is a
+    prefix of a navigation flag's name, a leftover of abbreviation support, so a full --output (outputs) or --state
+    (statewrites) typed first was named as the flag that could not analyze the element."""
+    from test_nav_deep_nesting_back2529 import DEEP, _nested_python, _run_deep
+    source = _nested_python(tmp_path / 'deep.py', DEEP)
+    result = _run_deep(str(source), 'f', *extra)
+    assert result.returncode == 3, result.stderr[-300:]
+    assert result.stderr.startswith(f'Error: {flag} could not analyze'), result.stderr[:160]
