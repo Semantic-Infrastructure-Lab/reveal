@@ -32,6 +32,12 @@ def claude(tmp_path, monkeypatch):
     home = build_claude_home(tmp_path / 'home')
     monkeypatch.setattr(adapter, 'CLAUDE_HOME', home)
     monkeypatch.setattr(adapter, 'CONVERSATION_BASE', home / 'projects')
+    # The paths the class derives from the real home at import: the fixture's own install config and workspace dirs
+    # (claude://config reads ~/.claude.json; CI runs in an empty HOME, BACK-2678).
+    monkeypatch.setattr(adapter, 'CLAUDE_JSON', home.parent / '.claude.json')
+    for name, folder in (('PLANS_DIR', 'plans'), ('AGENTS_DIR', 'agents'), ('HOOKS_DIR', 'hooks')):
+        monkeypatch.setattr(adapter, name, home / folder)
+    monkeypatch.setattr(adapter, 'SESSIONS_DIR', None)
     monkeypatch.chdir(tmp_path)
     return home
 
