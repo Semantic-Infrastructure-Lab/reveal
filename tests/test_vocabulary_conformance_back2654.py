@@ -207,7 +207,9 @@ RULED_EXEMPT_NOUNS = {'stats': 'rule 9: the retired stats:// scheme is deleted a
 # entry reaches zero before the cut.
 # Rule 20 (BACK-2656) conforms on every noun since Step 2d (codex was the last cell). Rule 23 (BACK-2673): since Step 3b-2
 # a declared noun's URI is read by its own parser and its query joins the typed flags, so a cell is left only where a
-# case waits for a ruling; RULE_23_CASES names each case, and a recorded cell fails on any other.
+# case waits for a ruling; RULE_23_CASES names each case, and a recorded cell fails on any other. Since 3b-3 the main
+# parser's legacy flags are flag-only modifiers of the declarations (--head, --check, Claude --type): what is left is
+# Claude --tail, held for Scott's ruling, and the equal repeated term (Scott 2026-11-19, BACK-2708 ruling 5: no ruling).
 _CLAUDE_TAIL_WHY = "pending Scott's ruling (claude --tail)"
 _EQUAL_TERM_WHY = ('waits for a ruling: ?k=A --flag A on a repeatable control combines as ?k=A&k=A and the subcommand\'s '
                    '--flag A --flag A do (the echo reads "A AND A"); rule 1 does not say whether an equal repeated term is '
