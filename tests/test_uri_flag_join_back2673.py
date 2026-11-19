@@ -117,3 +117,16 @@ def test_a_flag_given_without_its_value_joins_as_the_bare_uri_key(noun, flag):
     _specs, joined = _join(noun, '', {flag: True})
     assert dict(peek_query_items(bind_prepared_params(specs, joined, transport='uri'))) == bare
     assert joined._source_query == flag
+
+
+def test_two_values_one_of_them_rejected_name_both_spellings():
+    """Rule 1 before validation: a URI value the control rejects and a different flag value are a conflict naming both
+    as typed (as the URI route's flag injection answered), not the rejection of one; two equal rejected values are one
+    value, rejected once when the request binds."""
+    with pytest.raises(ValueError) as conflict:
+        _join('calls', 'sort=callers', {'sort': '-callers'}, {'sort': '--sort'})
+    assert str(conflict.value) == flag_conflicts_with_uri_message('--sort', 'sort', 'callers')
+    specs, joined = _join('imports', 'sort=-name', {'sort': '-name'}, {'sort': '--sort'})
+    assert joined._source_query == 'sort=-name'
+    with pytest.raises(ValueError, match='sort must be one of'):
+        bind_prepared_params(specs, joined, transport='uri')
