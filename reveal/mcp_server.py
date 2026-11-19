@@ -1108,8 +1108,8 @@ def resource_help_schema(adapter: str) -> str:
     return _read_help_uri(f'help://schemas/{adapter}')
 
 
-def main() -> None:
-    """Entry point for the ``reveal-mcp`` command."""
+def create_mcp_parser():
+    """The ``reveal-mcp`` command's argument parser."""
     import argparse
 
     parser = argparse.ArgumentParser(
@@ -1133,7 +1133,12 @@ def main() -> None:
         default=8000,
         help='Port for SSE/HTTP transport (default: 8000)',
     )
-    args = parser.parse_args()
+    return parser
+
+
+def main() -> None:
+    """Entry point for the ``reveal-mcp`` command."""
+    args = create_mcp_parser().parse_args()
 
     if args.transport == 'stdio':
         mcp.run(transport='stdio')
