@@ -177,10 +177,8 @@ reveal domain://example.com --check --advanced
 reveal mysql://localhost/mydb --check
 ```
 
-**Git Repository Health**:
-```bash
-reveal git://. --check
-```
+`git://`, `json://` and `claude://` have no `--check`: it never changed their answers, and it now prints a
+note naming `reveal check <path>`, which checks files.
 
 ---
 

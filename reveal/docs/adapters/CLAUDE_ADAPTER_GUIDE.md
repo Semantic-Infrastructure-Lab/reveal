@@ -794,34 +794,34 @@ reveal claude://session/infernal-earth-0118/message/-1
 
 **Notes**:
 - Index is 0-indexed over decoded JSONL object records, including metadata; blank, malformed and non-object lines are excluded (see [`/message` (range)](#11-message-range) for conversation-turn indexing).
-- For `user`/`assistant` messages, the response includes a `turn` field — the 1-indexed conversation-turn number that `/message --range` uses, so you can go from a raw index straight to the range number without a second call
+- For `user`/`assistant` messages, the response includes a `turn` field — the 1-indexed conversation-turn number that `/message` pages by (turn N is `--offset N-1`), so you can go from a raw index straight to the turn without a second call
 
-**Use when**: Read a long assistant response in full, inspect what a Write/Edit tool call actually wrote, read agent tool_result output, or find the `turn` number to jump into `/message --range`
+**Use when**: Read a long assistant response in full, inspect what a Write/Edit tool call actually wrote, read agent tool_result output, or find the `turn` number to jump into `/message --offset`
 
 ---
 
 ### 11. message (range)
 
-**Description**: Read a range of messages (both user and assistant, interleaved) using the standard `--range` flag
+**Description**: Read a range of messages (both user and assistant, interleaved) with `--offset` and `--limit` (the legacy `--range START-END` still works, with a note naming them)
 
 **Syntax**:
 ```bash
-reveal 'claude://session/<session-name>/message' --range 10-20
-reveal 'claude://session/<session-name>/message?detail=full' --range 10-20
-reveal 'claude://session/<session-name>/message' --range 300-    # open-ended: 300 to end
+reveal 'claude://session/<session-name>/message' --offset 9 --limit 11                  # turns 10-20
+reveal 'claude://session/<session-name>/message' --offset 9 --limit 11 --detail full    # untruncated
+reveal 'claude://session/<session-name>/message' --offset 299                           # turn 300 to the end
 ```
 
 **Example**:
 ```bash
-reveal 'claude://session/infernal-earth-0118/message?offset=4&limit=11'   # messages 5-15 (was: --range 5-15)
+reveal 'claude://session/infernal-earth-0118/message' --offset 4 --limit 11   # turns 5-15 (was: --range 5-15)
 ```
 
 **Output**: Interleaved user + assistant turns with role, timestamp, and content. Default truncation at 600 chars; add `?detail=full` to disable (the legacy `?full` and `--verbose` still do, with a note naming `detail=full`). Each turn shows its raw `message_index` so you can drill in with `/message/N`. Tool-only assistant turns show one-line summaries (`Read → file.py`, `Bash → git status`).
 
 **Notes**:
-- Range is 1-indexed over conversation messages (user + assistant only; metadata records excluded)
+- Turns are 1-indexed over conversation messages (user + assistant only; metadata records excluded); `--offset` skips that many turns
 - Raw `message_index` shown per turn for cross-reference with `/message/N` (0-indexed over decoded object records, including metadata).
-- Open-ended `--range 300-` supported: returns all messages from turn 300 to end
+- With no `--limit` every remaining turn is returned: `--offset 299` reads from turn 300 to the end
 - `?detail=full` disables the 600-char truncation; the legacy `?full` and `--verbose` are the same, with a note
 
 **Use when**: Navigate a specific region of a long conversation, review a troubleshooting exchange, inspect what happened between two known points
@@ -2607,7 +2607,7 @@ reveal claude://history
 reveal claude://history --all
 
 # Show N most recent
-reveal 'claude://history?limit=20'   # was: --head 20
+reveal claude://history --limit 20   # was: --head 20
 
 # Filter by prompt content
 reveal 'claude://history?match=deploy'
@@ -2636,7 +2636,7 @@ reveal 'claude://history?match=migration&since=2026-02-01&project=sdms'
 | Flag | Description |
 |------|-------------|
 | `--all` | Show all matching entries (default: 50) |
-| `--head N` | Show N most recent matching entries |
+| `--limit N` | Show N most recent matching entries (`--head N` is its noted legacy spelling) |
 
 **Returns**: Entries with `prompt`, `project`, `timestamp`, `session_id`. Header shows total entry count and match count.
 
