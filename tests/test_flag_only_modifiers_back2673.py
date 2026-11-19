@@ -1,0 +1,92 @@
+"""A flag-only legacy modifier (ParamSpec.flag_only, BACK-2673): the declared parser generates its flag, converted as
+the main parser's type= did, and applicability judges it, but it is no URI key, no api.query keyword and no schema
+query parameter, so neither transport gains a spelling it never had."""
+import argparse
+
+import pytest
+
+from reveal.errors import RequestValidationError, UnsupportedOverrideError
+from reveal.utils.query_binding import (add_declared_arguments, apply_declared_overrides, prepare_declared_params,
+                                        reject_unread_controls, reject_unsupported_overrides)
+from reveal.utils.query_parser import CliBinding, ParamSpec, ResourceSpec, line_range, param_schema, whole_number
+
+LIMIT = ParamSpec('limit', 'integer', 'Row cap', None, whole_number, minimum=0, cli=CliBinding(('--limit',)))
+HEAD = ParamSpec('head', 'integer', 'First N rows', None, whole_number, minimum=0, flag_only='applied',
+                 cli=CliBinding(('--head',), metavar='N', exclusive='slice'), answers=('rows',))
+TAIL = ParamSpec('tail', 'integer', 'Last N rows', None, whole_number, minimum=0, flag_only='applied',
+                 cli=CliBinding(('--tail',), metavar='N', exclusive='slice'))
+RANGE = ParamSpec('range', 'string', 'Rows START-END', None, line_range, flag_only='applied',
+                  cli=CliBinding(('--range',), metavar='START-END', exclusive='slice'))
+CHECK = ParamSpec('check', 'boolean', 'Legacy no-op', False, bool, flag_only='inert',
+                  cli=CliBinding(('--check', '--lint'), action='store_true'))
+SPECS = (LIMIT, HEAD, TAIL, RANGE, CHECK)
+
+
+def _parser():
+    parser = argparse.ArgumentParser(prog='reveal demo')
+    add_declared_arguments(parser, SPECS, ResourceSpec('path', 'path', 'The path', required=False))
+    return parser
+
+
+def test_the_flags_are_generated_and_read_converted():
+    args = _parser().parse_args(['p', '--head', '3', '--check'])
+    assert args.head == 3 and args.check is True
+    assert _parser().parse_args(['p', '--range', '2-4']).range == (2, 4)
+    assert _parser().parse_args(['p', '--range', '3-']).range == (3, None)
+    assert _parser().parse_args(['p', '--lint']).check is True
+
+
+@pytest.mark.parametrize('argv,said', [(['--head', '-1'], 'head must be >= 0'),
+                                       (['--range', 'x'], 'argument --range'),
+                                       (['--range', '4-2'], 'Range start must be <= end'),
+                                       (['--head', '1', '--tail', '1'], 'not allowed with argument --head')])
+def test_a_bad_value_or_two_slices_exit_2_naming_the_flag(capsys, argv, said):
+    with pytest.raises(SystemExit) as stop:
+        _parser().parse_args(['p', *argv])
+    assert stop.value.code == 2
+    assert said in capsys.readouterr().err
+
+
+def test_a_typed_source_binds_it_as_a_given_control():
+    params = prepare_declared_params(SPECS, {'head': 3}, 'typed')
+    assert dict(params) == {'head': 3} and params._given == {'head'}
+
+
+def test_it_is_judged_by_applicability_like_any_control():
+    params = prepare_declared_params(SPECS, {'head': 3}, 'typed')
+    reject_unread_controls(SPECS, params, lambda: 'rows')  # the declared answer reads it
+    with pytest.raises(RequestValidationError, match="control 'head' is not read by this answer"):
+        reject_unread_controls(SPECS, params, lambda: 'summary')
+
+
+@pytest.mark.parametrize('key', ['head', 'tail', 'range', 'check', 'lint'])
+def test_it_is_no_uri_key(key):
+    with pytest.raises(RequestValidationError) as refused:
+        prepare_declared_params(SPECS, f'{key}=1', 'uri')
+    message = str(refused.value)
+    assert f"unsupported control '{key}'" in message
+    assert 'supported controls: limit' in message and 'head' not in message.partition('supported controls:')[2]
+
+
+def test_a_uri_key_the_noun_declares_still_binds():  # negative control: the canonical control is untouched
+    assert dict(prepare_declared_params(SPECS, 'limit=2', 'uri')) == {'limit': '2'}
+
+
+@pytest.mark.parametrize('key', ['head', 'check'])
+def test_it_is_no_api_query_keyword(key):
+    with pytest.raises(UnsupportedOverrideError, match=f"unsupported control '{key}'"):
+        reject_unsupported_overrides(SPECS, {key: 1})
+    params = prepare_declared_params(SPECS, '', 'uri')
+    with pytest.raises(UnsupportedOverrideError, match=f"unsupported control '{key}'"):
+        apply_declared_overrides(SPECS, params, {key: 1})
+
+
+def test_it_is_no_schema_query_parameter():
+    assert list(param_schema(SPECS)) == ['limit']
+
+
+@pytest.mark.parametrize('kwargs', [{'flag_only': 'yes', 'cli': CliBinding(('--x',))}, {'flag_only': 'applied'},
+                                    {'flag_only': 'applied', 'cli': CliBinding(('--x',)), 'aliases': ('y',)}])
+def test_a_malformed_declaration_is_refused(kwargs):
+    with pytest.raises(ValueError):
+        ParamSpec('x', 'integer', 'X', None, whole_number, **kwargs)

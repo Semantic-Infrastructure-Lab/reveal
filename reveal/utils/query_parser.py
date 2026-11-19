@@ -253,13 +253,17 @@ def line_range(value: Any) -> Tuple[int, Optional[int]]:
     returned unchanged, so a value read twice converts once."""
     if isinstance(value, tuple):
         return value
-    start_text, end_text = str(value).split('-')
-    start = int(start_text)
-    end = int(end_text) if end_text else None  # '300-' -> open-ended
+    try:
+        start_text, end_text = str(value).split('-')
+        start = int(start_text)
+        end = int(end_text) if end_text else None  # '300-' -> open-ended
+    except ValueError:
+        raise ParamValueError(f"range must be START-END or START- (1-indexed, e.g. 10-20 or 300-), got {value!r}") \
+            from None
     if start < 1 or (end is not None and end < 1):
-        raise ValueError("Range must be 1-indexed (start from 1)")
+        raise ParamValueError("Range must be 1-indexed (start from 1)")
     if end is not None and start > end:
-        raise ValueError("Range start must be <= end")
+        raise ParamValueError("Range start must be <= end")
     return start, end
 
 
@@ -323,6 +327,9 @@ class CliBinding:
     action: Optional[str] = None
     metavar: Optional[str] = None
     const: Any = None
+    # Flags whose bindings share this name are mutually exclusive: argparse refuses two of them, exit 2 (``--head``,
+    # ``--tail`` and ``--range`` select one slice).
+    exclusive: str = ''
 
 
 @dataclass(frozen=True)
@@ -437,8 +444,19 @@ class ParamSpec:
     # alternatives, the request conflicts with itself: an invalid request naming both, refused before analysis by the
     # same check as ``answers`` (Scott 2026-11-18, BACK-2656).
     requires: Tuple[str, ...] = ()
+    # A legacy modifier only the CLI ever spelled (``--head`` after a URI or on the subcommand; COMMAND_MODEL "Flags
+    # after a URI", BACK-2673): the declared parser generates its flag, its retirement note is keyed by that flag
+    # (``flag:<noun>.<flag>``) and applicability judges it like any control, but it is no URI key, no ``api.query``
+    # keyword and no schema query parameter, so neither transport gains a spelling it never had. ``'applied'``: a CLI
+    # layer reads it from the namespace, converted (the router slices on ``--head``); ``'inert'``: it never shaped an
+    # answer, so its note is its whole effect and it counts as read once given (``--check`` on Claude).
+    flag_only: str = ''
 
     def __post_init__(self) -> None:
+        if self.flag_only not in ('', 'applied', 'inert'):
+            raise ValueError(f"{self.name}: flag_only is '', 'applied' or 'inert', not {self.flag_only!r}")
+        if self.flag_only and (self.cli is None or self.aliases or self.legacy):
+            raise ValueError(f'{self.name}: a flag-only modifier has its flags and no other spelling')
         from dataclasses import replace
         object.__setattr__(self, 'legacy', tuple(entry if entry.owner else replace(entry, owner=self.name)
                                                  for entry in self.legacy))
@@ -560,7 +578,8 @@ class ParamSpec:
 
 
 def param_schema(specs: Iterable[ParamSpec]) -> Dict[str, Any]:
-    return {spec.name: spec.schema() for spec in specs}
+    """The query parameters: a flag-only modifier is none (``ParamSpec.flag_only``)."""
+    return {spec.name: spec.schema() for spec in specs if not spec.flag_only}
 
 
 def expression_list(value: Any) -> List[str]:

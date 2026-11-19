@@ -409,19 +409,20 @@ def _note_retired_flags(name: str, adapter) -> None:
     (``reveal calls --target``) is the spelling ``calls://?target=`` is, so it is looked up under
     the same ``param:<name>.<param>`` key, in the order typed (a URI's are in query order). The URI
     route's hook is ``_note_retired_spellings``. A hyphenated flag names its underscore alias
-    (``--max-files`` is ``max_files``)."""
+    (``--max-files`` is ``max_files``). A flag-only modifier has no URI key: its row is keyed by the flag,
+    ``flag:<name>.<flag>`` (``ParamSpec.flag_only``)."""
     from ..invocation import current_invocation, retirement_note
     invocation = current_invocation()
     if invocation is None:
         return
-    params = {flag: _flag_param(spec, flag) for spec in adapter.PARAM_SPECS if spec.cli is not None
-              for flag in spec.flags}
+    keys = {flag: f'flag:{name}.{flag}' if spec.flag_only else f'param:{name}.{_flag_param(spec, flag)}'
+            for spec in adapter.PARAM_SPECS if spec.cli is not None for flag in spec.flags}
     for token in invocation.command_argv:
         if token == '--':
             break
-        param = params.get(token.partition('=')[0])
-        if param is not None:
-            retirement_note(f'param:{name}.{param}')
+        key = keys.get(token.partition('=')[0])
+        if key is not None:
+            retirement_note(key)
 
 
 def _flag_param(spec: ParamSpec, flag: str) -> str:
@@ -645,6 +646,8 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
         args = ledger.track(args)
     mark(args, *consumed)
     _delegate_typed_parameters(name, adapter, args, source, transport, spelled)
+    # An inert flag-only modifier never shaped an answer: its retirement note is its whole effect (ParamSpec.flag_only).
+    mark(args, *((spec.cli.dest or spec.name) for spec in adapter.PARAM_SPECS if spec.flag_only == 'inert'))
     query_resource = _flagged_query(adapter, name, path, source, transport, args, consume, spelled, uri_query)
     if query_resource is None:
         return

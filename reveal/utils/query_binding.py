@@ -274,7 +274,7 @@ def unsupported_controls_message(declarations: Iterable[ParamSpec], unknown: Ite
     does not declare, then every control it does declare, its where fields and its per-symbol lookup."""
     declarations = tuple(declarations)
     unknown = list(dict.fromkeys(unknown))
-    controls = ', '.join(spec.name for spec in declarations) or '(none)'
+    controls = ', '.join(spec.name for spec in declarations if not spec.flag_only) or '(none)'
     return (f"unsupported control{'s' if len(unknown) > 1 else ''} {', '.join(repr(key) for key in unknown)}; "
             f"supported controls: {controls}{_fields_clause(declarations)}{_symbol_clause(declarations)}"
             f"{_shared_name_clause(declarations, unknown)}")
@@ -291,7 +291,8 @@ def declared_spelling(declarations: Iterable[ParamSpec], word: str) -> Optional[
 def _declared_keys(declarations: tuple[ParamSpec, ...]) -> set:
     """Every URI key a declaration spells: names, spelling variants and every legacy word (value-keyed and
     first-position selectors included)."""
-    return {key for spec in declarations for key in (*spec.spellings, *(entry.name for entry in spec.legacy))}
+    return {key for spec in declarations if not spec.flag_only
+            for key in (*spec.spellings, *(entry.name for entry in spec.legacy))}
 
 
 # The walk policy every transport splits off before binding (split_respect_gitignore); an adapter built directly
@@ -741,7 +742,7 @@ def apply_declared_overrides(declarations: Iterable[ParamSpec], params: QueryPar
         if not isinstance(overrides, Mapping):
             raise TypeError('Declared parameter overrides must be a mapping')
         supplied = _normalize_aliases(declarations, overrides)
-        names = {spec.name for spec in declarations}
+        names = {spec.name for spec in declarations if not spec.flag_only}
         unknown = [key for key in supplied if key not in names]
         if unknown:
             raise UnsupportedOverrideError(unsupported_controls_message(declarations, unknown))
@@ -866,11 +867,24 @@ def _add_legacy_flag_arguments(parser, spec) -> None:
                             repeatable=spec.repeatable, help=f'Legacy {entry.flag}: {spec.name}')
 
 
+def _flag_value_type(spec: ParamSpec) -> Callable[[str], Any]:
+    """argparse's ``type`` for a flag-only modifier: its declared conversion, a bad value refused by the parser
+    naming the flag (exit 2)."""
+    def convert(raw: str) -> Any:
+        try:
+            return spec.validate(raw)
+        except ValueError as exc:
+            raise argparse.ArgumentTypeError(str(exc)) from None
+    convert.__name__ = spec.name
+    return convert
+
+
 def add_declared_arguments(parser: argparse.ArgumentParser, specs: Iterable[ParamSpec],
                            resource: ResourceSpec) -> None:
     """Generate local arguments; global presentation/exclusion owners remain unchanged."""
     parser.add_argument(resource.name, nargs=None if resource.required else '?',
                         default=resource.cli_default)
+    groups: Dict[str, Any] = {}
     for spec in specs:
         _add_legacy_cli_arguments(parser, spec)
         cli = spec.cli
@@ -879,6 +893,8 @@ def add_declared_arguments(parser: argparse.ArgumentParser, specs: Iterable[Para
         box: Dict[str, Any] = {}
         options: Dict[str, Any] = {'dest': cli.dest or spec.name, 'default': argparse.SUPPRESS,
                                    'required': cli.required, 'help': spec.description}
+        if spec.flag_only and spec.cli_action is None and cli.nargs != 0:
+            options['type'] = _flag_value_type(spec)  # read from the namespace converted, as the main parser's type=
         if spec.cli_action is not None:
             options['action'] = spec.cli_action
         else:
@@ -894,7 +910,12 @@ def add_declared_arguments(parser: argparse.ArgumentParser, specs: Iterable[Para
             if cli.metavar is not None:
                 options['metavar'] = cli.metavar
         separate = {entry.flag for entry in _separate_legacy_flags(spec)}
-        parser.add_argument(*(flag for flag in spec.flags if flag not in separate), **options)
+        owner = parser
+        if cli.exclusive:
+            if cli.exclusive not in groups:
+                groups[cli.exclusive] = parser.add_mutually_exclusive_group()
+            owner = groups[cli.exclusive]
+        owner.add_argument(*(flag for flag in spec.flags if flag not in separate), **options)
         _add_legacy_flag_arguments(parser, spec)
 
 
