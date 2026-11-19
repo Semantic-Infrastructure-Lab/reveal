@@ -222,10 +222,11 @@ def create_declared_parser(name: str) -> argparse.ArgumentParser:
     scalar_settings(parser)
     _describe_fail_on(parser, tuple(getattr(adapter, 'FINDINGS_POLICIES', ('none',))))
     # The global --all reaches every declared noun's subcommand as it reaches its URI form (BACK-2654): it binds
-    # what the noun's --all declaration gives the selected answer, and a noun that declares none notes it unused.
+    # what the noun's --all declaration gives the selected answer; an answer with no cap is already every row, so
+    # --all there answers as without it, with no note (COMMAND_MODEL "Applicability", BACK-2656).
     parser.add_argument('--all', action='store_true',
                         help='Show all results: lift the cap of the selected answer (the same as --all on the URI '
-                             'form; a note says when the answer has no cap to lift)')
+                             'form; an answer with no cap answers as without it)')
     add_declared_arguments(parser, adapter.PARAM_SPECS, adapter.RESOURCE_SPEC)
     add_declared_presentation_options(parser, getattr(adapter, 'CLI_PRESENTATION_FLAGS', ()))
     if callable(getattr(adapter, 'reconfigure_base_path', None)):

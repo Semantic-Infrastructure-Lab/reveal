@@ -475,7 +475,8 @@ def _add_navigation_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument('--sort', type=str, metavar='FIELD', action=ScalarOnceAction,
                         help='Sort results by field (e.g., modified, size, name, complexity). '
                              'Use --desc for descending order, or prefix with - in URI queries. Applied by --files and '
-                             'by the adapters that take sort= (help://schemas/<adapter>); elsewhere a note says it has no effect.')
+                             'by the adapters that take sort= (help://schemas/<adapter>); a noun whose selected answer does not '
+                             'read it exits 2 naming the answers that do, and other targets note that it has no effect.')
     parser.add_argument('--desc', action='store_true',
                         help='Sort descending (use with --sort, e.g., --sort modified --desc)')
     parser.add_argument('--asc', action='store_true',
@@ -491,8 +492,8 @@ def _add_navigation_options(parser: argparse.ArgumentParser) -> None:
     # cap flag shared by URI adapters and --check.
     parser.add_argument('--limit', type=int, metavar='N', default=None, action=ScalarOnceAction,
                         help='Cap the selected view at N where supported (help://schemas/<adapter>). '
-                             'Calls/imports rankings take --limit (legacy --top notes it); their other views may '
-                             'ignore it with a note. With --check, caps text output at the '
+                             'Calls/imports rankings take --limit (legacy --top notes it); an answer that does not '
+                             'read it exits 2 naming the answers that do. With --check, caps text output at the '
                              'first N files with issues and prints a "+N more files" footer (default 50, '
                              '0 disables; ignored with --format json).')
     parser.add_argument('--since', type=str, metavar='DATE', action=ScalarOnceAction,
