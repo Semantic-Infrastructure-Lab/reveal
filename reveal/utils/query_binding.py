@@ -370,6 +370,82 @@ def prepare_declared_params(declarations: Iterable[ParamSpec],
     return _prepare_typed_params(declarations, source, spelled)
 
 
+def flag_conflicts_with_uri_message(flag: str, key: str, value: str) -> str:
+    """Rule 1's message when a flag after a URI sets a scalar control the URI already sets differently: both named as
+    typed, the flag and ``key=value`` (COMMAND_MODEL "Conflicting values")."""
+    return f'{flag} conflicts with {key}={value} in the URI: {key} is set twice with different values; give it once'
+
+
+def _uri_spelling(spec: ParamSpec, params: QueryParams) -> tuple:
+    """(key, raw value) of the first query part that set *spec*, as the URI typed it (an alias or legacy word
+    included), else the control's name and its prepared value."""
+    for part in (getattr(params, '_source_query', None) or '').split('&'):
+        key, _, value = part.partition('=')
+        if part and query_key(part) in spec.spellings:
+            return key, value
+    return spec.name, dict.get(params, spec.name)
+
+
+def _typed_flag(spec: ParamSpec, spelled: Optional[Mapping[str, str]]) -> str:
+    """The flag that carried *spec* in a typed source (*spelled*: source key -> the flag typed)."""
+    keys = (spec.name, *((spec.cli.dest,) if spec.cli and spec.cli.dest else ()), *legacy_flag_dests(spec),
+            *spec.spellings)
+    return next((spelled[key] for key in keys if spelled and key in spelled), '--' + spec.name.replace('_', '-'))
+
+
+def _uri_terms(spec: ParamSpec, value: Any) -> tuple:
+    """(prepared, spelled) for a typed value joining a URI's prepared params: a repeatable control's terms as the URI's
+    preparation leaves them (decoded, one per term), a scalar as its raw URI value (decoded once, on binding); and the
+    query parts that spell it, for the joined source query."""
+    if spec.repeatable:
+        terms = list(value) if isinstance(value, (list, tuple)) else [value]
+        spelled = [encode_param_value(spec, term) if spec.uri_codec == 'percent' else str(term) for term in terms]
+        return terms, spelled
+    raw = encode_param_value(spec, 'true' if value is True else 'false' if value is False else value)
+    return raw, [raw]
+
+
+def join_uri_and_flags(declarations: Iterable[ParamSpec], uri_params: QueryParams, typed_params: QueryParams, *,
+                       spelled: Optional[Mapping[str, str]] = None) -> QueryParams:
+    """One request from a URI and the flags typed after it (COMMAND_MODEL "Flags after a URI", BACK-2673).
+
+    *uri_params* and *typed_params* are the two sources prepared by ``prepare_declared_params`` ('uri' and 'typed').
+    The answer is the URI's prepared params with every flag-given control joined under "Conflicting values": a control
+    only a flag gives is added; a scalar both give once with equal values (compared as the control reads them) is one
+    value; a scalar given two different values raises ValueError naming the flag as typed (*spelled*) and the URI's
+    ``key=value``; a repeatable control combines, the URI's terms first. Flag values take the form the URI's own
+    preparation gives (``_uri_terms``), so the result binds with transport 'uri' (``bind_prepared_params``), keeps the
+    URI's metadata (folded bare keys,
+    selectors) and records the joined query as its source. Bindings that read the selected answer (``--all``,
+    ``--verbose``) apply after this join, so they see the URI's selection too."""
+    declarations = tuple(declarations)
+    joined = QueryParams(dict(peek_query_items(uri_params)))
+    for name in ('_aliases', '_folded', '_selectors'):
+        setattr(joined, name, getattr(uri_params, name))
+    joined._supplied_aliases = set(uri_params._supplied_aliases) | set(typed_params._supplied_aliases)
+    joined._given = set(uri_params._given)
+    joined._transport = 'uri'
+    query = [part for part in (getattr(uri_params, '_source_query', None) or '').split('&') if part]
+    typed = dict(peek_query_items(typed_params))
+    for spec in declarations:
+        value = typed.get(spec.name)
+        if value is None:
+            continue
+        prepared, spelled_parts = _uri_terms(spec, value)
+        if dict.__contains__(joined, spec.name) and not spec.repeatable:  # a routing check, not a read
+            key, raw = _uri_spelling(spec, uri_params)
+            uri_value = _comparable(spec, _decode_value(spec, dict.get(joined, spec.name)))
+            if uri_value != _comparable(spec, value):
+                raise ValueError(flag_conflicts_with_uri_message(_typed_flag(spec, spelled), key, raw))
+            continue
+        given = dict.get(joined, spec.name)
+        joined[spec.name] = _accumulated([given, prepared]) if spec.repeatable and given is not None else prepared
+        joined._given.add(spec.name)
+        query += [f'{spec.name}={part}' for part in spelled_parts]
+    joined._source_query = '&'.join(query)
+    return joined
+
+
 def _prepare_typed_params(declarations: tuple, source: Mapping[str, Any],
                           spelled: Optional[Mapping[str, str]]) -> QueryParams:
     supplied = _normalize_aliases(declarations, source, spelled)
