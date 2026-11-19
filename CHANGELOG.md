@@ -28,7 +28,7 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 - `--all` lifts the selected answer's cap only. On an answer with no cap (an Imports summary, a Git blame, a Markdown link view, a Metrics file) it answers as without it, exit 0, where it added an `unused_flag` note; `overview PATH --against REF --all` (and `overview://`/`architecture://` with `against=`) now answers the comparison instead of exiting 2, and `patches://PATH?view=pressure --all` lifts the view's `top` (BACK-2656).
 
-- An option another option's value leaves unread is a conflicting request, exit 2 naming both: Metrics `since` or `merges` with `churn off` ("control 'since' requires churn=on; this request gives churn=off: give one or the other"; it was a note), and Codex `since` or `until` without `filter` or `search` (BACK-2656).
+- An option another option's value leaves unread is a conflicting request, exit 2 naming both: Metrics `since` or `merges` with `churn off` ("control 'since' requires churn=on; this request gives churn=off: give one or the other"; it was a note); one given without an option it needs exits 2 the same way: Codex `since` or `until` without `filter` or `search` (BACK-2656).
 
 - The `overview` and `architecture` comparison (`against=REF`) refuses `no_imports`, `all` and `verbose` with the same message as every other unread option, still exit 2, where it said "overview comparison does not support no_imports, all or verbose"; a typed `api.query(..., verbose=False)` on a comparison now answers instead of raising (BACK-2656).
 
