@@ -882,16 +882,21 @@ def _add_legacy_flag_arguments(parser, spec) -> None:
                             repeatable=spec.repeatable, help=f'Legacy {entry.flag}: {spec.name}')
 
 
-def _flag_value_type(spec: ParamSpec) -> Callable[[str], Any]:
-    """argparse's ``type`` for a flag-only modifier: its declared conversion, a bad value refused by the parser
-    naming the flag (exit 2)."""
-    def convert(raw: str) -> Any:
+def convert_flag_only(specs: Iterable[ParamSpec], args: Any) -> None:
+    """Store each applied flag-only modifier on the namespace converted, as the main parser's ``type=`` did, so the CLI
+    layer that reads it (the router's slice) gets ``3`` and ``(2, 4)``. A value the control rejects stays as typed: the
+    binder refuses it with the request's diagnostics, as it refuses any control's value."""
+    for spec in specs:
+        if spec.flag_only != 'applied':
+            continue
+        dest = spec.cli.dest or spec.name
+        raw = getattr(args, dest, None)
+        if raw is None:
+            continue
         try:
-            return spec.validate(raw)
-        except ValueError as exc:
-            raise argparse.ArgumentTypeError(str(exc)) from None
-    convert.__name__ = spec.name
-    return convert
+            setattr(args, dest, spec.validate(raw))
+        except ValueError:
+            pass
 
 
 def add_declared_arguments(parser: argparse.ArgumentParser, specs: Iterable[ParamSpec],
@@ -908,8 +913,6 @@ def add_declared_arguments(parser: argparse.ArgumentParser, specs: Iterable[Para
         box: Dict[str, Any] = {}
         options: Dict[str, Any] = {'dest': cli.dest or spec.name, 'default': argparse.SUPPRESS,
                                    'required': cli.required, 'help': spec.description}
-        if spec.flag_only and spec.cli_action is None and cli.nargs != 0:
-            options['type'] = _flag_value_type(spec)  # read from the namespace converted, as the main parser's type=
         if spec.cli_action is not None:
             options['action'] = spec.cli_action
         else:

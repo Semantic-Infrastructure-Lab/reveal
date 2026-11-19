@@ -28,23 +28,37 @@ def _parser():
     return parser
 
 
-def test_the_flags_are_generated_and_read_converted():
+def test_the_flags_are_generated_and_stored_converted():
+    from reveal.utils.query_binding import convert_flag_only
     args = _parser().parse_args(['p', '--head', '3', '--check'])
-    assert args.head == 3 and args.check is True
-    assert _parser().parse_args(['p', '--range', '2-4']).range == (2, 4)
-    assert _parser().parse_args(['p', '--range', '3-']).range == (3, None)
+    assert args.head == '3' and args.check is True  # as typed: the binder judges a bad value with its diagnostics
+    convert_flag_only(SPECS, args)
+    assert args.head == 3
+    for typed, stored in (('2-4', (2, 4)), ('3-', (3, None))):
+        args = _parser().parse_args(['p', '--range', typed])
+        convert_flag_only(SPECS, args)
+        assert args.range == stored
     assert _parser().parse_args(['p', '--lint']).check is True
 
 
-@pytest.mark.parametrize('argv,said', [(['--head', '-1'], 'head must be >= 0'),
-                                       (['--range', 'x'], 'argument --range'),
-                                       (['--range', '4-2'], 'Range start must be <= end'),
-                                       (['--head', '1', '--tail', '1'], 'not allowed with argument --head')])
-def test_a_bad_value_or_two_slices_exit_2_naming_the_flag(capsys, argv, said):
+@pytest.mark.parametrize('typed,said', [({'head': '-1'}, 'head must be >= 0'),
+                                        ({'range': 'x'}, 'range must be START-END'),
+                                        ({'range': '4-2'}, 'Range start must be <= end')])
+def test_a_bad_value_stays_as_typed_for_the_binder_to_refuse(typed, said):
+    from argparse import Namespace
+    from reveal.utils.query_binding import bind_prepared_params, convert_flag_only
+    args = Namespace(**typed)
+    convert_flag_only(SPECS, args)
+    assert vars(args) == typed
+    with pytest.raises(RequestValidationError, match=said):
+        bind_prepared_params(SPECS, prepare_declared_params(SPECS, typed, 'typed'), transport='typed')
+
+
+def test_two_slices_exit_2_naming_both(capsys):
     with pytest.raises(SystemExit) as stop:
-        _parser().parse_args(['p', *argv])
+        _parser().parse_args(['p', '--head', '1', '--tail', '1'])
     assert stop.value.code == 2
-    assert said in capsys.readouterr().err
+    assert 'not allowed with argument --head' in capsys.readouterr().err
 
 
 def test_a_typed_source_binds_it_as_a_given_control():
