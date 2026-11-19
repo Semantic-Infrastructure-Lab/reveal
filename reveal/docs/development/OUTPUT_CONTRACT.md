@@ -376,18 +376,42 @@ Adapters MAY include additional fields beyond the contract. These fields:
 
 ### Ignored inputs
 
-For a URI/declared dispatch using the shared JSON writer, ignored query inputs and
-flags are included in `meta.warnings` before serialization. On an adapter without declared
-parameters the parser owns unknown keys (`unknown_query_param`); on a declared noun an unknown
-key is an invalid request instead (next section). The flag ledger owns inputs that were accepted
-but not used by this operation. Each entry has a `type` and `code` (`unknown_query_param`,
-`unused_query_param`, or `unused_flag`), a human-readable `message`, and `fields`: the query keys
-or flag spellings concerned. Existing warnings remain in the answer. A control that only the data
-shows to be unread (JSON's `where`, `sort`, `limit` and `offset` on a value that is not a list) is
-named once, in a `control_unread_by_data` warning whose `fields` are the controls; the ledger does
-not name it again (COMMAND_MODEL "Applicability").
+A noun that declares its controls never answers past one its request cannot use. Each control
+declares which answers read it (`answers` on the control in `help://schemas/<adapter>`; none listed
+means every answer), and an answer is what the request selects: the result type its path and
+operation predict together with that selection (a view, a mode, a ranking, a legacy operation, a
+selector such as Claude `errors` or Codex `last`). A control the selected answer does not read is
+refused before analysis, as an invalid request (next section): exit 2 on the subcommand, the URI,
+the URI plus a flag, `reveal.api.query` (which raises `reveal.errors.UnreadControlError`, a
+`RequestValidationError`), MCP and `--stdin`, on every resource of the noun. The message names the
+control, the answer, the answers that read it and the controls this answer reads; a bare key folded
+into `where` is named as typed:
 
-These are informational diagnostics and do not make a usable answer fail. An
+```
+control 'limit' is not read by this answer (imports, default); limit is read by: fan_in_ranking; controls this answer reads: lazy, scope, tests, root, scan-limit
+```
+
+The same check refuses a control given beside another control's value that leaves it unread, naming
+both (Metrics `since` or `merges` with `churn off`: "control 'since' requires churn=on; this request
+gives churn=off: give one or the other"), and one given without a control it needs (Codex `since`
+without `filter` or `search`). A presence flag given off (`last=False`) selects nothing and is not
+judged. `--all` lifts the selected answer's cap; on an answer with no row cap it is already
+satisfied and answers as without it, exit 0, with no note.
+
+A control that only the data shows to be unread (JSON's `where`, `sort`, `limit` and `offset` on a
+value that is not a list; Metrics `since` and `merges` on a ranking whose files have no git history)
+answers, exit 0, with one `control_unread_by_data` warning whose `fields` are the controls and
+whose `message` says why ("'limit' has no effect on this data: the value at (root) is an object,
+not a list").
+
+On an adapter without declared parameters the parser owns unknown keys (`unknown_query_param`), and
+the flag ledger names inputs that were accepted but not used by this operation (`unused_query_param`
+or `unused_flag`), as it does for global presentation flags (`--max-items`) on every noun. Each entry
+has a `type` and `code`, a human-readable `message`, and `fields`: the query keys or flag spellings
+concerned. On a declared noun the ledger's warning for a declared control is reachable only through a
+wrong declaration, and the test suite fails when it fires (COMMAND_MODEL "Applicability").
+
+These warnings are informational diagnostics and do not make a usable answer fail. An
 operation rejected before it could run does not gain an unused-input warning;
 parser warnings already authored during preparation remain visible. The JSON
 writer does not change execution facts or failure classification. Text dispatches
@@ -403,8 +427,9 @@ does not convert arbitrary printed diagnostics into structured warnings.
 
 A request a declared noun cannot answer as written exits 2 before any analysis: an unknown URI key,
 subcommand flag or filter field (on a noun with a fixed field list), a shared control the noun does not
-take, a value outside a control's choices, one setting given twice with different values, or two
-controls that select different answers (BACK-2654). The message names what was typed and, for an
+take, a value outside a control's choices, one setting given twice with different values, two
+controls that select different answers (BACK-2654), or a control the selected answer does not read
+("Ignored inputs", BACK-2656). The message names what was typed and, for an
 unknown name, the supported controls and fields. In text mode it is one `Error (NOUN://): ...` line on
 stderr and stdout is empty. With `--format json` (or `--output json=PATH`) stdout is the invalid-request
 document, on the subcommand and the URI form alike and for the argument parser's own usage errors too
@@ -418,7 +443,7 @@ document, on the subcommand and the URI form alike and for the argument parser's
 
 A malformed `--output` spec writes no file. A file path or a scheme without declared parameters keeps
 the parser's text usage error. `reveal.api.query` raises the same message as `UnsupportedOverrideError`
-for an unknown typed keyword ("Declared parameter bindings").
+for an unknown typed keyword ("Declared parameter bindings") and as `UnreadControlError` for an unread one.
 
 ### Retired spellings (`retired_spelling`)
 
@@ -1115,8 +1140,10 @@ codecs are not globally reinterpreted.
 The binder also exposes source preparation separately from conversion. A mode-aware
 adapter's `result_type_for(params)` reads prepared parameter presence without
 consuming or converting values; the common runner carries that expected identity
-through validation and error construction. `validate_request(params, args)` checks
-operation-specific applicability before analysis.
+through validation and error construction. Which answers read a control is declared on it
+(`ParamSpec.answers`, with `ParamSpec.requires` for a control that needs another's value) and
+checked once, before the adapter is built ("Ignored inputs"); `validate_request(params, args)`
+keeps the request checks a declaration does not express.
 
 Constructor-bound structure calls explicitly declare class-local
 `BOUND_QUERY_CALL = True`. Surface is the initial adopter; Contracts and Trace also
@@ -1142,7 +1169,12 @@ non-consuming validation; actual reads establish use. Raw analysis leaves presen
 controls such as Surface's top unconsumed. Contracts preserves its existing read of
 presentation impls during result assembly and records `impls_cap`; its implementation
 arrays stay complete. Existing API resource splitting/decoding and host-request
-scope remain unchanged. Other adapters retain method-keyword forwarding until qualified.
+scope remain unchanged. A known typed keyword binds as its URI query key does on every declared
+noun and meets the same checks, the unread-control refusal included; deps, hotspots, pack, patches and
+testability used to drop it or raise Python's unexpected-keyword `TypeError` (BACK-2656). On a declared
+noun `element_name` is refused as the CLI refuses a positional element, before the adapter is built,
+naming the URI form (BACK-2687). Plugins and undeclared adapters keep forwarding keywords and the
+element to their own methods.
 
 For qualified direct URI operations without declared parameter binding, an optional
 adapter-owned `uri_result_type(resource)` resolves identity from the original resource
