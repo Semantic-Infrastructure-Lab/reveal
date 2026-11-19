@@ -106,10 +106,11 @@ def test_a_value_the_control_rejects_is_rejected_by_the_join():
         _join('ast', 'limit=3', {'limit': -1}, {'limit': '--limit'})
 
 
-@pytest.mark.parametrize('noun,flag', [('imports', 'importers'), ('calls', 'detail')])
+@pytest.mark.parametrize('noun,flag', [('imports', 'importers')])
 def test_a_flag_given_without_its_value_joins_as_the_bare_uri_key(noun, flag):
-    """A flag whose value is optional (``--importers``, ``--detail``) typed alone is the URI's bare key (``?importers``),
-    never the word ``true``: Imports read ``importers=true`` as a file named ``true`` (exit 2, no such file)."""
+    """A flag whose value is optional (``--importers``) typed alone is the URI's bare key (``?importers``), never the
+    word ``true``: Imports read ``importers=true`` as a file named ``true`` (exit 2, no such file). A boolean control's
+    optional value (Calls ``--detail``) is ``true`` either way, and keeps that spelling."""
     specs = declared_adapter_class(noun).PARAM_SPECS
     bare = dict(peek_query_items(bind_prepared_params(specs, prepare_declared_params(specs, flag, 'uri'),
                                                       transport='uri')))
