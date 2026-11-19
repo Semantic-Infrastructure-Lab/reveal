@@ -891,7 +891,8 @@ one-sided or unlisted recovered file stays incomplete (BACK-2432, overview guide
 malformed comparison proof cannot become success or be masked by a later usage
 diagnostic. Both transports share the canonical shapes and supported controls.
 Ordinary `top`, `all` and `verbose` bound or expand the map in text and JSON;
-comparison rejects explicitly supplied `no_imports`, `all` and `verbose`, even false.
+comparison does not read `no_imports`, `all` or `verbose`: given, even false, they are refused before analysis
+(exit 2, naming the controls the comparison reads; BACK-2656), while the global `--all` is satisfied there.
 `pack --architecture` remains a separate live selection control.
 
 Contracts supports only `--fail-on none`. Its `recovered_files`, `unparsed_files`

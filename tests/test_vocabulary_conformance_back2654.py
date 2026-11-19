@@ -154,8 +154,7 @@ EXEMPT = {
         'trace')},
     **{(noun, '20'): 'no answer reports a declared control unread, on any resource ANSWER_TARGETS lists (a control '
                      'read and not applied is the Step 4 backstop\'s)' for noun in (
-        'architecture', 'ast', 'contracts', 'deps', 'hotspots', 'overview', 'pack', 'surface', 'testability',
-        'trace')},
+        'ast', 'contracts', 'deps', 'hotspots', 'pack', 'surface', 'testability', 'trace')},
 }
 
 # Rules 1, 2, 5, 6, 10 and 12 are the shared seams' defaults (Scott 2026-11-16; BACK-2654 Step 3): their cells must

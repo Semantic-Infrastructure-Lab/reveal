@@ -247,13 +247,17 @@ def test_overview_comparison_rejects_explicit_ordinary_uri_controls(project, con
     assert canonical(invoke(project, transport='uri', query=f'{control}={value}'), 2)['error']
 
 
-@pytest.mark.parametrize('flag', ['--no-imports', '--all', '--verbose', '--no-git'])
+# --all is satisfied on the comparison, which has no cap it lifts (Scott 2026-11-18, BACK-2656): it answers quietly,
+# tests/test_overview_applicability_back2656.py.
+@pytest.mark.parametrize('flag', ['--no-imports', '--verbose', '--no-git'])
 def test_overview_comparison_rejects_ordinary_cli_controls(project, flag):
     assert canonical(invoke(project, flags=[flag]), 2)['error']
 
 
-@pytest.mark.parametrize('control', ['no_imports', 'all', 'verbose'])
-@pytest.mark.parametrize('value', [False, True])
+# A typed False on the legacy word verbose is its default, so not given, as on every noun's verbose (the URI's
+# explicit verbose=false is still refused above).
+@pytest.mark.parametrize('control,value', [('no_imports', False), ('no_imports', True), ('all', False), ('all', True),
+                                           ('verbose', True)])
 def test_api_comparison_controls_reject_before_map_or_engine(project, monkeypatch, control, value):
     from reveal.adapters import overview
     from reveal.diff import architecture_diff
@@ -267,17 +271,6 @@ def test_api_comparison_controls_reject_before_map_or_engine(project, monkeypatc
     with pytest.raises(ValueError):
         api.query(f'overview://{project.as_posix()}?against=HEAD', **{control: value})
     assert calls == []
-
-
-# verbose is the legacy word of all (BACK-2654 note #17): it reaches the owner as the query, not a keyword.
-@pytest.mark.parametrize('query,keywords', [('against=HEAD', {'all': True}), ('against=HEAD&verbose=true', {})])
-def test_direct_owner_comparison_controls_cannot_bypass_validation(project, monkeypatch, query, keywords):
-    from reveal.adapters import overview
-    def forbidden(*args, **kwargs):
-        raise AssertionError('direct incompatible comparison reached census')
-    monkeypatch.setattr(overview, '_run_scope', forbidden)
-    with pytest.raises(ValueError):
-        OverviewAdapter(str(project), query).get_structure(**keywords)
 
 
 def test_api_none_resets_operation_and_typed_top_overrides_uri(project, monkeypatch):

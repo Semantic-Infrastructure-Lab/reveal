@@ -1,6 +1,4 @@
 """Declared architecture controls retain their analysis population and codec roles."""
-from argparse import Namespace
-
 import pytest
 
 from reveal.adapters.architecture import ArchitectureAdapter
@@ -24,13 +22,18 @@ def test_ordinary_top_bounds_the_canonical_map(tmp_path, top, expected, transpor
     assert result['map']['components']['total'] == 7
 
 
-def test_validation_preserves_omitted_controls_and_read_accounting():
+@pytest.mark.parametrize('query', ['top=2', 'against=HEAD&top=2'])
+def test_validation_preserves_omitted_controls_and_read_accounting(query):
+    # The shared applicability check (BACK-2656) replaced the comparison's own validate_request: it reads no control.
+    from reveal.adapters.factory import predicted_result_type
+    from reveal.utils.query_binding import reject_unread_controls
     from reveal.utils.query_parser import collect_query_keys
     with collect_query_keys() as keys:
-        params = bind_declared_params(ArchitectureAdapter.PARAM_SPECS, 'top=2', transport='uri')
-        ArchitectureAdapter.validate_request(params, Namespace(verbose=False))
+        params = bind_declared_params(ArchitectureAdapter.PARAM_SPECS, query, transport='uri')
+        reject_unread_controls(ArchitectureAdapter.PARAM_SPECS, params,
+                               lambda: predicted_result_type(ArchitectureAdapter, params))
         assert keys.used == set()
-        assert set(dict.keys(params)) == {'top'}
+        assert set(dict.keys(params)) == set(part.partition('=')[0] for part in query.split('&'))
 
 
 @pytest.mark.parametrize('top,expected', [(None, 20), (0, 4), (2, 8)])

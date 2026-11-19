@@ -370,7 +370,7 @@ def _bind_global_all(name, adapter, args, source, spelled=None, path=None) -> No
     fragment = declared_flag_fragment(spec, adapter, {key: value for key, value in source.items() if value is not None},
                                       path)
     if not fragment:  # a declared noun: no cap the selected answer reads, so --all is satisfied (lifts_no_cap)
-        mark(args, 'all')
+        _satisfied_all(args, source, spelled)
         return
     key, _, value = fragment.partition('=')
     owner = next((declaration for declaration in adapter.PARAM_SPECS if key in declaration.spellings), None)
@@ -385,6 +385,16 @@ def _bind_global_all(name, adapter, args, source, spelled=None, path=None) -> No
         if spelled is not None:
             spelled[key] = '--all'
     delegate(args, 'all', owner.name if owner is not None else key)
+
+
+def _satisfied_all(args, source, spelled) -> None:
+    """``--all`` on an answer with no cap it lifts: quiet. A control of the flag's own name that the subcommand gave
+    it by name (Overview's ``all``) is dropped too, as the URI form injects nothing there."""
+    if source.get('all') is True:
+        del source['all']
+        if spelled is not None:
+            spelled.pop('all', None)
+    mark(args, 'all')
 
 
 def _typed_value(spec, key: str, source) -> tuple | None:

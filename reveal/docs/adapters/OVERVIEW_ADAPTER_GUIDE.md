@@ -150,8 +150,10 @@ unavailable; the error names the files. Existing exclusions and gitignore policy
 remain symmetric across the base and live head.
 
 Top, scope exclusions, gitignore, output, provenance and the none-only failure
-gate remain supported. Omit ordinary-only no_imports, all and verbose controls
-in comparisons, even if explicitly false; no_git/tests remain obsolete.
+gate remain supported. The comparison does not read the ordinary-only no_imports,
+all and verbose controls: given, even explicitly false, the request exits 2 before
+analysis, naming the controls the comparison reads. The global `--all` has no cap to
+lift there, so it answers as without it; no_git/tests remain obsolete.
 Explicit field selection may omit payload sections while validated execution
 facts and failure diagnostics still determine exits and MCP error state.
 

@@ -37,21 +37,11 @@ def _without_volatile(doc):
     return doc
 
 
-# Answers whose noun binds --all to a cap whose answers it does not declare yet: the injected cap goes unread and the
-# ledger names it. Each falls when its noun group declares the cap's answers (BACK-2656 Step 2); the list only falls.
-NOT_YET = {
-    ('architecture', 'proj', 'against=HEAD'): '2e: architecture declares which answers read all',
-    ('overview', 'proj', 'against=HEAD'): '2e: overview declares which answers read all',
-}
-
-
 def _cases():
     for noun in sorted(set(NOUNS) - {'stats'}):
         for target in ANSWER_TARGETS.get(noun, (TARGETS.get(noun, 'proj'),)):
             for label, parts in _answers(noun):
-                reason = NOT_YET.get((noun, target, label))
-                marks = [pytest.mark.xfail(strict=True, reason=reason)] if reason else []
-                yield pytest.param(noun, target, parts, id=f'{noun}-{target or "root"}-{label}', marks=marks)
+                yield pytest.param(noun, target, parts, id=f'{noun}-{target or "root"}-{label}')
 
 
 @pytest.mark.parametrize('noun,target,parts', list(_cases()))

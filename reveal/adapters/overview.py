@@ -190,18 +190,6 @@ _AGAINST = ParamSpec('against', 'string', 'Compare the live working tree against
                      cli=CliBinding(('--against',), metavar='REF'))
 
 
-def _validate_comparison_controls(params, *, all_requested=False) -> None:
-    supplied = dict(peek_query_items(params))
-    if supplied.get('against') is None:
-        return
-    if 'no_git' in supplied:
-        _obsolete_git(supplied['no_git'])
-    if 'tests' in supplied:
-        _obsolete_tests(supplied['tests'])
-    if supplied.keys() & {'no_imports', 'all'} or all_requested:
-        raise ValueError('overview comparison does not support no_imports, all or verbose')
-
-
 def _next_steps(path: str, exclude_patterns: List[str], respect_gitignore: bool) -> List[dict]:
     target = quote(path, safe='/.:')
     questions = (
@@ -441,15 +429,17 @@ class OverviewAdapter(ResourceAdapter):
                   cli=CliBinding(('--top', '--limit'), metavar='N')),
         ParamSpec('no_git', 'boolean', 'Removed: use Git queries for history',
                   False, _obsolete_git, role='analysis', cli=CliBinding(('--no-git',), action='store_true')),
+        # The map's own controls: the comparison (against=REF, overview_diff) reads neither (BACK-2656).
         ParamSpec('no_imports', 'boolean', 'Request only the recognized-code census; omit import analysis explicitly',
-                  False, boolean_value, role='analysis', examples=('no_imports=true',),
+                  False, boolean_value, role='analysis', examples=('no_imports=true',), answers=('overview',),
                   cli=CliBinding(('--no-imports',), action='store_true')),
         ParamSpec('tests', 'string', 'Removed: use metrics or AST for test-filtered rankings',
                   'exclude', _obsolete_tests, role='analysis',
                   cli=CliBinding(('--tests',), metavar='{include,exclude}')),
         # verbose only lifts the section caps: the legacy word of all (rule 16 parity, BACK-2654 note #17)
         ParamSpec('all', 'boolean', 'Expand map evidence; diagnostic details remain capped at 50',
-                  False, boolean_value, role='presentation', legacy=(verbose_legacy(True, 'all=true (--all)'),)),
+                  False, boolean_value, role='presentation', legacy=(verbose_legacy(True, 'all=true (--all)'),),
+                  answers=('overview',)),
         _AGAINST,
         exclude_param(),
     )
@@ -465,11 +455,6 @@ class OverviewAdapter(ResourceAdapter):
     @staticmethod
     def result_type_for(params):
         return 'overview_diff' if dict(peek_query_items(params)).get('against') is not None else 'overview'
-
-    @staticmethod
-    def validate_request(params, args):
-        flags = vars(args)  # Validation must not count inspected controls as applied.
-        _validate_comparison_controls(params, all_requested=flags.get('all', False))
 
     def answer_requirement_error(self, result, expected_type, prior_facts=None):
         if expected_type == 'overview_diff':
@@ -553,7 +538,7 @@ class OverviewAdapter(ResourceAdapter):
                           'Graph totals describe the observed graph; scan accounting and losses qualify its coverage.',
                           'Data, markup and unknown extensions are not counted by the code census.',
                           'no_git and tests are obsolete; use Git, metrics and AST queries for those questions.',
-                          'against selects overview_diff before map collection; comparison rejects no_imports, all and verbose.',
+                          'against selects overview_diff before map collection; the comparison does not read no_imports, all or verbose (exit 2).',
                           'Comparison centroid population is max(top, 1)*4; identical trees have unmeasured null centroids and proved zero change.'],
                 'output_formats': ['text', 'json']}
 
@@ -579,7 +564,6 @@ class OverviewAdapter(ResourceAdapter):
 
     def get_structure(self, all: bool = False, **kwargs: Any) -> RevealResult:
         with self.composition_run():
-            _validate_comparison_controls(self.query_params, all_requested=all)
             path = Path(self.path)
             # Direct API calls do not pass through the CLI's existing resource stat.
             # A missing/inaccessible target must not become a successful empty walk.
