@@ -16,16 +16,14 @@ def source(tmp_path):
     return path
 
 
+# An abbreviation (--outl, --ifm, --flowt) is an unknown option since BACK-2705 (tests/test_flag_abbreviation_back2705.py).
 @pytest.mark.parametrize('old,new,field', [
     ('--outline', '--flow', 'target:nav.outline'),
-    ('--outl', '--flow', 'target:nav.outline'),
     ('--ifmap', '--flow=if', 'flag:--ifmap'),
-    ('--ifm', '--flow=if', 'flag:--ifmap'),
     ('--loopmap', '--flow=loop', 'flag:--loopmap'),
     ('--catchmap', '--flow=try', 'flag:--catchmap'),
     ('--returns', '--exits', 'flag:--returns'),
     ('--flowto', '--exits', 'flag:--flowto'),
-    ('--flowt', '--exits', 'flag:--flowto'),
 ])
 def test_old_navigation_answers_canonically_and_corrects_once(source, old, new, field):
     old_run = _run_reveal_direct(source, 'work', old, '--format', 'json')
@@ -106,10 +104,11 @@ def test_teaching_global_option_order_preserves_live_outline_domains(command):
     assert scan(command) == []
 
 
-def test_ambiguous_flow_prefix_stays_an_argparse_error(source):
+def test_a_flow_prefix_is_an_unknown_option(source):
+    """A prefix of --flow and --flowto is no option at all (BACK-2705), not an ambiguous abbreviation."""
     result = _run_reveal_direct(source, 'work', '--flo')
     assert result.returncode == 2
-    assert 'ambiguous' in result.stderr
+    assert 'unrecognized arguments: --flo' in result.stderr
 
 
 def test_inline_file_line_binding_receives_runtime_contextual_correction(source):

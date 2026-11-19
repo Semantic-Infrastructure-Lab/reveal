@@ -36,7 +36,7 @@ def test_only_prefix_candidates_need_parser_identity(monkeypatch, option, expect
 
 @pytest.mark.parametrize('flag,expected_builds,canonical', [
     ('--exits', 0, 'exits'), ('--returns', 0, 'exits'),
-    ('--flow', 1, 'flow'), ('--flow=if', 1, 'flow'), ('--flowt', 1, 'exits'),
+    ('--flow', 1, 'flow'), ('--flow=if', 1, 'flow'),  # --flowt is an unknown option since BACK-2705
 ])
 def test_actual_navigation_avoids_unrelated_option_parser_rebuilds(
         tmp_path, monkeypatch, flag, expected_builds, canonical):

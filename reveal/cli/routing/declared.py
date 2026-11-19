@@ -45,9 +45,17 @@ class JsonUsageParser(argparse.ArgumentParser):
     stdout sink), answer with the invalid-request JSON document the declared route builds for an invalid value
     (COMMAND_MODEL "Transports"; exit 2, the message in the document and on stderr). The one seam for the main parser
     and every noun's declared parser; in text mode each keeps its own usage error. A subclass names the document's
-    target in ``invalid_request``."""
+    target in ``invalid_request``.
+
+    A long option is spelled in full: argparse's unique-prefix expansion is off on every such parser (BACK-2705), so an
+    abbreviation (``--lim``, ``--no-git``) is an unknown option with the same refusal as any other, never a second,
+    undeclared spelling of a flag (COMMAND_MODEL "Spellings")."""
     _argv: list | None = None
     _lenient: bool = False
+
+    def __init__(self, *args, **kwargs):
+        kwargs['allow_abbrev'] = False
+        super().__init__(*args, **kwargs)
 
     def parse_known_args(self, args=None, namespace=None):
         if not self._lenient:  # the request as typed (main passes it), for a usage error to recover format and target

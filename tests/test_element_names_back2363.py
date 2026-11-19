@@ -112,18 +112,22 @@ def test_callsites_equals_range_and_retired_equals_spelling(source):
 
 
 @pytest.mark.parametrize('abbreviation,old', [('mutation', 'mutations'), ('writ', 'writes')])
-def test_abbreviated_retired_flags_cannot_bypass_notes_or_cut(source, abbreviation, old, monkeypatch):
+def test_abbreviated_retired_flags_are_unknown_options(source, abbreviation, old, monkeypatch):
+    """An abbreviation cannot bypass a retired flag's note or cut: it is no spelling of the flag at all (BACK-2705), so
+    it exits 2 as an unknown option at every retirement stage, while the full spelling still answers with its note."""
     from reveal.cli.invocation import RETIREMENTS, Retirement
 
     key = 'flag:--' + old
     entry = RETIREMENTS[key]
-    response = run(source, 'extract', '--' + abbreviation, '--format', 'json')
+    for stage in (entry.stage, 'error'):
+        monkeypatch.setitem(RETIREMENTS, key, Retirement(entry.old, entry.replacement, stage))
+        rejected = run(source, 'extract', '--' + abbreviation)
+        assert rejected.returncode == 2 and rejected.stdout == ''
+        assert f'unrecognized arguments: --{abbreviation}' in rejected.stderr
+    monkeypatch.setitem(RETIREMENTS, key, entry)
+    response = run(source, 'extract', '--' + old, '--format', 'json')
     assert response.returncode == 0 and response.stderr.count(entry.text) == 0  # the JSON carries it (BACK-2659)
     without_note(json.loads(response.stdout), old)
-    monkeypatch.setitem(RETIREMENTS, key, Retirement(entry.old, entry.replacement, 'error'))
-    rejected = run(source, 'extract', '--' + abbreviation)
-    assert rejected.returncode == 2 and rejected.stdout == ''
-    assert entry.text in rejected.stderr
     assert run(source, 'extract', '--outputs').returncode == 0
 
 
