@@ -248,6 +248,21 @@ def whole_number(value: Any) -> int:
     return int(value)
 
 
+def line_range(value: Any) -> Tuple[int, Optional[int]]:
+    """``--range START-END`` as (start, end), 1-indexed; ``START-`` is open-ended (end None). A parsed pair is
+    returned unchanged, so a value read twice converts once."""
+    if isinstance(value, tuple):
+        return value
+    start_text, end_text = str(value).split('-')
+    start = int(start_text)
+    end = int(end_text) if end_text else None  # '300-' -> open-ended
+    if start < 1 or (end is not None and end < 1):
+        raise ValueError("Range must be 1-indexed (start from 1)")
+    if end is not None and start > end:
+        raise ValueError("Range start must be <= end")
+    return start, end
+
+
 def nonnegative_display_limit(value: Any, name: str = 'top') -> int:
     """The one parser for a display limit (``--top`` / ``?top=``); zero shows none.
 

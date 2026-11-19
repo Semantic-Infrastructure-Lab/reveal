@@ -15,6 +15,7 @@ _PACKAGE_DIR = Path(__file__).resolve().parent.parent
 from .argparsing import RevealArgumentParser
 from .global_flags import add_exclude_argument, add_gitignore_arguments, add_switch_argument, rule_patterns
 from ..utils.query_binding import ScalarOnceAction
+from ..utils.query_parser import line_range
 from .routing.declared import JsonUsageParser, invalid_uri_request, uri_flag_message
 from ..rules.base import category_legend
 
@@ -943,17 +944,7 @@ def validate_navigation_args(args):
     # Parse and validate range if provided
     if args.range:
         try:
-            start, end = args.range.split('-')
-            start = int(start)
-            end = int(end) if end else None  # '300-' → open-ended (end=None)
-            if start < 1:
-                raise ValueError("Range must be 1-indexed (start from 1)")
-            if end is not None and end < 1:
-                raise ValueError("Range must be 1-indexed (start from 1)")
-            if end is not None and start > end:
-                raise ValueError("Range start must be <= end")
-            # Store parsed range as tuple for easy access
-            args.range = (start, end)
+            args.range = line_range(args.range)  # stored parsed, as (start, end)
         except ValueError as e:
             print(f"Error: Invalid range format '{args.range}': {e}", file=sys.stderr)
             print("Expected format: START-END or START- for open-ended (e.g., 10-20, 300-, 1-indexed)", file=sys.stderr)
