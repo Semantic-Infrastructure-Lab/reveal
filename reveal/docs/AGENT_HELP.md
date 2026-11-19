@@ -75,6 +75,7 @@ Guides >200 lines show the first section by default (progressive disclosure). Ap
 
 ```text
 reveal NOUN TARGET --option value  ==  NOUN://TARGET?option=value  (same answer, same exit)
+A resource URI takes the noun's flags, with the same answer and exit (git://FILE --view history --limit 5).
 One name per idea: --limit/--offset, --sort [-]FIELD, --where 'FIELD OP VALUE',
   --match TEXT, --detail LEVEL, --view NAME, --since/--until DATE, --against REF, --tests MODE
 --limit 0 means no cap.
