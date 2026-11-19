@@ -60,6 +60,12 @@ control whatever its value type; 1b, 1d and 6 read every spelling (aliases and n
   22  configuration failures (Scott 2026-11-17, BACK-2677): ``REVEAL_CONFIG`` naming no file exits 2 naming it, on
       every noun; on a noun that walks (it reads ``ignore``) an unparseable project config exits 3 and ``ignore: 5``
       exits 2, each naming the file. Never an answer built from the defaults.
+  23  flags after a URI (Scott 2026-11-17, BACK-2673): ``reveal NOUN://T --flag v`` is the same request as
+      ``reveal NOUN T --flag v``, for every option of the main parser and of the noun's declared parser (the main
+      parser alone misses the noun's own control flags it lacks): the same exit and answer, JSON and text, both exit 2
+      counting as the same. A declared control's flag meets the URI's key under rule 1: ``?k=A --flag A`` answers as
+      ``?k=A``; a scalar ``?k=A --flag B`` exits 2 naming the flag and ``k=A``; a repeatable one answers as
+      ``?k=A&k=B``. stats is ruled exempt (rule 9); codex has no subcommand until BACK-2618.
 
 A cell is ``conforms`` (asserted), ``not_yet`` (recorded below with the behaviour observed; the count may only
 fall and must reach zero before the cut) or ``exempt`` (a written reason; the probe must find nothing to run).
@@ -80,6 +86,7 @@ from test_retirements_back2066 import PRODUCTION_CASES, SOURCE, commit_sample
 from reveal.adapters.base import get_adapter_class, list_supported_schemes
 from reveal.adapters.factory import uses_bound_query_call
 from reveal.cli.invocation import COMMANDS, RETIREMENTS
+from reveal.cli.parser import create_argument_parser
 from reveal.cli.routing.declared import create_declared_parser, declared_adapter_class
 from reveal.cli.routing.flag_specs import FLAG_SPECS
 from reveal.utils.query_parser import SHARED_CONTROL_NAMES, query_key
@@ -93,7 +100,7 @@ def _declared_nouns():
 
 NOUNS = _declared_nouns()
 RULES = ('1a', '1b', '1c', '1d', '2', '3', '3b', '4', '5', '6', '8a', '8b', '10', '12', '16', '17', '18', '20',
-         '14', '21j', '22')
+         '14', '21j', '22', '23')
 
 # The request each noun answers by default: the parity gate's table (CLI argv after the noun, URI suffix), plus
 # the two declared nouns it has no row for. None: no subcommand (codex is URI-only; stats is metrics' retired scheme).
@@ -152,6 +159,8 @@ EXEMPT = {
     **{(noun, '17'): 'one control at most selects the answer: no two selections to give' for noun in (
         'architecture', 'codex', 'contracts', 'deps', 'hotspots', 'overview', 'pack', 'surface', 'testability',
         'trace')},
+    ('codex', '23'): 'no subcommand to compare the URI form with until BACK-2618 generates codex\'s parser from its '
+                     'declarations through the shared builder',
     **{(noun, '20'): 'no answer reports a declared control unread, on any resource ANSWER_TARGETS lists (a control '
                      'read and not applied is the Step 4 backstop\'s)' for noun in (
         'ast', 'contracts', 'deps', 'hotspots', 'pack', 'surface', 'testability', 'trace')},
@@ -196,10 +205,17 @@ RULED_EXEMPT_NOUNS = {'stats': 'rule 9: the retired stats:// scheme is deleted a
 
 # Cells that do not conform yet: (noun, rule) -> the behaviour observed at fac0718b. May only shrink; every
 # entry reaches zero before the cut.
-NOT_YET: dict = {}  # rule 20 (BACK-2656) conforms on every noun since Step 2d (codex was the last cell)
+# Rule 20 (BACK-2656) conforms on every noun since Step 2d (codex was the last cell). Rule 23 (BACK-2673) was measured
+# by Step 3a at cd4cd87d: every noun with a subcommand diverges (103 to 116 failing cases each, 1,941 in all); 3b-2 binds
+# a URI's flags with the noun's own parser and the shared join, which leaves only the cells that wait for a ruling.
+NOT_YET: dict = {(noun, '23'): ('after a URI, a main-parser flag the noun does not take answers with an unused note where '
+                                'the subcommand exits 2; the noun\'s own control flags the main parser lacks exit 2; '
+                                '--head/--tail/--range slice rows; a flag meets the URI key only for FLAG_SPECS flags')
+                 for noun in NOUNS if BASE[noun][0] is not None}
 
 NOT_YET_BASELINE = {'1a': 0, '1b': 0, '1c': 0, '1d': 0, '2': 0, '3': 0, '3b': 0, '4': 0, '5': 0, '6': 0,
-                    '8a': 0, '8b': 0, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 0, '14': 0, '21j': 0, '22': 0}
+                    '8a': 0, '8b': 0, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 0, '14': 0, '21j': 0, '22': 0,
+                    '23': 18}
 
 
 # --- the fixture -------------------------------------------------------------------------------------------
@@ -1471,13 +1487,161 @@ def probe_config_failures(noun):
     return cases
 
 
+# --- rule 23: flags after a URI (BACK-2673) -------------------------------------------------------------------------
+
+# Options with no request to compare: a help or version page, the batch transport (its lines are the requests, and it
+# reads stdin), the system clipboard.
+_NOT_A_REQUEST_FLAG = {'-h': 'a help page', '--help': 'a help page', '--help-all': 'a help page',
+                       '--version': 'the version line', '--stdin': 'the batch transport: it reads its requests from stdin',
+                       '--copy': 'writes the system clipboard', '-c': 'writes the system clipboard'}
+# A value the argparse action cannot suggest: --output takes a sink spec.
+_FLAG_VALUES = {'--output': 'json'}
+
+
+def _flag_options(noun):
+    """(option, main-parser action, declared-parser action) for every option of the main parser and of the noun's
+    declared parser, one per pair of actions (``-v`` is ``--verbose``), less _NOT_A_REQUEST_FLAG."""
+    main = {option: action for action in create_argument_parser('')._actions for option in action.option_strings}
+    own = {option: action for action in create_declared_parser(noun)._actions for option in action.option_strings}
+    seen = set()
+    for option in dict.fromkeys([*main, *own]):
+        pair = (id(main.get(option)), id(own.get(option)))
+        if option not in _NOT_A_REQUEST_FLAG and pair not in seen:
+            seen.add(pair)
+            yield option, main.get(option), own.get(option)
+
+
+def _flag_control(noun, option, action):
+    """The declared control a declared-parser option sets (by dest, flag or legacy flag), else None."""
+    if action is None:
+        return None
+    return next((spec for spec in _specs(noun)
+                 if action.dest in (spec.name, spec.cli.dest if spec.cli else None)
+                 or option in (spec.cli.flags if spec.cli else ()) or spec.legacy_entry(option) is not None), None)
+
+
+def _flag_values(noun, option, action, spec):
+    """Candidate argv for *option*: a switch alone; a declared control's values from its declarations; else one value
+    from the argparse action (a flag the subcommand does not take is refused whatever its value)."""
+    if action.nargs == 0:
+        return [[option]]
+    if spec is not None:
+        values = [APPLICABILITY_VALUES.get((noun, spec.name)), SHARED_CONTROLS.get(spec.name),
+                  *(str(c) for c in (action.choices or spec.choices or ()) if c not in (None, '') and str(c) != str(spec.default)),
+                  *_candidate_values(spec)]
+        return [[option]] * (action.nargs == '?') + [[option, value] for value in dict.fromkeys(values) if value]
+    if option in _FLAG_VALUES:
+        return [[option, _FLAG_VALUES[option]]]
+    if action.choices:
+        return [[option, str(next(iter(action.choices)))]]
+    return [[option]] if action.nargs == '?' else [[option, '1' if action.type is int else 'x']]
+
+
+def _json_mode(argv):
+    return [] if argv[0] in ('--format', '--output') else ['--format', 'json']
+
+
+def _accepted(sub, candidates, limit=6):
+    """The candidates the subcommand takes (not exit 2), at most *limit* tried."""
+    return [argv for argv in candidates[:limit] if _run(*sub, *argv, *_json_mode(argv)).rc != 2]
+
+
+def _flag_answer(run, noun):
+    """The answer compared across the two spellings; --provenance's ``execution.command`` echoes the typed command
+    line, the one field the spellings must differ in."""
+    rc, doc = _answer(run, noun)
+    if isinstance(doc, dict) and isinstance(doc.get('execution'), dict):
+        doc = {**doc, 'execution': {k: v for k, v in doc['execution'].items() if k != 'command'}}
+    return rc, doc
+
+
+def _same_request(left, right, noun):
+    return (left.rc == right.rc == 2) or _flag_answer(left, noun) == _flag_answer(right, noun)
+
+
+def _flag_cases(noun):
+    cases = []
+    for option, main, own in _flag_options(noun):
+        spec = _flag_control(noun, option, own)
+        control = spec.name if spec is not None else None
+        uri, sub = _uri(noun, control=control), _sub(noun, control=control)
+        candidates = _flag_values(noun, option, own or main, spec)
+        argv = (_accepted(sub, candidates) or candidates)[0]
+        for mode, extra in (('json', _json_mode(argv)), ('text', [])):
+            if mode == 'text' and argv[0] in ('--format', '--output'):
+                continue
+            left, right = _run(uri, *argv, *extra), _run(*sub, *argv, *extra)
+            cases.append(Case(f'{option} ({mode})', _same_request(left, right, noun),
+                              f'{left.brief()} differs from {right.brief()}'))
+    return cases
+
+
+# Values that change the answer on the fixture, where the declarations' own would match nothing: two of the project's
+# paths, one tracked and one a whole directory, so the overview comparison's two snapshots both change.
+_JOIN_VALUES = {'exclude': ('tests', 'app.py')}
+
+
+def _join_cases(noun):
+    """Rule 1 after a URI, for each declared control a value-taking flag of the noun's parser sets."""
+    cases = []
+    for action in create_declared_parser(noun)._actions:
+        option = next((o for o in action.option_strings if o.startswith('--')), None)
+        spec = _flag_control(noun, option, action) if option and action.nargs != 0 else None
+        if spec is None:
+            continue
+        base = spec.role != 'operation'
+        sub = _sub(noun, base=base, control=spec.name)
+        candidates = [[option, value] for value in _JOIN_VALUES.get(spec.name, ())] + _flag_values(noun, option, action, spec)
+        values = [argv[1] for argv in _accepted(sub, candidates) if len(argv) == 2][:2]
+        if not values:
+            continue
+        first = values[0]
+        keyed = _uri(noun, f'{spec.name}={first}', base=base, control=spec.name)
+        cases.append(Case(f'?{spec.name}=A {option} A', _same_request(
+            _run(keyed, option, first, '--format', 'json'), _run(keyed, '--format', 'json'), noun),
+            f'`{keyed} {option} {first}` answers differently from the key alone'))
+        if len(values) < 2:
+            continue
+        both = _run(keyed, option, values[1], '--format', 'json')
+        if spec.repeatable:
+            cases += _combine_cases(noun, spec, option, values)
+        else:
+            cases.append(_conflict_case(f'?{spec.name}=A {option} B', both, (option, f'{spec.name}={first}')))
+    return cases
+
+
+def _combine_cases(noun, spec, option, values):
+    """A repeatable control's ``?k=A --flag B`` answers as ``?k=A&k=B``, on every answer the noun's operation
+    selections give (the overview comparison's ``against`` included: BACK-2673 note #5)."""
+    cases = []
+    first, second = values
+    target = TARGETS.get(noun, 'proj')
+    for label, parts in _answers(noun):
+        def uri(*terms):
+            return f'{noun}://{target}?' + '&'.join([*parts, *terms])
+        if _run(uri(), '--format', 'json').rc not in (0, 1, 3):
+            continue  # not an answer on this target
+        both = _run(uri(f'{spec.name}={first}'), option, second, '--format', 'json')
+        twice = _run(uri(f'{spec.name}={first}', f'{spec.name}={second}'), '--format', 'json')
+        cases.append(Case(f'{label} ?{spec.name}=A {option} B combines', _same_request(both, twice, noun),
+                          f'{both.brief()} answers differently from ?{spec.name}=A&{spec.name}=B'))
+    return cases
+
+
+def probe_flags_after_uri(noun):
+    """Rule 23: none for a noun with no subcommand to compare (codex until BACK-2618)."""
+    if _sub(noun) is None:
+        return []
+    return [*_flag_cases(noun), *_join_cases(noun)]
+
+
 PROBES = {'1a': probe_uri_and_flag, '1b': probe_alias_and_name, '1c': probe_repeated_spelling,
           '1d': probe_repeatable_aliases, '3': probe_unsupported_controls, '3b': probe_unknown_keys,
           '4': probe_verbose_is_detail_full, '8a': probe_bare_shared_keys,
           '8b': probe_bare_field_filters, '10': probe_spellings_declared, '12': probe_repeatability_declared,
           '16': probe_legacy_operations, '17': probe_one_answer, '18': probe_repeated_global_flags,
           '20': probe_applicability, '14': probe_defaults, '21j': probe_invalid_requests_answer_json,
-          '22': probe_config_failures}
+          '22': probe_config_failures, '23': probe_flags_after_uri}
 # These also run the retirement cases' sample file.
 SAMPLE_PROBES = {'2': probe_retirement_notes, '5': probe_legacy_declarations, '6': probe_alias_notes}
 
@@ -1777,7 +1941,9 @@ POSITIVE_CONTROLS = [('metrics', '1a', '--hotspots vs ?hotspots= conflict'),
                      ('imports', '3', '?match='), ('metrics', '3', 'subcommand --match'),
                      ('imports', '1c', '?limit= twice equal'),
                      ('markdown', '1d', '--match with --body-contains accumulates'),
-                     ('metrics', '8a', '?match= is the control')]
+                     ('metrics', '8a', '?match= is the control'),
+                     ('ast', '23', '--limit (json)'), ('ast', '23', '?limit=A --limit A'),
+                     ('ast', '23', '?limit=A --limit B conflict')]
 
 
 @pytest.mark.parametrize('noun,rule,label', POSITIVE_CONTROLS)
