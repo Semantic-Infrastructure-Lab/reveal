@@ -190,7 +190,12 @@ def _canonical_init(adapter_class: type, resource: str, *, params: Optional[Any]
         raise TypeError('params and overrides cannot be supplied together')
     if params is not None:
         # Already-bound input keeps literal '?' paths out of URI serialization.
-        return _built(adapter_class, resource, lambda: params, lambda: adapter_class(resource, params=params))
+        def construct() -> Any:
+            if not getattr(adapter_class, 'SOURCE_BEFORE_CONTROLS', False):  # that adapter binds (and reads) them itself
+                from ..utils.query_binding import withhold_flag_only
+                withhold_flag_only(getattr(adapter_class, 'PARAM_SPECS', ()), params)
+            return adapter_class(resource, params=params)
+        return _built(adapter_class, resource, lambda: params, construct)
     empty_default = getattr(adapter_class, 'CANONICAL_EMPTY_RESOURCE', '.')
     if resource and '?' in resource:
         path, query = resource.split('?', 1)

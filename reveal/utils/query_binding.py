@@ -445,6 +445,10 @@ def join_uri_and_flags(declarations: Iterable[ParamSpec], uri_params: QueryParam
         value = typed.get(spec.name)
         if value is None:
             continue
+        if spec.flag_only:  # no URI spelling to meet or to echo in the joined query: kept as the flag gave it
+            joined[spec.name] = value
+            joined._given.add(spec.name)
+            continue
         prepared, spelled_parts = _uri_terms(spec, value)
         if spec.name in dict.keys(joined) and not spec.repeatable:  # a routing check, not a read
             key, raw = _uri_spelling(spec, uri_params)
@@ -720,6 +724,17 @@ def declined_controls_warning(declarations: Iterable[ParamSpec], params: Mapping
               if spec.name in given and spec.role != 'operation' and query_key(spec.name) not in used]
     return unread_by_data_warning(dict(params) if not isinstance(params, dict) else params, unread,
                                   'the answer does not apply to this target (see not_applicable)')
+
+
+def withhold_flag_only(declarations: Iterable[ParamSpec], params: Mapping[str, Any]) -> None:
+    """Drop the flag-only modifiers from bound *params* once applicability has judged them: a CLI layer reads them
+    from the namespace (``ParamSpec.flag_only``), and an adapter that hands its params on whole (Git's view readers)
+    must not meet a key no URI can spell."""
+    for spec in declarations:
+        if spec.flag_only:
+            dict.pop(params, spec.name, None)
+            getattr(params, '_given', set()).discard(spec.name)
+            getattr(params, '_normalized', {}).pop(spec.name, None)
 
 
 def reject_unsupported_overrides(declarations: Iterable[ParamSpec], overrides: Mapping[str, Any]) -> None:

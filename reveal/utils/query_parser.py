@@ -577,6 +577,25 @@ class ParamSpec:
         return result
 
 
+_SLICE_MODIFIERS = {'head': ('integer', 'Legacy: the first N rows', whole_number, 'N'),
+                    'tail': ('integer', 'Legacy: the last N rows', whole_number, 'N'),
+                    'range': ('string', 'Legacy: rows START-END, 1-indexed (START- is open-ended)', line_range, 'START-END')}
+
+
+def legacy_slices(**answers: Tuple[str, ...]) -> Tuple[ParamSpec, ...]:
+    """The main parser's ``--head``/``--tail``/``--range`` as flag-only legacy modifiers of a noun whose rows they slice
+    (Scott 2026-11-19, BACK-2706/BACK-2708; BACK-2673): one keyword per flag the noun keeps, its value the answers that
+    read it (``()``: every answer). The router slices on the namespace (``uri._apply_head_tail_range``) or the adapter
+    does; each flag's note is its ``flag:<noun>.<flag>`` RETIREMENTS row; two of them exit 2."""
+    unknown = set(answers) - set(_SLICE_MODIFIERS)
+    if unknown:
+        raise ValueError(f'no legacy slice modifier {sorted(unknown)}')
+    return tuple(ParamSpec(name, kind, description, None, convert, minimum=0 if kind == 'integer' else None,
+                           flag_only='applied', answers=answers[name],
+                           cli=CliBinding((f'--{name}',), metavar=metavar, exclusive='slice'))
+                 for name, (kind, description, convert, metavar) in _SLICE_MODIFIERS.items() if name in answers)
+
+
 def param_schema(specs: Iterable[ParamSpec]) -> Dict[str, Any]:
     """The query parameters: a flag-only modifier is none (``ParamSpec.flag_only``)."""
     return {spec.name: spec.schema() for spec in specs if not spec.flag_only}

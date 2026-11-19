@@ -90,3 +90,44 @@ def test_it_is_no_schema_query_parameter():
 def test_a_malformed_declaration_is_refused(kwargs):
     with pytest.raises(ValueError):
         ParamSpec('x', 'integer', 'X', None, whole_number, **kwargs)
+
+
+def test_a_uri_and_the_flags_after_it_join_with_the_modifier_kept_as_typed():
+    from reveal.utils.query_binding import join_uri_and_flags
+    joined = join_uri_and_flags(SPECS, prepare_declared_params(SPECS, 'limit=2', 'uri'),
+                                prepare_declared_params(SPECS, {'range': (2, 4)}, 'typed'))
+    assert dict(joined) == {'limit': '2', 'range': (2, 4)} and joined._given == {'limit', 'range'}
+    assert joined._source_query == 'limit=2'  # no URI spelling to echo
+
+
+def test_withholding_drops_the_modifiers_once_judged():
+    from reveal.utils.query_binding import withhold_flag_only
+    params = prepare_declared_params(SPECS, {'head': 3, 'limit': 2}, 'typed')
+    withhold_flag_only(SPECS, params)
+    assert dict(params) == {'limit': 2} and params._given == {'limit'}
+
+
+def test_an_adapter_built_from_bound_params_never_meets_a_modifier():
+    from reveal.adapters.factory import _canonical_init
+    from reveal.utils.query_binding import bind_prepared_params
+
+    class Demo:
+        PARAM_SPECS = SPECS
+        RESULT_TYPE = 'rows'  # the answer that reads head: applicability passes, then the build withholds it
+
+        def __init__(self, resource, params=None):
+            self.params = dict(params)
+
+    params = bind_prepared_params(SPECS, prepare_declared_params(SPECS, {'head': 3, 'limit': 2}, 'typed'),
+                                  transport='typed')
+    assert _canonical_init(Demo, 'p', params=params).params == {'limit': 2}
+
+
+def test_legacy_slices_declares_the_three_flags_as_one_exclusive_group():
+    from reveal.utils.query_parser import legacy_slices
+    head, range_ = legacy_slices(head=('rows',), range=())
+    assert (head.name, head.flag_only, head.answers, head.cli.flags, head.cli.exclusive) == \
+        ('head', 'applied', ('rows',), ('--head',), 'slice')
+    assert range_.validate('2-3') == (2, 3) and range_.answers == ()
+    with pytest.raises(ValueError, match='no legacy slice modifier'):
+        legacy_slices(first=())
