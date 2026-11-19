@@ -72,11 +72,14 @@ def test_no_test_files_through_mcp_carries_the_shared_warning(project):
     assert 'control_unread_by_data' in _codes(doc) and not set(_codes(doc)) & set(_LEDGER), _warnings(doc)
 
 
-def test_no_test_files_in_text_mode_says_it_once_on_stderr(project):
+def test_no_test_files_in_text_mode_says_it_once(project):
+    """Text is as honest as JSON: the warning prints once under the not-applicable answer, as JSON's own Q2 warning
+    prints under its answer, and the ledger's note is gone."""
     response = run('patches://pkg?limit=0')
-    assert response.returncode == 0, response.stderr
-    assert response.stderr.count('has no effect on this data') == 1, response.stderr
-    assert 'has no effect on this patches:// query' not in response.stderr, response.stderr
+    text = response.stdout + response.stderr
+    assert response.returncode == 0, text
+    assert text.count("'limit' has no effect on this data") == 1, text
+    assert 'has no effect on this patches:// query' not in text, text
 
 
 @pytest.mark.parametrize('argv', [('patches://withtests?limit=0',), ('patches://withtests', '--all'),
