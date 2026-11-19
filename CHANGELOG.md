@@ -38,6 +38,10 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 - `reveal.api.query(uri, element_name=...)` on a declared noun (all 20, `stats://` included) now raises `RequestValidationError` with the CLI's message before the adapter is built, `json:// takes no positional element ('k'); name it in the URI: json://<file>[/path/to/key][?query]`; name the element in the URI (`json://f.json/k`). Before, `json://`, `markdown://` and `metrics://` answered it without the envelope, others raised `ValueError` "not found", and an element let an unknown keyword through. Plugins and undeclared adapters are unchanged (BACK-2687, BACK-2656).
 
+### Fixed
+
+- The `overview` comparison now leaves the request's `exclude` out of both snapshots on every transport: `overview://P?against=HEAD&exclude=vendor`, `reveal.api.query('overview://P', against='HEAD', exclude=['vendor'])` and the MCP query tool answered as if no exclude was given, while `reveal overview P --against HEAD --exclude vendor` applied it (BACK-2693).
+
 ## [0.135.0] - 2026-11-18
 
 Read "Behavior changes" first. Every declared noun now takes one vocabulary of options on its subcommand, its URI and `reveal.api.query` (`--limit/--offset`, `--sort`, `--where`, `--match`, `--detail`, `--view`, switches as `on|off`); old spellings still answer with a note until 1.0, and an unknown key, flag or field now exits 2 instead of being ignored. Configuration that cannot be used fails the request instead of answering from the defaults. A file read only through parser recovery is one `parse_recovered` warning on every noun, `check` included, and the answer is incomplete (exit 3). MCP, `--stdin` and the Python API now answer exactly as the CLI does.
