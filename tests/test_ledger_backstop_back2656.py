@@ -23,6 +23,11 @@ from test_vocabulary_conformance_back2654 import (ANSWER_TARGETS, APPLICABILITY_
 # only falls; an entry that stops failing must be removed.
 NOT_YET: dict = {}
 
+# Resources where the selected answer declines (not applicable, exit 0) because of the data, before it reads its
+# controls: a patches scan of a file with no test file (BACK-2696). Only the data decides it, so the controls are named
+# in the shared control_unread_by_data warning, never by the ledger (COMMAND_MODEL "Applicability", Q2).
+DECLINED_TARGETS = {'patches': ('proj/app.py',)}
+
 
 def _other_than_default(noun, spec):
     """A value the request gives on purpose: the probe's own value where it names one, else one the control's default
@@ -46,7 +51,7 @@ def backstop_cases(noun):
     """(key, ok, detail) for every declared control on every answer of *noun* that answers on the fixture."""
     adapter = _adapter(noun)
     cases = []
-    for target in ANSWER_TARGETS.get(noun, (TARGETS.get(noun, 'proj'),)):
+    for target in (*ANSWER_TARGETS.get(noun, (TARGETS.get(noun, 'proj'),)), *DECLINED_TARGETS.get(noun, ())):
         for label, parts in _answers(noun):
             def uri(*extra):
                 query = '&'.join([*parts, *extra])
