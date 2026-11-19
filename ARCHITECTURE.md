@@ -136,13 +136,15 @@ comes first. This compatibility chain does not select builtin construction.
 
 ### Constructor-bound structure calls
 
-Surface, Contracts and Trace explicitly declare class-local `BOUND_QUERY_CALL = True`.
-Their real `get_structure(self)` methods receive already-bound controls, and the shared structure
-boundary bypasses signature-name keyword forwarding. API structure queries bind
-typed keyword overrides through existing `ParamSpec` declarations before canonical
-construction. Other adapter methods and check/element dispatch retain their contracts.
+Every declared noun is constructor-bound: a class's own `PARAM_SPECS` with the canonical
+constructor, or a class-local `BOUND_QUERY_CALL = True` on a class that inherits its declarations
+(the retired `stats://` and `architecture://`). Their real `get_structure(self)` methods receive
+already-bound controls, and the shared structure boundary bypasses signature-name keyword
+forwarding. API structure queries bind typed keyword overrides through the same `ParamSpec`
+declarations, and the same checks (unsupported, unread and element refusals), before analysis.
+Other adapter methods and check dispatch retain their contracts.
 
-Adoption is class-local: a subclass declares it explicitly, so an inherited flag
+Adoption is class-local: a subclass declares it explicitly, so an inherited declaration
 does not bypass a plugin's custom `from_uri`. The developer protocol and normalization
 rules live in the [output contract](reveal/docs/development/OUTPUT_CONTRACT.md).
 The existing boundary ratchet tracks remaining bare class-body

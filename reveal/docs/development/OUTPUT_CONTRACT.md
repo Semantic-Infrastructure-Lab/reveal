@@ -1142,7 +1142,7 @@ adapter's `result_type_for(params)` reads prepared parameter presence without
 consuming or converting values; the common runner carries that expected identity
 through validation and error construction. Which answers read a control is declared on it
 (`ParamSpec.answers`, with `ParamSpec.requires` for a control that needs another's value) and
-checked once, before the adapter is built ("Ignored inputs"); `validate_request(params, args)`
+checked once, before analysis ("Ignored inputs"); `validate_request(params, args)`
 keeps the request checks a declaration does not express.
 
 Constructor-bound structure calls explicitly declare class-local

@@ -192,8 +192,11 @@ def query(
         element_name: Optional element for an adapter whose ``get_element`` reads one (plugins and undeclared
             adapters). A declared noun reads no positional element: it is refused as an invalid request
             (``RequestValidationError``) naming the URI form, as at the CLI; name the element in the URI instead.
-        **kwargs: Declared typed query controls for constructor-bound structure
-            adapters; otherwise forwarded to ``get_structure()`` or ``get_element()``.
+        **kwargs: Typed query controls. On a declared noun they bind as its URI query keys do and meet
+            the same checks before analysis: an unknown keyword raises
+            ``UnsupportedOverrideError``, and one the selected answer does not read raises
+            ``UnreadControlError`` (OUTPUT_CONTRACT, "Ignored inputs"). Plugins and undeclared adapters
+            forward them to ``get_structure()`` or ``get_element()``.
             Surface accepts type, source_only, by, depth and top; Contracts accepts
             abstract_only, implementations and impls; Trace accepts from and depth.
             AST accepts where (a string or list of ANDed expressions), kind, view,
@@ -218,7 +221,9 @@ def query(
     Raises:
         ValueError: If the URI is malformed or the scheme is not supported.
         ImportError: If an optional dependency required by the adapter is missing.
-        TypeError: If a constructor-bound structure query supplies an unsupported keyword.
+        RequestValidationError: A ValueError for a request a declared noun cannot answer as written: an
+            element, an unread control (``UnreadControlError``) or an unsupported keyword.
+        TypeError: If a declared noun gets an unsupported keyword (``UnsupportedOverrideError`` is both).
 
     Example::
 
