@@ -161,7 +161,8 @@ def answer_reads_control(adapter_class: type, name: str, selection: Any, path: O
         params = prepare_declared_params(declarations, selection, 'uri' if isinstance(selection, str) else 'typed')
     except ValueError:
         return True
-    scope = scope_path_of(adapter_class, path) if path else None
+    # An empty path is a path (codex:// names its catalog by it), as in the check's own prediction (_reject_unread_controls).
+    scope = scope_path_of(adapter_class, path) if path is not None else None
     return answer_reads(declarations, spec, params, lambda: predicted_result_type(adapter_class, params, scope))
 
 
