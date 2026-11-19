@@ -126,6 +126,10 @@ def _patterns(key):
         scheme, _, pair = rest.partition('.')
         param, _, value = pair.partition('=')
         return [re.compile(rf"{re.escape(scheme)}://[^\s'\"`]*[?&]{re.escape(param)}={re.escape(value)}\b")]
+    if kind == 'flag' and not rest.startswith('--'):  # flag:<noun>.<--flag>, after the noun's URI or its subcommand
+        noun, _, flag = rest.partition('.')
+        return [re.compile(rf"(?<![\w-]){re.escape(noun)}://[^\n`|]*\s{re.escape(flag)}(?![\w-])"),
+                re.compile(rf'reveal\s+{re.escape(noun)}(?=\s)[^\n`|]*\s{re.escape(flag)}(?![\w-])')]
     if kind == 'flag':
         if key == 'flag:--check':
             return [FILE_ROUTE_CHECK]
@@ -155,6 +159,9 @@ def _sample(key):
         return f"reveal '{scheme}://src/?{param}={value}'"
     if key == 'flag:--verbose':
         return 'reveal surface src/ --verbose'
+    if kind == 'flag' and not rest.startswith('--'):
+        noun, _, flag = rest.partition('.')
+        return f'reveal {noun}://src/ {flag} 3'
     if kind == 'flag':
         return f'reveal src/app.py {rest}'
     if key == 'target:health.code':

@@ -66,6 +66,14 @@ def test_the_generated_bare_shared_name_rows_are_scanned():
     assert scan('`markdown://docs/?kind=guide` is deprecated: use where=kind=guide') == []
 
 
+def test_a_noun_flag_row_is_found_on_the_subcommand_and_after_a_quoted_uri():
+    """A flag:<noun>.<flag> row (LEGACY_CLI_MODIFIERS, BACK-2673) is the same spelling on both forms of the request."""
+    assert [hit[1] for hit in scan('reveal claude session/NAME/message --range 10-20')] == ['flag:claude.--range']
+    assert [hit[1] for hit in scan("reveal 'claude://session/NAME/message?detail=full' --range 10-20")] \
+        == ['flag:claude.--range']
+    assert [hit[1] for hit in scan('reveal git://. --check')] == ['flag:git.--check']
+
+
 def test_a_list_item_is_judged_without_its_neighbours():
     text = '- `review` 0 pass, 1 findings\n- `deps` is retired, use imports'
     assert [hit[1] for hit in scan(text)] == ['subcommand:review']
@@ -86,6 +94,13 @@ def test_a_list_item_is_judged_without_its_neighbours():
     "reveal 'ast://src/?kind=function&complexity>10'",  # type is kind's legacy word since BACK-2654
     'reveal src/app.py --check-only',
     '| `reveal health [path]` | Ops health | `reveal health --help` |',
+    # flag:<noun>.<flag> rows name a flag on that noun only: a path read keeps --head/--range, a file named like a
+    # noun is a path, and the replacements are live (BACK-2673)
+    'reveal src/app.py --head 10',
+    'reveal ast.py --head 5',
+    'reveal ssl://example.com --check --advanced',
+    "reveal 'claude://session/NAME/message' --offset 9 --limit 11",
+    'reveal ast src/ --limit 3',
 ])
 def test_the_live_spellings_are_not_flagged(line):
     assert scan(line) == []
