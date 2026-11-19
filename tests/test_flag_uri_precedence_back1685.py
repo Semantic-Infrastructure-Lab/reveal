@@ -39,11 +39,12 @@ def test_the_same_holds_for_a_different_flag(tree):
     assert 'not supported by this adapter' not in err
 
 
-def test_a_flag_with_no_query_form_keeps_its_own_note(tree):
-    """--type is not an injectable ast:// flag (it has ?type= and a bare-path scan), so 'not supported'
-    is the true reason there and the hint to use ?type= or a bare path stays."""
+def test_ast_type_after_the_uri_is_asts_own_legacy_flag(tree):
+    """After an AST URI, --type is AST's own flag (the legacy word of kind), as on ``reveal ast`` (BACK-2673): it meets
+    the URI's ?type= under rule 1, so two different values name both. It used to be the main parser's file-mode --type,
+    noted as having no effect."""
     err = _stderr(tree, '?type=class', '--type', 'function')
-    assert '--type has no effect on ast:// queries' in err
+    assert '--type conflicts with type=class in the URI' in err, err
 
 
 def test_a_flag_that_agrees_with_the_uri_prints_no_note(tree):

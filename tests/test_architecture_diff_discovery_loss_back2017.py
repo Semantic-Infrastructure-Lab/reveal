@@ -198,14 +198,14 @@ def test_unknown_directory_event_rejects_comparison_and_repair_restores_clean_ou
     assert (repaired.returncode, repaired.stdout, repaired.stderr) == (clean.returncode, clean.stdout, clean.stderr)
 
 
-@pytest.mark.parametrize('extra', [(), ('--fields','analysis'), ('--head','1'), ('--top','0')])
+# --head left the list (BACK-2673): after the URI it is the subcommand's flag, which Architecture does not take (exit 2).
+@pytest.mark.parametrize('extra', [(), ('--fields','analysis'), ('--top','0')])
 def test_failed_comparison_survives_text_json_provenance_projections_and_artifact(tmp_path, monkeypatch, extra):
     root = tmp_path / 'affected'
     base = make_repo(root)
     selective_loss(monkeypatch, root)
     artifact = tmp_path / 'comparison.json'
-    command = ([f'architecture://{root.as_posix()}?against={base}'] if extra == ('--head','1')
-               else ['architecture', str(root), '--against', base])
+    command = ['architecture', str(root), '--against', base]
     output = _run_reveal_direct(*command, '--also-json', str(artifact), *extra)
     assert output.returncode == 3
     assert 'comparison unavailable' in (output.stdout + output.stderr).lower()

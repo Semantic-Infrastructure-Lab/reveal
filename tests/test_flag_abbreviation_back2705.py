@@ -33,7 +33,9 @@ ABBREVIATED = [
     (('ast', 'proj', '--lim', '1'), '--lim', '--limit'),
     (('metrics://proj', '--no-git'), '--no-git', 'the main parser\'s --no-gitignore'),
     (('metrics', 'proj', '--no-git'), '--no-git', 'metrics\' --no-gitignore'),
-    (('claude://sessions', '--key', 'model'), '--key', 'the main parser\'s --keys'),
+    # After a declared URI the noun's own parser reads the flags (BACK-2673): --key is Claude's control there, so the
+    # abbreviation is of Claude's own --since; the main parser's --keys is no longer an option after a Claude URI.
+    (('claude://sessions', '--sinc', '2020-01-01'), '--sinc', 'Claude\'s --since'),
     (('metrics', 'proj', '--code'), '--code', 'metrics\' --code-only'),
 ]
 

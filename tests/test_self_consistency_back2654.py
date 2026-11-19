@@ -579,8 +579,10 @@ def bindings(monkeypatch):
         declarations = tuple(declarations)
         if isinstance(source, str):
             keys = [re.split(r'!=|~=|>=|<=|=|>|<', part)[0] for part in source.split('&') if part]
-        else:
-            keys = list(source)
+        else:  # a typed source: each key as the flag that carried it spelled it (Calls keeps --limit in dest top)
+            spelled = kwargs.get('spelled') or {}
+            keys = [spelled[key][2:].replace('-', '_') if str(spelled.get(key, '')).startswith('--') else key
+                    for key in source]
         recorded.append((declarations, owners.get(id(declarations)), keys))
         return real(declarations, source, transport, **kwargs)
 

@@ -492,12 +492,14 @@ def test_the_recipe_gate_bites(harness):
     """Positive control: each check sees the drift it is for, so a clean run is not a check
     that can't fail -- an ignored flag/key in JSON warnings, text stderr, and a
     type the recipe would misname."""
-    _, out, err, _ = harness.run_subcommand('ast://proj', '--expiring-within', '30', '--format', 'json')
+    # An ignored flag needs an undeclared adapter: after a declared noun's URI a flag it does not take exits 2
+    # (BACK-2673), which the gate's exit check catches instead.
+    _, out, err, _ = harness.run_subcommand('env://PATH', '--expiring-within', '30', '--format', 'json')
     warnings = [w for w in json.loads(out)['meta']['warnings'] if w['type'] == 'unused_flag']
     assert [(w['code'], w['fields']) for w in warnings] == [('unused_flag', ['--expiring-within'])]
     assert '--expiring-within' not in err
     with pytest.raises(AssertionError, match='meta.warnings'):
-        _assert_runs_as_written(harness, 'reveal ast://proj --expiring-within 30', 'ast_query')
+        _assert_runs_as_written(harness, 'reveal env://PATH --expiring-within 30', 'env_variable')
     # limit (canonical since BACK-2620) caps only the ranking: elsewhere it is refused (BACK-2656), which fails a recipe.
     code, _, err, _ = harness.run_subcommand('imports://proj?limit=1', '--format', 'json')
     assert code == 2 and "control 'limit' is not read by this answer" in err
@@ -506,7 +508,7 @@ def test_the_recipe_gate_bites(harness):
     with pytest.raises(AssertionError, match='meta.warnings'):
         _assert_runs_as_written(harness, "reveal 'ast://proj?no_such_key=1'", 'ast_query')
     with pytest.raises(AssertionError, match='text stderr'):
-        _assert_text_as_written(harness, 'reveal ast://proj --expiring-within 30')
+        _assert_text_as_written(harness, 'reveal env://PATH --expiring-within 30')
     with pytest.raises(AssertionError, match='the recipe says'):
         _assert_runs_as_written(harness, 'reveal ast://proj', 'contracts')
     # A retired spelling's note rides in the JSON answer, not on stderr: the gate reads it there (BACK-2654), and a

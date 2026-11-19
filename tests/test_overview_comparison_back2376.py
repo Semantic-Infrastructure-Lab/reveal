@@ -367,11 +367,9 @@ def test_comparison_head_preserves_existing_transport_boundary(project):
     rejected = invoke(project, flags=['--head', '1'])
     # BACK-2654 rule 3: the unknown flag gets the teaching (supported controls), not argparse's bare error.
     assert rejected.returncode == 2 and "unsupported control '--head'; supported controls: " in rejected.stderr
-    original = canonical(invoke(project, transport='uri'))
+    # After the URI --head is the subcommand's flag (BACK-2673): refused the same way, where it was noted unused.
     response = invoke(project, transport='uri', flags=['--head', '1'])
-    selected = canonical(response)
-    assert selected['analysis'] == original['analysis'] and selected['deltas'] == original['deltas']
-    assert '--head' in response.stderr + json.dumps(selected.get('meta', {}))
+    assert response.returncode == 2 and "unsupported control '--head'; supported controls: " in response.stderr
 
 
 def test_comparison_gitignore_policy_selects_live_ignored_files(project):

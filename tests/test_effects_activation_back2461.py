@@ -239,6 +239,11 @@ def test_new_effects_require_a_file_target_instead_of_uri_or_batch(project, tmp_
         path = '@' + str(listing)
     result = _run(path, None, '--effects', '--format', 'json')
     assert result.returncode == 2, (result.stdout, result.stderr)
+    if target == 'ast':
+        # After a declared URI the noun's parser reads the flags (BACK-2673): --effects is not one of AST's, so it is
+        # refused with the invalid-request document naming it, as ``reveal ast PATH --effects`` is.
+        assert "unsupported control '--effects'" in json.loads(result.stdout)['error']
+        return
     assert result.stdout == '' and '--effects' in result.stderr
 
 

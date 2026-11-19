@@ -27,16 +27,23 @@ def config_writes(monkeypatch):
     return calls
 
 
-@pytest.mark.parametrize('form', ['subcommand', 'uri'])
 @pytest.mark.parametrize('extra', [(), ('--format', 'json')])
-def test_disable_breadcrumbs_is_not_an_option_of_a_declared_noun(workspace, config_writes, form, extra):
-    """``--disable-breadcrumbs`` is a main-command mode that writes the user's config: a declared noun does not take
-    it, so both spellings exit 2 naming it, and nothing is written (it used to be accepted and noted unused)."""
-    argv = ('ast', 'proj') if form == 'subcommand' else ('ast://proj',)
-    run = _run(*argv, '--disable-breadcrumbs', *extra)
+def test_disable_breadcrumbs_is_not_an_option_of_a_declared_subcommand(workspace, config_writes, extra):
+    """``--disable-breadcrumbs`` is a main-command mode that writes the user's config: a declared noun's subcommand does
+    not take it, so it exits 2 naming it, in JSON with the invalid-request document, and nothing is written (it used
+    to be accepted and noted unused)."""
+    run = _run('ast', 'proj', '--disable-breadcrumbs', *extra)
     assert run.rc == 2, run.brief()
     message = json.loads(run.out)['error'] if extra else run.err
     assert "unsupported control '--disable-breadcrumbs'" in message, run.brief()
+    assert config_writes == []
+
+
+def test_disable_breadcrumbs_after_a_uri_keeps_the_pathless_refusal(workspace, config_writes):
+    """Control: after a URI the main command's modes that take no path keep the main parser's refusal, which names the
+    mode and the path it would ignore (BACK-1751): exit 2, as on the subcommand, and nothing is written."""
+    run = _run('ast://proj', '--disable-breadcrumbs')
+    assert run.rc == 2 and '--disable-breadcrumbs takes no path' in run.err, run.brief()
     assert config_writes == []
 
 

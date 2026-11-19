@@ -144,6 +144,7 @@ class _DeclaredParser(JsonUsageParser):
     mode every usage error answers with the invalid-request document (``JsonUsageParser``)."""
     declarations: tuple = ()
     noun: str = ''
+    uri_query: Optional[str] = None  # the URI's query when this parser reads a URI request's flags (BACK-2673)
 
     def error(self, message: str):
         self.stop_tolerant_reread(message)
@@ -159,6 +160,10 @@ class _DeclaredParser(JsonUsageParser):
 
     def invalid_request(self, message: str, args):
         adapter = declared_adapter_class(self.noun)
+        if self.uri_query is not None:  # a URI request: its document keeps the operation the query selects
+            path = getattr(args, adapter.RESOURCE_SPEC.name, None) or ''
+            return _invalid_prepared_answer(adapter, self.noun, path, '?' + self.uri_query if self.uri_query else '',
+                                            message, args)
         path = getattr(args, adapter.RESOURCE_SPEC.name, None) or '.'
         return _invalid_answer(adapter, self.noun, path, message, args)
 
@@ -189,22 +194,137 @@ def invalid_uri_request(target, message: str, args):
 
 
 def uri_flag_message(target, message: str) -> str | None:
-    """Rule 3's one message for flags reveal does not have on a URI request of a declared noun, or None (argparse's
-    own error stands: another error, a file, an undeclared scheme). A flag spelling a control the noun declares
-    names where that control goes on a URI: its query key."""
-    from ...utils.query_binding import declared_spelling, unsupported_controls_message
+    """Rule 3's one message for flags the main parser does not have on a URI request of a declared noun, or None
+    (argparse's own error stands: another error, a file, an undeclared scheme). A declared noun's URI is read by its
+    own parser (``declared_uri_request``), so this answers only the requests the main parser still reads: a
+    ``--stdin`` batch's and a pending legacy spelling's."""
+    from ...utils.query_binding import unsupported_controls_message
     declared = _declared_uri(target)
     flags = [token for token in message.partition(':')[2].split() if token.startswith('-')]
     if declared is None or not message.startswith('unrecognized arguments:') or not flags:
         return None
-    declarations = declared[0].PARAM_SPECS
-    keys = [flag.lstrip('-').partition('=')[0] for flag in flags]
-    keys = [key for key in keys if declared_spelling(declarations, key) is not None]
-    where = '; on a URI, a control is a query key: ' + ', '.join(f'?{key}=VALUE' for key in keys) if keys else ''
-    return unsupported_controls_message(declarations, flags) + where
+    return unsupported_controls_message(declared[0].PARAM_SPECS, flags)
 
 
-def create_declared_parser(name: str) -> argparse.ArgumentParser:
+# Main-parser flags that keep their URI-only answer until a ruling settles them (Scott 2026-11-19, BACK-2706; step 3b-3
+# of BACK-2673): a request typing one after its noun's URI is still read by the main parser, as before. The table and the
+# branch reading it go when their rows land.
+# - --head/--tail/--range where a URI answer's rows slice today: the ruling names ast, claude, metrics and pack; the
+#   others slice on reveal's own tree at 23545deb (BACK-1497 pins hotspots and calls), so they wait for the same ruling.
+# - Claude's workflow and search readers take the main parser's --type and --name (--search): the legacy CLI population
+#   tests/test_claude_workflow_selection_back2617.py compares the canonical controls with.
+# Read from declarations instead: the legacy --check transport (LEGACY_CHECK_TRANSPORT), and a global flag the URI's
+# injection binds through the noun's CLI_QUERY_FLAGS that its subcommand does not take (Hotspots' and Testability's
+# --limit, which caps their top).
+_SLICES = ('--head', '--tail', '--range')
+_PENDING_MAIN_FLAGS = {**{noun: _SLICES for noun in ('ast', 'calls', 'git', 'hotspots', 'imports', 'json', 'markdown',
+                                                     'metrics', 'pack', 'patches', 'testability')},
+                       'claude': (*_SLICES, '--type', '--name', '--search')}
+_LEGACY_CHECK_FLAGS = ('--check', '--lint')
+
+
+def _main_option_arity() -> Dict[str, int]:
+    """Option string -> number of values, for every option of the main parser."""
+    from ..parser import create_argument_parser
+    return {option: 0 if action.nargs == 0 else 1
+            for action in create_argument_parser('', full_help=False)._actions for option in action.option_strings}
+
+
+def _target_index(argv) -> Optional[int]:
+    """Index of the path/URI form's target (its first positional), or None. An option before it takes the values
+    the main parser gives it; an option it does not have takes none."""
+    arity: Optional[Dict[str, int]] = None
+    index = 0
+    while index < len(argv):
+        token = argv[index]
+        if token == '--':
+            return None
+        if not token.startswith('-') or token == '-':
+            return index
+        if '=' not in token:
+            arity = _main_option_arity() if arity is None else arity
+            index += arity.get(token, 0)
+        index += 1
+    return None
+
+
+def _main_parser_reads(noun: str, adapter, parser, argv, main_modes) -> bool:
+    """Whether *argv* is still the main parser's to read: it types a main-parser flag that keeps its URI-only answer on
+    *noun* for now (see the table), or a main-command mode that takes no path (*main_modes*, ``PATHLESS_FLAGS``) the
+    noun's parser does not have, which the main parser refuses with its own teaching (BACK-1751; exit 2 as on the
+    subcommand)."""
+    from .flag_specs import FLAG_SPECS
+    received = getattr(adapter, 'CLI_QUERY_FLAGS', None) or {}
+    own = parser._option_string_actions
+    pending = (*_PENDING_MAIN_FLAGS.get(noun, ()),
+               *(_LEGACY_CHECK_FLAGS if getattr(adapter, 'LEGACY_CHECK_TRANSPORT', False) else ()),
+               *(flag.option for flag in FLAG_SPECS if flag.dest in received and flag.option not in own),
+               *(option for option in main_modes if option not in own))
+    for token in argv:
+        if token == '--':
+            return False
+        if token.partition('=')[0] in pending:
+            return True
+    return False
+
+
+def declared_uri_request(argv, main_modes=()) -> Optional[tuple]:
+    """(noun, its parser, argv for that parser, URI) when the path/URI form's target is a URI of a noun with a declared
+    subcommand, else None (a path, another scheme). The noun's own parser reads the request, the URI's path in the
+    URI's place as the resource argument, so a flag after the URI is that subcommand's flag (COMMAND_MODEL "Flags after
+    a URI", BACK-2673); the URI's query is the request's second source. None also for a pending legacy spelling or a
+    main-command mode that takes no path (*main_modes*: the main parser refuses it with its own teaching)."""
+    from ..invocation import COMMANDS
+    index = _target_index(argv)
+    if index is None or '://' not in argv[index]:
+        return None
+    uri = argv[index]
+    noun, _, resource = uri.partition('://')
+    spec = COMMANDS.get(noun)
+    if spec is None or not spec.declared_adapter:
+        return None
+    adapter = declared_adapter_class(noun)
+    if adapter is None:  # a plugin registered over the noun's scheme (BACK-2631)
+        return None
+    parser = create_declared_parser(noun)
+    if _main_parser_reads(noun, adapter, parser, argv, main_modes):
+        return None
+    parser.uri_query = resource.partition('?')[2]
+    return noun, parser, [*argv[:index], resource.partition('?')[0], *argv[index + 1:]], uri
+
+
+def parse_declared_uri_args(parser, argv):
+    """(args, element) for a URI request read by its noun's parser: a positional after the URI's path is an element
+    (refused by the runner, naming the URI form, as before), any other leftover the parser's usage error. A control
+    the subcommand requires as a flag (Trace's ``--from``) is given by the URI's query too, and an element is refused
+    before a missing one is named."""
+    required = [action for action in parser._actions if action.required and action.option_strings]
+    for action in required:
+        action.required = False  # judged below, after an element, and against the URI's query too
+    args, extras = parser.parse_known_args(argv)
+    if len(extras) > 1 or any(token.startswith('-') for token in extras):
+        parser.error('unrecognized arguments: ' + ' '.join(extras))
+    element = extras[0] if extras else None
+    missing = _missing_required(parser, args, required)
+    if missing and element is None:
+        parser.error('the following arguments are required: ' + ', '.join('/'.join(a.option_strings) for a in missing))
+    return args, element
+
+
+def _missing_required(parser, args, required: list) -> list:
+    """The required flags neither typed nor given by the URI's query under a spelling of their control."""
+    from ...utils.query_parser import query_key
+    given = {query_key(part) for part in (parser.uri_query or '').split('&') if part}
+    return [action for action in required if action.dest not in vars(args) and not given & _spellings_of(parser, action)]
+
+
+def _spellings_of(parser, action) -> set:
+    """The URI keys that give the control *action* sets (its declaration's spellings), or none."""
+    return next((set(spec.spellings) for spec in parser.declarations
+                 if spec.cli and action.dest == (spec.cli.dest or spec.name)), set())
+
+
+def create_declared_parser(name: str) -> '_DeclaredParser':
     from ..parser import (_build_global_options_parser, _add_universal_filter_flags, _add_base_path_option,
                           add_declared_presentation_options, scalar_settings)
     from ..global_flags import add_exclude_argument, add_gitignore_arguments
@@ -315,8 +435,29 @@ def _flag_param(spec: ParamSpec, flag: str) -> str:
     return next((alias for alias in spec.aliases if alias in (spelled, spelled.replace('-', '_'))), spec.name)
 
 
-def run_declared_command(name: str, args, *, answer_consumer=None) -> None:
-    """Bind original argparse values; no URI string is constructed."""
+def run_declared_uri_command(name: str, uri: str, element: Optional[str], args) -> None:
+    """A declared noun's URI request read by its own parser (``declared_uri_request``): the URI's spellings are noted
+    as on every URI route, then the typed flags join the URI's query (``run_declared_command``)."""
+    from .uri import _note_retired_spellings
+    _note_retired_spellings(uri)
+    query = uri.partition('?')[2]
+    if element:
+        _refuse_element(name, peek(args, declared_adapter_class(name).RESOURCE_SPEC.name), element, args)
+        return
+    run_declared_command(name, args, uri_query=query)
+
+
+def _refuse_element(name: str, path: str, element: str, args, answer_consumer=None) -> None:
+    """A declared noun reads no element: one invalid-request answer naming the URI form (BACK-2526, BACK-2687)."""
+    from ...adapters.base import unread_element_message
+    adapter = declared_adapter_class(name)
+    (answer_consumer or (lambda answer: answer.emit()))(_invalid_answer(
+        adapter, name, path, unread_element_message(adapter, name, element), args))
+
+
+def run_declared_command(name: str, args, *, answer_consumer=None, uri_query: Optional[str] = None) -> None:
+    """Bind original argparse values; no URI string is constructed. *uri_query*: the query of the URI these flags
+    followed, the request's second source (joined under "Conflicting values", BACK-2673)."""
     from ...utils.query_binding import flag_spellings, legacy_flag_dests
     adapter = declared_adapter_class(name)
     _note_retired_flags(name, adapter)
@@ -325,9 +466,16 @@ def run_declared_command(name: str, args, *, answer_consumer=None) -> None:
     for spec in adapter.PARAM_SPECS:
         if spec.cli is None:
             # A boolean with no flag of its own is carried by the global flag of its name
-            # (`--all` is `&all`), supplied only when set, as the URI spells it.
-            if spec.type == 'boolean' and peek(args, spec.name, False) is True:
+            # (`--all` is `&all`), supplied only when set, as the URI spells it. The walk's --exclude scopes the walk
+            # (``_walk_scope``); after a URI that sets the declared exclude control (exclude_param) it fills that control
+            # too, in the URI's spelling, a literal comma kept (BACK-1380), so the URI's exclude= and the flags after it
+            # are one list: the control's own walk scope replaces the dispatch's (BACK-2673).
+            value = peek(args, spec.name, None)
+            if spec.type == 'boolean' and value is True:
                 source[spec.name], spelled[spec.name] = True, _global_option(spec.name)
+            elif spec.name == 'exclude' and value and _uri_sets(adapter, uri_query, spec):
+                from ...utils.query_parser import join_exclude_patterns
+                source[spec.name], spelled[spec.name] = join_exclude_patterns(value), '--exclude'
             continue
         flags = flag_spellings(spec)
         dest = spec.cli.dest or spec.name
@@ -338,7 +486,15 @@ def run_declared_command(name: str, args, *, answer_consumer=None) -> None:
             if legacy in vars(args):
                 source[legacy], spelled[legacy] = peek(args, legacy), flags[legacy]
     _run_declared(name, args, getattr(args, adapter.RESOURCE_SPEC.name), source, 'typed',
-                  answer_consumer=answer_consumer, spelled=spelled)
+                  answer_consumer=answer_consumer, spelled=spelled, uri_query=uri_query)
+
+
+def _uri_sets(adapter, uri_query: Optional[str], spec: ParamSpec) -> bool:
+    """Whether the URI's query (None: no URI) gives *spec*'s control under any of its spellings."""
+    from ...utils.query_parser import query_key
+    if not uri_query:
+        return False
+    return any(query_key(part) in spec.spellings for part in uri_query.split('&') if part)
 
 
 def _global_option(dest: str) -> str:
@@ -352,15 +508,12 @@ def run_declared_uri(uri: str, element: str | None, args, consumed=(), *, answer
     path, _, query = resource.partition('?')
     if element:
         # One stderr line and an empty stdout left --format json with no answer (BACK-2526).
-        from ...adapters.base import unread_element_message
-        adapter = declared_adapter_class(name)
-        (answer_consumer or (lambda answer: answer.emit()))(_invalid_answer(
-            adapter, name, path, unread_element_message(adapter, name, element), args))
+        _refuse_element(name, path, element, args, answer_consumer)
         return
     _run_declared(name, args, path, query, 'uri', consumed, answer_consumer=answer_consumer)
 
 
-def _bind_global_all(name, adapter, args, source, spelled=None, path=None) -> None:
+def _bind_global_all(name, adapter, args, source, spelled=None, path=None, selection=None) -> None:
     """The subcommand's global ``--all`` through the URI form's own seam (``declared_flag_fragment``, BACK-2654): the
     noun's ``--all`` declaration, re-keyed to the cap of the answer the typed values select. A value the request
     already sets differently is an invalid request naming both flags, as on the URI form; on an answer with no cap
@@ -369,8 +522,7 @@ def _bind_global_all(name, adapter, args, source, spelled=None, path=None) -> No
         return
     from .flag_specs import FLAG_SPECS, declared_flag_fragment
     spec = next(flag for flag in FLAG_SPECS if flag.dest == 'all')
-    fragment = declared_flag_fragment(spec, adapter, {key: value for key, value in source.items() if value is not None},
-                                      path)
+    fragment = declared_flag_fragment(spec, adapter, _selection(source, selection), path)
     if not fragment:  # a declared noun: no cap the selected answer reads, so --all is satisfied (lifts_no_cap)
         _satisfied_all(args, source, spelled)
         return
@@ -387,6 +539,12 @@ def _bind_global_all(name, adapter, args, source, spelled=None, path=None) -> No
         if spelled is not None:
             spelled[key] = '--all'
     delegate(args, 'all', owner.name if owner is not None else key)
+
+
+def _selection(source, selection) -> dict:
+    """What a request selects: *selection* (a URI's query, or None) with the typed values given over it, so ``--all``
+    binds to the cap of the answer both select (it binds after the join, BACK-2673)."""
+    return {**(selection or {}), **{key: value for key, value in source.items() if value is not None}}
 
 
 def _satisfied_all(args, source, spelled) -> None:
@@ -469,10 +627,13 @@ def _walk_scope(adapter, path, args):
     return dispatch_scope(path, peek(args, 'exclude')) if adapter.RESOURCE_SPEC.walks else (None, [])
 
 def _run_declared(name: str, args, path: str, source: Any, transport: str, consumed=(), *,
-                  answer_consumer=None, spelled: Optional[Dict[str, str]] = None) -> None:
+                  answer_consumer=None, spelled: Optional[Dict[str, str]] = None,
+                  uri_query: Optional[str] = None) -> None:
+    """*uri_query*: on the typed transport, the query of the URI the flags followed; the two prepared sources join
+    into one request under "Conflicting values" (``join_uri_and_flags``) that binds as the URI does."""
     from ...utils.exclusions import exclusion_scope
     from ...utils.gitignore import gitignore_scope, split_respect_gitignore
-    from ...utils.query_binding import bind_resource_path, prepare_declared_params
+    from ...utils.query_binding import bind_resource_path, join_uri_and_flags, prepare_declared_params
     adapter = declared_adapter_class(name)
     consume = answer_consumer or (lambda answer: answer.emit())
     from .formats import declared_output_formats, require_supported_format
@@ -484,7 +645,7 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
         args = ledger.track(args)
     mark(args, *consumed)
     _delegate_typed_parameters(name, adapter, args, source, transport, spelled)
-    query_resource = _flagged_query(adapter, name, path, source, transport, args, consume, spelled)
+    query_resource = _flagged_query(adapter, name, path, source, transport, args, consume, spelled, uri_query)
     if query_resource is None:
         return
     # Global query policy keeps its existing codec; never split the decoded path.
@@ -492,6 +653,7 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
     if transport == 'uri':
         source = query_resource.partition('?')[2]
     query_walk_policy = respect
+    typed_walk_policy = peek(args, 'respect_gitignore', True)
     respect = respect if respect is not None else peek(args, 'respect_gitignore', True)
     dispatch = ledger.dispatching(query_resource, name) if ledger is not None else nullcontext()
     try:
@@ -500,6 +662,11 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
                 require_selected_config()  # on every noun, read or not (BACK-2677)
                 _validate_walk_policy(adapter, args, query_walk_policy)
                 source = prepare_declared_params(adapter.PARAM_SPECS, source, transport, spelled=spelled)
+                if uri_query is not None:
+                    _join_walk_policy(args, query_walk_policy, typed_walk_policy, uri_query)
+                    source = join_uri_and_flags(adapter.PARAM_SPECS, prepare_declared_params(
+                        adapter.PARAM_SPECS, query_resource.partition('?')[2], 'uri'), source, spelled=spelled)
+                    transport = 'uri'  # one request now, bound as the URI binds (its path's codec included)
             except ValueError as exc:
                 consume(_invalid_prepared_answer(adapter, name, path, query_resource, str(exc), args))
                 return
@@ -548,14 +715,34 @@ def _resource_error_message(error, path: str) -> str:
     return str(error)
 
 
-def _flagged_query(adapter, name, path, source, transport: str, args, consume, spelled=None) -> str | None:
+def _join_walk_policy(args, uri_policy: Optional[bool], typed_policy, uri_query: str) -> None:
+    """Rule 1 for the gitignore switch typed after a URI: a different value than the URI's ``respect_gitignore`` is an
+    invalid request naming both; equal values, or one alone, are the policy (COMMAND_MODEL "Flags after a URI")."""
+    from ..invocation import typed_spellings
+    from ...errors import RequestValidationError
+    from ...utils.query_binding import flag_conflicts_with_uri_message
+    typed = typed_spellings().get('respect_gitignore')
+    if uri_policy is None or typed is None or bool(typed_policy) == uri_policy:
+        return
+    raw = next(part.partition('=')[2] for part in uri_query.split('&') if part.partition('=')[0] == 'respect_gitignore')
+    mark(args, 'respect_gitignore')
+    raise RequestValidationError(flag_conflicts_with_uri_message(typed, 'respect_gitignore', raw))
+
+
+def _flagged_query(adapter, name, path, source, transport: str, args, consume, spelled=None,
+                   uri_query: Optional[str] = None) -> str | None:
     """The URI query with the global flags injected; None after answering a flag that conflicts with the
-    URI's own value as an invalid request (BACK-2654)."""
-    query_resource: str = '?' + source if transport == 'uri' else ''
+    URI's own value as an invalid request (BACK-2654). On the typed transport the global flags bind into the typed
+    values, ``--all`` against the selection the URI's query (*uri_query*) makes as well; that query is returned
+    unchanged, for the join."""
+    query_resource: str = '?' + source if transport == 'uri' else '?' + uri_query if uri_query else ''
     if transport != 'uri':
+        from ...utils.query_parser import parse_query_params, peek_query_items
+        # peek: reading the URI's selection to place --all is routing, not the answer reading its controls
+        selection = dict(peek_query_items(parse_query_params(uri_query))) if uri_query else None
         try:
             _bind_global_verbose(name, adapter, args, source, spelled)
-            _bind_global_all(name, adapter, args, source, spelled, path)
+            _bind_global_all(name, adapter, args, source, spelled, path, selection)
         except ValueError as exc:
             consume(_invalid_prepared_answer(adapter, name, path, query_resource, str(exc), args))
             return None

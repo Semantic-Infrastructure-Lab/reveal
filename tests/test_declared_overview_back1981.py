@@ -98,7 +98,16 @@ def test_defaults_match_and_missing_top_value_is_usage(project, monkeypatch):
     assert invalid.returncode == 2 and 'usage:' in invalid.stderr
 
 
-@pytest.mark.parametrize('flag', ['--head', '--tail', '--max-items'])
+@pytest.mark.parametrize('flag', ['--head', '--tail'])
+def test_path_read_flags_after_the_uri_are_refused_as_on_the_subcommand(project, flag):
+    """Overview has no rows --head/--tail slice and its subcommand does not take them; after the URI they are the
+    subcommand's flags (BACK-2673), so they exit 2 naming the flag, and nothing cuts the map."""
+    for argv in (('overview://proj',), ('overview', 'proj')):
+        result = run(*argv, flag, '1', '--format', 'json')
+        assert result.returncode == 2 and f"unsupported control '{flag}'" in json.loads(result.stdout)['error']
+
+
+@pytest.mark.parametrize('flag', ['--max-items'])
 def test_flat_list_budgets_do_not_silently_cut_nested_map(project, flag):
     result = run('overview://proj', flag, '1', '--format', 'json')
     assert result.returncode == 0, result.stderr

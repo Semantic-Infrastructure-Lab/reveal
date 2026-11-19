@@ -40,7 +40,7 @@ _ADAPTER_IDENTITY_KEYS = ('type', 'source', 'source_type')
 
 
 def dispatch_subcommand(name: str, parser: ArgumentParser,
-                        runner: Callable[[Namespace], None], args: Namespace) -> None:
+                        runner: Callable[[Namespace], None], args: Namespace, resource: str = '') -> None:
     """Run ``reveal <name>`` with the flag ledger and the dispatch walk scope.
 
     Flags are judged against ``parser``'s own defaults. The scope is ``--exclude`` plus
@@ -48,7 +48,8 @@ def dispatch_subcommand(name: str, parser: ArgumentParser,
     an existing path. A ``review`` git range, ``health``'s several targets or a ``scaffold``
     name has no walk root, so nothing is published. A runner that exits after producing its
     result (a findings exit code) calls ``ledger.complete(args)`` first; an error exit reports
-    nothing, since the flags never got the chance to apply.
+    nothing, since the flags never got the chance to apply. *resource*: ``?QUERY`` of the URI a declared noun's
+    request was typed as (BACK-2673), so the ledger tracks its keys as the URI route's does.
     """
     ledger = FlagLedger(args, parser=parser, subcommand=name)
     args = ledger.track(args)
@@ -63,7 +64,7 @@ def dispatch_subcommand(name: str, parser: ArgumentParser,
     else:
         walk_root, patterns = dispatch_scope(str(target) if target else '', peek(args, 'exclude'))
     try:
-        with exclusion_scope(walk_root, patterns), ledger.dispatching(''):
+        with exclusion_scope(walk_root, patterns), ledger.dispatching(resource):
             runner(args)
         ledger.complete = True
     finally:

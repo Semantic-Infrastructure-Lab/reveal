@@ -278,9 +278,9 @@ def _dispatch_and_run(invocation: Invocation) -> None:
     The subcommand and path/URI forms differ only in which parser reads the command line
     and what runs the result. Everything else is applied here, once, for both.
     """
-    args, run = _prepare(invocation)
+    args, run, command = _prepare(invocation)
     from .cli.routing.declared import validate_execution_policy
-    validate_execution_policy(args, invocation.command)
+    validate_execution_policy(args, command)
     apply_global_flags(args)
     # --copy comes from the parsed args, so every spelling argparse accepts (-c, -qc,
     # --copy) is honored. A raw scan of argv missed the combined short form.
@@ -318,10 +318,16 @@ def _apply_output_sinks(parser, args: Namespace, invocation: Invocation) -> None
         exit_on_sink_error(error)
 
 
-def _prepare(invocation: Invocation) -> Tuple[Namespace, Callable[[], None]]:
-    """Parse ``invocation`` with its command's parser; return the args and what runs them."""
+def _prepare(invocation: Invocation) -> Tuple[Namespace, Callable[[], None], Optional[str]]:
+    """Parse ``invocation`` with its command's parser; return the args, what runs them and the command that reads
+    them (a declared noun's URI request is read by that noun's command; None for the path/URI form)."""
     name = invocation.command
     if name is None:
+        from .cli.routing import PATHLESS_FLAGS
+        from .cli.routing.declared import declared_uri_request
+        declared = declared_uri_request(invocation.argv, PATHLESS_FLAGS.values())
+        if declared is not None:
+            return (*_prepare_declared_uri(invocation, *declared), declared[0])
         _check_ghost_flags(invocation)
         parser = create_argument_parser(__version__, full_help=invocation.typed('--help-all'))
         args = parser.parse_args(invocation.argv)
@@ -330,7 +336,7 @@ def _prepare(invocation: Invocation) -> Tuple[Namespace, Callable[[], None]]:
             retirement_note('flag:--search')
         validate_navigation_args(args)
         _apply_output_sinks(parser, args, invocation)
-        return args, lambda: _main_impl(invocation, parser, args)
+        return args, lambda: _main_impl(invocation, parser, args), None
 
     retirement_note(f'subcommand:{name}')
     _warn_if_subcommand_shadows_path(name)
@@ -344,7 +350,26 @@ def _prepare(invocation: Invocation) -> Tuple[Namespace, Callable[[], None]]:
     _require_subcommand_format(name, sub_args, formats)
     # BACK-1539: the flag ledger and the REVEAL_IGNORE/--exclude walk scope, once for all.
     from .cli.routing.subcommand import dispatch_subcommand
-    return sub_args, lambda: dispatch_subcommand(name, sub_parser, runner, sub_args)
+    return sub_args, lambda: dispatch_subcommand(name, sub_parser, runner, sub_args), name
+
+
+def _prepare_declared_uri(invocation: Invocation, noun: str, parser: Any, argv: List[str],
+                          uri: str) -> Tuple[Namespace, Callable[[], None]]:
+    """A declared noun's URI request, read by that noun's own parser: a flag after the URI is the subcommand's flag
+    (COMMAND_MODEL "Flags after a URI", BACK-2673). The URI's path is the resource argument; its query is the
+    request's second source, joined with the typed flags by the runner. Dispatched as the subcommand is."""
+    from .cli.routing.declared import parse_declared_uri_args, run_declared_uri_command
+    from .cli.routing.subcommand import dispatch_subcommand
+    args, element = parse_declared_uri_args(parser, argv)
+    record_typed_spellings(parser, argv)
+    _apply_output_sinks(parser, args, invocation)
+
+    def run() -> None:
+        check_for_updates()
+        query = uri.partition('?')[2]
+        dispatch_subcommand(noun, parser, lambda typed: run_declared_uri_command(noun, uri, element, typed), args,
+                            '?' + query if query else '')
+    return args, run
 
 
 # Special modes that answer and exit: (dest, handler run on the tracked args). Each runs

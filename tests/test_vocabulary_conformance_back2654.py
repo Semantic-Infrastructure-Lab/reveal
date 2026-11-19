@@ -205,17 +205,44 @@ RULED_EXEMPT_NOUNS = {'stats': 'rule 9: the retired stats:// scheme is deleted a
 
 # Cells that do not conform yet: (noun, rule) -> the behaviour observed at fac0718b. May only shrink; every
 # entry reaches zero before the cut.
-# Rule 20 (BACK-2656) conforms on every noun since Step 2d (codex was the last cell). Rule 23 (BACK-2673) was measured
-# by Step 3a at cd4cd87d: every noun with a subcommand diverges (103 to 116 failing cases each, 1,941 in all); 3b-2 binds
-# a URI's flags with the noun's own parser and the shared join, which leaves only the cells that wait for a ruling.
-NOT_YET: dict = {(noun, '23'): ('after a URI, a main-parser flag the noun does not take answers with an unused note where '
-                                'the subcommand exits 2; the noun\'s own control flags the main parser lacks exit 2; '
-                                '--head/--tail/--range slice rows; a flag meets the URI key only for FLAG_SPECS flags')
-                 for noun in NOUNS if BASE[noun][0] is not None}
+# Rule 20 (BACK-2656) conforms on every noun since Step 2d (codex was the last cell). Rule 23 (BACK-2673): since Step 3b-2
+# a declared noun's URI is read by its own parser and its query joins the typed flags, so a cell is left only where a
+# case waits for a ruling; RULE_23_CASES names each case, and a recorded cell fails on any other.
+_PENDING_3B3 = 'pending 3b-3 (ruled 2026-11-19)'
+_SLICES = ('--head', '--tail', '--range')
+_SLICE_WHY = (_PENDING_3B3 + ': --head/--tail/--range keep slicing rows after the URI, read by the main parser, until '
+              'their note-stage RETIREMENTS rows land on both spellings (BACK-2706)')
+_UNRULED = '; the ruling names {}, and this noun {} too at 23545deb (the manager confirms the ruling covers it)'
+_UNRULED_SLICE_WHY = _SLICE_WHY + _UNRULED.format('ast, claude, metrics and pack', 'slices its rows')
+_CHECK_WHY = (_PENDING_3B3 + ': the legacy --check transport (LEGACY_CHECK_TRANSPORT) keeps the main parser\'s route '
+              'after the URI until its note-stage RETIREMENTS row lands')
+_UNRULED_CHECK_WHY = _CHECK_WHY + _UNRULED.format('Claude\'s', 'declares the same transport')
+_CLAUDE_LEGACY_WHY = ('waits for a ruling: Claude\'s workflow and search readers take the main parser\'s --type and '
+                      '--name after the URI (the legacy population tests/test_claude_workflow_selection_back2617.py '
+                      'compares with); the subcommand has neither')
+_TOP_LIMIT_WHY = ('waits for a ruling: --limit after the URI caps top through CLI_QUERY_FLAGS, which the subcommand does '
+                  'not take (COMMAND_MODEL "Caps": --limit is the cap, top the divergence)')
+_EQUAL_TERM_WHY = ('waits for a ruling: ?k=A --flag A on a repeatable control combines as ?k=A&k=A and the subcommand\'s '
+                   '--flag A --flag A do (the echo reads "A AND A"); rule 1 does not say whether an equal repeated term is '
+                   'one term (Claude match dedupes it)')
+RULE_23_CASES = {
+    'ast': {**dict.fromkeys(_SLICES, _SLICE_WHY), '?where=A --where A': _EQUAL_TERM_WHY},
+    'claude': {**dict.fromkeys(_SLICES, _SLICE_WHY), '--check': _CHECK_WHY,
+               **dict.fromkeys(('--type', '--name'), _CLAUDE_LEGACY_WHY)},
+    'metrics': dict.fromkeys(_SLICES, _SLICE_WHY),
+    'pack': dict.fromkeys(_SLICES, _SLICE_WHY),
+    **{noun: dict.fromkeys(_SLICES, _UNRULED_SLICE_WHY) for noun in ('calls', 'imports', 'patches')},
+    **{noun: {**dict.fromkeys(_SLICES, _UNRULED_SLICE_WHY), '--check': _UNRULED_CHECK_WHY} for noun in ('git', 'json')},
+    **{noun: {**dict.fromkeys(_SLICES, _UNRULED_SLICE_WHY), '--limit': _TOP_LIMIT_WHY}
+       for noun in ('hotspots', 'testability')},
+    'markdown': {**dict.fromkeys(_SLICES, _UNRULED_SLICE_WHY),
+                 **dict.fromkeys(('?where=A --where A', '?match=A --match A'), _EQUAL_TERM_WHY)},
+}
+NOT_YET: dict = {(noun, '23'): '; '.join(dict.fromkeys(RULE_23_CASES[noun].values())) for noun in RULE_23_CASES}
 
 NOT_YET_BASELINE = {'1a': 0, '1b': 0, '1c': 0, '1d': 0, '2': 0, '3': 0, '3b': 0, '4': 0, '5': 0, '6': 0,
                     '8a': 0, '8b': 0, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 0, '14': 0, '21j': 0, '22': 0,
-                    '23': 18}
+                    '23': 12}
 
 
 # --- the fixture -------------------------------------------------------------------------------------------
@@ -444,11 +471,26 @@ def _value_pair(flag, spec):
     return 'b', 'a'
 
 
+def _subcommand_options(noun):
+    """Every option string the noun's subcommand takes, or None for a noun with no subcommand (codex)."""
+    if _sub(noun) is None:
+        return None
+    return {option for action in create_declared_parser(noun)._actions for option in action.option_strings}
+
+
+def _after_uri(noun, option):
+    """Whether *option* typed after the noun's URI reaches it as a global flag: on a noun with a subcommand a flag after
+    the URI is that subcommand's flag (rule 23, BACK-2673), so one the subcommand does not take is rule 23's refusal;
+    a URI-only noun (codex) still reads the main parser's flags."""
+    options = _subcommand_options(noun)
+    return options is None or option in options
+
+
 def probe_uri_and_flag(noun):
     cases = []
     for flag in FLAG_SPECS:
         fragment = _received(noun, flag)
-        if fragment is None:
+        if fragment is None or not _after_uri(noun, flag.option):
             continue
         key, _, template = fragment.partition('=')
         spec = None if key == 'respect_gitignore' else _spec_for(noun, key)  # the walk policy is a switch
@@ -780,7 +822,8 @@ def probe_unsupported_controls(noun):
             run = _run(*_sub(noun, f'--{control}', value), '--format', 'json')
             cases.append(Case(f'subcommand --{control}', _teaches(run, noun, control), f'{run.brief()} ({wants})'))
         flag = global_flags.get(control)
-        if flag is not None and _received(noun, flag) is None:
+        # a flag the subcommand takes answers after the URI as on the subcommand (rule 23); column 23 compares it
+        if flag is not None and _received(noun, flag) is None and f'--{control}' not in (_subcommand_options(noun) or ()):
             run = _run(_uri(noun), f'--{control}', value, '--format', 'json')
             cases.append(Case(f'URI with global --{control}', _teaches(run, noun, control), f'{run.brief()} ({wants})'))
     # One rejection wording on every transport (BACK-2654 item B): a flag reveal does not have on a URI request, and
@@ -1511,12 +1554,19 @@ def _flag_options(noun):
             yield option, main.get(option), own.get(option)
 
 
+def _carried(spec):
+    """Whether a control with no flag of its own is carried by the global flag of its name, as the subcommand binds it
+    (``run_declared_command``: a boolean, ``--all``, or a repeatable control, ``--exclude``). The global ``--format`` is
+    presentation; it never sets Calls' or Imports' own ``format`` query key."""
+    return spec.cli is not None or spec.type == 'boolean' or spec.repeatable
+
+
 def _flag_control(noun, option, action):
     """The declared control a declared-parser option sets (by dest, flag or legacy flag), else None."""
     if action is None:
         return None
     return next((spec for spec in _specs(noun)
-                 if action.dest in (spec.name, spec.cli.dest if spec.cli else None)
+                 if (action.dest in (spec.name, spec.cli.dest if spec.cli else None) and _carried(spec))
                  or option in (spec.cli.flags if spec.cli else ()) or spec.legacy_entry(option) is not None), None)
 
 
@@ -1984,6 +2034,11 @@ def test_cell(workspace, noun, rule):
         with open(report, 'a', encoding='utf-8') as sink:
             sink.write(json.dumps({'noun': noun, 'rule': rule, 'state': state, 'cases': len(cases),
                                    'failing': failing}) + '\n')
+    if rule == '23' and noun in RULE_23_CASES:  # recorded case by case: exactly these still fail
+        cases_failing = {case.label.partition(' (')[0] for case in cases if not case.ok}
+        assert cases_failing == set(RULE_23_CASES[noun]), (
+            f'{noun} x 23 fails {sorted(cases_failing)}; RULE_23_CASES records {sorted(RULE_23_CASES[noun])}:\n  '
+            + '\n  '.join(failing or ['no failing cases']))
     if (noun, rule) in OUT_OF_SCOPE or (noun, rule) in STOPPED:
         assert state == 'not_yet', f'{noun} x {rule} now conforms: remove it from OUT_OF_SCOPE/STOPPED'
     elif (noun, rule) in EXEMPT:
@@ -2217,16 +2272,13 @@ def test_metrics_rejects_an_unsupported_shared_control_through_the_shared_messag
 
 @pytest.mark.parametrize('noun,flag,value', [('ast', '--where', 'lines>1'), ('markdown', '--match', 'x'),
                                              ('metrics', '--view', 'hotspots')])
-def test_a_declared_control_given_as_a_flag_on_a_uri_names_its_query_key(workspace, noun, flag, value):
-    """A control the noun declares but reveal has no flag for on a URI request: the shared message, plus where the
-    control goes on a URI (its query key), in text and in the JSON document."""
-    from reveal.utils.query_binding import unsupported_controls_message
-    taught = unsupported_controls_message(_specs(noun), [flag])
-    key = f'?{flag[2:]}=VALUE'
-    text = _run(_uri(noun), flag, value)
-    assert text.rc == 2 and taught in text.err and key in text.err and not text.out.strip(), text.brief()
-    run = _run(_uri(noun), flag, value, '--format', 'json')
-    assert run.rc == 2 and taught in json.loads(run.out)['error'] and key in json.loads(run.out)['error'], run.brief()
+def test_a_declared_control_given_as_a_flag_on_a_uri_binds_to_it(workspace, noun, flag, value):
+    """A control the noun declares, given as its flag after a URI, is that control (rule 23, BACK-2673): the request
+    answers as the query key does, in text and in JSON. It used to exit 2 with "on a URI, a control is a query key"."""
+    keyed = _uri(noun, f'{flag[2:]}={value}')
+    for extra in ((), ('--format', 'json')):
+        flagged, by_key = _run(_uri(noun), flag, value, *extra), _run(keyed, *extra)
+        assert flagged.rc == 0 and _answer(flagged, noun) == _answer(by_key, noun), flagged.brief()
 
 
 def test_the_environment_ignore_pattern_binds_on_the_fixture(workspace):
