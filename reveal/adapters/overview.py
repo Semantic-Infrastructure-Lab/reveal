@@ -526,7 +526,10 @@ class OverviewAdapter(ResourceAdapter):
                 'overview_diff', as_spelled(path, path), contract_version=CONTRACT_VERSION,
                 errors=[{'code': FailureCause.INVALID_REQUEST.value, 'message': str(exc)}],
                 error=str(exc))
-        report = run_architecture_diff(path, against, head_ref='working tree', top_n=max(top, 1) * 4)
+        # Both snapshots walk under the request's exclude, as the map does: a URI key or api.query keyword is the
+        # same request as the CLI flag (BACK-2693).
+        with _request_exclusions(self, path):
+            report = run_architecture_diff(path, against, head_ref='working tree', top_n=max(top, 1) * 4)
         return cast(RevealResult, {**report, 'type': 'overview_diff'})
 
     @staticmethod
