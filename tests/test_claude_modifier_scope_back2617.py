@@ -68,8 +68,10 @@ def test_supported_modifiers_still_reach_existing_readers(transcript, resource, 
 
 
 def test_schema_publishes_the_enforced_modifier_scopes():
+    """Each control's declared answers (BACK-2656) are the scopes the shared check enforces."""
     from reveal.adapters.claude.adapter import ClaudeAdapter
-    scopes = ClaudeAdapter.get_schema()['modifier_scopes']
-    assert scopes['key'] == ['claude_settings', 'claude_config']
-    assert scopes['until'] == ['claude_session_list', 'claude_cross_session_search']
-    assert scopes['patches'] == ['claude_files']
+    controls = ClaudeAdapter.get_schema()['query_params']
+    assert 'modifier_scopes' not in ClaudeAdapter.get_schema()
+    assert controls['key']['answers'] == ['claude_settings', 'claude_config']
+    assert controls['until']['answers'] == ['claude_session_list', 'claude_cross_session_search']
+    assert controls['patches']['answers'] == ['claude_files']

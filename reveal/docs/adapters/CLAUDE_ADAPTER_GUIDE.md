@@ -51,12 +51,20 @@ headings describe the retained behavior, not additional recommended controls.
 
 ---
 
-Declared modifiers reject on resources whose readers do not use them, rather
-than silently changing no selection: `key` belongs to settings/config, `project`
+Each control declares the answers that read it (`help://schemas/claude`,
+`query_params.<name>.answers`); on any other answer it exits 2 before analysis,
+naming the answers that read it and the controls this answer reads (BACK-2656),
+rather than answering unchanged: `key` belongs to settings/config, `project`
 to history, `patches` to the session files view, and `word`/`snippet` to
 cross-session content search. `filter` is catalog-name filtering only. `since`
 applies to catalog listing/search, file tracking and history; `until` applies
-to catalog listing/search. The schema publishes these `modifier_scopes`.
+to catalog listing/search. `contains` reads `/messages` (not the `tail` slice)
+and the filtered tool results; `full` the exchanges, the turn range and raw
+assistant records; `raw` the `/prompts` and `/messages` role records; `detail`
+the answers that have levels. A selector (`errors`, `tools`, `tokens`, `digest`,
+`timeline`) reads the answer it selects, so beside another selector or an
+operation (`summary`, `search`, `tail`) that picks another answer it exits 2;
+only `tools` and `errors` combine.
 `None` API overrides omit a control; invalid original URI scope still rejects
 before an override can hide it.
 
@@ -568,7 +576,7 @@ reveal 'claude://session/my-session?errors'
 - `/messages?contains=<text>` - Narrative-turn text search (see `?search=<term>` below for a whole-session, all-roles equivalent)
 - `?tools=<tool>&contains=<text>` - Results of that tool whose output contains the text (tool inputs are not searched; use `?search=` for those)
 
-`?summary&errors` is not a combination: `errors` is ignored and the answer is the plain `?summary`.
+`?summary&errors` is not a combination: `summary` selects the overview analytics, which do not read `errors`, so the request exits 2.
 
 ---
 
@@ -1068,7 +1076,7 @@ reveal 'claude://session/infernal-earth-0118?match=credential'
 
 ### Legacy ?contains=<text> (deprecated)
 
-**Description**: A modifier, not a stand-alone filter. On `/messages` it filters narrative turns; combined with `tools=` or `errors` it filters tool-result content. On its own at the session root it is ignored (use `?search=<term>` for a whole-session search)
+**Description**: A modifier, not a stand-alone filter. On `/messages` it filters narrative turns; combined with `tools=` or `errors` it filters tool-result content. Anywhere else (the session root, the `tail` slice, `/errors`) it exits 2 (use `?search=<term>` for a whole-session search)
 
 **Syntax**:
 ```bash

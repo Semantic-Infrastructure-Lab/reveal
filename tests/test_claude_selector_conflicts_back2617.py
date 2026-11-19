@@ -27,7 +27,9 @@ from test_claude_source_evidence_back2617 import transcript
     ('plans/my-plan', {'search': 'token'}),
 ])
 def test_invalid_selector_combination_rejects_in_api_and_uri(transcript, resource, params):
-    with pytest.raises(RequestValidationError, match='selector'):
+    # a selector beside another, or on a namespace, is a control the selected answer does not read (BACK-2656); search
+    # on a resource whose path selects another kind of answer keeps its own selector message
+    with pytest.raises(RequestValidationError, match='selector|is not read by this answer'):
         query('claude://' + resource, **params)
     query_string = '&'.join(name + '=' + str(value).lower() for name, value in params.items())
     result = _run_reveal_in(transcript.parent, 'claude://' + resource + '?' + query_string, '--format', 'json')
@@ -63,7 +65,7 @@ def test_named_command_rejects_competing_selectors(transcript):
 
 
 def test_invalid_original_selectors_cannot_be_hidden_by_an_override(transcript):
-    with pytest.raises(RequestValidationError, match='selectors'):
+    with pytest.raises(RequestValidationError, match="control 'tokens' is not read by this answer"):
         query('claude://session/my-session?tokens&digest', digest=False)
 
 
@@ -73,9 +75,11 @@ def test_false_selector_restores_omission(transcript):
 
 def test_schema_publishes_selector_composition_rules():
     from reveal.adapters.claude.adapter import ClaudeAdapter
-    rules = ClaudeAdapter.get_schema()['selector_rules']
+    schema = ClaudeAdapter.get_schema()
+    rules = schema['selector_rules']
     assert rules['combined_selectors'] == [['tools', 'errors']]
-    assert 'tokens' in rules['session_only']
+    assert rules['session_only'] == ['summary', 'tail']  # the operations; a selector names its answer (BACK-2656)
+    assert schema['query_params']['tokens']['answers'] == ['claude_token_breakdown']
     assert 'claude_history' in rules['search_populations']
     assert 'claude_settings' not in rules['search_populations']
 
@@ -88,7 +92,7 @@ def test_sdk_rejects_conflict_then_accepts_a_valid_composite(transcript, monkeyp
     async def scenario(session):
         failed = await session.call_tool('reveal_query', {'uri': 'claude://session/my-session?tokens&digest'})
         assert failed.is_error
-        assert 'selectors' in _text(failed)
+        assert "control 'tokens' is not read by this answer" in _text(failed)
         healthy = await session.call_tool('reveal_query', {
             'uri': 'claude://session/my-session?tools=Bash&errors', 'provenance': True})
         assert not healthy.is_error, _text(healthy)

@@ -4,7 +4,7 @@ _SCHEMA_QUERY_PARAMS = {
     'summary': {'type': 'flag', 'description': 'Session overview plus per-tool success rates, message sizes and thinking-block count'},
     'errors': {'type': 'flag', 'description': 'Filter for messages containing errors'},
     'tools': {'type': 'string', 'description': 'Filter for specific tool usage (comma-separated for multiple)', 'examples': ['?tools=Bash', '?tools=Edit', '?tools=Bash,Read']},
-    'contains': {'type': 'string', 'description': 'Modifier, not a view: on /messages it keeps the narrative turns containing the text; with ?tools= or ?errors it keeps the tool results containing the text. Ignored on its own at the session root (use ?search=)', 'examples': ['/messages?contains=reveal', '?tools=Bash&contains=error']},
+    'contains': {'type': 'string', 'description': 'Modifier, not a view: on /messages it keeps the narrative turns containing the text; with ?tools= or ?errors it keeps the tool results containing the text. Refused on any other answer (use ?search= at the session root)', 'examples': ['/messages?contains=reveal', '?tools=Bash&contains=error']},
     'search': {
         'type': 'string',
         'description': 'Search all message content (text, thinking, tool inputs, tool results) for a term (case-insensitive). On claude://sessions/ performs cross-session search.',
@@ -62,8 +62,8 @@ _SCHEMA_QUERY_PARAMS = {
     },
     'full': {
         'type': 'flag',
-        'description': 'Disable per-message 600-char truncation on /messages?detail=raw, /message --range and /exchanges. No effect on plain /messages or on /message/<n> (use --detail full there)',
-        'examples': ['?full']
+        'description': 'Disable per-message 600-char truncation on /messages?detail=raw, /message --range and /exchanges. Refused on any other answer, plain /messages and /message/<n> included (use --detail full there)',
+        'examples': ['/exchanges?full', '/message?full']
     },
     'raw': {
         'type': 'flag',

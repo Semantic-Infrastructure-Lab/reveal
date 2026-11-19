@@ -2,7 +2,7 @@
 from typing import Any, Dict
 import json
 from ...errors import RequestValidationError
-from .resources import _parse_session_identifier, selected_type, NON_SESSION_NAMESPACES
+from .resources import _parse_session_identifier, operation_type, NON_SESSION_NAMESPACES
 
 
 def apply_view(params, resource):
@@ -39,6 +39,8 @@ _FULL_TYPES = frozenset(('claude_messages', 'claude_message', 'claude_message_ra
                          'claude_assistant_messages'))
 _RAW_TYPES = frozenset(('claude_messages', 'claude_user_prompts', 'claude_user_messages',
                         'claude_assistant_messages'))
+_SUMMARY_TYPES = frozenset(('claude_session_overview', 'claude_analytics'))
+LEVELLED_TYPES = _SUMMARY_TYPES | _FULL_TYPES | _RAW_TYPES  # a level the view lacks is the Detail rule's refusal
 
 
 def apply_detail(params, resource):
@@ -49,10 +51,10 @@ def apply_detail(params, resource):
         if any(key in params for key in ('summary', 'full', 'raw')):
             raise RequestValidationError('detail=normal conflicts with a legacy detail control')
         return
-    if resource in ('', '.') or resource.partition('/')[0] in NON_SESSION_NAMESPACES:
-        raise RequestValidationError(f'detail={level} is not supported on this resource')
-    kind = selected_type(resource, params)
-    if level == 'summary' and kind in ('claude_session_overview', 'claude_analytics'):
+    kind = operation_type(resource, params)
+    if kind not in LEVELLED_TYPES:
+        return  # an answer without detail levels does not read detail: its declared answers refuse it
+    if level == 'summary' and kind in _SUMMARY_TYPES:
         if 'raw' in params or 'full' in params:
             raise RequestValidationError('detail=summary conflicts with raw/full')
         params['summary'] = True
@@ -71,15 +73,13 @@ def detail_requirement_error(adapter, result):
 
 
 def validate_where_scope(params, resource):
+    """Each answer that reads where filters its own field: the workflow tool==NAME, the session list session~=TEXT.
+    Which answers read where at all is its declaration's (the shared applicability check)."""
     terms = params.get('where')
-    if terms is None:
+    if terms is None or operation_type(resource, params) not in ('claude_session_list', 'claude_workflow'):
         return
-    if resource.endswith('/workflow'):
-        valid = all(term.partition('==')[0].strip() == 'tool' and '==' in term for term in terms)
-    else:
-        valid = (resource.rstrip('/') in ('', '.', 'sessions') and not params.get('search')
-                 and all(term.partition('~=')[0].strip() == 'session' and '~=' in term for term in terms))
-    if not valid:
+    field, operator = ('tool', '==') if resource.endswith('/workflow') else ('session', '~=')
+    if not all(term.partition(operator)[0].strip() == field and operator in term for term in terms):
         raise RequestValidationError('where supports session~=TEXT on catalog listings or tool==NAME on workflows')
 
 
@@ -159,6 +159,8 @@ def apply_match(params, resource):
         return
     terms = match_terms(value)
     target = _match_target(params, resource)
+    if target is None:
+        return  # no reader on this answer: match's declared answers refuse it before analysis
     for name in ('search', 'contains'):
         if name in params and (name != target or match_terms(params[name]) != terms):
             raise RequestValidationError(f'match conflicts with {name} on this resource')
@@ -176,11 +178,11 @@ def _match_target(params, resource):
 
 
 def _session_match_target(params, resource, noun, suffix):
+    """The control match reaches on a session resource, or None where no reader takes it (a view selector, raw role
+    records, a sub-view without text rows)."""
     selectors = ('summary', 'digest', 'timeline', 'tokens', 'tail')
-    if any(params.get(key) is not None for key in selectors):
-        raise RequestValidationError('match is not supported with this session view selector')
-    if 'raw' in params:
-        raise RequestValidationError('match is not supported on raw session records')
+    if any(params.get(key) is not None for key in selectors) or 'raw' in params:
+        return None
     if 'tools' in params or 'errors' in params:
         return 'contains'
     if resource.endswith('/workflow'):
@@ -193,46 +195,24 @@ def _session_match_target(params, resource, noun, suffix):
     if (noun == 'session' and suffix and '/' not in suffix) or '/' not in resource:
         if noun not in ('info', 'settings', 'config', 'hooks', 'plans', 'agents'):
             return 'search'
-    raise RequestValidationError('match is not supported on this Claude resource')
+    return None
 
 
-# These modifiers have a reader only on the listed answer populations.
-MODIFIER_SCOPES = {
-    'key': ('claude_settings', 'claude_config'),
-    'project': ('claude_history',),
-    'patches': ('claude_files',),
-    'word': ('claude_cross_session_search',),
-    'snippet': ('claude_cross_session_search',),
-    'since': ('claude_session_list', 'claude_cross_session_search', 'claude_file_sessions', 'claude_history'),
-    'until': ('claude_session_list', 'claude_cross_session_search'),
-}
-
-
-def validate_modifier_scope(params, resource):
-    from .resources import operation_type
-    kind = operation_type(resource, params)
-    for name, supported in MODIFIER_SCOPES.items():
-        if name in params and kind not in supported:
-            raise RequestValidationError(f'{name} is supported only by: ' + ', '.join(supported))
-
-
-SESSION_SELECTORS = frozenset(('summary', 'digest', 'timeline', 'errors', 'tokens', 'tools', 'tail'))
+# The legacy operations that select a session's answer (role='operation'): rule 17 judges two of them, and a selector
+# beside one is a control that operation's answer does not read (its declaration). What stays here is an operation
+# on a resource whose path already selects another kind of answer.
+SESSION_OPERATIONS = frozenset(('summary', 'tail'))
 SEARCH_POPULATIONS = frozenset(('claude_cross_session_search', 'claude_search_results', 'claude_history',
                                 'claude_plans', 'claude_agents', 'claude_memory'))
 
 
 def validate_selectors(params, resource):
-    from .resources import operation_type
-    selected = set(params).intersection(SESSION_SELECTORS | {'search'})
     namespace = resource.partition('/')[0]
     if resource.rstrip('/') in ('', '.') or namespace in NON_SESSION_NAMESPACES:
-        misplaced = selected.intersection(SESSION_SELECTORS)
+        misplaced = SESSION_OPERATIONS.intersection(params)
         if misplaced:
             raise RequestValidationError('Session selectors require a session resource: ' + ', '.join(sorted(misplaced)))
     # Empty root search historically selects the session listing.
-    if resource.rstrip('/') in ('', '.') and params.get('search') == '':
-        selected.discard('search')
-    if 'search' in selected and operation_type(resource, params) not in SEARCH_POPULATIONS:
+    searched = 'search' in params and not (resource.rstrip('/') in ('', '.') and params.get('search') == '')
+    if searched and operation_type(resource, params) not in SEARCH_POPULATIONS:
         raise RequestValidationError('search selector is unsupported on this resource')
-    if len(selected) > 1 and not selected <= {'tools', 'errors'}:
-        raise RequestValidationError('Conflicting Claude selectors: ' + ', '.join(sorted(selected)))

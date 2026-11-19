@@ -29,15 +29,17 @@ def uri_result_type(resource):
 
 
 def predicted_result_type(resource, *, query=None, params=None):
+    """The answer the request selects, from its translation (not Claude's own checks: a request they refuse still
+    names its answer, which the applicability check reads)."""
     from ...errors import RequestValidationError
-    from .params import bind_request
+    from .params import translate_request
     from .resources import operation_type
     try:
-        effective, runtime = bind_request(query, params, resource)
+        effective, runtime = translate_request(query, params, resource)
     except (RequestValidationError, UnicodeDecodeError):
         # Prediction must not raise outside the router's answered-call boundary.
         # Canonical construction validates the original input and reports the error.
-        return operation_type(resource, {})
+        return operation_type(resource, params if params is not None else {})
     return operation_type(effective, runtime)
 
 

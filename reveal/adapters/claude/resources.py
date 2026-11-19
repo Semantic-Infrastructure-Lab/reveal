@@ -47,10 +47,11 @@ SESSION_VIEW_NAMES = ('overview', 'messages', 'prompts', 'thinking', 'tools', 'f
 SESSION_VIEWS = frozenset(('', 'messages', 'prompts', 'thinking', 'tools', 'files', 'workflow',
                            'agents', 'context', 'timeline', 'errors', 'summary', 'tokens',
                            'digest', 'exchanges', 'message'))
-QUERY_VIEWS = (('summary', 'claude_analytics'), ('digest', 'claude_digest'),
-               ('timeline', 'claude_timeline'), ('errors', 'claude_errors'),
-               ('tokens', 'claude_token_breakdown'), ('tools', 'claude_tool_calls'),
-               ('search', 'claude_search_results'), ('tail', 'claude_messages'))
+# The legacy operations (role='operation') select their answer before any selector: a selector beside one is then a
+# control that answer does not read, refused by its declaration (BACK-2656), never a silent second answer.
+OPERATION_VIEWS = (('summary', 'claude_analytics'), ('search', 'claude_search_results'), ('tail', 'claude_messages'))
+SELECTOR_VIEWS = (('digest', 'claude_digest'), ('timeline', 'claude_timeline'), ('errors', 'claude_errors'),
+                  ('tokens', 'claude_token_breakdown'), ('tools', 'claude_tool_calls'))
 RESOURCE_VIEWS = (('thinking', 'claude_thinking'), ('tools', 'claude_tool_summary'),
                   ('files', 'claude_files'), ('workflow', 'claude_workflow'),
                   ('agents', 'claude_session_agents'), ('context', 'claude_context'),
@@ -66,9 +67,12 @@ def _active(params):
 
 def selected_type(resource, params):
     active = _active(params)
+    for key, kind in OPERATION_VIEWS:
+        if key in active:
+            return kind
     if len(active.intersection(('tools', 'errors', 'contains'))) > 1:
         return 'claude_filtered_results'
-    for key, kind in QUERY_VIEWS:
+    for key, kind in SELECTOR_VIEWS:
         if key in active:
             return kind
     for segment, kind in RESOURCE_VIEWS:

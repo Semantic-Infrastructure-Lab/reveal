@@ -35,7 +35,8 @@ def test_full_detail_keeps_existing_body_and_marks_intent(transcript, view):
 @pytest.mark.parametrize('view,kind', [('messages', 'claude_assistant_messages'), ('prompts', 'claude_user_messages')])
 def test_raw_detail_uses_existing_role_record_population(transcript, view, kind):
     canonical = query('claude://session/my-session', view=view, detail='raw')
-    original = query('claude://session/my-session/' + view, raw=True, full=True)
+    # legacy full reads only the raw assistant records (the raw user records keep no truncation switch, BACK-2656)
+    original = query('claude://session/my-session/' + view, raw=True, **({'full': True} if view == 'messages' else {}))
     assert canonical['type'] == original['type'] == kind
     assert canonical['messages'] == original['messages']
     assert canonical['full'] is True
@@ -47,9 +48,16 @@ def test_full_tool_calls_and_indexed_message_use_existing_verbose_output(transcr
 
 
 def test_normal_detail_does_not_claim_to_filter_source(transcript):
-    canonical = query('claude://session/my-session', errors=True, contains='failed', detail='normal')
-    original = query('claude://session/my-session', errors=True, contains='failed')
+    canonical = query('claude://session/my-session', tools='Bash', detail='normal')
+    original = query('claude://session/my-session', tools='Bash')
     assert canonical == original
+
+
+def test_detail_on_an_answer_without_levels_is_refused(transcript):
+    """The filtered tool results have no detail levels, so even the default level is a control that answer does not
+    read (BACK-2656; it answered unchanged before)."""
+    with pytest.raises(RequestValidationError, match="control 'detail' is not read by this answer"):
+        query('claude://session/my-session', errors=True, contains='failed', detail='normal')
 
 
 @pytest.mark.parametrize('resource,level', [('info', 'summary'), ('settings', 'raw'),

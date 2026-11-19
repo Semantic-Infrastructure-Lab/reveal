@@ -153,8 +153,8 @@ EXEMPT = {
         'architecture', 'codex', 'contracts', 'deps', 'hotspots', 'overview', 'pack', 'surface', 'testability',
         'trace')},
     **{(noun, '20'): 'no answer reports a declared control unread, on any resource ANSWER_TARGETS lists (a control '
-                     'read and not applied is the Step 4 backstop\'s: Claude contains/full/raw)' for noun in (
-        'architecture', 'ast', 'claude', 'contracts', 'deps', 'hotspots', 'overview', 'pack', 'surface', 'testability',
+                     'read and not applied is the Step 4 backstop\'s)' for noun in (
+        'architecture', 'ast', 'contracts', 'deps', 'hotspots', 'overview', 'pack', 'surface', 'testability',
         'trace')},
 }
 

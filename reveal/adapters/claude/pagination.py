@@ -47,17 +47,19 @@ def page_requested(params):
 
 
 def validate_page_scope(params, resource):
+    """On an answer whose rows page (the controls' declared answers; the shared check refuses the others): config's
+    ``key`` answers one value, not its project list, and a sort names a field of the selected rows."""
     if not page_requested(params):
         return
     kind = operation_type(resource, params)
-    if kind not in PAGE_SPECS or (kind == 'claude_config' and params.get('key')):
+    if kind not in PAGE_SPECS:
+        return
+    if kind == 'claude_config' and params.get('key'):
         raise RequestValidationError('limit/offset/sort require a supported list answer')
     sort = params.get('sort')
     field = sort[1:] if sort and sort.startswith('-') else sort
     if sort and field not in PAGE_SPECS[kind][1]:
         raise RequestValidationError(f'Unsupported sort field for {kind}: {sort}')
-    if params.get('tail') is not None:
-        raise RequestValidationError('limit/offset/sort cannot combine with legacy tail/last')
 
 
 def page_result(result: Dict[str, Any], params) -> Dict[str, Any]:

@@ -388,7 +388,10 @@ class ClaudeAdapter(ResourceAdapter):
 
     @classmethod
     def validate_original_request(cls, params, resource):
-        # Resource-sensitive canonical controls validate before API overrides.
+        # The URI's own controls validate before API overrides, so an override cannot hide an invalid original
+        # request (BACK-2617): applicability by the shared check and declarations, then Claude's own checks.
+        from ...utils.query_binding import reject_unread_controls
+        reject_unread_controls(PARAM_SPECS, params, lambda: cls.result_type_at(params, resource))
         bind_query(None, params, resource)
 
     @classmethod
@@ -991,7 +994,7 @@ class ClaudeAdapter(ResourceAdapter):
         Returns JSON schema for AI agent integration.
         """
         from .pagination import page_schema
-        from .controls import MODIFIER_SCOPES, SESSION_SELECTORS, SEARCH_POPULATIONS
+        from .controls import SESSION_OPERATIONS, SEARCH_POPULATIONS
         return {
             'adapter': 'claude',
             'description': 'Claude Code conversation analysis with tool usage, workflow tracking, and error detection',
@@ -1000,9 +1003,8 @@ class ClaudeAdapter(ResourceAdapter):
             'pagination': page_schema(),
             'workflow_selection': {'tool_predicate': 'tool==NAME (case-insensitive exact equality)',
                                    'match_rule': MATCH_RULE, 'order': 'selection before sorting, offset and limit'},
-            'modifier_scopes': {name: list(kinds) for name, kinds in MODIFIER_SCOPES.items()},
-            'selector_rules': {
-                'session_only': sorted(SESSION_SELECTORS),
+            'selector_rules': {  # which answers read each control: query_params[*].answers (BACK-2656)
+                'session_only': sorted(SESSION_OPERATIONS),
                 'search_populations': sorted(SEARCH_POPULATIONS),
                 'combined_selectors': [['tools', 'errors']],
                 'turn_aliases': 'last is the other spelling of tail (bare or zero last is tail=1): equal counts answer once, different counts exit 2',
