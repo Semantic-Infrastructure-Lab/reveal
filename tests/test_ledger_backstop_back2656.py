@@ -24,9 +24,9 @@ from test_vocabulary_conformance_back2654 import (ANSWER_TARGETS, APPLICABILITY_
 NOT_YET: dict = {}
 
 # Resources where the selected answer declines (not applicable, exit 0) because of the data, before it reads its
-# controls: a patches scan of a file with no test file (BACK-2696). Only the data decides it, so the controls are named
+# controls: a patches scan of a file with no test file, git outside a repository (BACK-2696). Only the data decides it, so the controls are named
 # in the shared control_unread_by_data warning, never by the ledger (COMMAND_MODEL "Applicability", Q2).
-DECLINED_TARGETS = {'patches': ('proj/app.py',)}
+DECLINED_TARGETS = {'patches': ('proj/app.py',), 'git': ('home',)}  # git: a directory outside every repository
 
 
 def _other_than_default(noun, spec):
