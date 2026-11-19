@@ -401,8 +401,8 @@ def _requested_nav_flag(args) -> str:
         if token == '--':
             break
         option = token.partition('=')[0]
-        # argparse accepts unique abbreviations (--bound); echo what was typed.
-        if option.startswith('--') and any(name.startswith(option[2:]) for name in names):
+        # The spelling typed, matched exactly: a long option is spelled in full (BACK-2705).
+        if option.startswith('--') and option[2:] in names:
             return option
     for name in ('flow', 'varflow', 'narrow', 'calls', 'keys'):
         if getattr(args, name, None) is not None and getattr(args, name, None) is not False:
