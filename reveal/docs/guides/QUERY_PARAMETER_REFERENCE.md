@@ -44,7 +44,10 @@ Query parameters allow filtering, formatting, and modifying adapter behavior usi
 and `limit=N` for their ranking and reject `offset` (`top` is calls' legacy spelling of `limit`, with a note). The legacy
 `metrics://?hotspots=true` ranking, the retired `hotspots://` and `depends://`, and `patches://?view=pressure` cap with
 `top=N` (on `hotspots://` and `depends://` the `--limit N` flag maps to it). A declared noun rejects a key it does not
-take (exit 2, naming its controls); other adapters answer `Unknown query param ... ignored`.
+take (exit 2, naming its controls), and one its selected answer does not read (`sort`, `limit` and `offset`
+on a Git blame, a Markdown link view or a JSON key listing) exits 2 naming the answers that read it
+([output contract](../development/OUTPUT_CONTRACT.md#ignored-inputs)); other adapters answer
+`Unknown query param ... ignored`.
 Every adapter that walks a directory also takes `respect_gitignore=false` (the same as `--respect-gitignore off`).
 
 ## Detailed Documentation
