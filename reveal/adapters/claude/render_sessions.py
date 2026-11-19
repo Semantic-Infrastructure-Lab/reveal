@@ -13,7 +13,7 @@ def _render_claude_session_list(result: dict) -> None:
     count_line = f"Claude Sessions: {total} total"
     if displayed < total:
         count_line += f" | showing {displayed}"
-    count_line += " | --all to show all | --head N for more | --since/--until YYYY-MM-DD (or today)"
+    count_line += " | --all to show all | --limit N for more | --since/--until YYYY-MM-DD (or today)"
     if not with_stats:
         count_line += " | --with-stats for duration/message count"
     print(count_line)
@@ -190,7 +190,7 @@ def _render_claude_history(result: dict) -> None:
         count_str = f'{total:,} entries'
     header = f'Prompt history: {count_str} | showing {displayed}'
     if displayed < matched:
-        header += ' | --all to show all | --head N for more'
+        header += ' | --all to show all | --limit N for more'
     print(header)
 
     filters = []
