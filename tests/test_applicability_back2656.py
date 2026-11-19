@@ -408,3 +408,34 @@ def test_a_refusal_on_an_unqualified_resource_is_exit_2_and_an_undeclared_adapte
                                                                                          refused.stderr)
     own = _run_reveal_direct('applicability-raises://r', '--format', 'json')
     assert own.returncode == 1 and 'the adapter rejects this request itself' in own.stderr, (own.returncode, own.stderr)
+
+
+def test_a_retired_spelling_that_adopts_its_parents_declaration_is_judged_by_it(monkeypatch, tmp_path):
+    """A retired scheme adopts its parent's declaration with a class-local ``BOUND_QUERY_CALL`` (the opt-in
+    ``factory.uses_bound_query_call`` already reads: ``stats://``, Architecture). It is the same answer, so the same
+    control is refused on it before construction, on the URI and the API; a plugin subclass without that opt-in keeps
+    its own behaviour (the ``undeclared`` fixture above)."""
+    from reveal import api
+    declared, renderer, built = _fixture_classes(declared=True)
+
+    class Retired(declared):
+        BOUND_QUERY_CALL = True  # adopts the inherited declaration, as stats:// and architecture:// do
+
+    monkeypatch.setitem(_ADAPTER_REGISTRY, 'applicability-retired', Retired)
+    monkeypatch.setitem(_RENDERER_REGISTRY, 'applicability-retired', renderer)
+    run = _run_reveal_direct('applicability-retired://r?alpha=1', '--format', 'json')
+    assert run.returncode == 2 and "control 'alpha' is not read by this answer" in run.stderr, (run.returncode,
+                                                                                                 run.stderr)
+    with pytest.raises(RequestValidationError, match="'alpha' is not read by this answer"):
+        api.query('applicability-retired://r', alpha=1)
+    assert built == [], built
+    assert _run_reveal_direct('applicability-retired://r?view=a&alpha=1', '--format', 'json').returncode == 0
+
+    (tmp_path / 'a.py').write_text('def f():\n    return 1\n', encoding='utf-8')
+    monkeypatch.chdir(tmp_path)
+    for scheme in ('metrics', 'stats'):  # stats:// is metrics' retired spelling: one answer, one refusal
+        run = _run_reveal_direct(f'{scheme}://.?top=3', '--format', 'json')
+        assert run.returncode == 2 and "control 'top' is not read by this answer" in run.stderr, (scheme,
+                                                                                                   run.returncode,
+                                                                                                   run.stderr)
+        assert _run_reveal_direct(f'{scheme}://.?view=hotspots&top=3', '--format', 'json').returncode == 0
