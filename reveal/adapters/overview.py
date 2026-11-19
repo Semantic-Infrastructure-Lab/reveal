@@ -132,6 +132,13 @@ def _import_warnings(built, target: Path, limit: Optional[int]) -> list[WarningE
     return warnings
 
 
+def _request_exclusions(adapter: 'OverviewAdapter', path: Path):
+    """The request's ``exclude`` patterns as the walk scope of the walks inside the block, rooted at *path* (its
+    directory for a file); outside a CLI dispatch nothing else publishes them."""
+    target = path.resolve()
+    return exclusion_scope(target if target.is_dir() else target.parent, adapter.exclude_patterns)
+
+
 def _run_imports_analysis(adapter: 'OverviewAdapter', path: Path, top: int, *, scope_usable: bool) -> tuple[Optional[MapFacts], str]:
     """Validate full owner evidence before any map or diagnostic presentation cuts."""
     from ..config import RevealConfig
@@ -140,8 +147,7 @@ def _run_imports_analysis(adapter: 'OverviewAdapter', path: Path, top: int, *, s
     layout = RevealConfig.get(layout.anchor).apply_test_layout(layout)
     try:
         target = path.resolve()
-        with exclusion_scope(target if target.is_dir() else target.parent, adapter.exclude_patterns), \
-                gitignore_scope(adapter.respect_gitignore):
+        with _request_exclusions(adapter, target), gitignore_scope(adapter.respect_gitignore):
             scope = import_analysis.path_scope(target)
             built = import_analysis.analyze(scope)
         warnings = _import_warnings(built, target, scope.cap)
