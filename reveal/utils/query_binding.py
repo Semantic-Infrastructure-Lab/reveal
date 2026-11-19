@@ -394,15 +394,18 @@ def _typed_flag(spec: ParamSpec, spelled: Optional[Mapping[str, str]]) -> str:
 
 
 def _uri_terms(spec: ParamSpec, value: Any) -> tuple:
-    """(prepared, spelled) for a typed value joining a URI's prepared params: a repeatable control's terms as the URI's
-    preparation leaves them (decoded, one per term), a scalar as its raw URI value (decoded once, on binding); and the
-    query parts that spell it, for the joined source query."""
+    """(prepared, query parts) for a typed value joining a URI's prepared params: a repeatable control's terms as the
+    URI's preparation leaves them (decoded, one per term), a scalar as its raw URI value (decoded once, on binding); and
+    the query parts that spell it, for the joined source query. A flag typed without its optional value (``True`` on a
+    control that is not a boolean: ``--importers``) is the URI's bare key, as ``?importers`` parses."""
     if spec.repeatable:
         terms = list(value) if isinstance(value, (list, tuple)) else [value]
         spelled = [encode_param_value(spec, term) if spec.uri_codec == 'percent' else str(term) for term in terms]
-        return terms, spelled
+        return terms, [f'{spec.name}={part}' for part in spelled]
+    if value is True and spec.type != 'boolean':
+        return True, [spec.name]
     raw = encode_param_value(spec, 'true' if value is True else 'false' if value is False else value)
-    return raw, [raw]
+    return raw, [f'{spec.name}={raw}']
 
 
 def join_uri_and_flags(declarations: Iterable[ParamSpec], uri_params: QueryParams, typed_params: QueryParams, *,
@@ -441,7 +444,7 @@ def join_uri_and_flags(declarations: Iterable[ParamSpec], uri_params: QueryParam
         given = dict.get(joined, spec.name)
         joined[spec.name] = _accumulated([given, prepared]) if spec.repeatable and given is not None else prepared
         joined._given.add(spec.name)
-        query += [f'{spec.name}={part}' for part in spelled_parts]
+        query += spelled_parts
     joined._source_query = '&'.join(query)
     return joined
 
