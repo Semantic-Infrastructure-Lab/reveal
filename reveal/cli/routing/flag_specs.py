@@ -158,8 +158,8 @@ def _join_uri_value(args: Any, spec: Any, adapter_class: Any, resource: str, key
         return
     mark(args, spec.dest)
     from ...errors import RequestValidationError
-    raise RequestValidationError(f"{typed_option(spec)} conflicts with {key}={uri_value} in the URI: "
-                                 f"{key} is set twice with different values; give it once")
+    from ...utils.query_binding import flag_conflicts_with_uri_message
+    raise RequestValidationError(flag_conflicts_with_uri_message(typed_option(spec), key, uri_value))
 
 
 def _join_flag_value(args: Any, spec: Any, adapter_class: Any, key: str, fragment: str,
