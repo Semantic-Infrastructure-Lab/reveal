@@ -21,6 +21,7 @@ from ...reveal_types import CONTRACT_VERSION, RevealResult
 from ...utils import print_json_result, write_also_json
 from ...utils.json_utils import attach_provenance, write_requested_artifact
 from ...utils.path_utils import to_posix
+from ...utils.warning_render import render_meta_warnings
 from ...display.formatting import print_result_control_notes
 from ...utils.results import (ExecutionFacts, FailureCause, Outcome, ResultBuilder, echo_source,
                              dotted_holder, failure_execution_facts, note_truncation, outcome_of, restate_shown_counts, slice_items,
@@ -90,7 +91,7 @@ class UriUsageError(Exception):
 
 
 def _call_adapter(call: Callable[[], Any], scheme: str, resource: str,
-                  adapter_class: Any = None, *, classify_validation=False) -> Any:
+                  adapter_class: Any = None, *, classify_validation=False, adapter: Any = None) -> Any:
     """Run one call into an adapter; what it raises becomes a result like any returned one.
 
     Every call the router makes into an adapter goes through here: constructing it,
@@ -102,12 +103,13 @@ def _call_adapter(call: Callable[[], Any], scheme: str, resource: str,
     error line (three spellings) and hand-build its own envelope, so a raised error printed
     twice in text, carried contract_version 1.0 and source_type 'file', and wrote no
     --also-json (BACK-1553). The result leaves as an _Answered, not an exit, so stdin
-    --batch gets it as a result too (BACK-1554).
+    --batch gets it as a result too (BACK-1554). *adapter* is the instance being called, if any: a decline names the
+    declared controls it gave and never read (BACK-2696).
     """
     try:
         return call()
     except NotApplicableError as e:
-        _decline(scheme, resource, e.reason, adapter_class)
+        _decline(scheme, resource, e.reason, adapter_class, adapter)
     except Exception as e:  # boundary-ok: broad-except -- the router's boundary for every adapter: the query ends as a failed result via _fail, exit 1
         logger.debug('%s:// adapter call raised', scheme, exc_info=True)
         # A setting that cannot be used is the request's fault (2) or unknown input (3) on every operation, legacy
@@ -178,13 +180,19 @@ def _fail(scheme: str, resource: str, message: str, *,
     raise _Answered(result, detail, exception, facts, test_layout_failure=test_layout_failure)
 
 
-def _decline(scheme: str, resource: str, reason: str, adapter_class: Any = None) -> NoReturn:
+def _decline(scheme: str, resource: str, reason: str, adapter_class: Any = None, adapter: Any = None) -> NoReturn:
     """End the query 'not applicable' when it genuinely does not apply to the target
     (testability:// with no tests, git:// outside a repository): a recorded answer that
-    exits 0, not a failure (BACK-1210)."""
-    result = _router_result(scheme, resource, adapter_class,
-                            warnings=[{'type': 'not_applicable', 'code': 'not_applicable', 'message': reason}],
-                            applicable=False, reason=reason)
+    exits 0, not a failure (BACK-1210). The declared controls the request gave and the answer
+    never read are named in the one shared warning only the data decides (COMMAND_MODEL
+    "Applicability", Q2), not by the unused-input ledger (BACK-2696)."""
+    from ...utils.query_binding import declined_controls_warning
+    warnings = [{'type': 'not_applicable', 'code': 'not_applicable', 'message': reason}]
+    params = getattr(adapter, 'query_params', None)
+    unread = declined_controls_warning(getattr(adapter_class, 'PARAM_SPECS', ()), params) if params is not None else None
+    if unread:
+        warnings.append(unread)
+    result = _router_result(scheme, resource, adapter_class, warnings=warnings, applicable=False, reason=reason)
     raise _Answered(result)
 
 
@@ -236,6 +244,7 @@ def _render_router_result(result: Any, output_format: str,
         return
     if outcome_of(result) == 'not_applicable':
         print(f"({result['type']}://) not applicable: {result['reason']}")
+        render_meta_warnings(result, skip_types=frozenset({'not_applicable'}))  # the controls it left unread (BACK-2696)
     elif detail is not None:
         detail()
 
@@ -1415,7 +1424,8 @@ def _structure_answer(adapter, renderer_class: type[Any], args: 'Namespace',
     scheme_name, source = scheme or 'unknown', resource or ''
     # A qualified owner may reject the request only once it reads (sqlite: no such table, BACK-2521).
     result = _call_adapter(lambda: adapter.get_structure(**structure_kwargs),
-                           scheme_name, source, type(adapter), classify_validation=facts_of is not None)
+                           scheme_name, source, type(adapter), classify_validation=facts_of is not None,
+                           adapter=adapter)
 
     if facts_of is not None:
         from .declared import qualify_declared_answer
