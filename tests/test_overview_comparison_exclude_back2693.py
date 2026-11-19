@@ -18,7 +18,7 @@ import pytest
 
 pygit2 = pytest.importorskip('pygit2')
 
-from conftest import _run_reveal_direct as run  # noqa: E402
+from conftest import _run_reveal_direct as run, without_retirement_notes  # noqa: E402
 from reveal import api  # noqa: E402
 from reveal.mcp_server import reveal_query  # noqa: E402
 from reveal.utils.request_cache import reset_request_caches  # noqa: E402
@@ -61,8 +61,9 @@ def _cli(*argv, code=0):
 
 
 def _answer(doc):
-    """The comparison as the CLI prints it; MCP's provenance manifest is the one field the CLI JSON lacks."""
-    doc = json.loads(json.dumps(doc))
+    """The comparison as the CLI prints it; MCP's provenance manifest is the one field the CLI JSON lacks, and
+    architecture://'s retirement note the one warning its retired spelling adds."""
+    doc = without_retirement_notes(json.loads(json.dumps(doc)))
     doc.pop('execution', None)
     return doc
 
@@ -97,7 +98,6 @@ def _request_spellings(project):
                                       'api.query exclude keyword', 'api.query URI key', 'MCP reveal_query'])
 def test_the_comparison_applies_the_requests_exclude(project, reference, spelling):
     answer = _answer(_request_spellings(project)[spelling]())
-    answer['type'] = reference['type']  # architecture:// is the retired spelling of the same answer
     assert not _mentions(answer, _EXCLUDED), f'{spelling}: the comparison still measures {_EXCLUDED}/'
     assert answer == reference
 
