@@ -216,11 +216,12 @@ def _next_steps(path: str, exclude_patterns: List[str], respect_gitignore: bool)
 
 def _navigation_exclusions(path: Path, requested: List[str]) -> List[str]:
     # Config/REVEAL_IGNORE applies again in every deeper command. Repeat only
-    # request-specific patterns, not the automatic defaults on every hint.
+    # request-specific patterns, not the automatic defaults on every hint: the request's own, in the order it
+    # gives them (a URI's terms, then the flags after it, BACK-2673), then any only the dispatch scope adds.
     root = path if path.is_dir() else path.parent
     configured = RevealConfig.get(start_path=root).ignore_patterns()
     active = [pattern for pattern in active_exclusions()[1] if pattern not in configured]
-    return list(dict.fromkeys([*active, *requested]))
+    return list(dict.fromkeys([*requested, *active]))
 
 
 def _cut_sequence(result: dict, holder: dict, key: str, field: str, limit: int,
