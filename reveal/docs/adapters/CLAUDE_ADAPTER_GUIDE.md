@@ -813,7 +813,7 @@ reveal 'claude://session/<session-name>/message' --range 300-    # open-ended: 3
 
 **Example**:
 ```bash
-reveal claude://session/infernal-earth-0118/message --range 5-15
+reveal 'claude://session/infernal-earth-0118/message?offset=4&limit=11'   # messages 5-15 (was: --range 5-15)
 ```
 
 **Output**: Interleaved user + assistant turns with role, timestamp, and content. Default truncation at 600 chars; add `?detail=full` to disable (the legacy `?full` and `--verbose` still do, with a note naming `detail=full`). Each turn shows its raw `message_index` so you can drill in with `/message/N`. Tool-only assistant turns show one-line summaries (`Read → file.py`, `Bash → git status`).
@@ -2607,7 +2607,7 @@ reveal claude://history
 reveal claude://history --all
 
 # Show N most recent
-reveal claude://history --head 20
+reveal 'claude://history?limit=20'   # was: --head 20
 
 # Filter by prompt content
 reveal 'claude://history?match=deploy'
