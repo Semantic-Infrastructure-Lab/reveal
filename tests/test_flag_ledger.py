@@ -320,7 +320,7 @@ def test_declared_native_cap_accepts_limit(db, noun, mode):
     if noun in ('calls', 'imports'):
         notes = [w for w in legacy['meta']['warnings'] if w.get('field') == f'param:{noun}.top']
         assert len(notes) == 1
-        assert notes[0]['replacement'] == '?limit=N (--limit N); 0 is uncapped'
+        assert notes[0]['replacement'] == '--limit N; 0 is uncapped'
         legacy['meta']['warnings'].remove(notes[0])
     assert legacy == canonical
     assert 'has no effect' not in results[1].stderr

@@ -51,22 +51,22 @@ def project(tmp_path):
 # case id -> (table key, argv builder, a substring the replacement must name)
 CASES = {
     'reveal trace': ('subcommand:trace', lambda p: ['trace', p, '--from', 'main'], '--callees'),
-    'trace://': ('scheme:trace', lambda p: [f'trace://{p}?from=main'], '?callees='),
-    'calls ?root=': ('param:calls.root', lambda p: [f'calls://{p}?root=main'], '?callees='),
+    'trace://': ('scheme:trace', lambda p: [f'trace://{p}?from=main'], '--callees'),
+    'calls ?root=': ('param:calls.root', lambda p: [f'calls://{p}?root=main'], '--callees'),
     'reveal calls --root': ('param:calls.root', lambda p: ['calls', p, '--root', 'main'], '--callees'),
-    'calls ?target=': ('param:calls.target', lambda p: [f'calls://{p}?target=helper'], '?callers='),
+    'calls ?target=': ('param:calls.target', lambda p: [f'calls://{p}?target=helper'], '--callers'),
     'reveal calls --target': ('param:calls.target', lambda p: ['calls', p, '--target', 'helper'], '--callers'),
     # BACK-1054 slice S5: the module graph answers from imports ?importers&scope=path (Q4/Q8).
-    'calls ?modules': ('param:calls.modules', lambda p: [f'calls://{p}?modules'], '?importers&scope=path'),
+    'calls ?modules': ('param:calls.modules', lambda p: [f'calls://{p}?modules'], '--importers --scope path'),
     'reveal calls --modules': ('param:calls.modules', lambda p: ['calls', p, '--modules'], '--importers'),
     # BACK-2195 (D8): ?uncalled answers unchanged until the cut, with the note.
-    'calls ?uncalled': ('param:calls.uncalled', lambda p: [f'calls://{p}?uncalled'], '?callers=NAME'),
-    'reveal calls --uncalled': ('param:calls.uncalled', lambda p: ['calls', p, '--uncalled'], '?callers=NAME'),
-    'ast ?calls=': ('param:ast.calls', lambda p: [f'ast://{p}?calls=helper'], '?callers='),
-    'ast ?callee_of=': ('param:ast.callee_of', lambda p: [f'ast://{p}?callee_of=main'], '?callees='),
-    'ast ?show=calls': ('value:ast.show=calls', lambda p: [f'ast://{p}?show=calls'], '?callers='),
-    'ast ?calls~=': ('param:ast.calls', lambda p: [f'ast://{p}?calls~=help'], '?callers='),
-    'ast ?callee_of!=': ('param:ast.callee_of', lambda p: [f'ast://{p}?callee_of!=main'], '?callees='),
+    'calls ?uncalled': ('param:calls.uncalled', lambda p: [f'calls://{p}?uncalled'], '--callers NAME'),
+    'reveal calls --uncalled': ('param:calls.uncalled', lambda p: ['calls', p, '--uncalled'], '--callers NAME'),
+    'ast ?calls=': ('param:ast.calls', lambda p: [f'ast://{p}?calls=helper'], '--callers'),
+    'ast ?callee_of=': ('param:ast.callee_of', lambda p: [f'ast://{p}?callee_of=main'], '--callees'),
+    'ast ?show=calls': ('value:ast.show=calls', lambda p: [f'ast://{p}?show=calls'], '--callers'),
+    'ast ?calls~=': ('param:ast.calls', lambda p: [f'ast://{p}?calls~=help'], '--callers'),
+    'ast ?callee_of!=': ('param:ast.callee_of', lambda p: [f'ast://{p}?callee_of!=main'], '--callees'),
 }
 
 # The spellings that replace them, and siblings that share a parameter or scheme name: none notes.

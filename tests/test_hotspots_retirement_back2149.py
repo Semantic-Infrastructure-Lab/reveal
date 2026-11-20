@@ -57,10 +57,10 @@ def test_each_row_is_a_note_that_names_a_replacement():
     for key in ('subcommand:hotspots', 'scheme:hotspots'):
         text = RETIREMENTS[key].text
         assert 'metrics' in text and 'hotspots' in text.split('use ', 1)[1], text
-        assert 'ast://<path>?complexity>=10&sort=-complexity&limit=10' in text, text
+        assert "reveal ast <path> --where 'complexity>=10' --sort=-complexity --limit 10" in text, text
         assert 'has_test_hint' in text and 'unmeasured test-name heuristic' in text, text
         assert 'no replacement field' in text, text
-    assert 'ast://<path>?complexity>=10&sort=-complexity' in RETIREMENTS['param:hotspots.functions_only'].text
+    assert "reveal ast <path> --where 'complexity>=10' --sort=-complexity" in RETIREMENTS['param:hotspots.functions_only'].text
     assert 'metrics' in RETIREMENTS['param:hotspots.files_only'].text
 
 

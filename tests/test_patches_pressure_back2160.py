@@ -20,7 +20,7 @@ BOUNDARY = (
     "    open('/tmp/x', 'w').write('x')\n"
     "    return 1\n"
 )
-NOTE = 'note: testability:// is deprecated; use patches://<path>?view=pressure (the same answer).'
+NOTE = 'note: testability:// is deprecated; use reveal patches <path> --view pressure (the same answer).'
 
 
 def _w(path, text):

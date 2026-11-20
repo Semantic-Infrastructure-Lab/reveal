@@ -1175,7 +1175,8 @@ def probe_legacy_operations(noun):
         spec = next((s for s in _adapter(noun).PARAM_SPECS if s.name == name), None)
         if not key.startswith('param:') or spec is None or not getattr(entry, 'standalone', False):
             continue
-        if any(f'{scheme}://' in entry.replacement for scheme in NOUNS if scheme != noun):
+        if any(f'{scheme}://' in entry.replacement or f'reveal {scheme} ' in entry.replacement
+               for scheme in NOUNS if scheme != noun):
             continue  # the replacement is another noun (rule 11)
         if STANDALONE_WORDS.get((noun, name), ('operation',))[0] == 'modifier':
             cases.append(Case(f'{name} is a legacy modifier', spec.role != 'operation',
@@ -2144,7 +2145,7 @@ def test_a_bare_shared_named_field_is_a_translated_legacy_spelling_until_the_cut
     assert f'param:{noun}.{key}' in _retired_fields(json.loads(old.out)) and not _retired_fields(json.loads(new.out))
     assert without_retirement_notes(json.loads(old.out)) == json.loads(new.out)
     text_old, text_new = _run(bare), _run(where)
-    assert text_old.out == text_new.out and f'where={key}' in text_old.err and 'note:' not in text_new.err
+    assert text_old.out == text_new.out and f"--where '{key}" in text_old.err and 'note:' not in text_new.err
     assert f'param:{noun}.{key}' in _retired_fields(api.query(bare))
 
 
@@ -2194,7 +2195,7 @@ def test_ast_depth_is_a_translated_legacy_word_of_where():
     where = _spec_for('ast', 'where')
     assert 'depth' in where.legacy_words and _spec_for('ast', 'depth') is where
     row = RETIREMENTS['param:ast.depth']
-    assert row.stage == 'note' and not row.standalone and 'where=depth' in row.replacement
+    assert row.stage == 'note' and not row.standalone and "--where 'depth" in row.replacement
 
 
 @pytest.mark.parametrize('term', ['depth=0', 'depth>1', 'depth>=3', 'depth<=1'])

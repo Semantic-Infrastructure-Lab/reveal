@@ -368,7 +368,7 @@ class TestPreservation:
         assert_usage(result, answer, 'top is read by: hotspots, view=hotspots')
 
     def test_existing_retirement_notes(self, project):
-        for old, new, expected_controls in (('stats', 'metrics://', ''), ('classify', 'view=provenance', 'view=provenance')):
+        for old, new, expected_controls in (('stats', 'reveal metrics', ''), ('classify', '--view provenance', 'view=provenance')):
             address = f'{old}://{project.as_posix()}'
             result, answer = cli_json(address)
             assert result.returncode == 0

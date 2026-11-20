@@ -302,8 +302,8 @@ SWITCHES: Dict[str, Switch] = {switch.name: switch for switch in (
 # (ParamSpec.flag_only) on the answers that read it, and tests/test_legacy_cli_modifiers_back2673.py holds the two to
 # each other. They answer differently from the replacements (a slice of the shown rows, no offset on some nouns), so
 # every row is standalone.
-_LIMIT_N = '--limit N (?limit=N)'
-_OFFSET = '--offset START-1 --limit END-START+1 (?offset=START-1&limit=END-START+1)'
+_LIMIT_N = '--limit N'
+_OFFSET = '--offset START-1 --limit END-START+1'
 _LAST = 'a descending --sort with --limit N (the last N rows have no spelling of their own)'
 _SLICED = {'--head': _LIMIT_N, '--tail': _LAST, '--range': _OFFSET}
 
@@ -311,28 +311,28 @@ _SLICED = {'--head': _LIMIT_N, '--tail': _LAST, '--range': _OFFSET}
 def _no_check(noun: str) -> Dict[str, str]:
     """--check and its --lint alias on a noun whose answers they never changed (BACK-2708 ruling 2)."""
     return dict.fromkeys(('--check', '--lint'),
-                         f'reveal check <path> to check files (--check never changed a {noun}:// answer)')
+                         f'reveal check <path> to check files (the flag never changed a {noun}:// answer)')
 
 LEGACY_CLI_MODIFIERS: Dict[str, Dict[str, str]] = {
     **{noun: _SLICED for noun in ('ast', 'markdown', 'metrics')},
     **{noun: {**_SLICED, **_no_check(noun)} for noun in ('git', 'json')},
-    'calls': {'--head': '--limit N on a ranking (?sort=-callers&limit=N); --depth N on a callers or callees walk',
+    'calls': {'--head': '--limit N on a ranking (--sort=-callers --limit N); --depth N on a callers or callees walk',
               '--tail': 'a descending --sort with --limit N on a ranking (the last N rows have no spelling of their own)',
               '--range': '--limit N on a ranking (calls has no offset)'},
     # --tail as on every noun (Scott 2026-11-19, BACK-2709). --type/--name/--search: supported legacy (D18).
     'claude': {'--head': _LIMIT_N, '--tail': _LAST, '--range': _OFFSET,
-               '--type': '--where tool==TYPE (?where=tool==TYPE) on the workflow view',
-               **dict.fromkeys(('--name', '--search'), '--match TEXT (?match=TEXT) on the workflow view and history; '
+               '--type': '--where tool==TYPE on the workflow view',
+               **dict.fromkeys(('--name', '--search'), '--match TEXT on the workflow view and history; '
                                                        '--where session~=TEXT on the session list'),
                **_no_check('claude')},
-    'hotspots': {'--head': '--limit N (?limit=N), which caps each list',
+    'hotspots': {'--head': '--limit N, which caps each list',
                  '--tail': '--limit N, which keeps each list\'s worst N (each list is ranked worst first)',
                  '--range': '--limit N, which caps each list (hotspots has no offset)'},
-    'imports': {'--head': '--limit N (?limit=N) on a ranking or the entrypoints',
+    'imports': {'--head': '--limit N on a ranking or the entrypoints',
                 '--tail': 'a descending --sort with --limit N (the last N rows have no spelling of their own)',
                 '--range': '--limit N on a ranking (imports has no offset)'},
     'pack': {flag: '--budget N, which sizes the pack (it has no row slice)' for flag in ('--head', '--tail', '--range')},
-    'patches': {'--head': '--limit N for the groups (?limit=N), --top N in view=pressure',
+    'patches': {'--head': '--limit N for the groups, --top N in --view pressure',
                 '--tail': '--limit N, which keeps the first N groups (the groups are ranked)',
                 '--range': '--limit N, which caps the groups (patches has no offset)'},
     'testability': {'--head': 'reveal patches <path> --view pressure --top N',
@@ -349,7 +349,7 @@ RETIREMENTS: Dict[str, Retirement] = {
     'subcommand:scaffold': Retirement('reveal scaffold', 'reveal dev new-adapter NAME (or new-analyzer/new-rule)'),
     # D9: one compact map and comparison owner; pack --architecture is a separate live control.
     'subcommand:architecture': Retirement('reveal architecture', 'reveal overview <path> [--against REF]'),
-    'scheme:architecture': Retirement('architecture://', 'overview://<path>[?against=REF]'),
+    'scheme:architecture': Retirement('architecture://', 'reveal overview <path> [--against REF]'),
     'flag:--deps': Retirement('--deps', '--inputs'),
     'flag:--mutations': Retirement('--mutations', '--outputs'),
     'flag:--writes': Retirement('--writes', '--outputs'),
@@ -370,7 +370,7 @@ RETIREMENTS: Dict[str, Retirement] = {
     'flag:--also-json': Retirement('--also-json PATH', '--output json=PATH'),
     # Rule 4 (COMMAND_MODEL "Detail", BACK-2654): the global --verbose on a declared noun is --detail full; a noun whose
     # verbose lifts its caps declares it as a legacy word of the uncapping control instead (param:<noun>.verbose rows).
-    'flag:--verbose': Retirement('--verbose', '--detail full (?detail=full)'),
+    'flag:--verbose': Retirement('--verbose', '--detail full'),
     # Switches (COMMAND_MODEL "Switches", BACK-2654 rule 15): each switch's legacy off flag (--no-NAME, or the one its
     # declaration names) is --NAME off, one row per SWITCHES entry, generated. A short spelling of off (-q): no row.
     **{f'flag:{switch.legacy_flag}': Retirement(switch.legacy_flag, f'--{switch.name} off') for switch in SWITCHES.values()},
@@ -386,65 +386,65 @@ RETIREMENTS: Dict[str, Retirement] = {
     # trace merged into calls (BACK-2066): both spellings keep trace's frames shape until the cut
     # (decision c); the MCP tool reveal_trace keeps its name until Phase 7 (decision g).
     'subcommand:trace': Retirement('reveal trace', 'reveal calls <path> --callees FUNC --depth N --detail'),
-    'scheme:trace': Retirement('trace://', 'calls://<path>?callees=FUNC&depth=N&detail'),
+    'scheme:trace': Retirement('trace://', 'reveal calls <path> --callees FUNC --depth N --detail'),
     'param:calls.root': Retirement('calls ?root= (--root)',
-                                   '?callees=FUNC&depth=N (--callees FUNC --depth N), the same walk', standalone=True),
+                                   '--callees FUNC --depth N, the same walk', standalone=True),
     # Decision (a): an alias that answers identically until the cut.
-    'param:calls.target': Retirement('calls ?target= (--target)', '?callers=FUNC (--callers FUNC), the same answer'),
-    'param:calls.rank': Retirement('calls ?rank=callers (--rank callers)', '?sort=-callers (--sort=-callers)'),
-    'param:calls.top': Retirement('calls ?top=N (--top N)', '?limit=N (--limit N); 0 is uncapped'),
-    'param:calls.type': Retirement('calls ?type=KIND (--type KIND)', '?kind=KIND (--kind KIND); legacy method keeps its existing population'),
+    'param:calls.target': Retirement('calls ?target= (--target)', '--callers FUNC, the same answer'),
+    'param:calls.rank': Retirement('calls ?rank=callers (--rank callers)', '--sort=-callers'),
+    'param:calls.top': Retirement('calls ?top=N (--top N)', '--limit N; 0 is uncapped'),
+    'param:calls.type': Retirement('calls ?type=KIND (--type KIND)', '--kind KIND; legacy method keeps its existing population'),
     # Imports vocabulary (BACK-2620): aliases that answer identically until the cut.
-    'param:imports.rank': Retirement('imports ?rank=fan-in (--rank fan-in)', '?sort=-fan-in (--sort=-fan-in)'),
-    'param:imports.top': Retirement('imports ?top=N (--top N)', '?limit=N (--limit N); 0 is uncapped'),
+    'param:imports.rank': Retirement('imports ?rank=fan-in (--rank fan-in)', '--sort=-fan-in'),
+    'param:imports.top': Retirement('imports ?top=N (--top N)', '--limit N; 0 is uncapped'),
     'param:imports.verbose': Retirement('imports ?verbose (--verbose)',
-                                        '?detail=full (--detail full); JSON keeps "verbose": true'),
+                                        '--detail full; JSON keeps "verbose": true'),
     'param:imports.max_files': Retirement('imports ?max_files=N (--max-files N)',
-                                          '?scan-limit=N (--scan-limit N), the same input budget'),
+                                          '--scan-limit N, the same input budget'),
     # verbose where it adds detail (BACK-2654 rule 4) or only lifts caps (note #17): translated, the same answer.
-    'param:git.verbose': Retirement('git ?verbose (--verbose)', '?detail=full (--detail full)'),
+    'param:git.verbose': Retirement('git ?verbose (--verbose)', '--detail full'),
     'param:pack.verbose': Retirement('pack ?verbose (--verbose)',
-                                     '?detail=full (--detail full); JSON keeps "verbose": true'),
-    'param:overview.verbose': Retirement('overview ?verbose (--verbose)', '?all=true (--all), the same uncapped map'),
+                                     '--detail full; JSON keeps "verbose": true'),
+    'param:overview.verbose': Retirement('overview ?verbose (--verbose)', '--all, the same uncapped map'),
     'param:architecture.verbose': Retirement('architecture ?verbose (--verbose)',
-                                             'overview://<path>?all=true (--all), the same uncapped map'),
-    'param:hotspots.verbose': Retirement('hotspots ?verbose (--verbose)', '?limit=0 (--limit 0), both rankings uncapped'),
+                                             'reveal overview <path> --all, the same uncapped map'),
+    'param:hotspots.verbose': Retirement('hotspots ?verbose (--verbose)', '--limit 0, both rankings uncapped'),
     # limit is Hotspots' and Testability's cap (COMMAND_MODEL "Caps", BACK-2673): top is the same value's old word.
-    **{f'param:{noun}.top': Retirement(f'{noun} ?top=N (--top N)', '?limit=N (--limit N), which caps each list; 0 is uncapped')
+    **{f'param:{noun}.top': Retirement(f'{noun} ?top=N (--top N)', '--limit N, which caps each list; 0 is uncapped')
        for noun in ('hotspots', 'testability')},
     'param:testability.verbose': Retirement('testability ?verbose (--verbose)',
-                                            'patches://<path>?view=pressure&top=0 (--top 0), every group'),
-    'param:deps.verbose': Retirement('deps ?verbose (--verbose)', '?top=0 (--top 0), every text section uncapped'),
+                                            'reveal patches <path> --view pressure --top 0, every group'),
+    'param:deps.verbose': Retirement('deps ?verbose (--verbose)', '--top 0, every text section uncapped'),
     # Metrics' vocabulary (BACK-2621, Scott 2026-11-15): the hotspot ranking is a view whose rows limit caps,
     # filters are where (the complexity pair is the file average, avg_complexity), switches take on|off.
     # The row names the parameter, not one value: ?hotspots=false is noted too (it answers as if omitted).
     'param:metrics.hotspots': Retirement('metrics ?hotspots (--hotspots)',
-                                         '?view=hotspots (--view hotspots): the ranked files are the rows; '
-                                         'hotspots=false is the default, so omit it', standalone=True),
-    'param:metrics.top': Retirement('metrics ?top=N (--top N)', '?limit=N (--limit N) in view=hotspots; 0 is uncapped', standalone=True),
-    'param:metrics.min_lines': Retirement('metrics ?min_lines=N (--min-lines N)', "?where=lines>=N (--where 'lines>=N')"),
-    'param:metrics.max_lines': Retirement('metrics ?max_lines=N (--max-lines N)', "?where=lines<=N (--where 'lines<=N')"),
+                                         '--view hotspots: the ranked files are the rows; '
+                                         'hotspots false is the default, so omit it', standalone=True),
+    'param:metrics.top': Retirement('metrics ?top=N (--top N)', '--limit N in --view hotspots; 0 is uncapped', standalone=True),
+    'param:metrics.min_lines': Retirement('metrics ?min_lines=N (--min-lines N)', "--where 'lines>=N'"),
+    'param:metrics.max_lines': Retirement('metrics ?max_lines=N (--max-lines N)', "--where 'lines<=N'"),
     'param:metrics.min_functions': Retirement('metrics ?min_functions=N (--min-functions N)',
-                                              "?where=functions>=N (--where 'functions>=N')"),
+                                              "--where 'functions>=N'"),
     'param:metrics.min_complexity': Retirement('metrics ?min_complexity=N (--min-complexity N)',
-                                               "?where=avg_complexity>=N (--where 'avg_complexity>=N'), the file average"),
+                                               "--where 'avg_complexity>=N', the file average"),
     'param:metrics.max_complexity': Retirement('metrics ?max_complexity=N (--max-complexity N)',
-                                               "?where=avg_complexity<=N (--where 'avg_complexity<=N'), the file average"),
-    'param:metrics.no_churn': Retirement('metrics --no-churn', '--churn off (?churn=off)'),
-    'param:metrics.no_merges': Retirement('metrics ?no_merges (--no-merges)', '?merges=off (--merges off)'),
-    'param:metrics.summary_only': Retirement('metrics ?summary_only (--summary-only)', '?detail=summary (--detail summary)'),
+                                               "--where 'avg_complexity<=N', the file average"),
+    'param:metrics.no_churn': Retirement('metrics --no-churn', '--churn off'),
+    'param:metrics.no_merges': Retirement('metrics ?no_merges (--no-merges)', '--merges off'),
+    'param:metrics.summary_only': Retirement('metrics ?summary_only (--summary-only)', '--detail summary'),
     # calls?modules folded into imports (BACK-1054 slice S5, Q4/Q8): the module graph is imports' edges, in the
     # old shape without call_count, until the cut.
     'param:calls.modules': Retirement('calls ?modules (--modules)',
-                                      'imports://<path>?importers&scope=path (reveal imports <path> --importers '
-                                      '--scope path), the same import edges as each module\'s importers', standalone=True),
+                                      'reveal imports <path> --importers --scope path, the same import edges as '
+                                      'each module\'s importers', standalone=True),
     'param:calls.external': Retirement('calls ?external (--external)',
-                                       'imports://<path>?importers (scope=root, the default), importers from the '
-                                       'whole project root', standalone=True),
+                                       'reveal imports <path> --importers (--scope root, the default), importers '
+                                       'from the whole project root', standalone=True),
     # D8 (BACK-2195): ?uncalled is retired. It answers unchanged in shape until the cut (BACK-2200), with no
     # confidence in any language; ?callers=NAME answers "is this used?" and the language's own tool answers the rest.
     'param:calls.uncalled': Retirement('calls ?uncalled (--uncalled)',
-                                       '?callers=NAME (--callers NAME) for one function, or the language\'s own '
+                                       '--callers NAME for one function, or the language\'s own '
                                        'dead-code tool (vulture, knip, staticcheck/deadcode, rustc dead_code, '
                                        'Roslyn IDE0051, Periphery, Psalm)', standalone=True),
     # Decision (e): ast's call filters are retired, not kept as element filters; calls= matched call
@@ -453,17 +453,16 @@ RETIREMENTS: Dict[str, Retirement] = {
     # summary, search and contains answer differently from their replacements on most resources (BACK-2654 note #12):
     # standalone legacy words until the cut; each note names the replacement for what the word did.
     'param:claude.summary': Retirement('claude ?summary',
-        'claude://session/NAME?detail=summary (--detail summary) on the session overview; on a session sub-resource '
-        '?summary answered the overview analytics, and detail=summary there exits 2', standalone=True),
+        'claude://session/NAME --detail summary on the session overview; on a session sub-resource '
+        'summary answered the overview analytics, and --detail summary there exits 2', standalone=True),
     'param:claude.search': Retirement('claude ?search',
-        'claude://session/NAME?match=TEXT (--match TEXT) on the session overview for the session-wide search, or ?match=TEXT '
-        'on sessions, history and search; on a session sub-resource match filters that view or exits 2; URI match text '
-        'percent-decodes once', standalone=True),
+        'claude://session/NAME --match TEXT on the session overview for the session-wide search, or --match TEXT '
+        'on sessions, history and search; on a session sub-resource --match filters that view or exits 2', standalone=True),
     'param:claude.contains': Retirement('claude ?contains',
-        '?match=TEXT (--match TEXT) on /messages for narrative text, or with --tools/--errors for tool-result text; '
-        'where match is unsupported the request exits 2; URI match text percent-decodes once', standalone=True),
+        '--match TEXT on /messages for narrative text, or with --tools/--errors for tool-result text; '
+        'where --match is unsupported the request exits 2', standalone=True),
     'param:claude.filter': Retirement('claude ?filter',
-        'sessions --where session~=TEXT (or ?where=session~=TEXT), a case-insensitive session-name substring; URI expressions percent-decode once'),
+        'sessions --where session~=TEXT, a case-insensitive session-name substring'),
     'param:claude.tail': Retirement('claude ?tail',
         '--view messages --sort=-message_index --limit N selects latest-first; the legacy slice stays chronological, zero is empty and negative counts retain all turns; canonical limit=0 is uncapped', standalone=True),
     # last is tail's other spelling (last == tail=1, last=N == tail=N): a legacy entry on tail, not a parameter.
@@ -471,55 +470,54 @@ RETIREMENTS: Dict[str, Retirement] = {
         '--view messages --sort=-message_index --limit N selects latest-first; the legacy slice stays chronological, bare last or zero selects one; canonical limit=0 is uncapped'),
     # full and raw answer differently from detail=full/raw (BACK-2654 note #9): legacy settings of their own until the cut.
     'param:claude.full': Retirement('claude ?full',
-        '--detail full (or ?detail=full) on a supported expanding view; unsupported views reject', standalone=True),
+        '--detail full on a supported expanding view; unsupported views reject', standalone=True),
     'param:claude.raw': Retirement('claude ?raw',
-        '--view messages or --view prompts with --detail raw (or ?detail=raw); canonical raw also expands the text display', standalone=True),
-    'param:ast.calls': Retirement('ast://?calls=', "calls://<path>?callers=NAME, or --grep 'PATTERN' for a pattern", standalone=True),
+        '--view messages or --view prompts with --detail raw; canonical raw also expands the text display', standalone=True),
+    'param:ast.calls': Retirement('ast://?calls=', "reveal calls <path> --callers NAME, or --grep 'PATTERN' for a pattern", standalone=True),
     # Different words for one control are legacy spellings with a note (COMMAND_MODEL "Different words", BACK-2654);
     # AST show and Git type are D18-deferred and stay note-free.
-    'param:ast.type': Retirement('ast ?type=KIND (--type KIND)', '?kind=KIND (--kind KIND), the same element kind'),
+    'param:ast.type': Retirement('ast ?type=KIND (--type KIND)', '--kind KIND, the same element kind'),
     # A bare shared control name is never a field (BACK-2654 rule 8): AST's bare depth is its where term.
-    'param:ast.depth': Retirement('ast ?depth OP N (bare)', "?where=depth OP N (--where 'depth OP N'), the same "
+    'param:ast.depth': Retirement('ast ?depth OP N (bare)', "--where 'depth OP N', the same "
                                                             'nesting-depth filter'),
     'param:markdown.body-contains': Retirement('markdown ?body-contains=TEXT (--body-contains TEXT)',
-                                               '?match=TEXT (--match TEXT), the same body match; repeats AND'),
-    'param:markdown.fields': Retirement('markdown ?fields=A,B', '?columns=A,B (--columns A,B), the same frontmatter columns'),
-    'param:ast.callee_of': Retirement('ast://?callee_of=', 'calls://<path>?callees=NAME', standalone=True),
+                                               '--match TEXT, the same body match; repeats AND'),
+    'param:markdown.fields': Retirement('markdown ?fields=A,B', '--columns A,B, the same frontmatter columns'),
+    'param:ast.callee_of': Retirement('ast://?callee_of=', 'reveal calls <path> --callees NAME', standalone=True),
     'value:ast.show=calls': Retirement('ast://?show=calls',
-                                       "calls://<path>?callers=NAME or ?callees=NAME, or --grep 'PATTERN'"),
+                                       "reveal calls <path> --callers NAME or --callees NAME, or --grep 'PATTERN'"),
     # stats became metrics and absorbed classify (D2, BACK-2069): both old schemes answer from the
     # metrics owner, unchanged, until the cut. File hotspots are metrics' ?hotspots=true ranking.
-    'scheme:stats': Retirement('stats://', 'metrics://<path> (the same answer)'),
+    'scheme:stats': Retirement('stats://', 'reveal metrics <path> (the same answer)'),
     # hotspots retired into two commands (BACK-2149, Scott 2026-11-06): files and the --fail-on findings gate are
     # metrics' hotspots ranking, functions are ast's complexity sort. Both spellings answer as before until the
     # cut, which waits on the due-diligence script moving off hotspots:// (BACK-2153). has_test_hint is retired
     # with no replacement field (the D8 pattern of ?uncalled).
     'subcommand:hotspots': Retirement('reveal hotspots',
                                       "reveal metrics <path> --view hotspots [--fail-on findings] (files) and "
-                                      "reveal 'ast://<path>?complexity>=10&sort=-complexity&limit=10' --format json "
+                                      "reveal ast <path> --where 'complexity>=10' --sort=-complexity --limit 10 "
                                       '(functions); has_test_hint, an unmeasured test-name heuristic, has no '
                                       'replacement field (use a coverage tool)'),
-    'scheme:hotspots': Retirement('hotspots://', 'metrics://<path>?view=hotspots (files) and '
-                                  'ast://<path>?complexity>=10&sort=-complexity&limit=10 (functions); has_test_hint, '
+    'scheme:hotspots': Retirement('hotspots://', 'reveal metrics <path> --view hotspots (files) and '
+                                  "reveal ast <path> --where 'complexity>=10' --sort=-complexity --limit 10 (functions); has_test_hint, "
                                   'an unmeasured test-name heuristic, has no replacement field (use a coverage tool)'),
     'param:hotspots.functions_only': Retirement('hotspots ?functions_only (--functions-only)',
-                                                'ast://<path>?complexity>=10&sort=-complexity&limit=10, the same '
-                                                'function ranking (min_complexity=N is complexity>=N, top=N is limit=N)', standalone=True),
+                                                "reveal ast <path> --where 'complexity>=10' --sort=-complexity --limit 10, the same "
+                                                'function ranking (min_complexity=N is complexity>=N, top=N is --limit N)', standalone=True),
     'param:hotspots.files_only': Retirement('hotspots ?files_only (--files-only)',
-                                            'metrics://<path>?view=hotspots (reveal metrics <path> --view hotspots), the '
-                                            'same file ranking', standalone=True),
+                                            'reveal metrics <path> --view hotspots, the same file ranking', standalone=True),
     # testability became patches ?view=pressure (D2, Q-P4-2, BACK-2160): the old scheme answers from the patches owner,
     # unchanged, until the cut.
     'subcommand:testability': Retirement('reveal testability', 'reveal patches <path> --view pressure (the same answer)'),
-    'scheme:testability': Retirement('testability://', 'patches://<path>?view=pressure (the same answer)'),
-    'scheme:classify': Retirement('classify://', 'metrics://<path>?view=provenance (the same answer)'),
+    'scheme:testability': Retirement('testability://', 'reveal patches <path> --view pressure (the same answer)'),
+    'scheme:classify': Retirement('classify://', 'reveal metrics <path> --view provenance (the same answer)'),
     # depends folded into imports (BACK-1054 slice S6, Q8): it answers from the imports:// engine's build with its old
     # shapes and exit code (0 on a partial answer, BACK-2181) until the cut, which waits on BACK-2153.
-    'scheme:depends': Retirement('depends://', 'imports://<path>?importers (one file: ?importers=FILE)'),
+    'scheme:depends': Retirement('depends://', 'reveal imports <path> --importers (one file: --importers FILE)'),
     # deps folded into imports (BACK-1054 slice S4, Q5/Q8): both spellings answer from one imports:// build with deps'
     # old shapes and exit codes until the cut, which waits on a due-diligence consumer moving first (BACK-2153).
     'subcommand:deps': Retirement('reveal deps', 'reveal imports <path> --external, --circular or --unused'),
-    'scheme:deps': Retirement('deps://', 'imports://<path>?external, ?circular or ?unused'),
+    'scheme:deps': Retirement('deps://', 'reveal imports <path> --external, --circular or --unused'),
     # python:// was removed outright, not moved (D4, BACK-2225, Scott 2026-10-25): no reveal scheme answers its
     # questions, so the row names the interpreter's own tools and starts at the error stage.
     'scheme:python': Retirement('python://', 'python -m site (sys.path), python -m pip list or python -m pip show NAME '
@@ -718,7 +716,7 @@ def _shared_name_retirement(key: str) -> Optional[Retirement]:
     if not isinstance(declarations, tuple) or not shared_name_is_legacy_field(declarations, name):
         return None
     return Retirement(f'{scheme} bare ?{name} (a shared control name)',
-                      f"?where={name} OP VALUE (--where '{name} OP VALUE'), the same field filter")
+                      f"--where '{name} OP VALUE', the same field filter")
 
 
 def generated_retirements() -> Dict[str, Retirement]:

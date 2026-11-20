@@ -92,9 +92,9 @@ HOTSPOT_SPELLINGS = {
 # Each retired spelling, the note it prints, and the new spelling whose answer it must equal.
 RETIRED = {
     # The hotspot ranking's canonical spelling (BACK-2621): hotspots=true is itself retired.
-    'stats://': ('stats://', 'metrics://<path> (the same answer)',
+    'stats://': ('stats://', 'reveal metrics <path> (the same answer)',
                  lambda d: [f'stats://{d}?view=hotspots'], lambda d: [f'metrics://{d}?view=hotspots']),
-    'classify://': ('classify://', 'metrics://<path>?view=provenance (the same answer)',
+    'classify://': ('classify://', 'reveal metrics <path> --view provenance (the same answer)',
                     lambda d: [f'classify://{d}'], lambda d: [f'metrics://{d}?view=provenance']),
 }
 

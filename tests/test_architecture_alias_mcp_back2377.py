@@ -51,7 +51,7 @@ def test_registered_alias_returns_bounded_map_and_one_central_note(tmp_path):
             notes = retirement_notes(body)
             assert len(notes) == 1
             assert notes[0]['field'] == 'scheme:architecture'
-            assert notes[0]['stage'] == 'note' and 'overview://' in notes[0]['replacement']
+            assert notes[0]['stage'] == 'note' and 'reveal overview' in notes[0]['replacement']
             assert 'facts' not in body and 'risks' not in body
 
         canonical = await session.call_tool('reveal_query', {

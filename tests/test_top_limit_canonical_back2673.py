@@ -59,7 +59,7 @@ def test_top_is_the_noted_legacy_word_of_limit(rich, noun):  # noqa: F811
         run, doc = _json(*argv)
         assert run.rc == 0, run.brief()
         assert _lists(doc, noun) == _lists(canonical, noun)
-        assert _top_notes(doc) == [f'{noun} ?top=N (--top N) is deprecated; use ?limit=N (--limit N), which caps each '
+        assert _top_notes(doc) == [f'{noun} ?top=N (--top N) is deprecated; use --limit N, which caps each '
                                    f'list; 0 is uncapped.'], argv
         assert C._answer(run, noun) == C._answer(canonical_run, noun)
 

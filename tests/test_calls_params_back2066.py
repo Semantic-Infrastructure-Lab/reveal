@@ -111,7 +111,7 @@ def test_callers_answers_exactly_like_target(project, extra):
     old_json['meta']['warnings'] = [w for w in warnings if w.get('code') != 'retired_spelling']
     assert new_json == old_json
     assert new_json['type'] == 'calls_query' and new_json['total_callers'] == 2
-    note = 'note: calls ?target= (--target) is deprecated; use ?callers=FUNC (--callers FUNC), the same answer.\n'
+    note = 'note: calls ?target= (--target) is deprecated; use --callers FUNC, the same answer.\n'
     assert note.strip() == f"note: {[w for w in warnings if w.get('code') == 'retired_spelling'][0]['message']}"
     assert old.stderr == new.stderr  # the JSON carries the note (BACK-2659)
 

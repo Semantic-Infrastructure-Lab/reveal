@@ -27,7 +27,7 @@ from reveal.utils import path_utils
 
 pytestmark = [pytest.mark.component]
 
-NOTE = 'note: depends:// is deprecated; use imports://<path>?importers'
+NOTE = 'note: depends:// is deprecated; use reveal imports <path> --importers'
 
 
 def _write(root: Path, files: dict) -> Path:
@@ -126,7 +126,7 @@ def test_each_spelling_prints_one_note_and_carries_the_warning(mixed, rel):
     doc = json.loads(out.stdout)
     retired = [w for w in doc['meta']['warnings'] if w.get('code') == 'retired_spelling']
     assert [(w['field'], w['old']) for w in retired] == [('scheme:depends', 'depends://')]
-    assert 'imports://<path>?importers' in retired[0]['replacement']
+    assert 'reveal imports <path> --importers' in retired[0]['replacement']
     assert doc['type'] == ('module_dependents' if rel.endswith('.py') else 'dependency_summary')
 
 
