@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from conftest import _run_reveal_direct as run
+from conftest import without_request_notes
 from reveal import api
 from reveal.adapters.markdown import MarkdownQueryAdapter, operations
 from reveal.cli.defaults import _default_args
@@ -273,4 +274,4 @@ def test_healthy_missing_field_retains_its_existing_meaning(tmp_path):
     assert answer['matched_files'] == 1
     assert answer['files_missing_field'] == 1
     assert answer['aggregate'] == []
-    assert not answer.get('meta', {}).get('warnings')
+    assert not without_request_notes(answer).get('meta', {}).get('warnings')  # the URI request's own note aside (BACK-2716)

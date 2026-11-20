@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from conftest import _run_reveal_direct as run
+from conftest import without_request_notes
 from reveal.adapters import pack
 
 pytestmark = pytest.mark.component
@@ -209,7 +210,8 @@ def test_real_zero_cost_and_no_final_newline_stay_clean(tmp_path, observed, budg
     response = invoke('pack://' + str(root) + '?budget=' + budget, '--format', 'json')
     data = json.loads(response.stdout)
     assert response.returncode == 0 and len(data['files']) == expected
-    assert data['meta']['used_lines'] == 0 and not data['meta'].get('warnings')
+    # (the URI request's own note aside, BACK-2716)
+    assert data['meta']['used_lines'] == 0 and not without_request_notes(data)['meta'].get('warnings')
     assert 'line_budget_incomplete' not in data['meta']
     assert observed['reads'] == observed['stats'] == observed['directory'] == []
 

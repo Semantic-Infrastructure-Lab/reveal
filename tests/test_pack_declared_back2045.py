@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from conftest import _run_reveal_direct as run
+from conftest import without_request_notes
 from reveal.adapters import pack
 from reveal.cli.invocation import COMMANDS
 
@@ -125,7 +126,7 @@ def test_command_and_uri_json_are_equal(tmp_path):
     uri = json.loads(run(f'pack://{root}?budget=1000', '--format', 'json').stdout)
     for doc in (command, uri):
         doc.pop('execution', None)
-    assert command == uri
+    assert command == without_request_notes(uri)  # the URI request's own note (BACK-2716)
 
 
 def test_missing_path_is_an_error_on_both_spellings(tmp_path):

@@ -10,7 +10,7 @@ import subprocess
 
 import pytest
 
-from conftest import _run_reveal_direct
+from conftest import _run_reveal_direct, without_request_notes
 from reveal.utils.query_parser import parse_query_filters
 
 
@@ -64,7 +64,7 @@ def test_json_double_equals_matches_like_equals(tmp_path):
     data.write_text('[{"n": "a", "v": 1}, {"n": "b", "v": 2}]', encoding='utf-8')
     single, double = _same_answer(_json(f'json://{data.as_posix()}?where=v=1'),
                                   _json(f'json://{data.as_posix()}?where=v==1'))
-    assert single == double
+    assert without_request_notes(single) == without_request_notes(double)  # each request's own note (BACK-2716)
     assert json.dumps(double).count('"n": "a"') >= 1 and '"n": "b"' not in json.dumps(double)
 
 

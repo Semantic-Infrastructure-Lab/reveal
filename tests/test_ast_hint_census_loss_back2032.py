@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from conftest import _run_reveal_direct as run
+from conftest import _run_reveal_direct as run, without_request_notes
 from reveal import capabilities
 from reveal.adapters.ast.adapter import AstAdapter
 from reveal.mcp_server import reveal_query
@@ -178,7 +178,7 @@ def test_same_adapter_and_decorated_requests_repair_and_sibling_without_clears(t
     state['enabled'] = False
     assert adapter.get_structure() == clean
     repaired = json.loads(reveal_query(f'ast://{root}?{mode}', provenance=True))
-    assert repaired['meta'] == clean['meta']
+    assert without_request_notes(repaired)['meta'] == clean['meta']  # the URI request's own note (BACK-2716)
 
 
 def test_default_two_positional_helper_missing_and_all_python_remain_none(tmp_path):

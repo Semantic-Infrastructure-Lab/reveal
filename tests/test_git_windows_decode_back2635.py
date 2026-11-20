@@ -5,7 +5,7 @@ import subprocess
 
 import pytest
 
-from conftest import _run_reveal_in
+from conftest import _run_reveal_in, without_request_notes
 from test_declared_git_back2616 import commit_bytes
 from test_git_declared_api_back2616 import repo_path  # noqa: F401
 from test_mcp_expected_errors_back1992 import _run, _text
@@ -57,7 +57,7 @@ def test_git_search_is_utf8_under_non_utf8_locale(repo_path, windows_reader):
     commit_bytes(repo_path, '# café\ndef answer(): return 2\n'.encode('utf-8'))
     result = query(f'git://{repo_path}/code.py?view=history', where=['content~=café'])
     assert [row['message'] for row in result['commits']] == ['damaged source']
-    assert result['meta']['warnings'] == []
+    assert without_request_notes(result)['meta']['warnings'] == []  # the URI request's own note aside (BACK-2716)
 
 
 @pytest.mark.mcp

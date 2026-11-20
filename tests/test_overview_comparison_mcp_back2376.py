@@ -5,6 +5,8 @@ from urllib.parse import quote
 
 import pytest
 
+from conftest import without_mcp_request_note
+
 pytest.importorskip('mcp')
 
 from test_mcp_expected_errors_back1992 import _run, _text  # noqa: E402
@@ -58,7 +60,8 @@ def test_registered_overview_comparison_matches_cli_and_live_edits(tmp_path, pro
             assert not encoded.is_error
             assert json.loads(_text(encoded))['base_ref'] == 'base+%26=é'
         else:
-            assert _text(changed) == cli.stdout.rstrip('\n') or _text(changed) == cli.stdout
+            text = without_mcp_request_note(_text(changed))  # the request note's own block aside (BACK-2716)
+            assert text == cli.stdout.rstrip('\n') or text == cli.stdout
 
         for query_text in ('against=missing-ref', 'against=', 'against',
                            'against=HEAD&no_imports=false', 'against=HEAD&all=true',

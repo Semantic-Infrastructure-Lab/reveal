@@ -10,7 +10,7 @@ import json
 
 import pytest
 
-from conftest import _run_reveal_direct
+from conftest import _run_reveal_direct, without_request_note_lines
 from reveal.errors import RequestValidationError
 
 UNREAD_WARNINGS = ('unused_query_param', 'unused_flag', 'unknown_query_param')
@@ -76,7 +76,7 @@ def test_the_shared_warning_reaches_the_api_and_the_text_answer(proj):
     text = _run_reveal_direct('json://data.json?limit=1')
     assert text.returncode == 0, text.stderr
     assert "'limit' has no effect on this data: the value at (root) is an object, not a list" in text.stdout, text.stdout
-    assert 'limit' not in text.stderr, text.stderr  # not also the ledger's note
+    assert 'limit' not in without_request_note_lines(text.stderr), text.stderr  # not also the ledger's note (the request note, BACK-2716, aside)
 
 
 # --- an answer that does not read the control: exit 2, one message ------------------------------------------------
@@ -127,7 +127,8 @@ def test_an_array_control_on_a_list_still_applies(proj, argv, rows):
 def test_the_flatten_answer_still_reads_its_own_controls(proj, uri):
     run = _run_reveal_direct(uri, '--format', 'json')
     assert run.returncode == 0, run.stderr
-    assert run.stderr == '', run.stderr
+    # the bare legacy array has no meta to carry the URI request's note, so it is said on stderr (BACK-2716)
+    assert without_request_note_lines(run.stderr) == '', run.stderr
 
 
 def test_a_sibling_noun_refuses_through_its_own_declaration(tmp_path, monkeypatch):

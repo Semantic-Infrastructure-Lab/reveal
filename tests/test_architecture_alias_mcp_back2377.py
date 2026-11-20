@@ -5,6 +5,8 @@ from urllib.parse import quote
 
 import pytest
 
+from conftest import is_request_note
+
 pytest.importorskip('mcp')
 
 from test_mcp_expected_errors_back1992 import _run, _text  # noqa: E402
@@ -25,8 +27,9 @@ def uri(root, noun='architecture', query=''):
 
 
 def retirement_notes(body):
+    """The answer's own retirement notes: the canonical URI's request note (BACK-2716) is not the alias's."""
     return [warning for warning in body.get('meta', {}).get('warnings', [])
-            if warning.get('code') == 'retired_spelling']
+            if warning.get('code') == 'retired_spelling' and not is_request_note(warning)]
 
 
 def test_registered_alias_returns_bounded_map_and_one_central_note(tmp_path):
@@ -61,7 +64,7 @@ def test_registered_alias_returns_bounded_map_and_one_central_note(tmp_path):
         assert control['type'] == 'overview' and control['map_status'] == 'complete'
         assert control['map']['components']['total'] == 7
         assert control['map']['components']['returned'] == 5
-        assert retirement_notes(control) == []
+        assert retirement_notes(control) == []  # (only the overview:// request's own note, BACK-2716)
 
     _run(tmp_path, scenario)
 

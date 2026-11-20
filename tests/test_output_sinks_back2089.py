@@ -9,6 +9,7 @@ import json
 import pytest
 
 from conftest import _run_reveal_direct as run
+from conftest import without_request_note_lines
 from reveal.cli.invocation import RETIREMENTS
 
 
@@ -43,7 +44,7 @@ def test_a_json_file_sink_writes_what_also_json_wrote(project, tmp_path_factory,
     new = run(*argv(project, out_new))
     old = run(*argv(project, out_old)[:-2], '--also-json', str(out_old))
     assert new.returncode == old.returncode
-    assert 'deprecated' not in new.stderr, new.stderr
+    assert 'deprecated' not in without_request_note_lines(new.stderr), new.stderr  # the URI request's note aside (BACK-2716)
     assert _artifact(out_new) == _artifact(out_old)
 
 

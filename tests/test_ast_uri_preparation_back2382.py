@@ -101,9 +101,11 @@ def test_exclusion_scope_is_cleared_when_later_preparation_fails(project, monkey
     # to qualify cleanup at this boundary without changing query grammar.
     monkeypatch.setattr(gitignore, 'split_respect_gitignore', split)
     # The legacy dispatch still serves every undeclared scheme; ast is declared, so pin this to that route.
-    monkeypatch.setattr('reveal.cli.routing.declared.declared_adapter_class', lambda scheme: None)
-    failed = resolve_uri(encoded(project) + '?respect_gitignore=invalid',
-                         _default_args(format='json', exclude=['omit.py']))
+    # (only for the failing request: the sibling after it is an ordinary declared request, whose api note needs the lookup)
+    with monkeypatch.context() as legacy:
+        legacy.setattr('reveal.cli.routing.declared.declared_adapter_class', lambda scheme: None)
+        failed = resolve_uri(encoded(project) + '?respect_gitignore=invalid',
+                             _default_args(format='json', exclude=['omit.py']))
     assert 'respect_gitignore' in failed.result['error']
     if observation == 'scope':
         assert exclusions.active_exclusions() == (None, ())

@@ -18,7 +18,7 @@ from reveal.analyzers.imports import service as import_service
 
 from reveal.analyzers.imports import extraction as import_extraction
 
-from conftest import _run_reveal_direct
+from conftest import _run_reveal_direct, without_request_note_lines
 from reveal.adapters.depends import DependsAdapter
 from reveal.adapters.imports import ImportsAdapter
 from reveal.analyzers.imports.resolution import ProjectResolution
@@ -133,7 +133,7 @@ def test_each_spelling_prints_one_note_and_carries_the_warning(mixed, rel):
 def test_imports_prints_no_depends_note(mixed):
     """Negative control: the replacement spelling is not retired."""
     result = _run_reveal_direct(f'imports://{mixed}?importers=pkg/core.py')
-    assert 'deprecated' not in result.stderr
+    assert 'deprecated' not in without_request_note_lines(result.stderr)  # the URI request's own note aside (BACK-2716)
 
 
 def test_a_file_a_dead_worker_lost_is_disclosed(mixed, monkeypatch):

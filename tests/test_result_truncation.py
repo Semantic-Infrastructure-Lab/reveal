@@ -18,7 +18,7 @@ import json
 
 import pytest
 
-from conftest import _run_reveal_direct
+from conftest import _run_reveal_direct, without_request_notes
 from reveal.utils.results import (
     note_truncation, outcome_of, relabel_truncations, truncations_of,
 )
@@ -276,8 +276,8 @@ def test_the_subcommand_says_what_its_uri_form_says(proj):
     assert r.returncode == u.returncode == 0, (r.stderr, u.stderr)
     assert r.stdout == u.stdout
     assert r.stdout.count('Most imported files  (showing 1 of 4 observed)') == 1
-    assert json.loads(_run_reveal_direct(*command, '--format', 'json').stdout) == json.loads(
-        _run_reveal_direct(*uri, '--format', 'json').stdout)
+    assert json.loads(_run_reveal_direct(*command, '--format', 'json').stdout) == without_request_notes(json.loads(
+        _run_reveal_direct(*uri, '--format', 'json').stdout))  # the URI request's own note (BACK-2716)
 
 
 def test_a_subcommand_cut_is_printed_before_its_findings_exit(proj):

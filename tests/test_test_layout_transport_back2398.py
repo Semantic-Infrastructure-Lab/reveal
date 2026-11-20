@@ -1,7 +1,7 @@
 """Selected policy failures keep their typed transport outcome."""
 import pytest
 
-from conftest import _run_reveal_direct
+from conftest import _run_reveal_direct, without_request_notes
 from reveal.api import query
 from reveal.errors import RequestValidationError
 
@@ -98,7 +98,9 @@ def test_configured_overview_map_counts_and_diagnostics_match_cli_api_mcp(projec
         assert not result.is_error, _text(result)
         payload = json.loads(_text(result))
         assert payload['map'] == expected['map']
-        assert payload.get('meta', {}).get('warnings', []) == expected.get('meta', {}).get('warnings', [])
-        assert payload.get('meta', {}).get('errors', []) == expected.get('meta', {}).get('errors', [])
+        # each transport says its request note in its own form (BACK-2716)
+        payload, expected_meta = without_request_notes(payload), without_request_notes(expected)
+        assert payload.get('meta', {}).get('warnings', []) == expected_meta.get('meta', {}).get('warnings', [])
+        assert payload.get('meta', {}).get('errors', []) == expected_meta.get('meta', {}).get('errors', [])
 
     _run(project, scenario)

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from conftest import _run_reveal_direct, _assert_same_answer_source_spelling
+from conftest import _run_reveal_direct, _assert_same_answer_source_spelling, without_request_notes
 from reveal import api
 from reveal.adapters.surface import SurfaceAdapter
 from reveal.utils.query_parser import collect_query_keys, peek_query_items
@@ -89,9 +89,9 @@ def test_direct_method_keyword_rejects_without_mutating_adapter(project):
 
 
 def test_top_zero_and_none_do_not_cut_raw_analysis(project):
-    complete = api.query(uri(project))
-    assert api.query(uri(project), top=0) == complete
-    assert api.query(uri(project, 'type=env&top=0'), top=None) == complete
+    complete = without_request_notes(api.query(uri(project)))  # each request's own note aside (BACK-2716)
+    assert without_request_notes(api.query(uri(project), top=0)) == complete
+    assert without_request_notes(api.query(uri(project, 'type=env&top=0'), top=None)) == complete
     assert complete['total'] == 2
 
 

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from conftest import _run_reveal_direct
+from conftest import _run_reveal_direct, without_request_notes
 from reveal.adapters.ast.adapter import AstAdapter
 from reveal.utils.results import AnalysisCompleteness, ResultBuilder
 
@@ -45,7 +45,7 @@ def test_genuine_syntax_loss_full_partial_and_restored(tmp_path, mode):
     source.write_text(SOURCE, encoding='utf-8')
     restored, data = answer(tmp_path, mode)
     assert restored.returncode == 0 and data['results'] == clean['results']
-    assert data['meta']['confidence'] == 1.0 and not data['meta']['warnings']
+    assert data['meta']['confidence'] == 1.0 and not without_request_notes(data)['meta']['warnings']  # the URI request's own note aside (BACK-2716)
 
 
 @pytest.mark.parametrize('mode', MODES)

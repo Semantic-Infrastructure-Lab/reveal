@@ -20,7 +20,7 @@ from pathlib import Path
 
 import pytest
 
-from conftest import _run_reveal_direct
+from conftest import _run_reveal_direct, is_request_note
 from reveal.adapters.calls import CallsAdapter
 from reveal.adapters.calls import index as calls_index
 from reveal.adapters.calls.renderer import render_calls_structure
@@ -91,6 +91,15 @@ def _json(*argv):
 
 
 def _retired(doc):
+    """The spellings' own retirement warnings; a URI request's one request note (BACK-2716) is `_request_notes`."""
+    return [w for w in _request_notes_and_retired(doc) if not is_request_note(w)]
+
+
+def _request_notes(doc):
+    return [w for w in _request_notes_and_retired(doc) if is_request_note(w)]
+
+
+def _request_notes_and_retired(doc):
     return [w for w in (doc.get('meta') or {}).get('warnings') or [] if w.get('code') == 'retired_spelling']
 
 
@@ -207,6 +216,7 @@ def test_both_spellings_answer_the_same_and_print_the_note(fx2):
         assert run.stderr.count('deprecated') == 0, run.stderr  # the JSON carries the note (BACK-2659)
         assert 'reveal imports <path> --importers' in _retired(doc)[0]['message']
         assert [w['field'] for w in _retired(doc)] == ['param:calls.modules']
+    assert len(_request_notes(uri_doc)) == 1 and not _request_notes(cli_doc)  # only the URI says its request note
     strip = lambda doc: {k: v for k, v in doc.items() if k != 'meta'}  # noqa: E731
     assert strip(uri_doc) == {**strip(cli_doc), 'source': uri_doc['source']}
     assert len(uri_doc['edges']) == 3

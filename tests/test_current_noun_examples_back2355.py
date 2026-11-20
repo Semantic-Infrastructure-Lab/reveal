@@ -4,6 +4,7 @@ import shlex
 
 import pytest
 
+from conftest import without_request_notes
 from reveal.cli.invocation import COMMANDS
 from test_example_recipes_run import _named_fixture_skip, named_harness
 
@@ -43,7 +44,7 @@ def test_current_noun_executes_like_uri(named_harness, noun, args, uri, expected
     assert code == uri_code == 0, (out, err, uri_out, uri_err)
     result, sibling = json.loads(out), json.loads(uri_out)
     assert result['type'] == sibling['type'] == expected_type
-    assert result == sibling
+    assert result == without_request_notes(sibling)  # the URI request's own note (BACK-2716)
     if noun == 'calls':
         assert result['target'] == 'validate_item'
         assert result['total_callers'] > 0

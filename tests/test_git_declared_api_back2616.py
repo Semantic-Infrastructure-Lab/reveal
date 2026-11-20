@@ -1,6 +1,7 @@
 """Git declaration foundation: API controls must reach the existing query owners."""
 import pytest
 
+from conftest import without_request_notes
 from reveal.api import query
 
 pygit2 = pytest.importorskip('pygit2')
@@ -36,6 +37,7 @@ def test_typed_repeated_where_uses_existing_commit_predicates(repo_path):
 def test_canonical_uri_and_typed_controls_match(repo_path):
     a = query(f'git://{repo_path}?view=history&where=message%3Dchange%202')
     b = query(f'git://{repo_path}', view='history', where=['message=change 2'])
+    a, b = without_request_notes(a), without_request_notes(b)  # each request's own note (BACK-2716)
     assert a == b and len(a['history']) == 1
 
 
@@ -60,12 +62,12 @@ def test_positive_merge_policy_and_legacy_ownership_scope(repo_path):
     side = repo.create_commit(None, sig, sig, 'side', repo.head.peel().tree.id, [head])
     repo.create_commit('HEAD', sig, sig, 'merge', repo.head.peel().tree.id, [head, side])
     uri = f'git://{repo_path}?view=history'
-    whole = query(uri)
-    without = query(uri, merges=False)
+    whole = without_request_notes(query(uri))  # the request's own note names its own controls (BACK-2716)
+    without = without_request_notes(query(uri, merges=False))
     assert len(without['history']) == len(whole['history']) - 1
-    assert query(uri + '&merges=off') == without
-    assert query(uri, merges=True) == whole
-    assert query(uri + '&merges=1') == whole  # existing ownership-only legacy spelling
+    assert without_request_notes(query(uri + '&merges=off')) == without
+    assert without_request_notes(query(uri, merges=True)) == whole
+    assert without_request_notes(query(uri + '&merges=1')) == whole  # existing ownership-only legacy spelling
 
 
 def test_repeated_time_aliases_and_original_regex_validation(repo_path):

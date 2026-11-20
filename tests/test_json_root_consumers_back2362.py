@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from conftest import _run_reveal_direct as run
+from conftest import without_request_notes
 from reveal import api
 from test_mcp_expected_errors_back1992 import _run, _text
 
@@ -84,7 +85,7 @@ def test_introspection_stays_legacy_while_navigation_qualifies(tmp_path, suffix)
     uri = f'json://{path.as_posix()}{suffix}'
     response = run(uri, '--format', 'json')
     assert response.returncode == 0
-    assert json.loads(response.stdout) == api.query(uri)
+    assert without_request_notes(json.loads(response.stdout)) == without_request_notes(api.query(uri))  # each in its own form (BACK-2716)
     path.unlink()
     missing = run(uri, '--format', 'json')
     assert missing.returncode == 2  # a missing path is an invalid resource in every mode (BACK-2533)

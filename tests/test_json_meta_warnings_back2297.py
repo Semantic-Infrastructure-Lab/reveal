@@ -13,7 +13,7 @@ import json
 
 import pytest
 
-from conftest import _run_reveal_in
+from conftest import _run_reveal_in, without_request_notes
 from reveal.adapters.json.adapter import JsonAdapter
 from reveal.adapters.json.renderer import JsonRenderer
 from reveal.utils.results import RESULT_CONTROL_WARNINGS, result_control_notes_of
@@ -63,7 +63,7 @@ def test_warning_is_in_meta_warnings_with_its_keys(data, name, query, expected):
 def test_json_output_carries_it_in_meta(data, name, query, expected):
     run = _run_reveal_in(data, f'json://{name}?{query}', '--format', 'json')
     assert run.returncode == 0, run.stderr
-    result = json.loads(run.stdout)
+    result = without_request_notes(json.loads(run.stdout))  # the URI request's own note (BACK-2716)
     assert 'warnings' not in result
     assert result['meta']['warnings'] == [expected]
 

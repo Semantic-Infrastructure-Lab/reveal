@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from conftest import _run_reveal_in
+from conftest import _run_reveal_in, without_request_notes
 from reveal import query
 from reveal.errors import RequestValidationError
 from test_claude_source_evidence_back2617 import transcript
@@ -33,7 +33,7 @@ def test_selection_precedes_paging_and_both_cli_spellings_agree(transcript):
                            '--where', 'tool==Bash', '--limit', '1', '--format', 'json')
     uri = _run_reveal_in(transcript.parent, 'claude://session/my-session?view=workflow&where=tool==Bash&limit=1', '--format', 'json')
     assert named.returncode == uri.returncode == 0
-    assert json.loads(named.stdout) == json.loads(uri.stdout)
+    assert json.loads(named.stdout) == without_request_notes(json.loads(uri.stdout))  # the URI request's own note (BACK-2716)
 
 
 def test_tool_predicate_is_equality_and_repeated_constraints_are_anded(transcript):
@@ -107,7 +107,7 @@ def test_workflow_predicate_and_match_codecs_keep_literal_api_values(transcript)
     expression = 'tool==' + tool
     api = query('claude://session/my-session/workflow', where=[expression], match=tool)
     uri = query('claude://session/my-session/workflow?where=' + quote(expression, safe='') + '&match=' + quote(tool, safe=''))
-    assert api == uri
+    assert without_request_notes(api) == without_request_notes(uri)  # each request's own note (BACK-2716)
     assert [step['tool'] for step in api['workflow']] == [tool]
 
 

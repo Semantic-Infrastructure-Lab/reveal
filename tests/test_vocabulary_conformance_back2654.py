@@ -1059,6 +1059,10 @@ def probe_alias_notes(noun, sample):
             values = _alias_values(spec, alias)
             if values is None:
                 continue
+            # A request the noun rejects for its own sake says no note (BACK-2716): probe with a value the fixture accepts.
+            accepted = APPLICABILITY_VALUES.get((noun, spec.name))
+            if accepted is not None and values[0] != accepted:
+                values = (accepted, _alias_spelling(spec, alias, accepted) or values[1], values[2])
             key = f'param:{noun}.{alias}'
             uri = _uri(noun, f'{alias}={values[1]}', base=spec.role != 'operation', control=spec.name)
             noted = not _spelling_only(spec, alias) and (noun, alias) not in DEFERRED_ALIASES

@@ -13,6 +13,7 @@ from urllib.parse import quote
 import pytest
 
 from conftest import _run_reveal_direct as run
+from conftest import without_request_notes
 from reveal import api
 from reveal.adapters.overview import OverviewAdapter
 from reveal.analyzers.imports import service
@@ -48,10 +49,11 @@ def answer(root, *flags, query=''):
 @pytest.mark.parametrize('top', [0, 1, 5, 20])
 def test_bounded_text_json_and_cli_uri_api(project, top):
     uri, result = answer(project, query=f'top={top}')
+    result = without_request_notes(result)  # the URI request's own note (BACK-2716)
     command = run('overview', project, '--top', str(top), '--format', 'json')
     assert uri.returncode == command.returncode == 0, (uri.stderr, command.stderr)
     assert json.loads(command.stdout) == result
-    assert api.query(f'overview://{project.as_posix()}', top=top) == result
+    assert without_request_notes(api.query(f'overview://{project.as_posix()}', top=top)) == result
     assert result['map_status'] == 'complete'
     assert not {'stats', 'architecture', 'git_log', 'complex_functions'} & result.keys()
     assert result['scope']['total_code_files'] == 24

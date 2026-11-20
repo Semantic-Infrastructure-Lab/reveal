@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from conftest import _run_reveal_in
+from conftest import _run_reveal_in, without_request_notes
 from reveal.api import query
 from reveal.errors import RequestValidationError
 from test_claude_source_evidence_back2617 import transcript
@@ -172,7 +172,7 @@ def test_page_original_scope_validation_precedes_overlay_and_none_clears_valid_p
         query('claude://session/my-session?view=messages&sort=invented', sort='message_index')
     original = query('claude://session/my-session', view='messages')
     cleared = query('claude://session/my-session?view=messages&limit=1', limit=None)
-    assert cleared == original
+    assert without_request_notes(cleared) == without_request_notes(original)  # each request's own note (BACK-2716)
 
 
 def test_invalid_uri_sort_is_an_answered_request_error(transcript):

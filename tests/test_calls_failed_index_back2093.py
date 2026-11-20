@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+from conftest import without_mcp_request_note
 from reveal import base as reveal_base
 from reveal import mcp_server
 from reveal.adapters.ast import analysis
@@ -124,7 +125,8 @@ def test_a_failure_the_content_causes_is_still_stored(tree, builds, monkeypatch)
     assert SKIPPED in first
     # Only the cold build echoes the per-file "Failed to analyze" stderr line; the answer
     # and its analysis_failed disclosure are the same.
-    assert request(tree) == first.split('\n[stderr: ')[0]
+    # (the request note's own block aside, BACK-2716)
+    assert without_mcp_request_note(request(tree)) == without_mcp_request_note(first.split('\n[stderr: ')[0])
     assert len(builds) == 1, builds
 
 

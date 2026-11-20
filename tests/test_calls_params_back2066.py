@@ -22,6 +22,7 @@ from pathlib import Path
 import pytest
 
 from conftest import _run_reveal_direct as run
+from conftest import without_request_notes
 
 APP = '''\
 import os
@@ -105,14 +106,14 @@ def test_callers_answers_exactly_like_target(project, extra):
     new, new_json = jrun(f'calls://proj?callers=helper{extra}')
     old, old_json = jrun(f'calls://proj?target=helper{extra}')
     assert new.returncode == old.returncode == 0, (new.stderr, old.stderr)
-    # ?target= is retired (slice D): the same answer plus one retired_spelling warning and its note.
+    # ?target= is retired (slice D), and a URI request says one request note (BACK-2716) that replaces its per-spelling note:
+    # both spellings render the same canonical request, so the whole answers are equal.
     warnings = old_json['meta']['warnings']
-    assert [w['field'] for w in warnings if w.get('code') == 'retired_spelling'] == ['param:calls.target']
-    old_json['meta']['warnings'] = [w for w in warnings if w.get('code') != 'retired_spelling']
+    notes = [w for w in warnings if w.get('code') == 'retired_spelling']
+    assert [w['field'] for w in notes] == ['request:calls']
+    assert f'--callers helper' in notes[0]['message']
     assert new_json == old_json
     assert new_json['type'] == 'calls_query' and new_json['total_callers'] == 2
-    note = 'note: calls ?target= (--target) is deprecated; use --callers FUNC, the same answer.\n'
-    assert note.strip() == f"note: {[w for w in warnings if w.get('code') == 'retired_spelling'][0]['message']}"
     assert old.stderr == new.stderr  # the JSON carries the note (BACK-2659)
 
 
@@ -122,7 +123,7 @@ def test_callers_subcommand_flag_equals_the_uri(project):
     assert cli.returncode == uri.returncode == 0, (cli.stderr, uri.stderr)
     assert cli_json['execution'].pop('command').startswith('reveal calls proj --callers helper')
     assert uri_json['execution'].pop('command').startswith('reveal calls://proj?callers=helper')
-    assert cli_json == uri_json
+    assert cli_json == without_request_notes(uri_json)  # the URI request's own note (BACK-2716)
 
 
 def test_callers_is_one_mode_selector(project):
@@ -196,7 +197,8 @@ def test_callees_depth_one_keeps_the_per_definition_answer(project):
                            'matches', 'total_calls', '_builtins_hidden', 'path', 'walk_rule'}
     assert answer['walk_rule']['depth'] == 1
     explicit, explicit_answer = jrun('calls://proj?callees=main&depth=1')
-    assert explicit.returncode == 0 and explicit_answer == answer
+    # each request's own note names its own controls (BACK-2716)
+    assert explicit.returncode == 0 and without_request_notes(explicit_answer) == without_request_notes(answer)
 
 
 def test_callees_builtins_toggle_reaches_the_walk(project):

@@ -4,6 +4,7 @@ import shlex
 
 import pytest
 
+from conftest import without_request_notes
 import test_example_recipes_run as recipes
 from test_example_recipes_run import named_harness
 
@@ -63,7 +64,7 @@ def test_metrics_noun_and_uri_report_the_existing_fixture(named_harness):
         assert any(row['file'] == 'validators.py' and row['elements']['functions'] > 0
                    for row in payload['files'])
         answers.append(payload)
-    assert answers[0] == answers[1]
+    assert answers[0] == without_request_notes(answers[1])  # the URI request's own note (BACK-2716)
 
 
 def test_current_nouns_analyze_real_calls_and_test_scope(named_harness):
