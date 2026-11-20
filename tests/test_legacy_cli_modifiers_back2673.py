@@ -1,6 +1,6 @@
 """LEGACY_CLI_MODIFIERS and the flag-only declarations agree (BACK-2673): every flag a declared noun keeps as a flag-only
 legacy modifier has exactly one note-stage, standalone flag:<noun>.<flag> RETIREMENTS row, generated from the one
-table, and every row names a flag its noun declares. Claude --tail is held for Scott's ruling: neither."""
+table, and every row names a flag its noun declares. Claude --tail too (Scott 2026-11-19, BACK-2709)."""
 import pytest
 
 from reveal.cli.invocation import COMMANDS, LEGACY_CLI_MODIFIERS, RETIREMENTS
@@ -31,5 +31,5 @@ def test_every_table_noun_is_a_declared_noun():
     assert set(LEGACY_CLI_MODIFIERS) <= set(DECLARED)
 
 
-def test_claude_tail_is_held():  # pending Scott's ruling (claude --tail)
-    assert '--tail' not in _declared_flags('claude') and '--tail' not in LEGACY_CLI_MODIFIERS['claude']
+def test_claude_tail_is_a_legacy_modifier_like_every_nouns():  # Scott 2026-11-19, BACK-2709
+    assert '--tail' in _declared_flags('claude') and '--tail' in LEGACY_CLI_MODIFIERS['claude']

@@ -197,21 +197,13 @@ def uri_flag_message(target, message: str) -> str | None:
     """Rule 3's one message for flags the main parser does not have on a URI request of a declared noun, or None
     (argparse's own error stands: another error, a file, an undeclared scheme). A declared noun's URI is read by its
     own parser (``declared_uri_request``), so this answers only the requests the main parser still reads: a
-    ``--stdin`` batch's and a pending legacy spelling's."""
+    ``--stdin`` batch's and a global flag the noun's subcommand does not take."""
     from ...utils.query_binding import unsupported_controls_message
     declared = _declared_uri(target)
     flags = [token for token in message.partition(':')[2].split() if token.startswith('-')]
     if declared is None or not message.startswith('unrecognized arguments:') or not flags:
         return None
     return unsupported_controls_message(declared[0].PARAM_SPECS, flags)
-
-
-# Main-parser flags that keep their URI-only answer until a ruling settles them (step 3b-3 of BACK-2673): a request
-# typing one after its noun's URI is still read by the main parser, as before. Claude --tail is held for Scott's ruling:
-# undocumented, it collides with the documented legacy operation ?tail=N. Every other main-parser flag a declared noun
-# keeps is a flag-only modifier of its declaration (ParamSpec.flag_only, LEGACY_CLI_MODIFIERS), and a global flag the
-# URI's injection binds through the noun's CLI_QUERY_FLAGS that its subcommand does not take is read from there.
-_PENDING_MAIN_FLAGS = {'claude': ('--tail',)}
 
 
 def _main_option_arity() -> Dict[str, int]:
@@ -240,15 +232,17 @@ def _target_index(argv) -> Optional[int]:
 
 
 def _main_parser_reads(noun: str, adapter, parser, argv, main_modes) -> bool:
-    """Whether *argv* is still the main parser's to read: it types a main-parser flag that keeps its URI-only answer on
-    *noun* for now (see the table), or a main-command mode that takes no path (*main_modes*, ``PATHLESS_FLAGS``) the
+    """Whether *argv* is still the main parser's to read: it types a global flag the URI binds through *noun*'s
+    ``CLI_QUERY_FLAGS`` that its subcommand does not take, or a main-command mode that takes no path (*main_modes*, ``PATHLESS_FLAGS``) the
     noun's parser does not have, which the main parser refuses with its own teaching (BACK-1751; exit 2 as on the
     subcommand)."""
     from .flag_specs import FLAG_SPECS
     received = getattr(adapter, 'CLI_QUERY_FLAGS', None) or {}
     own = parser._option_string_actions
-    pending = (*_PENDING_MAIN_FLAGS.get(noun, ()),
-               *(flag.option for flag in FLAG_SPECS if flag.dest in received and flag.option not in own),
+    # Every main-parser flag a declared noun keeps is a flag-only modifier of its declaration (ParamSpec.flag_only,
+    # LEGACY_CLI_MODIFIERS); a global flag the URI's injection binds through the noun's CLI_QUERY_FLAGS that its
+    # subcommand does not take is still the main parser's.
+    pending = (*(flag.option for flag in FLAG_SPECS if flag.dest in received and flag.option not in own),
                *(option for option in main_modes if option not in own))
     for token in argv:
         if token == '--':
@@ -262,7 +256,7 @@ def declared_uri_request(argv, main_modes=()) -> Optional[tuple]:
     """(noun, its parser, argv for that parser, URI) when the path/URI form's target is a URI of a noun with a declared
     subcommand, else None (a path, another scheme). The noun's own parser reads the request, the URI's path in the
     URI's place as the resource argument, so a flag after the URI is that subcommand's flag (COMMAND_MODEL "Flags after
-    a URI", BACK-2673); the URI's query is the request's second source. None also for a pending legacy spelling or a
+    a URI", BACK-2673); the URI's query is the request's second source. None also for such a global flag or a
     main-command mode that takes no path (*main_modes*: the main parser refuses it with its own teaching)."""
     from ..invocation import COMMANDS
     index = _target_index(argv)
@@ -472,8 +466,11 @@ def run_declared_command(name: str, args, *, answer_consumer=None, uri_query: Op
         flags = flag_spellings(spec)
         dest = spec.cli.dest or spec.name
         if dest in vars(args):
-            source[dest] = peek(args, dest)
-            spelled[dest] = typed_spelling(dest, flags.get(dest, dest))
+            # A flag-only modifier binds by its own name: its dest may be a word the noun's own control owns (Claude's
+            # --tail slice keeps args.tail for the router while ?tail=N is the legacy operation, BACK-2709).
+            key = spec.name if spec.flag_only else dest
+            source[key] = peek(args, dest)
+            spelled[key] = typed_spelling(dest, flags.get(dest, dest))
         for legacy in legacy_flag_dests(spec):  # an old flag keeps its legacy name; the binder translates it
             if legacy in vars(args):
                 source[legacy], spelled[legacy] = peek(args, legacy), flags[legacy]

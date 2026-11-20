@@ -209,21 +209,19 @@ RULED_EXEMPT_NOUNS = {'stats': 'rule 9: the retired stats:// scheme is deleted a
 # a declared noun's URI is read by its own parser and its query joins the typed flags, so a cell is left only where a
 # case waits for a ruling; RULE_23_CASES names each case, and a recorded cell fails on any other. Since 3b-3 the main
 # parser's legacy flags are flag-only modifiers of the declarations (--head, --check, Claude --type): what is left is
-# Claude --tail, held for Scott's ruling, and the equal repeated term (Scott 2026-11-19, BACK-2708 ruling 5: no ruling).
-_CLAUDE_TAIL_WHY = "pending Scott's ruling (claude --tail)"
+# the equal repeated term (Scott 2026-11-19, BACK-2708 ruling 5: no ruling). Claude --tail conforms since BACK-2709.
 _EQUAL_TERM_WHY = ('waits for a ruling: ?k=A --flag A on a repeatable control combines as ?k=A&k=A and the subcommand\'s '
                    '--flag A --flag A do (the echo reads "A AND A"); rule 1 does not say whether an equal repeated term is '
                    'one term (Claude match dedupes it)')
 RULE_23_CASES = {
     'ast': {'?where=A --where A': _EQUAL_TERM_WHY},
-    'claude': {'--tail': _CLAUDE_TAIL_WHY},
     'markdown': dict.fromkeys(('?where=A --where A', '?match=A --match A'), _EQUAL_TERM_WHY),
 }
 NOT_YET: dict = {(noun, '23'): '; '.join(dict.fromkeys(RULE_23_CASES[noun].values())) for noun in RULE_23_CASES}
 
 NOT_YET_BASELINE = {'1a': 0, '1b': 0, '1c': 0, '1d': 0, '2': 0, '3': 0, '3b': 0, '4': 0, '5': 0, '6': 0,
                     '8a': 0, '8b': 0, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 0, '14': 0, '21j': 0, '22': 0,
-                    '23': 3}
+                    '23': 2}
 
 
 # --- the fixture -------------------------------------------------------------------------------------------

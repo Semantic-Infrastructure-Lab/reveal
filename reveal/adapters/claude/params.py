@@ -1,6 +1,6 @@
 """Bind existing Claude query controls before session reading; no new analysis engine."""
 from dataclasses import replace
-from typing import Any, Callable
+from typing import Any, Callable, cast
 
 from ...utils.query_binding import bind_declared_params, legacy_presence_value as presence, string_value as text
 from ...utils.query_parser import CliBinding, LegacySpelling, ParamSpec, ParamValueError, QueryParams, where_param, peek_query_items, nonnegative_display_limit, nonempty_scalar, legacy_check, legacy_slices
@@ -136,10 +136,17 @@ PARAM_SPECS = tuple(_spec(name, schema) for name, schema in _SCHEMA_QUERY_PARAMS
 )
 # --head/--tail/--range slice this noun's rows today: flag-only legacy modifiers until the cut, read by the answers named
 # (BACK-2673; their notes are the flag:<noun>.<flag> RETIREMENTS rows).
-PARAM_SPECS = (*PARAM_SPECS, *legacy_slices(
+_SLICES = {spec.name: spec for spec in legacy_slices(
     head=('claude_workflow', 'claude_session_list', 'claude_messages', 'claude_message_range',
           'claude_cross_session_search', 'claude_history', 'claude_filtered_results'),
-    range=('claude_workflow', 'claude_messages', 'claude_message_range', 'claude_filtered_results')),
+    range=('claude_workflow', 'claude_messages', 'claude_message_range', 'claude_filtered_results'),
+    tail=('claude_workflow', 'claude_messages', 'claude_message_range', 'claude_filtered_results'))}
+# --tail slices the selected answer's rows as on every noun (Scott 2026-11-19, BACK-2709). The word tail is already
+# Claude's legacy operation (?tail=N selects the latest messages), so the slice is declared as tail_rows; its flag and
+# the router's args.tail stay --tail, and messages name a flag-only modifier by its flag.
+_SLICES['tail'] = replace(_SLICES['tail'], name='tail_rows',
+                          cli=replace(cast(CliBinding, _SLICES['tail'].cli), dest='tail'))  # legacy_slices binds it
+PARAM_SPECS = (*PARAM_SPECS, *_SLICES.values(),
     # The workflow, catalog and history readers' legacy filters (Scott 2026-11-19, BACK-2708 ruling 3; supported legacy
     # under D18 until the cut): tests/test_claude_workflow_selection_back2617.py compares the canonical controls with them.
     ParamSpec('type', 'string', 'Legacy: workflow steps of this tool', None, str, flag_only='applied',

@@ -72,13 +72,16 @@ def test_a_stdin_batch_line_still_binds_the_command_lines_flags(workspace, monke
     assert len(json.loads(run.out)['results']) == 1
 
 
-def test_a_pending_legacy_slice_still_answers_after_the_uri(workspace):
-    """Control: Claude ``--tail`` after a URI keeps slicing on the main parser's route, held for Scott's ruling (step
-    3b-3), while the subcommand does not take it. ``--head`` is a flag-only modifier since 3b-3 (one answer on both
-    spellings with a note: tests/test_legacy_slice_flags_back2673.py)."""
-    sliced = _run('claude://session/my-session?view=messages', '--tail', '1', '--format', 'json')
-    assert sliced.rc == 0 and len(json.loads(sliced.out)['messages']) == 1, sliced.brief()
-    assert _run('claude', 'session/my-session', '--view', 'messages', '--tail', '1').rc == 2
+def test_no_main_parser_flag_is_held_on_the_old_route(workspace):
+    """Claude ``--tail`` was the last main-parser flag kept on the URI-only route (held for Scott's ruling, step 3b-3);
+    since BACK-2709 it is a flag-only modifier like ``--head``, so the URI and the subcommand give one answer, exit 0,
+    and the declared route keeps no table of held flags."""
+    from reveal.cli.routing import declared
+    assert not hasattr(declared, '_PENDING_MAIN_FLAGS')
+    uri = _run('claude://session/my-session?view=messages', '--tail', '1', '--format', 'json')
+    sub = _run('claude', 'session/my-session', '--view', 'messages', '--tail', '1', '--format', 'json')
+    assert uri.rc == sub.rc == 0, (uri.brief(), sub.brief())
+    assert json.loads(uri.out)['messages'] == json.loads(sub.out)['messages'] and len(json.loads(sub.out)['messages']) == 1
 
 
 def _without_execution(document):

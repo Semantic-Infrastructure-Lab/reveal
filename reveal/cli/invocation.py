@@ -319,8 +319,8 @@ LEGACY_CLI_MODIFIERS: Dict[str, Dict[str, str]] = {
     'calls': {'--head': '--limit N on a ranking (?sort=-callers&limit=N); --depth N on a callers or callees walk',
               '--tail': 'a descending --sort with --limit N on a ranking (the last N rows have no spelling of their own)',
               '--range': 'nothing: calls has no offset; --limit N caps a ranking'},
-    # --tail waits for Scott's ruling (it collides with ?tail=N). --type/--name/--search: supported legacy (D18).
-    'claude': {'--head': _LIMIT_N, '--range': _OFFSET,
+    # --tail as on every noun (Scott 2026-11-19, BACK-2709). --type/--name/--search: supported legacy (D18).
+    'claude': {'--head': _LIMIT_N, '--tail': _LAST, '--range': _OFFSET,
                '--type': '--where tool==TYPE (?where=tool==TYPE) on the workflow view',
                **dict.fromkeys(('--name', '--search'), '--match TEXT (?match=TEXT) on the workflow view and history; '
                                                        '--where session~=TEXT on the session list'),
