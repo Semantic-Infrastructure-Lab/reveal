@@ -311,14 +311,14 @@ _SLICED = {'--head': _LIMIT_N, '--tail': _LAST, '--range': _OFFSET}
 def _no_check(noun: str) -> Dict[str, str]:
     """--check and its --lint alias on a noun whose answers they never changed (BACK-2708 ruling 2)."""
     return dict.fromkeys(('--check', '--lint'),
-                         f'nothing: it never changed a {noun}:// answer; reveal check <path> checks files')
+                         f'reveal check <path> to check files (--check never changed a {noun}:// answer)')
 
 LEGACY_CLI_MODIFIERS: Dict[str, Dict[str, str]] = {
     **{noun: _SLICED for noun in ('ast', 'markdown', 'metrics')},
     **{noun: {**_SLICED, **_no_check(noun)} for noun in ('git', 'json')},
     'calls': {'--head': '--limit N on a ranking (?sort=-callers&limit=N); --depth N on a callers or callees walk',
               '--tail': 'a descending --sort with --limit N on a ranking (the last N rows have no spelling of their own)',
-              '--range': 'nothing: calls has no offset; --limit N caps a ranking'},
+              '--range': '--limit N on a ranking (calls has no offset)'},
     # --tail as on every noun (Scott 2026-11-19, BACK-2709). --type/--name/--search: supported legacy (D18).
     'claude': {'--head': _LIMIT_N, '--tail': _LAST, '--range': _OFFSET,
                '--type': '--where tool==TYPE (?where=tool==TYPE) on the workflow view',
@@ -326,18 +326,18 @@ LEGACY_CLI_MODIFIERS: Dict[str, Dict[str, str]] = {
                                                        '--where session~=TEXT on the session list'),
                **_no_check('claude')},
     'hotspots': {'--head': '--limit N (?limit=N), which caps each list',
-                 '--tail': 'nothing: each list is ranked worst first; --limit N keeps its worst N',
-                 '--range': 'nothing: hotspots has no offset; --limit N caps each list'},
+                 '--tail': '--limit N, which keeps each list\'s worst N (each list is ranked worst first)',
+                 '--range': '--limit N, which caps each list (hotspots has no offset)'},
     'imports': {'--head': '--limit N (?limit=N) on a ranking or the entrypoints',
                 '--tail': 'a descending --sort with --limit N (the last N rows have no spelling of their own)',
-                '--range': 'nothing: imports has no offset; --limit N caps a ranking'},
-    'pack': {flag: 'nothing: --budget sizes the pack' for flag in ('--head', '--tail', '--range')},
+                '--range': '--limit N on a ranking (imports has no offset)'},
+    'pack': {flag: '--budget N, which sizes the pack (it has no row slice)' for flag in ('--head', '--tail', '--range')},
     'patches': {'--head': '--limit N for the groups (?limit=N), --top N in view=pressure',
-                '--tail': 'nothing: the groups are ranked; --limit N keeps the first N',
-                '--range': 'nothing: patches has no offset; --limit N caps the groups'},
+                '--tail': '--limit N, which keeps the first N groups (the groups are ranked)',
+                '--range': '--limit N, which caps the groups (patches has no offset)'},
     'testability': {'--head': 'reveal patches <path> --view pressure --top N',
-                    '--tail': 'nothing: each list is ranked; reveal patches <path> --view pressure --top N keeps the first N',
-                    '--range': 'nothing: no offset; reveal patches <path> --view pressure --top N caps each list'},
+                    '--tail': 'reveal patches <path> --view pressure --top N, which keeps the first N (each list is ranked)',
+                    '--range': 'reveal patches <path> --view pressure --top N, which caps each list (no offset)'},
 }
 
 
