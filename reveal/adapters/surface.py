@@ -422,6 +422,10 @@ def _surface_limit(value: Any, name: str) -> int:
 class SurfaceAdapter(ResourceAdapter):
     """Adapter for mapping known boundary indicators in source: CLI,
     HTTP routes, env vars, network, filesystem writes, subprocess calls."""
+
+    # Names a path and selects an analysis (COMMAND_MODEL rule 2): its request is `reveal NOUN TARGET --flags`; the
+    # scheme and its query-string options are retired spellings of it (D20, BACK-2716).
+    ANALYSIS_ONLY = True
     HELP_CLUSTER = 'Code Analysis'
 
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907

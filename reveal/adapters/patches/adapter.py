@@ -82,6 +82,10 @@ PARAM_SPECS = (_VIEW, _GROUP, _LIMIT, _MIN, _TARGET, _PRIVATE, _SUPPRESS, *_PRES
 class PatchesAdapter(ResourceAdapter):
     """Patch pressure in Python and TypeScript tests; ?view=pressure joins it with production boundary fan-out
     (was testability://)."""
+
+    # Names a path and selects an analysis (COMMAND_MODEL rule 2): its request is `reveal NOUN TARGET --flags`; the
+    # scheme and its query-string options are retired spellings of it (D20, BACK-2716).
+    ANALYSIS_ONLY = True
     HELP_CLUSTER = 'Code Analysis'
 
     # ?view=pressure answers testability's report, so its lists and counts are testability's (BACK-2667)

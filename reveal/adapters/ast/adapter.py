@@ -309,6 +309,10 @@ class AstAdapter(ResourceAdapter):
         ast://.?lines=50..200            # Range filter (NEW: .. operator)
         ast://.?complexity>10&sort=-complexity&limit=10  # Top 10 most complex (NEW: sort, limit)
     """
+
+    # Names a path and selects an analysis (COMMAND_MODEL rule 2): its request is `reveal NOUN TARGET --flags`; the
+    # scheme and its query-string options are retired spellings of it (D20, BACK-2716).
+    ANALYSIS_ONLY = True
     HELP_CLUSTER = ('Code Analysis', 'Self-Describing')
     QUICK_RANK = 0
 

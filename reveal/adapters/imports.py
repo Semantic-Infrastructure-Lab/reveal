@@ -1418,6 +1418,10 @@ def _incomplete(result: Dict[str, Any]) -> bool:
 @register_renderer(ImportsRenderer)
 class ImportsAdapter(ResourceAdapter):
     """Analyze import relationships in codebases."""
+
+    # Names a path and selects an analysis (COMMAND_MODEL rule 2): its request is `reveal NOUN TARGET --flags`; the
+    # scheme and its query-string options are retired spellings of it (D20, BACK-2716).
+    ANALYSIS_ONLY = True
     HELP_CLUSTER = 'Code Analysis'
     QUICK_RANK = 2
 

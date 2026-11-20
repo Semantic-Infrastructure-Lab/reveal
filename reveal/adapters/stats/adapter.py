@@ -390,6 +390,10 @@ def _requests(value: Any) -> bool:
 @register_renderer(StatsRenderer)
 class MetricsAdapter(ResourceAdapter):
     """Codebase metrics, file hotspots and provenance (was stats:// and classify://)."""
+
+    # Names a path and selects an analysis (COMMAND_MODEL rule 2): its request is `reveal NOUN TARGET --flags`; the
+    # scheme and its query-string options are retired spellings of it (D20, BACK-2716).
+    ANALYSIS_ONLY = True
     HELP_CLUSTER = 'Code Analysis'
     QUICK_RANK: Optional[int] = 2
 

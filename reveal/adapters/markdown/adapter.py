@@ -136,6 +136,10 @@ class MarkdownQueryAdapter(ResourceAdapter):
     Enables finding markdown files based on frontmatter field values,
     missing fields, or wildcards. Works on local directory trees.
     """
+
+    # Names a path and selects an analysis (COMMAND_MODEL rule 2): its request is `reveal NOUN TARGET --flags`; the
+    # scheme and its query-string options are retired spellings of it (D20, BACK-2716).
+    ANALYSIS_ONLY = True
     HELP_CLUSTER = 'Sessions & Docs'
 
     BUDGET_LIST_FIELD = 'results'

@@ -160,6 +160,12 @@ class ResourceAdapter(ABC):
     # before typed API overrides; source-before-controls readers retain their own loading order.
     BOUND_QUERY_CALL: bool = False
 
+    # True for an adapter whose address is a plain path and whose scheme only selects an analysis (ast, calls, imports,
+    # markdown, metrics, overview, patches, surface, contracts, pack; COMMAND_MODEL rule 2). Such a scheme and its
+    # query-string options are retired spellings of `reveal NOUN TARGET --flags`; any other scheme names a resource a path
+    # cannot (a ref, session, table, key, host or variable) and keeps its URI, taking flags (D20, BACK-2716).
+    ANALYSIS_ONLY: bool = False
+
     # Some source readers must load once before interpreting query controls.
     SOURCE_BEFORE_CONTROLS: bool = False
     # Retain a pre-existing Check transport while direct command views adopt declarations.

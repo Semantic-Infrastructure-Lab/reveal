@@ -8,12 +8,16 @@ import re
 
 import pytest
 
+from reveal.adapters.registry import get_adapter_class, list_supported_schemes
 from reveal.cli.invocation import COMMANDS, RETIREMENTS, generated_retirements
 from reveal.cli.parser import create_argument_parser
 from reveal.cli.routing.declared import create_declared_parser, declared_adapter_class
 
-# COMMAND_MODEL rule 2: schemes that name a path and select an analysis. Their requests are `reveal NOUN TARGET`.
-ANALYSIS_ONLY = ('ast', 'calls', 'imports', 'markdown', 'metrics', 'overview', 'patches', 'surface', 'contracts', 'pack')
+# COMMAND_MODEL rule 2: schemes that name a path and select an analysis. Their requests are `reveal NOUN TARGET`. The
+# adapters declare it (``ANALYSIS_ONLY``); a retired twin (architecture, stats) is one with its own scheme row.
+ANALYSIS_ONLY = tuple(sorted(
+    scheme for scheme in list_supported_schemes()
+    if getattr(get_adapter_class(scheme), 'ANALYSIS_ONLY', False) and f'scheme:{scheme}' not in RETIREMENTS))
 _ANALYSIS_URI = re.compile(r'\b(?:' + '|'.join(ANALYSIS_ONLY) + r')://')
 _QUERY_OPTION = re.compile(r'(?<![\w/])[?&][A-Za-z_][\w-]*')
 _FLAG = re.compile(r'(?<![\w-])--[a-z][\w-]*')
@@ -77,6 +81,11 @@ def test_every_flag_a_replacement_names_is_one_reveal_reads(key):
     readable = _readable_flags(key, replacement)
     unknown = [flag for flag in _FLAG.findall(replacement) if flag not in readable]
     assert not unknown, f'{key}: names flags no parser in its context reads: {unknown} in {replacement}'
+
+
+def test_the_declared_analysis_only_schemes_are_the_ten_of_rule_2():
+    assert set(ANALYSIS_ONLY) == {'ast', 'calls', 'imports', 'markdown', 'metrics', 'overview', 'patches', 'surface',
+                                  'contracts', 'pack'}
 
 
 def test_the_red_control_a_chained_replacement_fails():
