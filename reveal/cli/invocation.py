@@ -755,6 +755,42 @@ def retirement_note(key: str) -> Optional[Retirement]:
     return entry
 
 
+# The stage of the one request note (``request_note``): a URI request to an analysis-only scheme, or a URI with a query
+# string, is a retiring spelling of its canonical request (D20). The cut turns it to 'error' (BACK-2718).
+REQUEST_STAGE = 'note'
+REQUEST_FORMS = ('cli', 'mcp', 'python')
+_FORM: ContextVar[str] = ContextVar('reveal_request_form', default='cli')
+
+
+def request_form() -> str:
+    """The transport the running request came in on: ``cli`` (also a ``--stdin`` line), ``mcp`` or ``python``."""
+    return _FORM.get()
+
+
+def request_note(scheme: str, replacement_for: Callable[[str], str]) -> Retirement:
+    """The one note of a retiring URI request: *replacement_for(form)* is the executable canonical request rendered from
+    the bound request in the running transport's own form. Keyed ``request:<scheme>`` so it is said once per scheme per
+    invocation; at the ``error`` stage it raises like any retired spelling (exit 2, the same text)."""
+    entry = Retirement(f'a {scheme}:// request', replacement_for(request_form()), REQUEST_STAGE)
+    key = f'request:{scheme}'
+    if entry.stage == 'error':
+        raise RetiredSpellingError(key, entry)
+    log = current_log()
+    if log is not None:
+        (log.recorded if entry.stage == 'phase7' else log.noted).setdefault(key, entry)
+    return entry
+
+
+def request_note_covers(key: str) -> bool:
+    """Whether a per-key note is the spelling of a request that ``request_note`` replaces: a ``param:``/``value:`` row at
+    the note stage that names a replacement for this noun's own control. A standalone row (a legacy operation with no
+    identical canonical form) and every error-stage row keep their own note."""
+    if not key.startswith(('param:', 'value:')):
+        return False
+    entry = RETIREMENTS.get(key) or _shared_name_retirement(key)
+    return entry is not None and entry.stage == 'note' and not entry.standalone and not entry.removed
+
+
 def noted_retirements() -> Dict[str, Retirement]:
     """The ``note``-stage spellings this invocation used, by key."""
     log = current_log()
@@ -941,15 +977,21 @@ def current_invocation() -> Optional[Invocation]:
 
 
 @contextmanager
-def invocation_scope(invocation: Invocation, *, retirements_to_stderr: bool = True) -> Iterator[Invocation]:
+def invocation_scope(invocation: Invocation, *, retirements_to_stderr: bool = True,
+                     form: str = 'cli') -> Iterator[Invocation]:
     """Publish ``invocation`` for the code it runs, and restore the previous one on exit. It
     also opens the invocation's log (``utils.invocation_log``); the MCP server passes
-    ``retirements_to_stderr=False`` and returns the fact in the tool result."""
+    ``retirements_to_stderr=False`` and returns the fact in the tool result; *form* names the transport a request note
+    renders its replacement for (``cli``, ``mcp`` or ``python``)."""
+    if form not in REQUEST_FORMS:
+        raise ValueError(f'form is one of {REQUEST_FORMS}, not {form!r}')
     token = _CURRENT.set(invocation)
     typed_token = _TYPED.set({})
+    form_token = _FORM.set(form)
     try:
         with log_scope(retirements_to_stderr):
             yield invocation
     finally:
+        _FORM.reset(form_token)
         _TYPED.reset(typed_token)
         _CURRENT.reset(token)

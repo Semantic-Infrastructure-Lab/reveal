@@ -31,6 +31,7 @@ import re
 import shlex
 import shutil
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -83,6 +84,10 @@ def _findings_exits(argv):
 
 # A stderr line that reports a problem. Progress lines (review's "Scanning complexity…")
 # are not one.
+# The one note of a retiring URI request (BACK-2716): a doc example that still teaches a URI request answers with it. Such
+# examples are counted and may only fall (`test_doc_uri_requests_only_fall`); they move per noun package and in the
+# consumer sweep (BACK-2071), so the clean-stderr check does not fail on the note itself.
+REQUEST_NOTE = re.compile(r'^(?:note: )?an? \w+:// request is deprecated; use ')
 PROBLEM_LINE = re.compile(r'(?i)\b(error|warning|note|no effect|unknown|not recognized|ignored)\b')
 # stderr lines that are the test environment talking, not the recipe -- or a standing
 # disclosure true of every run of that command (pack without --architecture/--focus, BACK-1006).
@@ -184,7 +189,8 @@ def _assert_text_as_written(harness, query, literal=False):
     argv = stages[0][1:] if literal else _argv(query)
     code, out, err, _ = harness.run_subcommand(argv[0], *argv[1:])
     problems = [line for line in err.splitlines()
-                if PROBLEM_LINE.search(line) and not any(n in line for n in ENVIRONMENT_NOISE)]
+                if PROBLEM_LINE.search(line) and not any(n in line for n in ENVIRONMENT_NOISE)
+                and not REQUEST_NOTE.search(line)]
     assert not problems, f"{query}: text stderr {problems[:3]}"
     assert code in _findings_exits(argv), f"{query}: text exit {code}"
     assert out.strip(), f"{query}: text renderer printed nothing"
@@ -225,7 +231,8 @@ def _assert_runs_as_written(harness, query, output_type, retired_note=None):
                    if isinstance(w, dict) and w.get('code') == 'retired_spelling']
         assert carried.count(retired_note.removeprefix('note: ')) == 1, f"{query}: expected {retired_note!r} in {carried}"
     problems = [line for line in err.splitlines()
-                if PROBLEM_LINE.search(line) and not any(n in line for n in ENVIRONMENT_NOISE)]
+                if PROBLEM_LINE.search(line) and not any(n in line for n in ENVIRONMENT_NOISE)
+                and not REQUEST_NOTE.search(line)]
     assert not problems, f"{query}: stderr {problems[:3]}"
     assert code in _findings_exits(argv), f"{query}: exit {code}"
     payload = json.loads(out)
@@ -236,7 +243,8 @@ def _assert_runs_as_written(harness, query, output_type, retired_note=None):
     # recipe that teaches a retired spelling: the answer's own retired_spelling entries are the evidence (BACK-2654).
     expected = retired_note.removeprefix('note: ') if retired_note else None
     notes = [w.get('message') for w in (payload.get('meta') or {}).get('warnings') or []
-             if isinstance(w, dict) and w.get('code') == 'retired_spelling' and w.get('message') != expected]
+             if isinstance(w, dict) and w.get('code') == 'retired_spelling' and w.get('message') != expected
+             and not REQUEST_NOTE.search(str(w.get('message')))]
     assert not notes, f"{query}: teaches a retired spelling: {notes[:2]}"
     if output_type:
         assert payload.get('type') == output_type, (
@@ -513,12 +521,14 @@ def test_the_recipe_gate_bites(harness):
         _assert_runs_as_written(harness, 'reveal ast://proj', 'contracts')
     # A retired spelling's note rides in the JSON answer, not on stderr: the gate reads it there (BACK-2654), and a
     # retired scheme's own expected note still passes.
+    # (A per-key note a request note covers is said once, as that note; a standalone legacy operation keeps its own.)
     with pytest.raises(AssertionError, match='teaches a retired spelling'):
-        _assert_runs_as_written(harness, "reveal 'ast://proj?type=function'", 'ast_query')
+        _assert_runs_as_written(harness, "reveal 'metrics://proj?top=3&hotspots=true'", 'stats_hotspots')
     _assert_runs_as_written(harness, "reveal 'ast://proj?kind=function'", 'ast_query')
     _, out, _, _ = harness.run_subcommand('ast://proj?no_such_key=1', '--format', 'json')
     payload = json.loads(out)
-    assert [w['type'] for w in payload['meta']['warnings']] == ['unknown_filter_field']  # one type (note #15)
+    # one type (note #15), besides the URI request's own note (BACK-2716)
+    assert [w['type'] for w in payload['meta']['warnings'] if w['type'] != 'retired_spelling'] == ['unknown_filter_field']
     assert payload['type'] == 'ast_query' != 'contracts'
 
 
@@ -1029,7 +1039,8 @@ def test_next_step_hints_in_recipe_output_run(harness):
         argv = shlex.split(command)[1:]
         code, _, err, _ = harness.run_subcommand(argv[0], *argv[1:])
         problems = [line for line in err.splitlines()
-                    if PROBLEM_LINE.search(line) and not any(n in line for n in ENVIRONMENT_NOISE)]
+                    if PROBLEM_LINE.search(line) and not any(n in line for n in ENVIRONMENT_NOISE)
+                    and not REQUEST_NOTE.search(line)]  # reveal's own hints still teach URI forms (BACK-2713)
         if code not in (0, 1) or problems:
             failures.append(f'{command} (hinted after {source}): exit {code} {problems[:1]}')
     assert not failures, failures
@@ -1052,3 +1063,32 @@ def test_agent_help_routing_rows_execute(harness, task, target, kind, field):
     _assert_text_as_written(harness, command, literal=True)
     payload = _assert_runs_as_written(harness, command, kind)
     assert payload[field], f'{command}: route failed to return a positive answer'
+
+
+DOC_URI_BASELINE = Path(__file__).resolve().parent.parent / '.github' / 'doc_uri_requests_baseline.json'
+
+
+def _documented_uri_requests():
+    """The distinct documented commands whose first word is a URI request that retires: an analysis-only scheme, or any
+    URI spelling a query string (BACK-2716)."""
+    from reveal.adapters.base import get_adapter_class
+    found = set()
+    for _source, _line, tokens, _failing in _documented_commands(None):
+        words = [w for w in tokens[1:] if not w.startswith('-')]
+        if not words or '://' not in words[0]:
+            continue
+        scheme, _, rest = words[0].partition('://')
+        adapter = get_adapter_class(scheme.lower())
+        if adapter is not None and (getattr(adapter, 'ANALYSIS_ONLY', False) or '?' in rest):
+            found.add(shlex.join(tokens))
+    return found
+
+
+def test_doc_uri_requests_only_fall():
+    """Documentation that teaches a retiring URI request may only shrink (BACK-2716, BACK-2713, BACK-2071): lower the
+    baseline in the commit that migrates a doc (`REVEAL_WRITE_DOC_URI_BASELINE=1`)."""
+    count = len(_documented_uri_requests())
+    if os.environ.get('REVEAL_WRITE_DOC_URI_BASELINE'):
+        DOC_URI_BASELINE.write_text(json.dumps({'count': count}) + '\n', encoding='utf-8')
+    baseline = json.loads(DOC_URI_BASELINE.read_text(encoding='utf-8'))['count']
+    assert count <= baseline, f'{count} documented commands teach a retiring URI request, baseline {baseline}'

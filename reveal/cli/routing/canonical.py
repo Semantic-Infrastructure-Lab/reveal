@@ -34,8 +34,20 @@ def canonical_controls(parser: Any, adapter: Any, params: Mapping[str, Any]) -> 
         keyword = own[2:].replace('-', '_') if own else None
         if keyword not in options:
             continue
-        controls[keyword] = spec.validate(params[spec.name])
+        controls[keyword] = _flag_value(spec, params[spec.name])
     return controls
+
+
+def _flag_value(spec: Any, raw: Any) -> Any:
+    """One bound control as its flag takes it: a URI-spelled value decoded as the binder decodes it, and a comma-separated
+    list (``?columns=a,b``) as the one comma-joined value its flag reads (``--columns a,b``), unless the flag repeats or takes
+    several words."""
+    from ...utils.query_binding import _decode_value
+    value = spec.validate(_decode_value(spec, raw))
+    one_word = spec.cli_action != 'append' and spec.cli.nargs != '+'
+    if isinstance(value, (list, tuple)) and one_word:
+        return ','.join(str(item) for item in value)
+    return value
 
 
 def _cli_words(words: List[str]) -> List[str]:
@@ -94,6 +106,28 @@ def render_request(form: str, noun: str, target: Optional[str], params: Mapping[
     if form == 'python':
         return python_call(noun, target, controls)
     argv = cli_argv(noun, target, typed_words(parser, adapter, controls))
+    if form == 'mcp':
+        return f'reveal_run({json.dumps(argv)})'
+    return 'reveal ' + shlex.join(argv)
+
+
+def render_uri_request(form: str, scheme: str, resource: str, params: Mapping[str, Any]) -> str:
+    """What a URI request is a retiring spelling of, in one transport's form (BACK-2716 step 3). An analysis-only
+    scheme names a path and selects an analysis: ``reveal NOUN TARGET --flags``. A resource keeps its address and takes
+    the flags: ``reveal git://app.py@main --limit 5``; on MCP that is ``reveal_run(["git://app.py@main", ...])`` and in
+    Python ``api.query("git://app.py@main", limit=5)``."""
+    from ...adapters.base import get_adapter_class
+    if getattr(get_adapter_class(scheme), 'ANALYSIS_ONLY', False):
+        return render_request(form, scheme, resource or None, params)
+    adapter_name, adapter = _noun_adapter(scheme)
+    from .declared import create_declared_parser
+    parser = create_declared_parser(adapter_name)
+    controls = canonical_controls(parser, adapter, params)
+    uri = f'{scheme}://{resource}'
+    if form == 'python':
+        call = python_call(scheme, None, controls)
+        return call.replace(f'api.query({json.dumps(scheme)}', f'api.query({json.dumps(uri)}', 1)
+    argv = [*_target_words(uri, _cli_words(typed_words(parser, adapter, controls)))]
     if form == 'mcp':
         return f'reveal_run({json.dumps(argv)})'
     return 'reveal ' + shlex.join(argv)

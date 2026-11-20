@@ -625,6 +625,17 @@ def _walk_scope(adapter, path, args):
     from ...utils.exclusions import dispatch_scope
     return dispatch_scope(path, peek(args, 'exclude')) if adapter.RESOURCE_SPEC.walks else (None, [])
 
+def _note_uri_request(name: str, adapter, path: str, params, spelled_query: bool) -> None:
+    """The one note of a retiring URI request (BACK-2716 step 3), said after the request is bound so its replacement is
+    rendered from what was bound: an analysis-only scheme always, any other scheme when it spells a query string. A
+    retired twin has its own scheme row, and a resource URI with only flags is the canonical form: neither notes."""
+    from ..invocation import RETIREMENTS, request_note
+    if f'scheme:{name}' in RETIREMENTS or not (getattr(adapter, 'ANALYSIS_ONLY', False) or spelled_query):
+        return
+    from .canonical import render_uri_request
+    request_note(name, lambda form: render_uri_request(form, name, path, params))
+
+
 def _run_declared(name: str, args, path: str, source: Any, transport: str, consumed=(), *,
                   answer_consumer=None, spelled: Optional[Dict[str, str]] = None,
                   uri_query: Optional[str] = None) -> None:
@@ -638,6 +649,7 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
     from .formats import declared_output_formats, require_supported_format
     require_supported_format(args, declared_output_formats(adapter), f'{name}://')
     validate_execution_policy(args, name)
+    spelled_query = bool(uri_query) if uri_query is not None else (transport == 'uri' and bool(source))
     ledger = None
     if ledger_of(args) is None:
         ledger = FlagLedger(args)
@@ -666,6 +678,8 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
                     source = join_uri_and_flags(adapter.PARAM_SPECS, prepare_declared_params(
                         adapter.PARAM_SPECS, query_resource.partition('?')[2], 'uri'), source, spelled=spelled)
                     transport = 'uri'  # one request now, bound as the URI binds (its path's codec included)
+                if transport == 'uri':
+                    _note_uri_request(name, adapter, path, source, spelled_query)
             except ValueError as exc:
                 consume(_invalid_prepared_answer(adapter, name, path, query_resource, str(exc), args))
                 return
