@@ -60,6 +60,16 @@ class ConfigLoadError(RuntimeError):
     cannot be complete, exit 3 (COMMAND_MODEL "Configuration failures", BACK-2677)."""
 
 
+class AnalysisFailedError(RuntimeError):
+    """A required analysis or output failed (the CLI's exit 3, D6) and nothing raised a cause of its own, for a caller
+    that receives answers instead of an exit code (the Python API's noun form, BACK-2717). ``result`` is the answer
+    the CLI prints with that exit, so what was established stays readable; it is never a result to trust as complete."""
+
+    def __init__(self, message: str, result: Optional[Dict[str, Any]] = None):
+        super().__init__(message)
+        self.result = result
+
+
 class TestLayoutValidationError(RequestValidationError):
     """A selected test/support declaration or unsupported adoption is invalid."""
 

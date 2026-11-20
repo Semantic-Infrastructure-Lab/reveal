@@ -16,8 +16,11 @@ Usage::
     if func:
         print(func["content"])
 
-    # Query via URI scheme
-    result = query("ast://myproject/?show=classes")
+    # Ask a noun, as `reveal calls myproject --callers main` does
+    result = query("calls", "myproject", callers="main")
+
+    # A resource is named by its URI and takes the same keywords
+    history = query("git://myfile.py", limit=5)
 
     # Check code quality — returns list of Detection objects
     findings = check("myfile.py", select=["C", "M"])
@@ -175,24 +178,44 @@ def _noted_answer(scheme: str, uri: str, overrides: Dict[str, Any], answer):
         return attach_invocation_warnings(answer())
 
 
+def _query_noun(noun: str, target: Optional[str], controls: Dict[str, Any]) -> Dict[str, Any]:
+    """The noun form, in one host request and invocation log as the URI form (and an MCP tool call) is."""
+    from .cli.routing.typed import answer_typed_request
+    from .utils.invocation_log import log_scope
+    from .utils.request_cache import host_request
+    with host_request(), log_scope(to_stderr=False):
+        return answer_typed_request(noun, target, controls)
+
+
 def query(
     uri: str,
     element_name: Optional[str] = None,
     **kwargs: Any,
 ) -> Dict[str, Any]:
-    """Query a resource via a reveal URI scheme.
+    """Ask a noun about a target, or query a resource by its URI; returns the answer as a dict.
 
-    Equivalent to ``reveal ast://myproject/?show=classes`` at the CLI, but
-    returns the structured dict instead of rendering it.
+    ``query("calls", "src", callers="main")`` is ``reveal calls src --callers main --format json``: the same
+    answer, run through the CLI's own dispatch, returned instead of printed (BACK-2717). Each keyword is the
+    noun's long flag with ``-`` written as ``_`` (``test_framework=``; ``--from`` is ``**{"from": NAME}``); a
+    flag that takes no value takes True. ``query("git://app.py@main", limit=5)`` names a resource by its URI.
 
     Args:
-        uri: Full URI of the form ``scheme://resource[?params]``.
-            Examples: ``"ast://mydir/"``, ``"claude://sessions/"``,
-            ``"nginx:///etc/nginx/nginx.conf"``.
-        element_name: Optional element for an adapter whose ``get_element`` reads one (plugins and undeclared
-            adapters). A declared noun reads no positional element: it is refused as an invalid request
-            (``RequestValidationError``) naming the URI form, as at the CLI; name the element in the URI instead.
-        **kwargs: Typed query controls. On a declared noun they bind as its URI query keys do and meet
+        uri: A noun (``"calls"``, ``"imports"``, ``"ast"``, ``"metrics"``, ``"overview"``...), or the URI of a
+            resource, ``scheme://resource``: ``"git://app.py@main"``, ``"claude://session/NAME"``,
+            ``"sqlite://app.db/users"``, ``"json://data.json/key"``, ``"help://quick"``. A URI query
+            (``?callers=main``) is the older spelling of the noun's keywords.
+        element_name: With a noun, its target, the CLI's positional (``"src"``; omitted, the noun's default,
+            usually ``"."``). With a URI, an element for an adapter whose ``get_element`` reads one (plugins and
+            undeclared adapters); a declared noun reads no element and refuses it as an invalid request
+            (``RequestValidationError``) naming the URI form, as at the CLI.
+        **kwargs: With a noun, its flags as keywords (above): an unknown keyword raises
+            ``UnsupportedOverrideError``; an invalid request (a value outside its choices, a control the
+            answer does not read, a target that matches nothing, a path that does not exist) raises
+            ``RequestValidationError`` with the CLI's message, where the CLI exits 2; a failed analysis raises
+            its cause, or ``AnalysisFailedError`` (its ``result`` is the CLI's document), where the CLI exits 3.
+            An incomplete answer and findings are returned and say so in themselves, as the CLI's JSON does.
+            Output options (``format``, ``output``, ``fail_on``) are not keywords: the answer itself is returned.
+            With a URI: typed query controls. On a declared noun they bind as its URI query keys do and meet
             the same checks before analysis: an unknown keyword raises
             ``UnsupportedOverrideError``, and one the selected answer does not read raises
             ``UnreadControlError`` (OUTPUT_CONTRACT, "Ignored inputs"). Plugins and undeclared adapters
@@ -216,28 +239,29 @@ def query(
     reused. Calls are serialized across threads.
 
     Returns:
-        Result dict from the adapter.
+        The answer dict; for a noun, the CLI's JSON document for the same request.
 
     Raises:
-        ValueError: If the URI is malformed or the scheme is not supported.
+        ValueError: If the first argument is neither a noun nor a URI, or the URI's scheme is not supported.
         ImportError: If an optional dependency required by the adapter is missing.
         RequestValidationError: A ValueError for a request a declared noun cannot answer as written: an
-            element, an unread control (``UnreadControlError``) or an unsupported keyword.
+            element, an unread control (``UnreadControlError``) or an unsupported keyword; with a noun, every
+            request the CLI exits 2 on.
         TypeError: If a declared noun gets an unsupported keyword (``UnsupportedOverrideError`` is both).
+        AnalysisFailedError: With a noun, a failed analysis that raised no cause of its own (the CLI's exit 3).
 
     Example::
 
-        sessions = query("claude://sessions/", element_name=None)
-        nginx_result = query("nginx:///etc/nginx/nginx.conf")
+        callers = query("calls", "src", callers="process_order", depth=2)
+        biggest = query("ast", "src", kind="function", sort="-lines", limit=5)
+        sessions = query("claude", "sessions")
+        history = query("git://app.py", limit=5)
     """
     from . import adapters as _adapters  # noqa: F401 — triggers adapter registrations
     from .adapters.base import _default_from_uri, get_adapter_class
 
     if "://" not in uri:
-        raise ValueError(
-            f"Invalid URI (missing scheme): {uri!r}\n"
-            "Expected format: scheme://resource  (e.g. ast://mydir/)"
-        )
+        return _query_noun(uri, element_name, kwargs)
 
     from .utils.gitignore import gitignore_scope, split_respect_gitignore
 

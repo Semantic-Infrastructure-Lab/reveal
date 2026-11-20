@@ -52,6 +52,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Added
 
+- `reveal.api.query(NOUN, TARGET, **keywords)` asks a noun as its subcommand does: `api.query('calls', 'src', callers='main')` returns the JSON document `reveal calls src --callers main --format json` prints, each keyword the noun's flag with `-` as `_`. A request the subcommand exits 2 on raises `RequestValidationError` with its message (a missing path and a target that matches nothing included, which the URI form returned as answers), and a failed analysis raises its cause or the new `reveal.errors.AnalysisFailedError`. Resource URIs answer as before; a word that is neither a noun nor a URI still raises `ValueError`, now naming the nouns instead of "missing scheme" (BACK-2717).
+
 - MCP tool `reveal_run(args)`: any reveal command line, one list item per word, answered as the CLI answers it (`reveal_run(["calls", "src", "--callers", "main", "--format", "json"])` returns the CLI's JSON exactly). An invalid request (CLI exit 2) is a tool error naming what the noun accepts; findings and a self-described incomplete answer are results. It refuses `--stdin`, `--copy`, `--output FORMAT=PATH` and the `dev`/`offline` commands. `reveal_query(uri)` keeps working and retires at 1.0 with query-string options (BACK-2710).
 
 ### Fixed

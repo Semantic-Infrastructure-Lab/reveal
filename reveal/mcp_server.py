@@ -242,8 +242,9 @@ def _capture(fn, *args, **kwargs) -> _Captured:
 def _raised_failure(captured: _Captured) -> str | None:
     """The tool failure for a run that raised: a failed navigation source, or an exception (public when it is an
     invalid request or an unusable input the caller can act on, masked otherwise)."""
+    from .utils.results import execution_failed
     source_failure, exc = captured.source_failure, captured.exception
-    if source_failure is not None and _execution_failed(source_failure.execution_facts):
+    if source_failure is not None and execution_failed(source_failure.execution_facts):
         return _tool_failure(source_failure.public_diagnostic)
     if exc is None:
         return None
@@ -297,22 +298,15 @@ def _trace_absence_compatibility(answer) -> bool:
             and answer.execution_facts.failures == frozenset({FailureCause.INVALID_REQUEST}))
 
 
-def _execution_failed(facts) -> bool:
-    """The existing fatal execution-facts decision shared by authored consumers."""
-    from .utils.results import AnalysisCompleteness, FailureCause
-    return (facts.completeness in (AnalysisCompleteness.FAILED, AnalysisCompleteness.NOT_STARTED)
-            or FailureCause.OUTPUT in facts.failures or FailureCause.INVALID_REQUEST in facts.failures)
-
-
 def _declared_failure(answer) -> str | None:
     """Consume owner facts and diagnostic origin, never rendered result text."""
-    from .utils.results import FailureCause
+    from .utils.results import FailureCause, execution_failed
     facts = answer.execution_facts
     if facts is None:
         return None
     if FailureCause.OUTPUT not in facts.failures and _trace_absence_compatibility(answer):
         return None
-    if not _execution_failed(facts):
+    if not execution_failed(facts):
         return None
     if answer.exception is not None:
         exc = answer.exception

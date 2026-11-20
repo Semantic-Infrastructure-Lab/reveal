@@ -445,6 +445,10 @@ document, on the subcommand and the URI form alike and for the argument parser's
 A malformed `--output` spec writes no file. A file path or a scheme without declared parameters keeps
 the parser's text usage error. `reveal.api.query` raises the same message as `UnsupportedOverrideError`
 for an unknown typed keyword ("Declared parameter bindings") and as `UnreadControlError` for an unread one.
+Its noun form, `reveal.api.query('calls', 'src', callers='main')`, runs the subcommand's own dispatch: every
+request the subcommand exits 2 on raises `RequestValidationError` with the message above (an unknown keyword
+`UnsupportedOverrideError`), a failed analysis raises its cause or `reveal.errors.AnalysisFailedError` (exit 3,
+its `result` the JSON document), and every other answer is returned as the JSON document (BACK-2717).
 
 ### Retired spellings (`retired_spelling`)
 

@@ -117,7 +117,8 @@ class TestQuery:
         assert isinstance(result, dict)
 
     def test_invalid_uri_raises(self):
-        with pytest.raises(ValueError, match="missing scheme"):
+        # A word without '://' is read as a noun (BACK-2717); one that is not a noun names both forms.
+        with pytest.raises(ValueError, match="neither a noun nor a URI"):
             query("not-a-uri")
 
     def test_unsupported_scheme_raises(self):

@@ -238,6 +238,14 @@ def requested_fail_on(args: Any) -> Literal['none', 'findings']:
     return getattr(args, 'fail_on', None) or 'findings'
 
 
+def execution_failed(facts: ExecutionFacts) -> bool:
+    """Whether a host that returns answers instead of exiting (MCP, the Python API) reports a failure, not a result:
+    an invalid request, a failed or unstarted analysis, or a failed output. An incomplete answer and findings are
+    results that say so in themselves (COMMAND_MODEL "Transports")."""
+    return (facts.completeness in (AnalysisCompleteness.FAILED, AnalysisCompleteness.NOT_STARTED)
+            or FailureCause.OUTPUT in facts.failures or FailureCause.INVALID_REQUEST in facts.failures)
+
+
 def execution_exit_code(facts: ExecutionFacts, *, fail_on: Literal['none', 'findings'] = 'none',
                         legacy_scan_override: bool = False) -> int:
     """Map opt-in D6 evidence; existing routers and outcome_of retain their policy.

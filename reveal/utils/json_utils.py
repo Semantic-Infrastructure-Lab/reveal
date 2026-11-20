@@ -205,4 +205,11 @@ def print_json_result(result, file=None) -> None:
     When provenance is enabled (see set_provenance_enabled), attaches an
     'execution' block to dict results that don't already carry one.
     """
-    print(safe_json_dumps(attach_provenance(attach_invocation_warnings(attach_input_warnings(result)))), file=file or sys.stdout)
+    print(safe_json_dumps(attach_provenance(json_answer(result))), file=file or sys.stdout)
+
+
+def json_answer(result):
+    """*result* as the JSON document carries it: the request's unused-input warnings and what the invocation recorded
+    (retirement notes, config warnings). ``print_json_result`` prints it; the Python API's noun form returns it, so
+    both carry the same answer (BACK-2717)."""
+    return attach_invocation_warnings(attach_input_warnings(result))

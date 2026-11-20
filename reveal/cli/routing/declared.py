@@ -141,17 +141,25 @@ class JsonUsageParser(RevealArgumentParser):
 class _DeclaredParser(JsonUsageParser):
     """A noun's parser: an unknown flag gets rule 3's teaching (the supported controls and fields, exit 2), the
     same message the URI gives, not argparse's bare usage error (COMMAND_MODEL "Unsupported controls"); in JSON
-    mode every usage error answers with the invalid-request document (``JsonUsageParser``)."""
+    mode every usage error answers with the invalid-request document (``JsonUsageParser``). *raise_usage_errors*: the
+    Python API's noun form (BACK-2717) reads its request with this parser and gets the same message as a
+    ``RequestValidationError``; nothing prints and nothing exits."""
     declarations: tuple = ()
     noun: str = ''
     uri_query: Optional[str] = None  # the URI's query when this parser reads a URI request's flags (BACK-2673)
+    raise_usage_errors: bool = False
 
     def error(self, message: str):
         self.stop_tolerant_reread(message)
         flags = [token for token in message.partition(':')[2].split() if token.startswith('-')]
-        if message.startswith('unrecognized arguments:') and flags:
+        teaching = message.startswith('unrecognized arguments:') and bool(flags)
+        if teaching:
             from ...utils.query_binding import unsupported_controls_message
             message = unsupported_controls_message(self.declarations, flags)
+        if self.raise_usage_errors:
+            from ...errors import RequestValidationError
+            raise RequestValidationError(message)
+        if teaching:
             self.answer_in_json(message)
             self._print_message(f'{self.prog}: error: {message}\n', sys.stderr)
             self.exit(2)
