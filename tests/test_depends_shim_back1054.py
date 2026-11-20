@@ -19,6 +19,7 @@ from reveal.analyzers.imports import service as import_service
 from reveal.analyzers.imports import extraction as import_extraction
 
 from conftest import _run_reveal_direct, without_request_note_lines
+from reveal.cli.invocation import RETIREMENTS
 from reveal.adapters.depends import DependsAdapter
 from reveal.adapters.imports import ImportsAdapter
 from reveal.analyzers.imports.resolution import ProjectResolution
@@ -27,7 +28,7 @@ from reveal.utils import path_utils
 
 pytestmark = [pytest.mark.component]
 
-NOTE = 'note: depends:// is deprecated; use reveal imports <path> --importers'
+NOTE = f"note: {RETIREMENTS['scheme:depends'].text}"
 
 
 def _write(root: Path, files: dict) -> Path:

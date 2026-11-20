@@ -4,6 +4,7 @@ import json
 import pytest
 
 from reveal.adapters.git.params import MERGES
+from reveal.cli.invocation import RETIREMENTS
 from reveal.utils.query_binding import switch_value
 
 
@@ -91,7 +92,7 @@ def test_each_switch_takes_on_and_off_and_answers_as_the_old_flag(project, monke
 def test_the_old_no_flag_answers_with_its_replaced_by_note(project, monkeypatch, case):
     switch = SWITCH_OF[case]
     old = _run(case, f'--no-{switch}', monkeypatch=monkeypatch)
-    assert f'note: --no-{switch} is deprecated; use --{switch} off.' in _notes(old), old[2]
+    assert f'note: {RETIREMENTS[f"flag:--no-{switch}"].text}' in _notes(old), old[2]
 
 
 @pytest.mark.parametrize('case', ['group', 'snippets'])
@@ -181,7 +182,7 @@ def test_a_switch_typed_off_is_a_given_flag_beside_a_second_path(project, typed)
     from conftest import _run_reveal_direct
     result = _run_reveal_direct('a.py', 'long.py', *typed)
     assert result.returncode == 2 and 'long.py' in result.stderr and '--group' in result.stderr, result.stderr
-    assert ('note: --no-group is deprecated; use --group off.' in result.stderr) == (typed == ['--no-group'])
+    assert (f'note: {RETIREMENTS["flag:--no-group"].text}' in result.stderr) == (typed == ['--no-group'])
 
 
 @pytest.mark.parametrize('view', [[], ['f'], ['--metadata'], ['--typed']], ids=['structure', 'element', 'metadata', 'typed'])
@@ -215,7 +216,7 @@ def _walk(*extra):
 
 def test_no_gitignore_notes_its_replacement_and_conflicts_with_an_opposite_switch(project):
     old = _walk('--no-gitignore')
-    assert 'note: --no-gitignore is deprecated; use --respect-gitignore off.' in _notes(old), old[2]
+    assert f'note: {RETIREMENTS["flag:--no-gitignore"].text}' in _notes(old), old[2]
     rc, _out, err = _walk('--no-gitignore', '--respect-gitignore', 'on')
     assert rc == 2 and 'conflicting spellings: --no-gitignore, --respect-gitignore' in err, (rc, err)
     both = _walk('--no-gitignore', '--respect-gitignore', 'off')

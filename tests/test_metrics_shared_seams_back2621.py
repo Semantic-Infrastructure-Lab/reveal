@@ -80,8 +80,9 @@ def test_api_notes_a_retired_key_whatever_the_adapter_declares(legacy_row, monke
     """BACK-2654 rule 11: RETIREMENTS is the one source of notes, as on the CLI (api.query used to note only
     declared aliases and ParamSpec.retired names)."""
     from reveal.cli import invocation
-    monkeypatch.setitem(invocation.RETIREMENTS, 'param:stub.other', invocation.Retirement('stub ?other', '?limit'))
-    assert _notes(_api_answer('stub://p?other=1&limit=2', {})) == ['stub ?other is deprecated; use ?limit.']
+    row = invocation.Retirement('stub ?other', '?limit')
+    monkeypatch.setitem(invocation.RETIREMENTS, 'param:stub.other', row)
+    assert _notes(_api_answer('stub://p?other=1&limit=2', {})) == [row.text]
 
 
 def test_api_keeps_no_note_for_a_spelling_without_a_row(legacy_row):

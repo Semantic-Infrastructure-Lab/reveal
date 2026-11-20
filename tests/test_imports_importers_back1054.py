@@ -360,7 +360,8 @@ def test_reveal_imports_subcommand_answers_like_the_uri(fx, monkeypatch):
     typed = _run_reveal_direct('imports', 'pkg/core.py', '--importers', '--tests', 'exclude', '--format', 'json')
     uri = _run_reveal_direct('imports://pkg/core.py?importers&tests=exclude', '--format', 'json')
     assert typed.returncode == uri.returncode == 0
-    strip = lambda out: {k: v for k, v in json.loads(out).items() if k not in ('meta', 'provenance')}
+    from conftest import without_request_notes  # the URI's own note, which imports' `metadata` alias carries too (BACK-2716)
+    strip = lambda out: {k: v for k, v in without_request_notes(json.loads(out)).items() if k not in ('meta', 'provenance')}
     assert strip(typed.stdout) == strip(uri.stdout)
     assert json.loads(typed.stdout)['count'] == 4
 

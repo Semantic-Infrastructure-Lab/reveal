@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from conftest import _run_reveal_direct as run
+from reveal.cli.invocation import RETIREMENTS
 from test_conformance_matrix import EXPECTED, EXTENSIONS
 
 pytestmark = pytest.mark.conformance
@@ -140,13 +141,13 @@ def test_alias_text_notes_once_repeats_per_invocation_and_cut_stage_is_two(sourc
         legacy = run(source, 'extract', '--' + old, '--' + old)
         assert legacy.returncode == current.returncode == 0
         assert legacy.stdout == current.stdout
-        assert legacy.stderr.count('is deprecated; use') == 1
+        assert legacy.stderr.count('is deprecated') == 1
     key = 'flag:--' + old
     entry = RETIREMENTS[key]
     monkeypatch.setitem(RETIREMENTS, key, Retirement(entry.old, entry.replacement, 'error'))
     rejected = run(source, 'extract', '--' + old, '--format', 'json')
     assert rejected.returncode == 2 and rejected.stdout == ''
-    assert entry.text in rejected.stderr
+    assert RETIREMENTS[key].text in rejected.stderr  # the patched, error-stage row's wording
     assert run(source, 'extract', '--' + NAMES[old]).returncode == 0
 
 
@@ -178,7 +179,7 @@ def test_actual_sdk_nav_names_alias_notes_and_request_isolation(source, tmp_path
                 legacy = await session.call_tool('reveal_nav', {'path': source, 'element': 'extract', 'flag': old})
                 assert not legacy.is_error
                 assert _text(legacy).startswith(_text(canonical).rstrip('\n'))
-                assert _text(legacy).count(f'--{old} is deprecated; use --{new}.') == 1
+                assert _text(legacy).count(RETIREMENTS[f'flag:--{old}'].text) == 1
         ranged = await session.call_tool('reveal_nav', {
             'path': source, 'element': 'extract', 'flag': 'callsites', 'flag_value': '3-3'})
         assert not ranged.is_error and 'transform' in _text(ranged) and 'len(' not in _text(ranged)
@@ -204,7 +205,7 @@ mcp_server.main()
 
     async def scenario(session):
         old = await session.call_tool('reveal_nav', {'path': source, 'element': 'extract', 'flag': 'deps'})
-        assert old.is_error and '--deps is deprecated; use --inputs.' in _text(old)
+        assert old.is_error and '--deps is deprecated; use --inputs.' in _text(old)  # the server runs this row at the error stage
         current = await session.call_tool('reveal_nav', {'path': source, 'element': 'extract', 'flag': 'inputs'})
         assert not current.is_error and 'deprecated' not in _text(current)
 

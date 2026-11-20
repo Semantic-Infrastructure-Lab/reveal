@@ -85,7 +85,7 @@ def test_a_slicing_flag_answers_alike_on_both_spellings_with_its_note(rich, noun
     assert on_sub.rc == 0, on_sub.brief()
     doc = json.loads(after_uri.out)
     assert _at(doc, field) == cut(_at(base, field))
-    notes = [message for message in _retired(doc) if message.startswith(f'{noun} {flag} is deprecated; use ')]
+    notes = [message for message in _retired(doc) if message.startswith(f'{noun} {flag} is deprecated')]
     assert len(notes) == 1, _retired(doc)
     assert C._answer(on_sub, noun) == C._answer(after_uri, noun)
     assert notes == [m for m in _retired(json.loads(on_sub.out)) if m.startswith(f'{noun} {flag} ')]
@@ -97,7 +97,7 @@ def test_the_text_answer_prints_the_note_once_on_both_spellings(rich, noun, uri,
     argv, _ = SLICE[flag]
     for run in (C._run(uri, *argv), C._run(*sub, *argv)):
         assert run.rc == 0, run.brief()
-        assert run.err.count(f'note: {noun} {flag} is deprecated; use ') == 1, run.err
+        assert run.err.count(f'note: {noun} {flag} is deprecated') == 1, run.err
 
 
 @pytest.mark.parametrize('noun,uri,sub,flag', _unread_cases())

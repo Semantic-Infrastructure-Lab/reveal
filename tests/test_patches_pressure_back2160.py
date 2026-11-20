@@ -10,6 +10,7 @@ import json
 import pytest
 
 from conftest import _run_reveal_direct as run
+from reveal.cli.invocation import RETIREMENTS
 
 PATCH = "from unittest import mock\n\n\ndef test_x():\n    with mock.patch('pkg.mod.target'):\n        pass\n"
 BOUNDARY = (
@@ -20,7 +21,7 @@ BOUNDARY = (
     "    open('/tmp/x', 'w').write('x')\n"
     "    return 1\n"
 )
-NOTE = 'note: testability:// is deprecated; use reveal patches <path> --view pressure (the same answer).'
+NOTE = f"note: {RETIREMENTS['scheme:testability'].text}"
 
 
 def _w(path, text):

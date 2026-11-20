@@ -358,9 +358,11 @@ def _answer(run, noun):
         doc = json.loads(run.out)
     except ValueError:
         return run.rc, run.out
-    meta = doc.get('meta') if isinstance(doc, dict) else None
-    if isinstance(meta, dict) and 'warnings' in meta:
-        names = _spellings(noun)
+    names = _spellings(noun)
+    for key in ('meta', 'metadata'):  # `metadata` is meta's additive-stage alias on an imports answer: the same warnings
+        meta = doc.get(key) if isinstance(doc, dict) else None
+        if not (isinstance(meta, dict) and 'warnings' in meta):
+            continue
         warnings = []
         for warning in meta['warnings']:
             if warning.get('code') == 'retired_spelling':
@@ -372,7 +374,7 @@ def _answer(run, noun):
                 warnings.append(warning)
         meta['warnings'] = warnings
         if not warnings and set(meta) == {'warnings'}:  # an answer with no meta of its own gained one only to carry a note
-            del doc['meta']
+            del doc[key]
     return run.rc, doc
 
 

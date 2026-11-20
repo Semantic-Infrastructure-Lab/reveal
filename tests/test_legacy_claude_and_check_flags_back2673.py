@@ -8,6 +8,7 @@ import json
 import pytest
 
 import test_vocabulary_conformance_back2654 as C
+from reveal.cli.invocation import Retirement
 from legacy_modifier_fixture import rich, workspace  # noqa: F401  (fixtures)
 
 # (URI, subcommand argv, flags typed after either): Claude answers that read the legacy filter
@@ -48,7 +49,7 @@ def test_claude_filters_answer_alike_on_both_spellings_with_their_notes(rich, ur
     assert after_uri.rc == 0, after_uri.brief()
     assert on_sub.rc == 0, on_sub.brief()
     assert C._answer(on_sub, 'claude') == C._answer(after_uri, 'claude')
-    wanted = sorted(f'claude {flag} is deprecated; use ' for flag in _flags(typed))
+    wanted = sorted(f'claude {flag} is deprecated' for flag in _flags(typed))  # the stage clause after it is the row's
     for run in (after_uri, on_sub):
         assert [note[:len(prefix)] for note, prefix in zip(_notes(run, 'claude'), wanted)] == wanted, _notes(run, 'claude')
 
@@ -73,8 +74,8 @@ def test_check_answers_as_without_it_with_its_note(rich, noun, uri, sub, flag): 
     for run in (C._run(uri, flag, '--format', 'json'), C._run(*sub, flag, '--format', 'json')):
         assert run.rc == 0, run.brief()
         assert C._answer(run, noun) == C._answer(plain, noun)
-        assert _notes(run, noun) == [f'{noun} {flag} is deprecated; use reveal check <path> to check files '
-                                     f'(the flag never changed a {noun}:// answer).']
+        assert _notes(run, noun) == [Retirement(f'{noun} {flag}', f'reveal check <path> to check files '
+                                                f'(the flag never changed a {noun}:// answer)').text]
         assert not [w for w in json.loads(run.out)['meta'].get('warnings', []) if w.get('code') == 'unused_flag']
 
 

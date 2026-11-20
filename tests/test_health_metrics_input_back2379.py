@@ -25,7 +25,7 @@ def test_clean_metrics_health_stays_complete(tmp_path, scheme, format):
     else:
         assert 'healthy' in response.stdout
     # Text prints the note once; a JSON answer carries it instead (BACK-2659).
-    assert response.stderr.count('note: stats:// is deprecated;') == (scheme == 'stats' and format == 'text')
+    assert response.stderr.count('note: stats:// is deprecated') == (scheme == 'stats' and format == 'text')
 
 
 @pytest.mark.parametrize('scheme', ['metrics', 'stats'])

@@ -322,6 +322,8 @@ def test_declared_native_cap_accepts_limit(db, noun, mode):
         assert len(notes) == 1
         assert notes[0]['replacement'] == '--limit N; 0 is uncapped'
         legacy['meta']['warnings'].remove(notes[0])
+        if 'metadata' in legacy:  # imports' metadata is meta's alias (BACK-2601): the note is in it too
+            legacy['metadata']['warnings'].remove(notes[0])
     assert legacy == canonical
     assert 'has no effect' not in results[1].stderr
     full = _cli(noun, '.', *mode, '--top', '4', '--format', 'json', cwd=db)

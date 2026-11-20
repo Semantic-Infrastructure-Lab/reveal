@@ -46,8 +46,9 @@ def commit_sample(path):
 
 
 def _retire(monkeypatch, key, old, replacement='NEW SPELLING', stage='note'):
-    monkeypatch.setitem(RETIREMENTS, key, Retirement(old, replacement, stage, standalone=True))  # the per-key path (a covered row is the request note's)
-    return f'{old} is deprecated; use {replacement}.'
+    row = Retirement(old, replacement, stage, standalone=True)  # the per-key path (a covered row is the request note's)
+    monkeypatch.setitem(RETIREMENTS, key, row)
+    return row.text  # the row's own wording: its stage clause is the row's
 
 
 def _notes(stderr, text):
@@ -382,7 +383,8 @@ def test_every_production_row_is_exercised_and_prints_once(source):
 
 
 def test_a_removed_row_says_removed_and_is_an_error_from_the_start():
-    assert Retirement('old://', 'new://').text == 'old:// is deprecated; use new://.'
+    # A note-stage row says how long it works (agent help: old spellings still work until 1.0, BACK-2716).
+    assert Retirement('old://', 'new://').text == 'old:// is deprecated and works until 1.0; use new://.'
     # The cut wording of a renamed spelling does not change; only a removed one says so.
     assert Retirement('old://', 'new://', 'error').text == 'old:// is deprecated; use new://.'
     assert Retirement('old://', 'new://', 'error', removed=True).text == 'old:// was removed; use new://.'
@@ -394,9 +396,9 @@ def test_a_removed_row_says_removed_and_is_an_error_from_the_start():
 
 
 def test_the_moved_notes_keep_their_wording():
-    assert RETIREMENTS['flag:--search'].text == '--search is deprecated; use --name PATTERN (regex).'
+    assert RETIREMENTS['flag:--search'].text == '--search is deprecated and works until 1.0; use --name PATTERN (regex).'
     assert RETIREMENTS['flag:--check'].text == (
-        'file --check/--lint is deprecated; use reveal check <path>.')
+        'file --check/--lint is deprecated and works until 1.0; use reveal check <path>.')
 
 
 @pytest.mark.parametrize('key', ['subcommand:trace', 'scheme:trace', 'param:calls.root',

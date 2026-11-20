@@ -185,7 +185,7 @@ def test_at_the_cut_each_spelling_exits_2_with_its_text(monkeypatch, project, ca
     monkeypatch.setitem(RETIREMENTS, key, Retirement(entry.old, entry.replacement, 'error'))
     result = run(*argv(project), '--format', 'json')
     assert result.returncode == 2
-    assert f'error: {entry.text}' in result.stderr
+    assert f'error: {RETIREMENTS[key].text}' in result.stderr  # the patched, error-stage row's wording
     assert result.stdout == ''
 
 

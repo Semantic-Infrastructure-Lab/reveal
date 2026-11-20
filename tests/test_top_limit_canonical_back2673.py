@@ -7,6 +7,7 @@ import json
 import pytest
 
 import test_vocabulary_conformance_back2654 as C
+from reveal.cli.invocation import RETIREMENTS
 from legacy_modifier_fixture import rich, workspace  # noqa: F401  (fixtures)
 
 # noun -> (subcommand flags, URI query) selecting an answer with several rows in each list
@@ -59,8 +60,7 @@ def test_top_is_the_noted_legacy_word_of_limit(rich, noun):  # noqa: F811
         run, doc = _json(*argv)
         assert run.rc == 0, run.brief()
         assert _lists(doc, noun) == _lists(canonical, noun)
-        assert _top_notes(doc) == [f'{noun} ?top=N (--top N) is deprecated; use --limit N, which caps each '
-                                   f'list; 0 is uncapped.'], argv
+        assert _top_notes(doc) == [RETIREMENTS[f'param:{noun}.top'].text], argv
         assert C._answer(run, noun) == C._answer(canonical_run, noun)
 
 

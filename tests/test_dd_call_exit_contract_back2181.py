@@ -21,6 +21,7 @@ from pathlib import Path
 import pytest
 
 from conftest import _run_reveal_direct
+from reveal.cli.invocation import RETIREMENTS
 
 pytestmark = [pytest.mark.component]
 
@@ -120,7 +121,7 @@ def test_depends_exits_0_on_complete_input(clean):
 # text, with its old JSON shape and the one retired-spelling note.
 
 DEPENDENT_KEYS = {'file', 'line', 'module', 'names', 'type', 'is_relative', 'alias'}
-NOTE = 'note: depends:// is deprecated; use reveal imports <path> --importers'
+NOTE = f"note: {RETIREMENTS['scheme:depends'].text}"
 
 
 def _depends_json(target: Path, module: str = ''):
@@ -181,6 +182,6 @@ def test_mcp_depends_answers_with_the_note(partial):
     from reveal.mcp_server import reveal_query
     out = reveal_query(f'depends://{partial}/src/a.js')
     assert 'src/bad.js' in out and 'parsed with errors' in out
-    assert out.count('depends:// is deprecated; use reveal imports <path> --importers') == 1
+    assert out.count(RETIREMENTS['scheme:depends'].text) == 1
     doc = json.loads(reveal_query(f'depends://{partial}/src/a.js', provenance=True))
     assert doc['type'] == 'module_dependents' and 'retired_spelling' in _warning_types(doc)

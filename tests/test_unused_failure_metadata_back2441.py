@@ -4,6 +4,7 @@ import json
 import pytest
 
 from conftest import _run_reveal_direct as run
+from conftest import without_request_notes
 
 pytestmark = pytest.mark.component
 
@@ -201,7 +202,7 @@ def test_api_and_cli_use_the_same_unprojected_completeness_facts(project, inside
     assert facts.findings
     response = query(project)
     cli = json.loads(response.stdout)
-    assert cli['metadata'] == body['metadata']
+    assert without_request_notes(cli)['metadata'] == without_request_notes(body)['metadata']  # each in its own form (BACK-2716)
     assert cli['unused'] == body['unused']
 
 

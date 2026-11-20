@@ -21,7 +21,7 @@ import pytest
 from conftest import _run_reveal_direct as run
 from reveal.adapters.stats.issue_count import COUNTING_RULE, COUNT_FIELD, issue_count_line
 from reveal.rules import RuleRegistry
-from reveal.cli.invocation import RETIREMENTS
+from reveal.cli.invocation import RETIREMENTS, Retirement
 
 pytestmark = pytest.mark.component
 
@@ -212,7 +212,7 @@ def _answer(doc):
 @pytest.mark.parametrize('retired', RETIRED)
 def test_a_retired_spelling_prints_its_replacement_and_answers_like_metrics(project, retired):
     old, replacement, old_argv, new_argv = RETIRED[retired]
-    note = f'note: {old} is deprecated; use {replacement}.'
+    note = f'note: {Retirement(old, replacement).text}'
 
     as_old = run(*old_argv(project), '--format', 'json')
     as_new = run(*new_argv(project), '--format', 'json')
