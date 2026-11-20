@@ -1,7 +1,7 @@
 """Declared AST controls; expressions continue through the existing AST filter parser."""
 
 from ...utils.query_binding import boolean_value
-from ...utils.query_parser import CliBinding, LegacySpelling, ParamSpec, QueryParams, where_param
+from ...utils.query_parser import CliBinding, LegacySpelling, ParamSpec, QueryParams, where_param, legacy_slices
 from ...utils.query_control import declared_result_control as result_control
 from .queries import ALL_OP, parse_query, validate_filter_values, _condition
 
@@ -35,6 +35,9 @@ LIMIT = ParamSpec('limit', 'integer', 'Answer rows; 0 = no cap (every row, past 
 OFFSET = ParamSpec('offset', 'integer', 'Answer rows skipped after sorting', 0, int,
                    minimum=0, cli=CliBinding(('--offset',)))
 PARAM_SPECS = (WHERE, KIND, VIEW, BUILTINS, REVEAL_TYPE, SORT, LIMIT, OFFSET)
+# --head/--tail/--range slice this noun's rows today: flag-only legacy modifiers until the cut, read by the answers named
+# (BACK-2673; their notes are the flag:<noun>.<flag> RETIREMENTS rows).
+PARAM_SPECS = (*PARAM_SPECS, *legacy_slices(head=(), tail=(), range=()))
 
 
 def _and_kind(query: dict, condition: dict) -> None:

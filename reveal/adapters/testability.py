@@ -21,7 +21,7 @@ from ..errors import NotApplicableError
 from ..utils.path_utils import TestLayout, is_test_dir
 from ..rendering.adapters.testability import TestabilityRenderer
 from ..utils.query_binding import bind_declared_params, boolean_value, verbose_legacy
-from ..utils.query_parser import (CliBinding, LegacySpelling, ParamSpec, QueryParams, ResourceSpec,
+from ..utils.query_parser import (CliBinding, LegacySpelling, ParamSpec, legacy_slices, QueryParams, ResourceSpec,
                                   param_schema, peek_query_items, whole_number)
 from ..utils.results import AnalysisCompleteness, lost_evidence, result_execution_facts
 
@@ -175,7 +175,9 @@ class TestabilityAdapter(ResourceAdapter):
     # limit is the cap (COMMAND_MODEL "Caps", BACK-2673; each list capped separately): top is its legacy word, the same
     # value, and verbose lifts the group caps, the legacy word of limit=0 (rule 16 parity, BACK-2654 note #17). patches'
     # pressure view declares PRESSURE_SPECS as they are: its --limit question is BACK-2625's.
-    PARAM_SPECS = tuple(_LIMIT if spec is _PRESSURE_TOP else spec for spec in PRESSURE_SPECS)
+    # --head/--tail/--range slice both lists today: flag-only legacy modifiers until the cut (BACK-2673)
+    PARAM_SPECS = (*(_LIMIT if spec is _PRESSURE_TOP else spec for spec in PRESSURE_SPECS),
+                   *legacy_slices(head=(), tail=(), range=()))
 
     def __init__(self, resource: str, query: Optional[str] = None, *,
                  params: Optional[Dict[str, Any]] = None):

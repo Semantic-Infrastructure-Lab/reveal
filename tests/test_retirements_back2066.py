@@ -15,7 +15,7 @@ import pytest
 
 from conftest import _run_reveal_direct
 from reveal.cli import invocation
-from reveal.cli.invocation import (RETIREMENT_KEY, RETIREMENTS, STAGES, Retirement,
+from reveal.cli.invocation import (LEGACY_CLI_MODIFIERS, RETIREMENT_KEY, RETIREMENTS, STAGES, Retirement,
                                    uri_retirement_keys)
 
 SOURCE = 'def auth_gate(value):\n    return value\n'
@@ -29,6 +29,7 @@ def source(tmp_path, monkeypatch):
     monkeypatch.setattr(ClaudeAdapter, 'CONVERSATION_BASE', home / 'projects')
     path = tmp_path / 'sample.py'
     path.write_text(SOURCE, encoding='utf-8')
+    (tmp_path / 'rows.json').write_text('[{"n": 1}, {"n": 2}]', encoding='utf-8')  # JSON's legacy slice rows
     commit_sample(path)
     return path
 
@@ -196,6 +197,17 @@ def test_a_retirement_row_validates_itself():
 
 # Every production row and one command line that spells it. A row without a case fails the
 # last test, so a later phase cannot add a spelling it never exercised.
+# An answer of each noun that reads its legacy CLI modifiers, and the flags typed after it.
+_MODIFIER_REQUESTS = {
+    **{noun: (lambda noun: lambda f: [f'{noun}://{Path(f).parent}'])(noun)
+       for noun in ('ast', 'git', 'hotspots', 'markdown', 'metrics', 'pack', 'patches')},
+    'calls': lambda f: [f'calls://{Path(f).parent}?sort=-callers'],
+    'claude': lambda f: ['claude://session/my-session?view=messages'],
+    'imports': lambda f: [f'imports://{Path(f).parent}?sort=-fan-in'],
+    'json': lambda f: [f'json://{Path(f).parent / "rows.json"}'],
+    'testability': lambda f: [f'testability://{Path(f).parent}?tests={Path(f).parent}'],
+}
+_MODIFIER_ARGV = {'--head': ['--head', '1'], '--tail': ['--tail', '1'], '--range': ['--range', '1-1']}
 PRODUCTION_CASES = {
     # D9: architecture delegates to the canonical compact overview.
     'subcommand:architecture': lambda f: ['architecture', str(Path(f).parent)],
@@ -309,12 +321,20 @@ PRODUCTION_CASES = {
     'scheme:hotspots': lambda f: [f'hotspots://{Path(f).parent}'],
     'param:hotspots.functions_only': lambda f: [f'hotspots://{Path(f).parent}?functions_only=true'],
     'param:hotspots.files_only': lambda f: ['hotspots', str(Path(f).parent), '--files-only'],
+    # BACK-2673: the main parser's flags a declared noun keeps, typed after an answer that reads them (one row per flag
+    # per noun, generated from LEGACY_CLI_MODIFIERS; tests/test_legacy_slice_flags_back2673.py runs each on both
+    # spellings).
+    **{f'flag:{noun}.{flag}': (lambda request, typed: lambda f: [*request(f), *typed])(_MODIFIER_REQUESTS[noun],
+                                                                                       _MODIFIER_ARGV[flag])
+       for noun, flags in LEGACY_CLI_MODIFIERS.items() for flag in flags},
 }
 # The row a case notes beside its own: a parameter of a noun that is itself retired.
 ALSO_NOTED = {'param:hotspots.functions_only': 'scheme:hotspots', 'param:hotspots.files_only': 'subcommand:hotspots',
               'param:architecture.verbose': 'scheme:architecture', 'param:hotspots.verbose': 'scheme:hotspots',
               'param:testability.verbose': 'scheme:testability', 'param:deps.verbose': 'scheme:deps',
               'param:hotspots.top': 'scheme:hotspots', 'param:testability.top': 'scheme:testability',
+              **{f'flag:{noun}.{flag}': f'scheme:{noun}' for noun in ('hotspots', 'testability')
+                 for flag in LEGACY_CLI_MODIFIERS[noun]},
               'param:calls.type': 'param:calls.uncalled', 'param:calls.external': 'param:calls.modules'}
 
 

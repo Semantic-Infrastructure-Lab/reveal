@@ -32,7 +32,7 @@ from ..analyzers.imports.unused import describe_unused
 from ..conventions import family_for_path
 from ..analyzers.imports.layers import load_layer_config
 from ..utils.query_parser import (CliBinding, LegacySpelling, ParamSpec, ParamValueError, QueryParams, ResourceSpec,
-                                  param_schema, peek_query_items, whole_number)
+                                  param_schema, peek_query_items, whole_number, legacy_slices)
 from ..errors import RequestValidationError
 from ..utils.query_binding import bind_declared_params, boolean_value, verbose_legacy
 from ..analyzers.imports.views import ImportView, _unused_not_checked  # noqa: F401 -- checks.py imports _unused_not_checked from here (BACK-2255)
@@ -333,6 +333,10 @@ PARAM_SPECS: Tuple[ParamSpec, ...] = (
     _UNUSED, _CIRCULAR, _VIOLATIONS, _SORT, _LIMIT, _ENTRYPOINTS, _COMPONENTS, _EXTERNAL, _DETAIL,
     _LAZY, _SCOPE, _TESTS, _ROOT, _SCAN_LIMIT, _IMPORTERS, _FORMAT,
 )
+# --head/--tail/--range slice this noun's rows today: flag-only legacy modifiers until the cut, read by the answers named
+# (BACK-2673; their notes are the flag:<noun>.<flag> RETIREMENTS rows).
+_SLICED_ANSWERS = ('sort', 'entrypoints', 'importer_summary')  # the answers whose rows are entries
+PARAM_SPECS = (*PARAM_SPECS, *legacy_slices(head=_SLICED_ANSWERS, tail=_SLICED_ANSWERS, range=_SLICED_ANSWERS))
 _FLAG_NAMES = frozenset(spec.name for spec in PARAM_SPECS if spec.type == 'boolean')
 
 

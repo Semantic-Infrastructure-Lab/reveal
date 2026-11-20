@@ -25,7 +25,7 @@ from ...utils.query_eval import find_unknown_filter_fields
 from ...utils.query_parser import (
     CliBinding, LegacySpelling, ParamSpec, ParamValueError, QueryParams, ResourceSpec, filter_expression, param_schema,
     exclude_param, peek_query_items, split_exclude_param, where_param, whole_number,
-)
+ legacy_slices)
 from ...utils.query_binding import (bind_declared_params, boolean_value, given_controls, switch_value,
                                    unread_by_data_warning)
 from ...utils.gitignore import respect_gitignore_param
@@ -249,6 +249,9 @@ _RESPECT_GITIGNORE = ParamSpec('respect_gitignore', 'string', 'false includes fi
 # binder and the declared parser from the one shared list (BACK-2654 rule 7), never declared here to reject it.
 PARAM_SPECS = (_VIEW, _WHERE, _HOTSPOTS, _TOP, _CODE_ONLY, _CHURN, _SINCE, _MERGES, _TESTS, _DETAIL,
                _SORT, _LIMIT, _OFFSET, _EXCLUDE, _RESPECT_GITIGNORE)
+# --head/--tail/--range slice this noun's rows today: flag-only legacy modifiers until the cut, read by the answers named
+# (BACK-2673; their notes are the flag:<noun>.<flag> RETIREMENTS rows).
+PARAM_SPECS = (*PARAM_SPECS, *legacy_slices(head=(), tail=(), range=()))
 
 def _supplied(params: Any) -> Dict[str, Any]:
     return dict(peek_query_items(params))  # validating is not reading

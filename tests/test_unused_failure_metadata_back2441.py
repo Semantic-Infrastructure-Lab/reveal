@@ -56,8 +56,9 @@ def test_observed_cycle_survives_unrelated_outside_loss(project):
     assert body['count'] == 2
 
 
-@pytest.mark.parametrize('flags', [(), ('--fields', 'unused'), ('--fields', 'metadata'),
-                                   ('--head', '1'), ('--max-items', '1')])
+# --head is not a projection of ?unused: that answer never read it, so it exits 2 by applicability since BACK-2673
+# (tests/test_legacy_slice_flags_back2673.py).
+@pytest.mark.parametrize('flags', [(), ('--fields', 'unused'), ('--fields', 'metadata'), ('--max-items', '1')])
 @pytest.mark.parametrize('location,expected', [('outside', 0), ('inside', 3), ('root', 3)])
 def test_output_projections_preserve_target_completeness(project, flags, location, expected):
     break_outside(project)

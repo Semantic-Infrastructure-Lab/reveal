@@ -10,7 +10,7 @@ import sys
 
 import pytest
 
-from reveal.cli.invocation import (COMMANDS, EXIT_CODES, EXIT_CODE_WORDING, RETIREMENTS,
+from reveal.cli.invocation import (COMMANDS, EXIT_CODES, EXIT_CODE_WORDING, LEGACY_CLI_MODIFIERS, RETIREMENTS,
                                    exit_codes_text)
 from reveal.cli.routing.declared import declared_adapter_class
 
@@ -32,9 +32,10 @@ def test_retirement_inventory_matches_the_shipped_migrations():
     BACK-2149 adds the hotspots noun and its two only-flags. BACK-2620 adds the four Imports aliases.
     BACK-2621 adds the ten Metrics legacy spellings. BACK-2654 adds the different words AST type and Markdown
     body-contains and fields, AST's bare depth (rule 8) the four presentation switches' --no-NAME and --no-gitignore (rule 15).
-    BACK-2673 adds Hotspots' and Testability's top.
+    BACK-2673 adds Hotspots' and Testability's top and the main-parser flags declared nouns keep (LEGACY_CLI_MODIFIERS).
     """
-    assert sorted(RETIREMENTS) == sorted(['flag:--also-json', 'flag:--calls', 'flag:--catchmap', 'flag:--check', 'flag:--deps',
+    generated = [f'flag:{noun}.{flag}' for noun, flags in LEGACY_CLI_MODIFIERS.items() for flag in flags]  # BACK-2673
+    assert sorted(RETIREMENTS) == sorted(generated + ['flag:--also-json', 'flag:--calls', 'flag:--catchmap', 'flag:--check', 'flag:--deps',
                                    'flag:--fanout', 'flag:--flowto', 'flag:--ifmap', 'flag:--loopmap', 'flag:--mutations',
                                    'flag:--no-breadcrumbs', 'flag:--no-fallback', 'flag:--no-gitignore', 'flag:--no-group', 'flag:--no-snippets',
                                    'flag:--returns', 'flag:--search', 'flag:--sideeffects', 'flag:--statewrites',

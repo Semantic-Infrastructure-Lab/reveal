@@ -3,7 +3,7 @@ from dataclasses import replace
 from typing import Any, Callable
 
 from ...utils.query_binding import bind_declared_params, legacy_presence_value as presence, string_value as text
-from ...utils.query_parser import CliBinding, LegacySpelling, ParamSpec, ParamValueError, QueryParams, where_param, peek_query_items, nonnegative_display_limit, nonempty_scalar
+from ...utils.query_parser import CliBinding, LegacySpelling, ParamSpec, ParamValueError, QueryParams, where_param, peek_query_items, nonnegative_display_limit, nonempty_scalar, legacy_slices
 from .schema import _SCHEMA_QUERY_PARAMS
 from .resources import SESSION_VIEW_NAMES
 from .pagination import PAGE_SPECS
@@ -134,6 +134,12 @@ PARAM_SPECS = tuple(_spec(name, schema) for name, schema in _SCHEMA_QUERY_PARAMS
     ParamSpec('match', 'array', 'Match text in this resource: session content, narrative messages, tool results, workflow tool/detail text, cross-session content, workspace lists or history; repeat to require every term in each row (a message, turn, tool result, entry, session, file or workflow row); unsupported views reject',
               None, _terms, uri_codec='percent', repeatable=True, cli=CliBinding(('--match',)), answers=ANSWERS['match']),
 )
+# --head/--tail/--range slice this noun's rows today: flag-only legacy modifiers until the cut, read by the answers named
+# (BACK-2673; their notes are the flag:<noun>.<flag> RETIREMENTS rows).
+PARAM_SPECS = (*PARAM_SPECS, *legacy_slices(
+    head=('claude_workflow', 'claude_session_list', 'claude_messages', 'claude_message_range',
+          'claude_cross_session_search', 'claude_history', 'claude_filtered_results'),
+    range=('claude_workflow', 'claude_messages', 'claude_message_range', 'claude_filtered_results')))
 
 
 def translate_request(query, params, resource=''):

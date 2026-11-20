@@ -206,20 +206,15 @@ def uri_flag_message(target, message: str) -> str | None:
     return unsupported_controls_message(declared[0].PARAM_SPECS, flags)
 
 
-# Main-parser flags that keep their URI-only answer until a ruling settles them (Scott 2026-11-19, BACK-2706; step 3b-3
-# of BACK-2673): a request typing one after its noun's URI is still read by the main parser, as before. The table and the
-# branch reading it go when their rows land.
-# - --head/--tail/--range where a URI answer's rows slice today: the ruling names ast, claude, metrics and pack; the
-#   others slice on reveal's own tree at 23545deb (BACK-1497 pins hotspots and calls), so they wait for the same ruling.
+# Main-parser flags that keep their URI-only answer until a ruling settles them (step 3b-3 of BACK-2673): a request
+# typing one after its noun's URI is still read by the main parser, as before. The table and the branch reading it go
+# when their rows land. --head/--range and --tail elsewhere are flag-only modifiers now (LEGACY_CLI_MODIFIERS).
+# - Claude --tail is held for Scott's ruling: undocumented, it collides with the documented legacy operation ?tail=N.
 # - Claude's workflow and search readers take the main parser's --type and --name (--search): the legacy CLI population
 #   tests/test_claude_workflow_selection_back2617.py compares the canonical controls with.
 # Read from declarations instead: the legacy --check transport (LEGACY_CHECK_TRANSPORT), and a global flag the URI's
-# injection binds through the noun's CLI_QUERY_FLAGS that its subcommand does not take (Hotspots' and Testability's
-# --limit, which caps their top).
-_SLICES = ('--head', '--tail', '--range')
-_PENDING_MAIN_FLAGS = {**{noun: _SLICES for noun in ('ast', 'calls', 'git', 'hotspots', 'imports', 'json', 'markdown',
-                                                     'metrics', 'pack', 'patches', 'testability')},
-                       'claude': (*_SLICES, '--type', '--name', '--search')}
+# injection binds through the noun's CLI_QUERY_FLAGS that its subcommand does not take.
+_PENDING_MAIN_FLAGS = {'claude': ('--tail', '--type', '--name', '--search')}
 _LEGACY_CHECK_FLAGS = ('--check', '--lint')
 
 
@@ -459,9 +454,10 @@ def _refuse_element(name: str, path: str, element: str, args, answer_consumer=No
 def run_declared_command(name: str, args, *, answer_consumer=None, uri_query: Optional[str] = None) -> None:
     """Bind original argparse values; no URI string is constructed. *uri_query*: the query of the URI these flags
     followed, the request's second source (joined under "Conflicting values", BACK-2673)."""
-    from ...utils.query_binding import flag_spellings, legacy_flag_dests
+    from ...utils.query_binding import convert_flag_only, flag_spellings, legacy_flag_dests
     adapter = declared_adapter_class(name)
     _note_retired_flags(name, adapter)
+    convert_flag_only(adapter.PARAM_SPECS, args)
     source: dict = {}
     spelled: Dict[str, str] = {}  # each key -> the flag that carried it, so errors name what was typed
     for spec in adapter.PARAM_SPECS:

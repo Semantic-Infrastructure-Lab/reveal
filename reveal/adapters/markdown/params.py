@@ -1,7 +1,7 @@
 """Markdown controls bind directly; existing operations keep selection and source ownership."""
 from typing import Any
 
-from ...utils.query_parser import CliBinding, LegacySpelling, ParamSpec, QueryParams, peek_query_items
+from ...utils.query_parser import CliBinding, LegacySpelling, ParamSpec, QueryParams, peek_query_items, legacy_slices
 from ...utils.query_binding import boolean_value
 from ...utils.query import parse_query_filters
 from ...utils.query_control import declared_result_control as result_control
@@ -57,6 +57,9 @@ OFFSET = ParamSpec('offset', 'integer', 'Answer rows skipped after sorting', 0, 
                    cli=CliBinding(('--offset',)), answers=(_LIST,))
 PARAM_SPECS = (WHERE, MATCH, VIEW, FIELD, BACKLINKS, AGGREGATE, LINKS, LINT, LINT_FIELDS,
                FIELDS, EXPLAIN, SORT, LIMIT, OFFSET)
+# --head/--tail/--range slice this noun's rows today: flag-only legacy modifiers until the cut, read by the answers named
+# (BACK-2673; their notes are the flag:<noun>.<flag> RETIREMENTS rows).
+PARAM_SPECS = (*PARAM_SPECS, *legacy_slices(head=('markdown_query',), tail=('markdown_query',), range=('markdown_query',)))
 
 
 def _enabled(value: Any) -> bool:

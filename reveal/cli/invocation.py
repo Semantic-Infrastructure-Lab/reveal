@@ -207,6 +207,7 @@ FINDINGS_BY_DEFAULT = ('check', 'review', 'health')
 #   param:<scheme>.<param>       calls://...?root=
 #   value:<scheme>.<param>=<v>   ast://...?show=calls
 #   flag:<--flag>                --search
+#   flag:<noun>.<--flag>         reveal ast ... --head (a main-parser flag a declared noun keeps, LEGACY_CLI_MODIFIERS)
 #   mcp:<tool>                   reveal_trace
 # A row's stage says what the spelling does now: ``note`` prints the note and answers as before,
 # ``phase7`` is recorded and prints nothing yet (MCP tool names stay until Phase 7), ``error``
@@ -220,6 +221,7 @@ RETIREMENT_KEY = re.compile(
     r'|param:[a-z][a-z0-9+.-]*\.[^.=\s]+'
     r'|value:[a-z][a-z0-9+.-]*\.[^.=\s]+=.*'
     r'|flag:--[a-z][a-z0-9-]*'
+    r'|flag:[a-z][a-z0-9-]*\.--[a-z][a-z0-9-]*'
     r'|target:[a-z][a-z0-9-]*\.[a-z][a-z0-9-]*'  # a kind of target a subcommand stops taking
     r'|mcp:[a-z][a-z0-9_]*)$')
 
@@ -294,9 +296,43 @@ SWITCHES: Dict[str, Switch] = {switch.name: switch for switch in (
 )}
 
 
+# The main parser's flags a declared noun keeps until the cut, typed after its URI or on its subcommand (Scott
+# 2026-11-19, BACK-2706 and BACK-2708; COMMAND_MODEL "Flags after a URI", BACK-2673): noun -> flag -> what replaces it.
+# One flag:<noun>.<flag> row each, generated below; the noun declares each flag as a flag-only modifier
+# (ParamSpec.flag_only) on the answers that read it, and tests/test_legacy_cli_modifiers_back2673.py holds the two to
+# each other. They answer differently from the replacements (a slice of the shown rows, no offset on some nouns), so
+# every row is standalone.
+_LIMIT_N = '--limit N (?limit=N)'
+_OFFSET = '--offset START-1 --limit END-START+1 (?offset=START-1&limit=END-START+1)'
+_LAST = 'a descending --sort with --limit N (the last N rows have no spelling of their own)'
+_SLICED = {'--head': _LIMIT_N, '--tail': _LAST, '--range': _OFFSET}
+LEGACY_CLI_MODIFIERS: Dict[str, Dict[str, str]] = {
+    **{noun: _SLICED for noun in ('ast', 'git', 'json', 'markdown', 'metrics')},
+    'calls': {'--head': '--limit N on a ranking (?sort=-callers&limit=N); --depth N on a callers or callees walk',
+              '--tail': 'a descending --sort with --limit N on a ranking (the last N rows have no spelling of their own)',
+              '--range': 'nothing: calls has no offset; --limit N caps a ranking'},
+    'claude': {'--head': _LIMIT_N, '--range': _OFFSET},  # --tail waits for Scott's ruling (it collides with ?tail=N)
+    'hotspots': {'--head': '--limit N (?limit=N), which caps each list',
+                 '--tail': 'nothing: each list is ranked worst first; --limit N keeps its worst N',
+                 '--range': 'nothing: hotspots has no offset; --limit N caps each list'},
+    'imports': {'--head': '--limit N (?limit=N) on a ranking or the entrypoints',
+                '--tail': 'a descending --sort with --limit N (the last N rows have no spelling of their own)',
+                '--range': 'nothing: imports has no offset; --limit N caps a ranking'},
+    'pack': {flag: 'nothing: --budget sizes the pack' for flag in ('--head', '--tail', '--range')},
+    'patches': {'--head': '--limit N for the groups (?limit=N), --top N in view=pressure',
+                '--tail': 'nothing: the groups are ranked; --limit N keeps the first N',
+                '--range': 'nothing: patches has no offset; --limit N caps the groups'},
+    'testability': {'--head': 'reveal patches <path> --view pressure --top N',
+                    '--tail': 'nothing: each list is ranked; reveal patches <path> --view pressure --top N keeps the first N',
+                    '--range': 'nothing: no offset; reveal patches <path> --view pressure --top N caps each list'},
+}
+
+
 # The two older BACK-1906 notes, then Phase 2b's call-graph spellings (BACK-2066). A param:
 # row covers the URI parameter and the same parameter typed as a declared subcommand's flag.
 RETIREMENTS: Dict[str, Retirement] = {
+    **{f'flag:{noun}.{flag}': Retirement(f'{noun} {flag}', replacement, standalone=True)
+       for noun, flags in LEGACY_CLI_MODIFIERS.items() for flag, replacement in flags.items()},
     'subcommand:scaffold': Retirement('reveal scaffold', 'reveal dev new-adapter NAME (or new-analyzer/new-rule)'),
     # D9: one compact map and comparison owner; pack --architecture is a separate live control.
     'subcommand:architecture': Retirement('reveal architecture', 'reveal overview <path> [--against REF]'),

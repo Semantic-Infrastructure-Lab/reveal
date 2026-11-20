@@ -32,7 +32,7 @@ from ..utils.path_utils import (
     failure_records,
 )
 from ..utils.query_binding import bind_declared_params, boolean_value, verbose_legacy
-from ..utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSpec, exclude_param, param_schema,
+from ..utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSpec, exclude_param, legacy_slices, param_schema,
                                   split_exclude_param)
 from ..utils.results import LOST_EVIDENCE, PARSE_RECOVERED, AnalysisCompleteness, ResultBuilder, result_execution_facts
 from reveal.utils.lines import split_lines
@@ -957,7 +957,9 @@ class PackAdapter(ResourceAdapter):
     FINDINGS_POLICIES = ('none',)
     DEFAULT_FAIL_ON = 'none'
     RESOURCE_SPEC = ResourceSpec(cli_default=None, required=True, uri_codec='existing-path-first')
-    PARAM_SPECS = (_BUDGET, _FOCUS, _SINCE, _CONTENT, _ARCHITECTURE, _DETAIL, exclude_param())
+    # --head/--tail/--range slice the pack's files today: flag-only legacy modifiers until the cut (BACK-2673)
+    PARAM_SPECS = (_BUDGET, _FOCUS, _SINCE, _CONTENT, _ARCHITECTURE, _DETAIL, exclude_param(),
+                   *legacy_slices(head=(), tail=(), range=()))
 
     def __init__(self, resource: str, query: Optional[str] = None, *,
                  params: Optional[Dict[str, Any]] = None):

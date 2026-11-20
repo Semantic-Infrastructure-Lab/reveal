@@ -4,7 +4,7 @@ from typing import Any, Dict, Optional
 from ...errors import RequestValidationError
 from ...utils.query_binding import boolean_value, given_controls, unread_by_data_warning
 from ...utils.query_parser import (CliBinding, LegacySpelling, ParamSpec, ParamValueError, QueryParams,
-                                   parse_query_params, peek_query_items)
+                                   parse_query_params, peek_query_items, legacy_slices)
 from ...utils.query_control import declared_result_control as result_control, parse_result_control
 from ...utils.query import parse_query_filters
 
@@ -52,6 +52,10 @@ OFFSET = ParamSpec('offset', 'integer', 'Array rows skipped after sorting', 0, l
                    cli=CliBinding(('--offset',)), answers=_VALUE)
 ARRAY_CONTROLS = (WHERE, SORT, LIMIT, OFFSET)
 PARAM_SPECS = (VIEW, WHERE, DETAIL, SORT, LIMIT, OFFSET)
+# --head/--tail/--range slice this noun's rows today: flag-only legacy modifiers until the cut, read by the answers named
+# (BACK-2673; their notes are the flag:<noun>.<flag> RETIREMENTS rows).
+LEGACY_SLICES = legacy_slices(head=('json_value',), tail=('json_value',), range=('json_value',))
+PARAM_SPECS = (*PARAM_SPECS, *LEGACY_SLICES)
 
 
 def result_type(params: Any) -> str:
@@ -93,7 +97,7 @@ def legacy_raw(params: QueryParams) -> bool:
 def array_controls_unread_by_data(params: Dict[str, Any], value: Any, path: str) -> Optional[dict]:
     """The value answer's array controls given for a value that is not a list: only the data shows they are unread, so
     the answer carries the one shared warning, exit 0 (COMMAND_MODEL "Applicability", Scott 2026-11-18 Q2)."""
-    given = [spec.name for spec in ARRAY_CONTROLS if spec.name in given_controls(params)]
+    given = [spec.name for spec in (*ARRAY_CONTROLS, *LEGACY_SLICES) if spec.name in given_controls(params)]
     return unread_by_data_warning(params, given, f'the value at {path} is {_json_kind(value)}, not a list')
 
 

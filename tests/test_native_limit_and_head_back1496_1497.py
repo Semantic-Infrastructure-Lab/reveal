@@ -164,13 +164,13 @@ class TestLimitLive:
         text = run_reveal(f'depends://{imported}', '--limit', '1').stdout
         assert 'Top 1 of 2 module(s) imported internally' in text
 
-    @pytest.mark.parametrize('flag,code,said', [('--limit', 2, 'limit must be a whole number'),
-                                                ('--head', 1, 'Error: --head must be 0 or more, got -1'),
-                                                ('--tail', 1, 'Error: --tail must be 0 or more, got -1')])
-    def test_negative_counts_are_rejected(self, tree, flag, code, said):
-        # The cap is a declared control since BACK-2673: the binder refuses its value as an invalid request, exit 2.
+    @pytest.mark.parametrize('flag,said', [('--limit', 'limit must be a whole number'), ('--head', 'head must be >= 0'),
+                                           ('--tail', 'tail must be >= 0')])
+    def test_negative_counts_are_rejected(self, tree, flag, said):
+        # A declared control's value (the cap since BACK-2673; --head/--tail as flag-only modifiers): the binder
+        # refuses it as an invalid request, exit 2, on the URI form as on the subcommand.
         proc = run_reveal(f'hotspots://{tree}', flag, '-1')
-        assert proc.returncode == code
+        assert proc.returncode == 2
         assert said in proc.stderr
 
 

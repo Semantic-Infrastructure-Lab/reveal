@@ -73,11 +73,12 @@ def test_a_stdin_batch_line_still_binds_the_command_lines_flags(workspace, monke
 
 
 def test_a_pending_legacy_slice_still_answers_after_the_uri(workspace):
-    """Control: ``--head`` after an AST URI keeps slicing until its RETIREMENTS row lands (Scott 2026-11-19,
-    BACK-2706; step 3b-3), while the subcommand does not take it yet."""
-    sliced = _run('ast://proj', '--head', '1', '--format', 'json')
-    assert sliced.rc == 0 and len(json.loads(sliced.out)['results']) == 1, sliced.brief()
-    assert _run('ast', 'proj', '--head', '1').rc == 2
+    """Control: Claude ``--tail`` after a URI keeps slicing on the main parser's route, held for Scott's ruling (step
+    3b-3), while the subcommand does not take it. ``--head`` is a flag-only modifier since 3b-3 (one answer on both
+    spellings with a note: tests/test_legacy_slice_flags_back2673.py)."""
+    sliced = _run('claude://session/my-session?view=messages', '--tail', '1', '--format', 'json')
+    assert sliced.rc == 0 and len(json.loads(sliced.out)['messages']) == 1, sliced.brief()
+    assert _run('claude', 'session/my-session', '--view', 'messages', '--tail', '1').rc == 2
 
 
 def _without_execution(document):

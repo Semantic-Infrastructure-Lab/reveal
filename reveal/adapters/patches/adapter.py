@@ -13,7 +13,7 @@ from reveal.testability.patches import (group_patches, language_not_scanned_warn
                                         scan_patches)
 from reveal.utils.path_utils import TestLayout, to_posix
 from reveal.utils.query_binding import bind_declared_params, boolean_value
-from reveal.utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSpec, param_schema,
+from reveal.utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSpec, legacy_slices, param_schema,
                                        peek_query_items, whole_number)
 from reveal.utils.results import AnalysisCompleteness, lost_evidence, ResultBuilder, note_truncation, result_execution_facts
 from reveal.utils.validation import require_path_exists
@@ -71,7 +71,10 @@ _SUPPRESS = ParamSpec('suppress', 'boolean', 'Hide stdlib I/O noise (sys.stdout/
                       role='analysis', cli=CliBinding(('--no-suppress',), action='store_false'), answers=_SCAN)
 # The pressure view's own parameters are testability's, declared once there; here only the pressure report reads them.
 _PRESSURE_SPECS = tuple(replace(spec, answers=_PRESSURE) for spec in PRESSURE_SPECS)
-PARAM_SPECS = (_VIEW, _GROUP, _LIMIT, _MIN, _TARGET, _PRIVATE, _SUPPRESS, *_PRESSURE_SPECS)
+# --head/--tail/--range slice this noun's rows today: flag-only legacy modifiers until the cut, read by every answer
+# (BACK-2673; their notes are the flag:<noun>.<flag> RETIREMENTS rows).
+PARAM_SPECS = (_VIEW, _GROUP, _LIMIT, _MIN, _TARGET, _PRIVATE, _SUPPRESS, *_PRESSURE_SPECS,
+               *legacy_slices(head=(), tail=(), range=()))
 
 
 @register_adapter('patches')

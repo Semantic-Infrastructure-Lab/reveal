@@ -15,7 +15,7 @@ from ..conventions import LanguageConventions, conventions_for, family_for_path
 from ..defaults import TEST_DIR_NAMES, VENDOR_DIR_NAMES
 from ..rendering.adapters.hotspots import HotspotsRenderer
 from ..utils.path_utils import EVIDENCE, resolve_project_root, walk_tree
-from ..utils.query_parser import (CliBinding, LegacySpelling, ParamSpec, QueryParams, ResourceSpec,
+from ..utils.query_parser import (CliBinding, LegacySpelling, ParamSpec, legacy_slices, QueryParams, ResourceSpec,
                                   nonnegative_display_limit, param_schema, whole_number)
 from ..utils.query_binding import bind_declared_params, boolean_value, verbose_legacy
 from ..utils.results import LOST_EVIDENCE, PARSE_RECOVERED, AnalysisCompleteness, ResultBuilder, result_execution_facts
@@ -356,7 +356,8 @@ class HotspotsAdapter(ResourceAdapter):
     FINDINGS_POLICIES = ('none', 'findings')
     DEFAULT_FAIL_ON = 'none'
     RESOURCE_SPEC = ResourceSpec(uri_codec='existing-path-first')
-    PARAM_SPECS = (_TOP, _MIN_COMPLEXITY, _FUNCTIONS_ONLY, _FILES_ONLY)
+    # --head/--tail/--range slice both rankings today: flag-only legacy modifiers until the cut (BACK-2673)
+    PARAM_SPECS = (_TOP, _MIN_COMPLEXITY, _FUNCTIONS_ONLY, _FILES_ONLY, *legacy_slices(head=(), tail=(), range=()))
 
     def __init__(self, resource: str, query: Optional[str] = None, *, params: Optional[Dict[str, Any]] = None):
         self.path = str(Path(resource).expanduser())
