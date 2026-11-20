@@ -641,3 +641,27 @@ def without_request_notes(document):
 def without_request_note_lines(text: str) -> str:
     """Stderr or text output without the request note's line."""
     return ''.join(line for line in text.splitlines(keepends=True) if not _REQUEST_NOTE_TEXT.search(line))
+
+
+def covered_note_text(line):
+    """A stderr line that is the note of a ``param:``/``value:`` spelling the URI's request note replaces (BACK-2716)."""
+    from reveal.cli.invocation import RETIREMENTS, request_note_covers
+    return any(line == f'note: {entry.text}\n' for key, entry in RETIREMENTS.items() if request_note_covers(key))
+
+
+def without_covered_notes(document):
+    """The subcommand's JSON answer without the per-spelling notes the URI's one request note replaces: the URI twin names
+    that spelling inside the request note's own replacement instead (nothing else is touched)."""
+    import copy
+    from reveal.cli.invocation import request_note_covers
+    result = copy.deepcopy(document)
+    meta = result.get('meta') if isinstance(result, dict) else None
+    if isinstance(meta, dict) and meta.get('warnings'):
+        meta['warnings'] = [w for w in meta['warnings'] if not (
+            w.get('code') == 'retired_spelling' and request_note_covers(str(w.get('field'))))]
+    return result
+
+
+def twin_stderr(text: str) -> str:
+    """Stderr without the request note and without the notes of spellings that request note replaces."""
+    return ''.join(line for line in without_request_note_lines(text).splitlines(keepends=True) if not covered_note_text(line))

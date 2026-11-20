@@ -5,14 +5,13 @@ the one declared execution owner: equal parsed JSON, the same exit code, and pro
 only in ``execution.command`` (surface program section 9). The legacy ``stats://`` spelling keeps
 answering through the legacy URI route and must still equal the new one.
 """
-import copy
 import json
 
 import pytest
 
 from conftest import _run_reveal_direct as run
-from conftest import without_request_note_lines, without_request_notes
-from reveal.cli.invocation import COMMANDS, RETIREMENTS, request_note_covers
+from conftest import twin_stderr, without_covered_notes, without_request_notes
+from reveal.cli.invocation import COMMANDS
 from reveal.cli.routing.declared import declared_adapter_class
 
 pytestmark = pytest.mark.component
@@ -29,27 +28,6 @@ def project(tmp_path, monkeypatch):
     (root / 'pkg' / 'busy.py').write_text(BUSY, encoding='utf-8')
     (root / 'pkg' / 'small.py').write_text('X = 1\n\n\ndef one():\n    return X\n', encoding='utf-8')
     return root
-
-
-def covered_note_text(line):
-    """A stderr line that is the note of a ``param:``/``value:`` spelling the URI's request note replaces (BACK-2716)."""
-    return any(line == f'note: {entry.text}\n' for key, entry in RETIREMENTS.items() if request_note_covers(key))
-
-
-def without_covered_notes(document):
-    """The subcommand's answer without the per-spelling notes the URI's one request note replaces: the URI twin names
-    that spelling inside the request note's own replacement instead."""
-    result = copy.deepcopy(document)
-    warnings = ((result.get('meta') or {}).get('warnings'))
-    if warnings:
-        result['meta']['warnings'] = [w for w in warnings if not (
-            w.get('code') == 'retired_spelling' and request_note_covers(str(w.get('field'))))]
-    return result
-
-
-def twin_stderr(text):
-    """Stderr without the notes of spellings the request note replaces (subcommand side) or is (URI side)."""
-    return ''.join(line for line in without_request_note_lines(text).splitlines(keepends=True) if not covered_note_text(line))
 
 
 def equal_answers(noun_spelling, left, right):

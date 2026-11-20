@@ -4,7 +4,6 @@ Typed parameters with no coercion, exactly one mode per request, D6 exits (0 com
 before analysis, 3 required analysis or output failed) and a `reveal calls` subcommand generated
 from the same declaration, answering like `calls://` through the one execution owner.
 """
-import copy
 import json
 import os
 from pathlib import Path
@@ -12,29 +11,7 @@ from pathlib import Path
 import pytest
 
 from conftest import _run_reveal_direct as run
-from conftest import without_request_note_lines, without_request_notes
-from reveal.cli.invocation import RETIREMENTS, request_note_covers
-
-def covered_note_text(line):
-    """A stderr line that is the note of a ``param:``/``value:`` spelling the URI's request note replaces (BACK-2716)."""
-    return any(line == f'note: {entry.text}\n' for key, entry in RETIREMENTS.items() if request_note_covers(key))
-
-
-def without_covered_notes(document):
-    """The subcommand's answer without the per-spelling notes the URI's one request note replaces: the URI twin names
-    that spelling inside the request note's own replacement (`reveal calls proj --callers helper ...`) instead."""
-    result = copy.deepcopy(document)
-    warnings = (result.get('meta') or {}).get('warnings')
-    if warnings:
-        result['meta']['warnings'] = [w for w in warnings if not (
-            w.get('code') == 'retired_spelling' and request_note_covers(str(w.get('field'))))]
-    return result
-
-
-def twin_stderr(text):
-    """Stderr without the request note and without the notes of spellings that request note replaces."""
-    return ''.join(line for line in without_request_note_lines(text).splitlines(keepends=True) if not covered_note_text(line))
-
+from conftest import twin_stderr, without_covered_notes, without_request_notes
 
 APP = '''\
 import os
