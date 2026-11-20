@@ -105,7 +105,8 @@ def test_an_answer_that_does_not_read_the_flag_exits_2_on_both_spellings(rich, n
     argv, _ = SLICE[flag]
     for run in (C._run(uri, *argv, '--format', 'json'), C._run(*sub, *argv, '--format', 'json')):
         assert run.rc == 2, run.brief()
-        assert f"control '{flag[2:]}' is not read by this answer" in run.err + run.out, run.brief()
+        # A flag-only modifier has no URI key: the refusal names it by its flag, the only way to spell it (BACK-2709)
+        assert f"control '{flag}' is not read by this answer" in run.err + run.out, run.brief()
 
 
 @pytest.mark.parametrize('flag', ALL)

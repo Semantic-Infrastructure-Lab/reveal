@@ -21,9 +21,9 @@ CLAUDE_READ = [
     ('claude://history', ['claude', 'history'], ['--name', 'review']),
 ]
 CLAUDE_NOT_READ = [
-    ('claude://session/my-session', ['claude', 'session/my-session'], ['--type', 'Read'], 'type'),
+    ('claude://session/my-session', ['claude', 'session/my-session'], ['--type', 'Read'], '--type'),
     ('claude://session/my-session?view=messages', ['claude', 'session/my-session', '--view', 'messages'],
-     ['--name', 'x'], 'name'),
+     ['--name', 'x'], '--name'),
 ]
 CHECKED = [('claude', 'claude://sessions', ['claude', 'sessions']),
            ('git', 'git://proj', ['git', 'proj']),

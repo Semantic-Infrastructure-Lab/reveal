@@ -69,7 +69,7 @@ def test_a_typed_source_binds_it_as_a_given_control():
 def test_it_is_judged_by_applicability_like_any_control():
     params = prepare_declared_params(SPECS, {'head': 3}, 'typed')
     reject_unread_controls(SPECS, params, lambda: 'rows')  # the declared answer reads it
-    with pytest.raises(RequestValidationError, match="control 'head' is not read by this answer"):
+    with pytest.raises(RequestValidationError, match="control '--head' is not read by this answer.*; --head is read by"):
         reject_unread_controls(SPECS, params, lambda: 'summary')
 
 
