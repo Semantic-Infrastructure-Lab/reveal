@@ -34,7 +34,7 @@ def canonical_controls(parser: Any, adapter: Any, params: Mapping[str, Any]) -> 
         keyword = own[2:].replace('-', '_') if own else None
         if keyword not in options:
             continue
-        controls[keyword] = _flag_value(spec, params[spec.name])
+        controls[keyword] = _flag_value(spec, dict.__getitem__(params, spec.name))  # no read is recorded
     return controls
 
 

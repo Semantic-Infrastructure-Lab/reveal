@@ -625,13 +625,26 @@ def _walk_scope(adapter, path, args):
     from ...utils.exclusions import dispatch_scope
     return dispatch_scope(path, peek(args, 'exclude')) if adapter.RESOURCE_SPEC.walks else (None, [])
 
-def _note_uri_request(name: str, adapter, path: str, params, spelled_query: bool) -> None:
-    """The one note of a retiring URI request (BACK-2716 step 3), said after the request is bound so its replacement is
-    rendered from what was bound: an analysis-only scheme always, any other scheme when it spells a query string. A
-    retired twin has its own scheme row, and a resource URI with only flags is the canonical form: neither notes."""
-    from ..invocation import request_note, request_noted
+def _note_uri_request(name: str, adapter, path: str, params, spelled_query: bool, *, early: bool = False,
+                      answer=None) -> None:
+    """The one note of a retiring URI request (BACK-2716 step 3), rendered from what was bound: an analysis-only scheme
+    always, any other scheme when it spells a query string. A retired twin has its own scheme row, and a resource URI
+    with only flags is the canonical form: neither notes.
+
+    At the ``note`` stage it is said once the request has an answer, and not for a rejected request: the command it
+    would recommend is the one the request spells, and fails the same way. At the ``error`` stage (the cut) it is
+    refused before anything runs (*early*). Rendering never marks a control as read: the answer's own unread-control
+    checks see exactly what the request gave."""
+    from ..invocation import REQUEST_STAGE, request_note, request_noted
     if not request_noted(name) or not (getattr(adapter, 'ANALYSIS_ONLY', False) or spelled_query):
         return
+    if early != (REQUEST_STAGE == 'error'):
+        return
+    if answer is not None:
+        from ...utils.results import FailureCause
+        facts = getattr(answer, 'execution_facts', None)
+        if facts is not None and FailureCause.INVALID_REQUEST in facts.failures:
+            return
     from .canonical import render_uri_request
     try:
         request_note(name, lambda form: render_uri_request(form, name, path, params))
@@ -682,7 +695,7 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
                         adapter.PARAM_SPECS, query_resource.partition('?')[2], 'uri'), source, spelled=spelled)
                     transport = 'uri'  # one request now, bound as the URI binds (its path's codec included)
                 if transport == 'uri':
-                    _note_uri_request(name, adapter, path, source, spelled_query)
+                    _note_uri_request(name, adapter, path, source, spelled_query, early=True)
             except ValueError as exc:
                 consume(_invalid_prepared_answer(adapter, name, path, query_resource, str(exc), args))
                 return
@@ -706,8 +719,11 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
                                         result_type=expected_type))
                 return
             with exclusion_scope(root, excludes), gitignore_scope(respect):
-                consume(_declared_answer(adapter, name, path, source, transport, args, expected_type,
-                                         scope_path=scope_path))
+                answer = _declared_answer(adapter, name, path, source, transport, args, expected_type,
+                                          scope_path=scope_path)
+                if transport == 'uri':
+                    _note_uri_request(name, adapter, path, source, spelled_query, answer=answer)
+                consume(answer)
             complete(args)
     finally:
         if ledger is not None and ledger.complete:

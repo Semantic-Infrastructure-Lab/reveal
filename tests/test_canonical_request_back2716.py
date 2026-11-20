@@ -112,3 +112,31 @@ def test_a_request_that_cannot_render_is_not_noted_and_keeps_its_own_error_answe
     run = _run_reveal_direct('overview://proj?against=%FF', '--format', 'json')
     assert run.returncode == 2
     assert _json(run)['type'] == 'overview_diff'
+
+
+def test_a_rejected_uri_request_does_not_recommend_the_command_it_spells(project):  # noqa: F811
+    """`callers` with a ranking sort is refused (exit 2); the one note would recommend `reveal calls proj --callers serve
+    --sort=-callers`, which fails the same way, so a rejected request says none."""
+    run = _run_reveal_direct('calls://proj?callers=serve&sort=-callers', '--format', 'json')
+    assert run.returncode == 2
+    assert 'request is deprecated' not in run.stderr
+    assert not [w for w in (_json(run).get('meta') or {}).get('warnings') or [] if w.get('field') == 'request:calls']
+
+
+def test_the_request_note_marks_no_control_as_read(project):  # noqa: F811
+    """Rendering the note must not hide the answer's own `control_unread_by_data` warning (patches on a tree with no
+    tests): the URI and the subcommand agree besides the note."""
+    uri = _run_reveal_direct('patches://proj?limit=0', '--format', 'json')
+    sub = _run_reveal_direct('patches', 'proj', '--limit', '0', '--format', 'json')
+    kinds = lambda run: sorted(w.get('type') for w in (_json(run).get('meta') or {}).get('warnings') or []  # noqa: E731
+                               if w.get('type') != 'retired_spelling')
+    assert kinds(uri) == kinds(sub)
+
+
+def test_at_the_error_stage_a_uri_request_is_refused_before_it_runs(project, monkeypatch):  # noqa: F811
+    """The cut turns the note to an error: exit 2 naming the flag form, the same text (BACK-2718)."""
+    from reveal.cli import invocation
+    monkeypatch.setattr(invocation, 'REQUEST_STAGE', 'error')
+    run = _run_reveal_direct('calls://proj?callers=serve')
+    assert run.returncode == 2
+    assert 'reveal calls proj --callers serve' in run.stderr
