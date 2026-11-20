@@ -633,9 +633,10 @@ def without_request_notes(document):
     """A copy of a JSON answer without the URI request's own note (nothing else is touched)."""
     import copy
     result = copy.deepcopy(document)
-    meta = result.get('meta') if isinstance(result, dict) else None
-    if isinstance(meta, dict) and isinstance(meta.get('warnings'), list):
-        meta['warnings'] = [w for w in meta['warnings'] if not is_request_note(w)]
+    for key in ('meta', 'metadata'):  # imports' metadata is an alias of meta (BACK-2601): both carry the note
+        meta = result.get(key) if isinstance(result, dict) else None
+        if isinstance(meta, dict) and isinstance(meta.get('warnings'), list):
+            meta['warnings'] = [w for w in meta['warnings'] if not is_request_note(w)]
     return result
 
 

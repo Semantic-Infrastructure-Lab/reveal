@@ -42,9 +42,10 @@ def _without_command(document):
     document = json.loads(json.dumps(document))
     if isinstance(document.get('execution'), dict):
         document['execution'].pop('command', None)
-    meta = document.get('meta')
-    if isinstance(meta, dict) and isinstance(meta.get('warnings'), list):  # the note is the spelling's own, not the answer's
-        meta['warnings'] = [w for w in meta['warnings'] if w.get('type') != 'retired_spelling']
+    for key in ('meta', 'metadata'):  # the note is the spelling's own, not the answer's (imports aliases metadata to meta)
+        meta = document.get(key)
+        if isinstance(meta, dict) and isinstance(meta.get('warnings'), list):
+            meta['warnings'] = [w for w in meta['warnings'] if w.get('type') != 'retired_spelling']
     return document
 
 
