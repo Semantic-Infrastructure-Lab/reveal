@@ -21,9 +21,7 @@ import os
 from functools import partial
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
-# The walk's request controls every walking noun's parser carries beside its declared ones.
-_WALK_CONTROLS = ('all', 'exclude', 'respect_gitignore')
-
+from .canonical import _WALK_CONTROLS, typed_options, typed_words  # noqa: F401  (the keyword <-> flag words live in canonical)
 
 def typed_nouns() -> Tuple[str, ...]:
     """The nouns the noun form answers: every command whose adapter is qualified for the declared route."""
@@ -48,78 +46,6 @@ def _noun_adapter(noun: str) -> Tuple[str, Any]:
                          f"query('{noun}://RESOURCE', ...)")
     raise ValueError(f"{noun!r} is neither a noun nor a URI. Nouns: {', '.join(typed_nouns())}; "
                      "a resource is named by its URI: scheme://resource (e.g. git://app.py@main)")
-
-
-def _request_dests(adapter: Any) -> set:
-    from ...utils.query_binding import legacy_flag_dests
-    dests = set(_WALK_CONTROLS) | set(getattr(adapter, 'CLI_PRESENTATION_FLAGS', ()))
-    if callable(getattr(adapter, 'reconfigure_base_path', None)):
-        dests.add('base_path')
-    for spec in adapter.PARAM_SPECS:
-        if spec.cli is not None:
-            dests.add(spec.cli.dest or spec.name)
-        dests.update(legacy_flag_dests(spec))
-    return dests
-
-
-def typed_options(parser: argparse.ArgumentParser, adapter: Any) -> Dict[str, Tuple[str, argparse.Action]]:
-    """keyword -> (the long flag it writes, its action), for every request control the noun's *parser* reads."""
-    dests = _request_dests(adapter)
-    options: Dict[str, Tuple[str, argparse.Action]] = {}
-    for action in parser._actions:
-        if action.dest not in dests:
-            continue
-        for flag in action.option_strings:
-            if flag.startswith('--'):
-                options.setdefault(flag[2:].replace('-', '_'), (flag, action))
-    return options
-
-
-def _value_word(keyword: str, flag: str, action: argparse.Action, item: Any) -> str:
-    """One value after *flag*: ``--flag=VALUE`` (a value that starts with '-' stays a value), a bare ``--flag`` for
-    True on a flag whose value is optional, ``true``/``false`` for any other boolean."""
-    from ...errors import RequestValidationError
-    if isinstance(item, bool):
-        if item and action.nargs == '?':
-            return flag
-        item = 'true' if item else 'false'
-    elif not isinstance(item, (str, int, float)):
-        raise RequestValidationError(f'{keyword} takes a string or number, got {type(item).__name__}')
-    return f'{flag}={item}'
-
-
-def _flag_words(keyword: str, flag: str, action: argparse.Action, value: Any) -> List[str]:
-    """The words *value* is spelled as after *flag*; None, and False on a flag that takes no value, select nothing
-    (the declared default)."""
-    from ...errors import RequestValidationError
-    if value is None:
-        return []
-    if action.nargs == 0:
-        if not isinstance(value, bool):
-            raise RequestValidationError(f'{keyword} takes True or False, got {value!r}')
-        return [flag] if value else []
-    values = list(value) if isinstance(value, (list, tuple)) else [value]
-    if action.nargs == '+':  # one flag, then its words: --tests a b
-        return [flag, *(_value_word(keyword, flag, action, item).partition('=')[2] for item in values)]
-    if len(values) > 1 and not isinstance(action, argparse._AppendAction):
-        raise RequestValidationError(f'{keyword} takes one value, got {len(values)}')
-    return [_value_word(keyword, flag, action, item) for item in values]
-
-
-def typed_words(parser: argparse.ArgumentParser, adapter: Any, controls: Mapping[str, Any]) -> List[str]:
-    """The noun's flags for *controls*; a keyword that names no request control is the unsupported-control error
-    (``UnsupportedOverrideError``, rule 3's message), raised before anything runs."""
-    options = typed_options(parser, adapter)
-    unknown = [keyword for keyword in controls if keyword not in options]
-    if unknown:
-        from ...errors import UnsupportedOverrideError
-        from ...utils.query_binding import unsupported_controls_message
-        raise UnsupportedOverrideError(unsupported_controls_message(adapter.PARAM_SPECS, unknown))
-    words: List[str] = []
-    for keyword, value in controls.items():
-        flag, action = options[keyword]
-        words.extend(_flag_words(keyword, flag, action, value))
-    return words
 
 
 def _answer_dict(answer: Any) -> Dict[str, Any]:

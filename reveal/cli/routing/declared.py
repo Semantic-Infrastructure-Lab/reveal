@@ -625,8 +625,15 @@ def _walk_scope(adapter, path, args):
     from ...utils.exclusions import dispatch_scope
     return dispatch_scope(path, peek(args, 'exclude')) if adapter.RESOURCE_SPEC.walks else (None, [])
 
-def _note_uri_request(name: str, adapter, path: str, params, spelled_query: bool, *, early: bool = False,
-                      answer=None) -> None:
+def _spelled_query(uri_query: Optional[str], transport: str, source: Any) -> bool:
+    """Whether the request spelled a URI query string: the query of the URI the flags followed, or the URI route's own."""
+    if uri_query is not None:
+        return bool(uri_query)
+    return transport == 'uri' and bool(source)
+
+
+def _note_uri_request(name: str, adapter, path: str, params, transport: str, spelled_query: bool, *,
+                      early: bool = False, answer=None) -> None:
     """The one note of a retiring URI request (BACK-2716 step 3), rendered from what was bound: an analysis-only scheme
     always, any other scheme when it spells a query string. A retired twin has its own scheme row, and a resource URI
     with only flags is the canonical form: neither notes.
@@ -636,7 +643,7 @@ def _note_uri_request(name: str, adapter, path: str, params, spelled_query: bool
     refused before anything runs (*early*). Rendering never marks a control as read: the answer's own unread-control
     checks see exactly what the request gave."""
     from ..invocation import REQUEST_STAGE, request_note, request_noted
-    if not request_noted(name) or not (getattr(adapter, 'ANALYSIS_ONLY', False) or spelled_query):
+    if transport != 'uri' or not request_noted(name) or not (getattr(adapter, 'ANALYSIS_ONLY', False) or spelled_query):
         return
     if early != (REQUEST_STAGE == 'error'):
         return
@@ -646,8 +653,9 @@ def _note_uri_request(name: str, adapter, path: str, params, spelled_query: bool
         if facts is not None and FailureCause.INVALID_REQUEST in facts.failures:
             return
     from .canonical import render_uri_request
+    parser = create_declared_parser(name)
     try:
-        request_note(name, lambda form: render_uri_request(form, name, path, params))
+        request_note(name, lambda form: render_uri_request(form, name, path, params, parser=parser, adapter=adapter))
     except ValueError:
         return  # a request that cannot render is invalid: binding says why, with the answer's own type (not this note)
 
@@ -665,7 +673,7 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
     from .formats import declared_output_formats, require_supported_format
     require_supported_format(args, declared_output_formats(adapter), f'{name}://')
     validate_execution_policy(args, name)
-    spelled_query = bool(uri_query) if uri_query is not None else (transport == 'uri' and bool(source))
+    spelled_query = _spelled_query(uri_query, transport, source)
     ledger = None
     if ledger_of(args) is None:
         ledger = FlagLedger(args)
@@ -694,8 +702,7 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
                     source = join_uri_and_flags(adapter.PARAM_SPECS, prepare_declared_params(
                         adapter.PARAM_SPECS, query_resource.partition('?')[2], 'uri'), source, spelled=spelled)
                     transport = 'uri'  # one request now, bound as the URI binds (its path's codec included)
-                if transport == 'uri':
-                    _note_uri_request(name, adapter, path, source, spelled_query, early=True)
+                _note_uri_request(name, adapter, path, source, transport, spelled_query, early=True)
             except ValueError as exc:
                 consume(_invalid_prepared_answer(adapter, name, path, query_resource, str(exc), args))
                 return
@@ -721,8 +728,7 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
             with exclusion_scope(root, excludes), gitignore_scope(respect):
                 answer = _declared_answer(adapter, name, path, source, transport, args, expected_type,
                                           scope_path=scope_path)
-                if transport == 'uri':
-                    _note_uri_request(name, adapter, path, source, spelled_query, answer=answer)
+                _note_uri_request(name, adapter, path, source, transport, spelled_query, answer=answer)
                 consume(answer)
             complete(args)
     finally:

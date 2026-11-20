@@ -10,8 +10,9 @@ import shlex
 import pytest
 
 from conftest import _run_reveal_direct
-from reveal.cli.routing.canonical import FORMS, render_request
-from reveal.cli.routing.declared import declared_adapter_class
+from reveal.cli.routing import canonical
+from reveal.cli.routing.canonical import FORMS
+from reveal.cli.routing.declared import create_declared_parser, declared_adapter_class
 from reveal.utils.query_binding import prepare_declared_params
 
 from test_declared_parity_back2053 import project  # noqa: F401  (the fixture)
@@ -27,6 +28,11 @@ PROBES = [
     ('patches', 'proj', 'limit=3'),
     ('markdown', 'proj', 'limit=2'),
 ]
+
+
+def render_request(form, noun, target, params):
+    return canonical.render_request(form, noun, target, params, parser=create_declared_parser(noun),
+                                    adapter=declared_adapter_class(noun))
 
 
 def _bound(noun, query):

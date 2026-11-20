@@ -192,7 +192,7 @@ def _note_uri_request(scheme: str, uri: str, overrides: Dict[str, Any]) -> None:
     from .adapters.base import get_adapter_class
     from .cli.invocation import request_note
     from .cli.routing.canonical import render_uri_request
-    from .cli.routing.declared import declared_adapter_class
+    from .cli.routing.declared import create_declared_parser, declared_adapter_class
     from .utils.query_binding import apply_declared_overrides, prepare_declared_params
     resource, _, query = uri.partition('://')[2].partition('?')
     adapter = declared_adapter_class(scheme)
@@ -203,7 +203,8 @@ def _note_uri_request(scheme: str, uri: str, overrides: Dict[str, Any]) -> None:
                                           overrides)
     except (ValueError, TypeError):
         return
-    request_note(scheme, lambda form: render_uri_request(form, scheme, resource, params))
+    parser = create_declared_parser(scheme)
+    request_note(scheme, lambda form: render_uri_request(form, scheme, resource, params, parser=parser, adapter=adapter))
 
 
 def _query_noun(noun: str, target: Optional[str], controls: Dict[str, Any]) -> Dict[str, Any]:
