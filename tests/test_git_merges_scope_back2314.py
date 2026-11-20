@@ -6,6 +6,7 @@ import json
 import pytest
 
 from conftest import _run_reveal_direct as run
+from conftest import without_request_notes
 from reveal.adapters.git.adapter import GitAdapter
 from test_git_filter_answers_back2312 import history_repo
 
@@ -24,7 +25,8 @@ def test_legacy_merges_answers_unchanged_outside_ownership(history_repo, target,
         baseline = run(f'git://{path}?{query}', '--format', 'json')
         modified = run(f'git://{path}?{with_merges}', '--format', 'json')
         assert baseline.returncode == modified.returncode == 0
-        assert json.loads(modified.stdout) == json.loads(baseline.stdout)
+        # each request's own note names its own controls (BACK-2716)
+        assert without_request_notes(json.loads(modified.stdout)) == without_request_notes(json.loads(baseline.stdout))
         warning = modified.stderr
     else:
         baseline = GitAdapter(str(path), query).get_structure()

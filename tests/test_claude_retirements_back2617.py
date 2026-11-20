@@ -4,9 +4,9 @@ import json
 
 import pytest
 
-from conftest import _run_reveal_in
+from conftest import _run_reveal_in, is_request_note
 from reveal import query
-from reveal.cli.invocation import RETIREMENTS
+from reveal.cli.invocation import RETIREMENTS, request_note_covers
 from test_claude_source_evidence_back2617 import transcript
 
 
@@ -35,14 +35,19 @@ def test_retirement_adds_exactly_one_notice_and_keeps_the_reader_answer(transcri
     result = _run_reveal_in(transcript.parent, uri, '--format', 'json')
     assert result.returncode == 0
     answer = json.loads(result.stdout)
-    records = [w for w in answer['meta']['warnings'] if w.get('code') == 'retired_spelling']
-    assert len(records) == 1
+    every = [w for w in answer['meta']['warnings'] if w.get('code') == 'retired_spelling']
+    assert sum(map(is_request_note, every)) == 1  # a URI that spells a query string says its one request note (BACK-2716)
+    records = [w for w in every if not is_request_note(w)]
     key = 'param:claude.' + name
     entry = RETIREMENTS[key]
-    assert records[0]['field'] == key and records[0]['message'] == entry.text
+    # A covered spelling's note is the request note itself (it spells the canonical request); the rest keep their own.
+    assert len(records) == (0 if request_note_covers(key) else 1)
+    for record in records:
+        assert record['field'] == key and record['message'] == entry.text
     assert result.stderr == ''  # the JSON carries the note (BACK-2659)
     restored = copy.deepcopy(answer)
-    restored['meta']['warnings'].remove(records[0])
+    for record in records:
+        restored['meta']['warnings'].remove(record)
     assert restored == expected
     assert query(uri) == api_before
 
@@ -71,10 +76,12 @@ def test_sdk_notice_is_json_only_and_fresh_canonical_request_has_none(transcript
             'uri': 'claude://session/my-session?last', 'provenance': True})
         assert not legacy.is_error, _text(legacy)
         answer = json.loads(_text(legacy))
-        notices = [w for w in answer['meta']['warnings'] if w.get('code') == 'retired_spelling']
-        assert [w['field'] for w in notices] == ['param:claude.last']
+        notices = [w for w in answer['meta']['warnings'] if w.get('code') == 'retired_spelling' and not is_request_note(w)]
+        assert notices == []  # `last` is covered: the request note replaces its own (BACK-2716)
+        assert [w['field'] for w in answer['meta']['warnings'] if w.get('code') == 'retired_spelling'] == ['request:claude']
         canonical = await session.call_tool('reveal_query', {
             'uri': 'claude://session/my-session?view=messages&sort=-message_index&limit=1', 'provenance': True})
         assert not canonical.is_error, _text(canonical)
-        assert not any(w.get('code') == 'retired_spelling' for w in json.loads(_text(canonical))['meta']['warnings'])
+        assert not any(w.get('code') == 'retired_spelling' and not is_request_note(w)
+                       for w in json.loads(_text(canonical))['meta']['warnings'])  # only the URI's request note (BACK-2716)
     _run(transcript.parent, scenario)

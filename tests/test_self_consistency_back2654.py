@@ -32,6 +32,7 @@ import shlex
 
 import pytest
 
+from conftest import is_request_note
 from test_example_recipes_run import PLACEHOLDERS, harness  # noqa: F401  (the module-scoped fixture)
 from claude_session_fixture import SESSION_NAMES
 from reveal.adapters.base import get_adapter_class, list_supported_schemes
@@ -393,7 +394,9 @@ def _raw_problems(harness, argv):
     if code == 2 and any(e.get('code') == 'invalid_request' for e in errors):
         problems.append(('invalid request', '', str(doc.get('error'))))
     for warning in meta.get('warnings') or []:
-        if isinstance(warning, dict) and warning.get('code') == 'retired_spelling':
+        # The URI request's own note is not a printed spelling's fault: reveal's own hints and examples still teach URI forms
+        # (BACK-2713), counted by test_doc_uri_requests_only_fall (BACK-2716).
+        if isinstance(warning, dict) and warning.get('code') == 'retired_spelling' and not is_request_note(warning):
             problems.append(('note', warning.get('field', ''), str(warning.get('message'))))
     return problems
 
@@ -677,11 +680,16 @@ def test_the_collector_reads_hints_and_maps_placeholders():
 
 def test_the_judge_bites(harness):
     """Positive controls: a legacy spelling and a rejected key are problems; a canonical spelling is not."""
-    assert any('note:' in p for p in _problems(harness, ['ast://proj?type=function'], 'test'))
+    # (a standalone legacy row keeps its own note; a covered one is the URI request's note, which is no fault, BACK-2716)
+    assert any('note:' in p for p in _problems(harness, ['ast://proj?calls=helper'], 'test'))
+    assert _problems(harness, ['ast://proj?type=function'], 'test') == []
     assert any('invalid request' in p for p in _problems(harness, ['metrics://proj?bogus=1'], 'test'))
     assert _problems(harness, ['ast://proj?kind=function'], 'test') == []
     # the generated family: a bare shared-control key on an open-field noun notes where=
-    assert any('where' in p for p in _problems(harness, ['ast://proj?depth>1'], 'test'))
+    # (that note is now the URI request's one note, which names --where; it is no printed-spelling fault, BACK-2716)
+    assert _problems(harness, ['ast://proj?depth>1'], 'test') == []
+    _, out, _, _ = harness.run_subcommand(*_json_argv(['ast://proj?depth>1']))
+    assert any(is_request_note(w) and '--where' in w['message'] for w in json.loads(out)['meta']['warnings'])
     # a retired scheme's own help may name it; another surface may not
     assert _problems(harness, ['deps://proj'], 'help://deps') == []
     assert _problems(harness, ['deps://proj'], 'overview://proj')

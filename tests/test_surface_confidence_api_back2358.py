@@ -6,7 +6,7 @@ from pathlib import PurePosixPath, PureWindowsPath
 
 import pytest
 
-from conftest import _run_reveal_direct as run, _assert_same_answer_source_spelling
+from conftest import _run_reveal_direct as run, _assert_same_answer_source_spelling, without_request_notes
 from reveal import api
 from reveal.adapters.surface import SurfaceAdapter
 from reveal.utils.results import AnalysisCompleteness, note_incomplete
@@ -55,7 +55,7 @@ def test_complete_baseline_answer_survives_estimate_omission(tmp_path, case):
     (tmp_path / name).write_text(source, encoding='utf-8')
     adapter = SurfaceAdapter(str(tmp_path))
     native = adapter.get_structure()
-    result = api.query(f'surface://{tmp_path}?respect_gitignore=false')
+    result = without_request_notes(api.query(f'surface://{tmp_path}?respect_gitignore=false'))  # the URI request's own note (BACK-2716)
     # The API answer is the CLI's: the native answer plus the incomplete marker when it is incomplete (BACK-2650).
     expected_answer = copy.deepcopy(native)
     note_incomplete(expected_answer, adapter.execution_facts(native))
@@ -79,7 +79,7 @@ def test_loss_repair_reuse_and_siblings_keep_evidence(tmp_path, fault, stage):
     clean = adapter.get_structure()
     assert clean['total'] == 2
     fault.update(stage=stage, denied=set(children))
-    lost = api.query(f'surface://{tmp_path}?respect_gitignore=false', type='env')
+    lost = without_request_notes(api.query(f'surface://{tmp_path}?respect_gitignore=false', type='env'))
     assert fault['events']
     assert adapter.execution_facts(lost).completeness is AnalysisCompleteness.INCOMPLETE
     assert lost['total'] == (1 if stage == 'source' else 2)
@@ -87,7 +87,7 @@ def test_loss_repair_reuse_and_siblings_keep_evidence(tmp_path, fault, stage):
     _absent(lost)
     fault['denied'] = set()
     assert adapter.get_structure() == clean
-    assert api.query(f'surface://{tmp_path}?respect_gitignore=false', type='env', top=0) == clean
+    assert without_request_notes(api.query(f'surface://{tmp_path}?respect_gitignore=false', type='env', top=0)) == clean
     _absent(clean)
     sibling = api.query(f'ast://{tmp_path}?name=absent')
     assert sibling['meta']['confidence'] == 1.0
@@ -101,7 +101,7 @@ def test_cli_json_text_and_artifact_preserve_requested_rows(tmp_path, spelling):
     assert response.returncode == 0
     result = json.loads(response.stdout)
     _assert_same_answer_source_spelling(
-        result, api.query(f'surface://{tmp_path}?respect_gitignore=false', type='env'))
+        without_request_notes(result), without_request_notes(api.query(f'surface://{tmp_path}?respect_gitignore=false', type='env')))
     assert result['total'] == 2
     _absent(result)
     artifact = tmp_path / 'answer.json'

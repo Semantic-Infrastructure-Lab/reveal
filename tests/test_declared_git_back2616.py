@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from conftest import _run_reveal_in
+from conftest import _run_reveal_in, without_covered_notes, without_request_notes
 from test_git_declared_api_back2616 import repo_path
 
 
@@ -23,7 +23,7 @@ def test_cli_uri_share_existing_view_identity(repo_path, suffix, controls, query
     cli = _run_reveal_in(repo_path, 'git', path, *controls, '--format', 'json')
     uri = _run_reveal_in(repo_path, 'git://' + path + query, '--format', 'json')
     assert cli.returncode == uri.returncode == 0, (cli.stderr, uri.stderr)
-    a, b = json.loads(cli.stdout), json.loads(uri.stdout)
+    a, b = without_covered_notes(json.loads(cli.stdout)), without_request_notes(json.loads(uri.stdout))  # BACK-2716
     assert a == b and a['type'] == kind
     assert a['meta']['errors'] == []
 
@@ -371,7 +371,7 @@ def test_global_all_reaches_the_same_declared_limit_as_the_uri(repo_path):
     cli = _run_reveal_in(repo_path, 'git', str(repo_path), '--view', 'history', '--all', '--format', 'json')
     uri = _run_reveal_in(repo_path, f'git://{repo_path}?view=history', '--all', '--format', 'json')
     assert cli.returncode == uri.returncode == 0
-    a, b = json.loads(cli.stdout), json.loads(uri.stdout)
+    a, b = without_covered_notes(json.loads(cli.stdout)), without_request_notes(json.loads(uri.stdout))  # BACK-2716
     assert len(a['history']) == len(b['history']) == 28
     assert a == b
 
@@ -384,7 +384,7 @@ def test_declared_date_flags_reach_the_existing_history_owner(repo_path, name, v
     cli = _run_reveal_in(repo_path, 'git', str(repo_path), '--view', 'history', '--' + name, value, '--format', 'json')
     uri = _run_reveal_in(repo_path, resource + '&' + name + '=' + value, '--format', 'json')
     assert cli.returncode == uri.returncode == 0
-    a, b = json.loads(cli.stdout), json.loads(uri.stdout)
+    a, b = without_covered_notes(json.loads(cli.stdout)), without_request_notes(json.loads(uri.stdout))  # BACK-2716
     assert a == b and a['history'] == []
     assert query(resource, **{name: value})['history'] == []
 
@@ -394,5 +394,5 @@ def test_declared_verbose_reaches_full_blame(repo_path):
     cli = _run_reveal_in(repo_path, 'git', target, '--view', 'blame', '--verbose', '--format', 'json')
     uri = _run_reveal_in(repo_path, f'git://{target}?view=blame', '--verbose', '--format', 'json')
     assert cli.returncode == uri.returncode == 0
-    a, b = json.loads(cli.stdout), json.loads(uri.stdout)
+    a, b = json.loads(cli.stdout), without_request_notes(json.loads(uri.stdout))  # the flag keeps its own note beside the request note (BACK-2716)
     assert a == b and a['detail'] is True

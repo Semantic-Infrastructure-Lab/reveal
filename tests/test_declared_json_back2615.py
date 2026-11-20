@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from conftest import _run_reveal_in
+from conftest import _run_reveal_in, without_covered_notes, without_request_notes
 
 
 @pytest.fixture
@@ -23,6 +23,7 @@ def test_cli_uri_api_filter_and_zero_overrides(data):
     from reveal.api import query
     a = answer(data, 'json', 'data.json/items', '--where', 'n>1', '--sort=-n')
     b = answer(data, 'json://data.json/items?where=n%3E1&sort=-n')
+    a, b = without_covered_notes(a), without_request_notes(b)  # the URI request's own note (BACK-2716)
     assert a == b and a['value'] == [{'type': 'photo', 'n': 3}]
     uri = f'json://{data / "data.json"}/items?limit=1'
     # limit=0 overrides the URI's limit=1 and is no cap (Caps row, BACK-2654; it was an empty page)
@@ -33,6 +34,7 @@ def test_cli_uri_api_filter_and_zero_overrides(data):
 def test_type_field_filter_is_not_a_view_selector(data):
     a = answer(data, 'json://data.json/items?type=book')
     b = answer(data, 'json', 'data.json/items', '--where', 'type=book')
+    a, b = without_request_notes(a), without_covered_notes(b)  # a is the URI (BACK-2716)
     assert a == b and a['type'] == 'json_value'
     assert a['value'] == [{'type': 'book', 'n': 1}]
 
@@ -41,6 +43,7 @@ def test_type_field_filter_is_not_a_view_selector(data):
 def test_existing_inspection_views_share_generated_bindings(data, view):
     a = answer(data, 'json', 'data.json', '--view', view)
     b = answer(data, 'json://data.json?view=' + view)
+    a, b = without_covered_notes(a), without_request_notes(b)  # the URI request's own note (BACK-2716)
     assert a == b and a['type'] == 'json_' + view
 
 

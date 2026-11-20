@@ -6,7 +6,7 @@ from urllib.parse import quote
 
 import pytest
 
-from conftest import _run_reveal_direct as run, _assert_same_answer_source_spelling
+from conftest import _run_reveal_direct as run, _assert_same_answer_source_spelling, without_request_notes
 from reveal.api import query
 from reveal.adapters.factory import _canonical_init
 from reveal.adapters.overview import OverviewAdapter
@@ -35,7 +35,7 @@ def test_encoded_filename_is_bound_once_and_typed_top_still_applies(tmp_path, fi
     answer = query(uri + '?top=1', top=0)
     expected = run(uri + '?top=0', '--format', 'json')
     assert expected.returncode == 0, expected.stderr
-    assert answer == json.loads(expected.stdout)
+    assert without_request_notes(answer) == without_request_notes(json.loads(expected.stdout))  # BACK-2716
     assert answer['path'] == path.as_posix()
     assert answer['map']['components']['rows'] == []
     assert answer['map']['components']['total'] == 1

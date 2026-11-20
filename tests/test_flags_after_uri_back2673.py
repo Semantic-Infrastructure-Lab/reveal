@@ -11,6 +11,7 @@ import json
 
 import pytest
 
+from conftest import without_request_notes
 from test_vocabulary_conformance_back2654 import BASE, TARGETS, _answer, _run, _uri, workspace  # noqa: F401
 
 from reveal.cli.invocation import COMMANDS
@@ -97,4 +98,5 @@ def test_the_flagless_mcp_answer_is_the_cli_json(workspace, noun):
     cli = _run(uri, '--format', 'json', '--provenance')
     assert cli.rc in (0, 1, 3), cli.brief()
     mcp = json.loads(reveal_query(uri, provenance=True))
-    assert _without_execution(mcp) == _without_execution(json.loads(cli.out))
+    # each transport says its request note in its own form (BACK-2716)
+    assert _without_execution(without_request_notes(mcp)) == _without_execution(without_request_notes(json.loads(cli.out)))

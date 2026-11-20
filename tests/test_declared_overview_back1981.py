@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from conftest import _run_reveal_direct as run
+from conftest import _run_reveal_direct as run, without_covered_notes, without_request_notes
 from reveal.adapters.overview import OverviewAdapter
 
 
@@ -25,7 +25,7 @@ def requests(cli=(), query=''):
 
 
 def equal_answers(left, right):
-    left, right = deepcopy(left), deepcopy(right)
+    left, right = without_covered_notes(left), without_request_notes(right)  # the URI request's own note (BACK-2716)
     if 'execution' in left:
         del left['execution']['command'], right['execution']['command']
     assert left == right

@@ -15,7 +15,7 @@ import sys
 
 import pytest
 
-from tests.conftest import _run_reveal_in
+from tests.conftest import _run_reveal_in, without_request_notes
 
 pytestmark = [pytest.mark.cli]
 
@@ -53,8 +53,9 @@ def _cli(*argv, stdin=None):
 
 
 def _answer(document):
-    """The answer without the per-invocation provenance manifest (its command line differs by transport)."""
-    return {key: value for key, value in document.items() if key != 'execution'}
+    """The answer without the per-invocation provenance manifest and the URI request's note (each differs by transport:
+    the command line, and the request spelled in the transport's own form, BACK-2716)."""
+    return {key: value for key, value in without_request_notes(document).items() if key != 'execution'}
 
 
 @pytest.mark.mcp

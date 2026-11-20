@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from conftest import _run_reveal_in
+from conftest import _run_reveal_in, without_covered_notes, without_request_notes
 from reveal.adapters.claude.adapter import ClaudeAdapter
 from test_claude_source_evidence_back2617 import transcript
 from test_claude_workspace_lists_back2617 import workspace_home
@@ -33,7 +33,7 @@ def test_command_and_uri_have_equal_json_and_exit(transcript, command_home, reso
     command = _run_reveal_in(transcript.parent, 'claude', resource, *options, '--format', 'json')
     uri = _run_reveal_in(transcript.parent, 'claude://' + resource + ('?' + query if query else ''), '--format', 'json')
     assert command.returncode == uri.returncode == 0
-    assert json.loads(command.stdout) == json.loads(uri.stdout)
+    assert without_covered_notes(json.loads(command.stdout)) == without_request_notes(json.loads(uri.stdout))  # BACK-2716
 
 
 @pytest.mark.parametrize('form', ['command', 'uri'])

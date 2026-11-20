@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from conftest import _run_reveal_direct as run
+from conftest import is_request_note, without_covered_notes, without_request_notes
 from reveal.api import query
 from reveal.adapters.calls.adapter import CallsAdapter, _TOP
 from reveal.utils.query_binding import bind_declared_params
@@ -129,7 +130,8 @@ class TestPreservation:
         ('callers=sink&depth=1', {'callers': 'sink', 'depth': 0}),
     ])
     def test_api_false_zero_none_are_real_overrides(self, project, controls, typed):
-        assert query(uri(project, controls)) == query(uri(project, ''), **typed)
+        # each request's own note spells its own form (BACK-2716)
+        assert without_request_notes(query(uri(project, controls))) == without_request_notes(query(uri(project, ''), **typed))
 
     def test_same_key_repetition_and_same_cli_alias_values(self, project):
         expected = query(uri(project, 'rank=callers&top=2'))
@@ -302,7 +304,7 @@ class TestProposedChanges:
         assert len(actual['entries']) == 1
         result, answer = cli_json('calls', str(project), '--sort=-callers', '--limit', '1', '--top', '1.0')
         assert result.returncode == 0
-        assert answer == actual
+        assert without_covered_notes(answer) == without_request_notes(actual)  # the request note replaces the --top note (BACK-2716)
 
     def test_uri_global_zero_cap_is_uncapped_not_a_million_row_approximation(self, project):
         from reveal.cli.defaults import _default_args
@@ -402,8 +404,9 @@ class TestProposedChanges:
         old = legacy.partition('=')[0]
         new = canonical.partition('=')[0]
         notes = [w for w in answer['meta']['warnings'] if w.get('type') == 'retired_spelling']
-        assert any(old in w.get('message', '') and new in w.get('message', '') for w in notes), \
-            f'legacy {old} must keep working with a retirement note naming {new}'
+        # the URI request's one note replaces the per-spelling note and spells the canonical control (BACK-2716)
+        assert [w['field'] for w in notes] == ['request:calls'] and is_request_note(notes[0]), notes
+        assert new in notes[0]['message'], f'legacy {old} must keep working with a request note naming {new}'
 
     @pytest.mark.parametrize('controls,replacement', [
         ('rank=callers&top=1&limit=2', 'limit'),

@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from conftest import _run_reveal_direct as run
+from conftest import is_request_note, without_request_notes
 from reveal import api
 from reveal.adapters.markdown import operations
 from reveal.core import disk_cache
@@ -43,7 +44,8 @@ def _uri(root, mode):
 
 
 def _warnings(answer):
-    return answer.get('meta', {}).get('warnings', [])
+    """The answer's own warnings: the URI request's one note (BACK-2716) is not a discovery fact."""
+    return [w for w in answer.get('meta', {}).get('warnings', []) if not is_request_note(w)]
 
 
 def _loss(answer, directory):
@@ -72,7 +74,7 @@ def test_api_loss_and_recovery_keep_observed_population(docs, denied, total, mod
     else:
         assert lost['linked_by'] == []
         assert lost['found'] is (not total and mode == 'backlinks=target.md')
-    assert str(docs) not in json.dumps(lost['meta'])
+    assert str(docs) not in json.dumps(without_request_notes(lost)['meta'])  # the request note echoes the caller's own path (BACK-2716)
     denied.clear()
     assert api.query(_uri(docs, mode)) == healthy
     _loss(lost, '.' if total else 'hidden')  # later requests do not mutate old evidence
@@ -86,7 +88,7 @@ def test_cli_discloses_loss_in_each_format(docs, denied, mode, output):
     assert response.returncode == 3  # source loss is now qualified across Markdown views
     if output == 'json':
         _loss(json.loads(response.stdout), 'hidden')
-        assert json.loads(response.stdout) == api.query(_uri(docs, mode))
+        assert without_request_notes(json.loads(response.stdout)) == without_request_notes(api.query(_uri(docs, mode)))
     else:
         visible = response.stderr if output == 'grep' else response.stdout
         assert 'missing file population is unknown' in visible

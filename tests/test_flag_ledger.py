@@ -38,7 +38,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from conftest import production_schemes
+from conftest import production_schemes, without_request_notes
 from reveal.cli.defaults import _default_args
 from reveal.cli.routing.ledger import FlagLedger, TrackedArgs, delegate, mark, peek
 from reveal.cli.routing.uri import handle_uri
@@ -283,7 +283,7 @@ def test_json_filters_on_an_object_are_named(jsons, uri, control):
     counts as their read: the ledger does not name them again."""
     proc = _cli(uri, '--format', 'json', cwd=jsons)
     assert proc.returncode == 0 and not proc.stderr
-    warnings = json.loads(proc.stdout)['meta']['warnings']
+    warnings = without_request_notes(json.loads(proc.stdout))['meta']['warnings']  # the URI's own request note (BACK-2716)
     assert [(warning['type'], warning['fields']) for warning in warnings] == [('control_unread_by_data', [control])]
     assert 'has no effect on this data' in warnings[0]['message']
 

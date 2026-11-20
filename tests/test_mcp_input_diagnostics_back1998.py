@@ -7,6 +7,7 @@ from io import StringIO
 
 import pytest
 
+from conftest import without_request_note_lines, without_request_notes
 from reveal.main import main
 from reveal.cli.defaults import _default_args
 from reveal.cli.routing.ledger import FlagLedger
@@ -56,10 +57,10 @@ def test_cli_json_and_text_preserve_unknown_and_unused_inputs(resources):
     json_uri = f'json://{resources / "object.json"}?bogus=1'
     code, out, err = _cli(json_uri, '--format', 'json')
     assert code == 0 and not err, err
-    assert [(w['type'], w['fields']) for w in json.loads(out)['meta']['warnings']] == [('control_unread_by_data',
+    assert [(w['type'], w['fields']) for w in without_request_notes(json.loads(out))['meta']['warnings']] == [('control_unread_by_data',
                                                                                         ['where'])]
     code, out, err = _cli(json_uri, '--format', 'text')
-    assert code == 0 and "'where' (bogus=1) has no effect on this data" in out and 'bogus' not in err, (out, err)
+    assert code == 0 and "'where' (bogus=1) has no effect on this data" in out and 'bogus' not in without_request_note_lines(err), (out, err)  # BACK-2716
     for uri, field, options in (
         (f'sqlite://{resources / "data.db"}?bogus=1', 'bogus', ()),
         (f'sqlite://{resources / "data.db"}?limit=1', 'limit', ()),
@@ -147,7 +148,7 @@ def test_sdk_provenance_keeps_one_json_value_and_diagnostics_without_leaking(res
             assert not result.is_error, _text(result)
             answer = json.loads(_text(result))
             if warning:  # JSON: the data leaves the where filter unread (BACK-2656, Q2)
-                assert [(w['type'], w['fields']) for w in answer['meta']['warnings']] == [warning], answer
+                assert [(w['type'], w['fields']) for w in without_request_notes(answer)['meta']['warnings']] == [warning], answer  # BACK-2716
             else:
                 assert len(_ignored(answer, 'bogus')) == 1, answer
             assert answer['execution']['command']

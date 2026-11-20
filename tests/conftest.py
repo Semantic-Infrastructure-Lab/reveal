@@ -63,9 +63,10 @@ def without_retirement_notes(answer):
 
 
 def _assert_same_answer_source_spelling(*answers):
-    """Compare every field; normalize only the source path's separator spelling."""
+    """Compare every field; normalize only the source path's separator spelling and set aside the URI request's own note
+    (BACK-2716), which each transport says in its own form."""
     from reveal.utils.path_utils import to_posix
-    first, *rest = answers
+    first, *rest = (without_request_notes(answer) for answer in answers)
     expected = {**first, 'source': to_posix(first['source'])}
     for answer in rest:
         assert {**answer, 'source': to_posix(answer['source'])} == expected
