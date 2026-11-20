@@ -24,7 +24,7 @@ from ...file_handler import handle_file  # noqa: E402
 from .grep import handle_grep, handle_grep_directory
 from .ledger import FlagLedger, ledger_of, mark, peek  # noqa: E402
 from ..defaults import _parser_defaults  # noqa: E402
-from ..invocation import typed_spelling  # noqa: E402
+from ..invocation import internal_request, typed_spelling  # noqa: E402
 from ...utils.json_utils import attach_invocation_warnings  # noqa: E402
 from ...utils.path_utils import to_posix  # noqa: E402
 from ...registry import get_markdown_extensions  # noqa: E402
@@ -336,10 +336,12 @@ def _handle_directory_path(path: Path, args: 'Namespace') -> None:
             ext_from_args = mapped  # treat as file-type filter; fall through
         else:
             # AST node-type filter (class, function, etc.) or --ext already set
-            handle_uri(_build_ast_query_from_flags(path, args), args.element, args)
+            with internal_request():
+                handle_uri(_build_ast_query_from_flags(path, args), args.element, args)
             return
     elif getattr(args, 'name', None):
-        handle_uri(_build_ast_query_from_flags(path, args), args.element, args)
+        with internal_request():
+            handle_uri(_build_ast_query_from_flags(path, args), args.element, args)
         return
     require_supported_format(args, DEFAULT_OUTPUT_FORMATS, 'a directory listing')
     reject_unhonored_also_json(args, 'a directory listing')
@@ -553,7 +555,8 @@ def _handle_file_path(path: Path, element_from_path: Optional[str], args: 'Names
         handle_grep(to_posix(path), args.grep, args)
         return
     if getattr(args, 'name', None) or getattr(args, 'sort', None) or getattr(args, 'type', None):
-        handle_uri(_build_ast_query_from_flags(path, args), args.element, args)
+        with internal_request():
+            handle_uri(_build_ast_query_from_flags(path, args), args.element, args)
         return
 
     element = element_from_path or args.element

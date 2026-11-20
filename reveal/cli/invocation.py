@@ -767,10 +767,27 @@ def request_form() -> str:
     return _FORM.get()
 
 
-def request_note(scheme: str, replacement_for: Callable[[str], str]) -> Retirement:
+_INTERNAL: ContextVar[bool] = ContextVar('reveal_internal_request', default=False)
+
+
+@contextmanager
+def internal_request() -> Iterator[None]:
+    """Mark the request a router builds for a spelling the user did not type as its own (``reveal a.py --name X`` runs
+    an ``ast://`` URI internally): it says no request note, since the user's actual spelling has its own note."""
+    token = _INTERNAL.set(True)
+    try:
+        yield
+    finally:
+        _INTERNAL.reset(token)
+
+
+def request_note(scheme: str, replacement_for: Callable[[str], str]) -> Optional[Retirement]:
     """The one note of a retiring URI request: *replacement_for(form)* is the executable canonical request rendered from
     the bound request in the running transport's own form. Keyed ``request:<scheme>`` so it is said once per scheme per
-    invocation; at the ``error`` stage it raises like any retired spelling (exit 2, the same text)."""
+    invocation; at the ``error`` stage it raises like any retired spelling (exit 2, the same text). A request a router
+    built itself (``internal_request``) says nothing."""
+    if _INTERNAL.get():
+        return None
     entry = Retirement(f'a {scheme}:// request', replacement_for(request_form()), REQUEST_STAGE)
     key = f'request:{scheme}'
     if entry.stage == 'error':

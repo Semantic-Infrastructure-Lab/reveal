@@ -98,3 +98,17 @@ def test_the_red_control_a_form_that_names_no_flag_fails_the_round_trip(project)
     line = render_request('cli', 'calls', 'proj', _bound('calls', 'callers=serve')).replace('--callers', '--no-such-flag')
     run = _run_reveal_direct(*shlex.split(line)[1:], '--format', 'json')
     assert run.returncode == 2
+
+
+def test_a_plain_path_with_a_legacy_flag_says_no_request_note(project):  # noqa: F811
+    """`reveal a.py --name X` runs an ast URI internally; the user typed none, so only the flag's own note is said."""
+    run = _run_reveal_direct('proj/app.py', '--name', 'serve*')
+    assert 'request is deprecated' not in run.stderr
+
+
+def test_a_request_that_cannot_render_is_not_noted_and_keeps_its_own_error_answer(project):  # noqa: F811
+    """The note renders after binding; a malformed control must reach the binder's answer (its own type), not turn
+    into a generic invalid request because the note's rendering raised."""
+    run = _run_reveal_direct('overview://proj?against=%FF', '--format', 'json')
+    assert run.returncode == 2
+    assert _json(run)['type'] == 'overview_diff'

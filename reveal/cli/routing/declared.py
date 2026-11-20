@@ -633,7 +633,10 @@ def _note_uri_request(name: str, adapter, path: str, params, spelled_query: bool
     if not request_noted(name) or not (getattr(adapter, 'ANALYSIS_ONLY', False) or spelled_query):
         return
     from .canonical import render_uri_request
-    request_note(name, lambda form: render_uri_request(form, name, path, params))
+    try:
+        request_note(name, lambda form: render_uri_request(form, name, path, params))
+    except ValueError:
+        return  # a request that cannot render is invalid: binding says why, with the answer's own type (not this note)
 
 
 def _run_declared(name: str, args, path: str, source: Any, transport: str, consumed=(), *,
