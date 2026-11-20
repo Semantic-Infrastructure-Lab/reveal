@@ -75,6 +75,7 @@ REVEAL_CONFORMANCE_REPORT=<path>: each cell appends one JSON line (state, case c
 """
 import json
 import os
+import re
 from dataclasses import dataclass
 from functools import partial
 
@@ -370,6 +371,8 @@ def _answer(run, noun):
             if warning not in warnings:  # two spellings of one unused control are one fact
                 warnings.append(warning)
         meta['warnings'] = warnings
+        if not warnings and set(meta) == {'warnings'}:  # an answer with no meta of its own gained one only to carry a note
+            del doc['meta']
     return run.rc, doc
 
 
@@ -727,9 +730,40 @@ def _uri_of(argv):
     return f'{noun}://{path}?' + '&'.join(pairs)
 
 
+def _noted(key, fields):
+    """Whether a retired spelling's note is among *fields*: its own key, or (a covered per-key row, BACK-2716) the one
+    request note of its scheme."""
+    from reveal.cli.invocation import request_note_covers
+    scheme = key.partition(':')[2].partition('.')[0]
+    return key in fields or (request_note_covers(key) and f'request:{scheme}' in fields)
+
+
+def _own_notes(stderr):
+    """Stderr without the request note's line (BACK-2716)."""
+    return ''.join(line for line in stderr.splitlines(keepends=True) if not _REQUEST_NOTE.search(line))
+
+
+def _own_retired_fields(doc):
+    """The spellings a URI request noted by their own rows: ``_retired_fields`` without the request note, which every
+    URI request to a retiring scheme carries (BACK-2716) and a canonical-spelling check does not mean."""
+    return [field for field in _retired_fields(doc) if not str(field).startswith('request:')]
+
+
 def _retired_fields(doc):
     return [w.get('field') for w in ((doc or {}).get('meta') or {}).get('warnings') or []
             if w.get('code') == 'retired_spelling']
+
+
+_REQUEST_NOTE = re.compile(r'an? \w+:// request is deprecated; use ')
+
+
+def _noted_as(key, entry, argv):
+    """How a retired spelling notes (BACK-2716): a per-key row a request note covers says the one request note of its
+    scheme, rendered from the bound request; any other row says its own text under its own key."""
+    from reveal.cli.invocation import request_note_covers
+    if not request_note_covers(key) or '://' not in argv[0]:  # a CLI flag spelling is no URI request
+        return key, lambda text: entry.text in text
+    return f"request:{key[key.index(':') + 1:].partition('.')[0]}", lambda text: bool(_REQUEST_NOTE.search(text))
 
 
 def probe_retirement_notes(noun, sample):
@@ -738,27 +772,29 @@ def probe_retirement_notes(noun, sample):
     cases = []
     for key in _rows(noun):
         entry, argv = RETIREMENTS[key], PRODUCTION_CASES[key](str(sample))
+        field, says = _noted_as(key, entry, argv)
         text = _run(*argv)
-        cases.append(Case(f'{key} CLI text', text.err.count(f'note: {entry.text}') == 1,
-                          f'{text.brief()} (wants one note line)'))
+        lines = [line for line in text.err.splitlines() if line.startswith('note: ') and says(line)]
+        cases.append(Case(f'{key} CLI text', len(lines) == 1, f'{text.brief()} (wants one note line)'))
         as_json = _run(*argv, '--format', 'json')
         doc = json.loads(as_json.out) if as_json.out.strip().startswith('{') else None
-        cases.append(Case(f'{key} CLI JSON', key in _retired_fields(doc),
+        cases.append(Case(f'{key} CLI JSON', field in _retired_fields(doc),
                           f'{as_json.brief()}: retired_spelling fields {_retired_fields(doc)}'))
         if key.startswith('subcommand:'):
             continue  # api.query and MCP take a URI; the scheme row is their spelling of the noun
         uri = _uri_of(argv)
+        field, says = _noted_as(key, entry, [uri])  # api.query and MCP take the URI, whatever spelling the CLI case used
         try:
             fields = _retired_fields(api.query(uri))
             evidence = f'api.query({uri!r}): retired_spelling fields {fields}'
         except Exception as exc:  # the probe records any failure as evidence, never as a pass
             fields, evidence = [], f'api.query({uri!r}) raised {type(exc).__name__}: {str(exc)[:120]}'
-        cases.append(Case(f'{key} api.query', key in fields, evidence))
+        cases.append(Case(f'{key} api.query', field in fields, evidence))
         try:
             out = reveal_query(uri)
         except Exception as exc:  # a ToolError is a failed tool call: evidence, not a pass
             out = f'raised {type(exc).__name__}: {str(exc)[:120]}'
-        cases.append(Case(f'{key} MCP', entry.text in out, f'reveal_query({uri!r}): {out[-160:]!r}'))
+        cases.append(Case(f'{key} MCP', says(out), f'reveal_query({uri!r}): {out[-160:]!r}'))
     return cases
 
 
@@ -786,7 +822,7 @@ def probe_unsupported_controls(noun):
             run = _run(_uri(noun, f'{control}={value}'), '--format', 'json')
             if open_fields:  # rule 8: a translated legacy spelling of where=CONTROL... until the cut, with its note
                 doc = json.loads(run.out) if run.out.strip().startswith('{') else None
-                ok = run.rc == 0 and f'param:{noun}.{control}' in _retired_fields(doc)
+                ok = run.rc == 0 and f'request:{noun}' in _retired_fields(doc)
                 cases.append(Case(f'?{control}= (legacy where term until the cut)', ok,
                                   f'{run.brief()} (wants exit 0 with the param:{noun}.{control} note)'))
             else:
@@ -877,7 +913,7 @@ def _verbose_as_declared(noun, owner):
         verbose = _run(*argv, '--verbose', '--format', 'json')
         doc = json.loads(verbose.out) if verbose.out.strip().startswith('{') else None
         ok = (verbose.rc != 2 and _read_answer(verbose, noun) == _read_answer(declared, noun)
-              and key in _retired_fields(doc) and not _mentions(verbose, '--verbose'))
+              and _noted(key, _retired_fields(doc)) and not _mentions(verbose, '--verbose'))
         cases.append(Case(f'{form} --verbose is ?verbose ({owner.name})', ok,
                           f'{verbose.brief()} vs {declared.brief()}: retired fields {_retired_fields(doc)} '
                           f'(wants the same answer and the {key} note)'))
@@ -920,7 +956,7 @@ def probe_verbose_is_detail_full(noun):
             continue
         doc = json.loads(verbose.out) if verbose.out.strip().startswith('{') else None
         ok = (_answer(verbose, noun) == _answer(full, noun) and not _mentions(verbose, '--verbose')
-              and VERBOSE_NOTE in _retired_fields(doc))
+              and _noted(VERBOSE_NOTE, _retired_fields(doc)))
         cases.append(Case(f'{form} --verbose', ok, f'{verbose.brief()} vs {full.brief()}: retired fields '
                                                    f'{_retired_fields(doc)} (wants the same answer and the note)'))
     return cases
@@ -1029,7 +1065,7 @@ def probe_alias_notes(noun, sample):
             as_json = _run(uri, '--format', 'json')
             doc = json.loads(as_json.out) if as_json.out.strip().startswith('{') else None
             if not noted:
-                ok = key not in RETIREMENTS and key not in _retired_fields(doc)
+                ok = key not in RETIREMENTS and key not in _own_retired_fields(doc)
                 cases.append(Case(f'?{alias}= note-free', ok, f'{as_json.brief()}: retired_spelling fields '
                                                               f'{_retired_fields(doc)}; row {key in RETIREMENTS}'))
                 continue
@@ -1037,20 +1073,23 @@ def probe_alias_notes(noun, sample):
             cases.append(Case(f'{key} row', row is not None and row.stage == 'note', f'no note-stage row {key}'))
             if row is None:
                 continue
-            cases.append(Case(f'?{alias}= CLI JSON', key in _retired_fields(doc),
+            cases.append(Case(f'?{alias}= CLI JSON', _noted(key, _retired_fields(doc)),
                               f'{as_json.brief()}: retired_spelling fields {_retired_fields(doc)}'))
             text = _run(uri)
-            cases.append(Case(f'?{alias}= CLI text', text.err.count(f'note: {row.text}') == 1, text.brief()))
+            noted = text.err.count(f'note: {row.text}') + len(
+                [line for line in text.err.splitlines() if line.startswith('note: ') and _REQUEST_NOTE.search(line)]
+                if _noted(key, [f'request:{noun}']) else [])
+            cases.append(Case(f'?{alias}= CLI text', noted == 1, text.brief()))
             try:
                 fields = _retired_fields(api.query(uri))
             except Exception as exc:  # recorded as evidence, never a pass
                 fields = [f'raised {type(exc).__name__}: {str(exc)[:100]}']
-            cases.append(Case(f'?{alias}= api.query', key in fields, f'api.query({uri!r}): {fields}'))
+            cases.append(Case(f'?{alias}= api.query', _noted(key, fields), f'api.query({uri!r}): {fields}'))
             try:
                 out = reveal_query(uri)
             except Exception as exc:  # a ToolError is a failed call: evidence, not a pass
                 out = f'raised {type(exc).__name__}: {str(exc)[:100]}'
-            cases.append(Case(f'?{alias}= MCP', row.text in out, f'reveal_query({uri!r}): {out[-120:]!r}'))
+            cases.append(Case(f'?{alias}= MCP', row.text in out or (_noted(key, [f'request:{noun}']) and bool(_REQUEST_NOTE.search(out))), f'reveal_query({uri!r}): {out[-120:]!r}'))
     return cases
 
 
@@ -1070,7 +1109,7 @@ def probe_bare_shared_keys(noun):
             continue
         run = _run(_uri(noun, f'{control}={value}'), '--format', 'json')
         doc = json.loads(run.out) if run.out.strip().startswith('{') else None
-        ok = run.rc == 2 or f'param:{noun}.{control}' in _retired_fields(doc)
+        ok = run.rc == 2 or _noted(f'param:{noun}.{control}', _retired_fields(doc))
         cases.append(Case(f'?{control}= is the control', ok,
                           f'{run.brief()} (wants exit 2, or the declared legacy spelling with its note)'))
     return cases
@@ -2142,11 +2181,12 @@ def test_a_bare_shared_named_field_is_a_translated_legacy_spelling_until_the_cut
     old, new = _run(bare, '--format', 'json'), _run(where, '--format', 'json')
     assert old.rc == new.rc == 0, (old.brief(), new.brief())
     assert len(_rows_found(where, json.loads(new.out))) == rows
-    assert f'param:{noun}.{key}' in _retired_fields(json.loads(old.out)) and not _retired_fields(json.loads(new.out))
-    assert without_retirement_notes(json.loads(old.out)) == json.loads(new.out)
+    assert _noted(f'param:{noun}.{key}', _retired_fields(json.loads(old.out))) and not _own_retired_fields(json.loads(new.out))
+    from conftest import without_request_notes
+    assert without_retirement_notes(json.loads(old.out)) == without_request_notes(json.loads(new.out))
     text_old, text_new = _run(bare), _run(where)
-    assert text_old.out == text_new.out and f"--where '{key}" in text_old.err and 'note:' not in text_new.err
-    assert f'param:{noun}.{key}' in _retired_fields(api.query(bare))
+    assert text_old.out == text_new.out and '--where' in text_old.err and key in text_old.err and 'note:' not in _own_notes(text_new.err)
+    assert _noted(f'param:{noun}.{key}', _retired_fields(api.query(bare)))
 
 
 @pytest.mark.parametrize('uri,key', [('git://proj?match=x', 'match'), ('metrics://proj?depth=1', 'depth'),
@@ -2208,12 +2248,13 @@ def test_ast_bare_depth_answers_as_where_depth(deep, term):
     new, old = _run(canonical, '--format', 'json'), _run(legacy, '--format', 'json')
     assert new.rc == old.rc == plain.rc == 0, (new.brief(), old.brief())
     assert json.loads(plain.out)['total_results'] == 2 and json.loads(new.out)['total_results'] == 1
-    assert 'param:ast.depth' in _retired_fields(json.loads(old.out))
-    assert not _retired_fields(json.loads(new.out))
-    assert without_retirement_notes(json.loads(old.out)) == json.loads(new.out)
+    assert _noted('param:ast.depth', _retired_fields(json.loads(old.out)))
+    assert not _own_retired_fields(json.loads(new.out))
+    from conftest import without_request_notes
+    assert without_retirement_notes(json.loads(old.out)) == without_request_notes(json.loads(new.out))
     text_old, text_new = _run(legacy), _run(canonical)
     assert text_old.rc == text_new.rc == 0 and text_old.out == text_new.out
-    assert 'ast ?depth' in text_old.err and 'ast ?depth' not in text_new.err
+    assert '--where' in text_old.err and 'depth' in text_old.err and 'ast ?depth' not in text_new.err  # (the canonical URI notes its request)
 
 
 # --- rule 7 (Step 4 item C): one declared shared-control list feeds every noun's rejection ------------------------

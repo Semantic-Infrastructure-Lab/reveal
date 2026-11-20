@@ -629,8 +629,8 @@ def _note_uri_request(name: str, adapter, path: str, params, spelled_query: bool
     """The one note of a retiring URI request (BACK-2716 step 3), said after the request is bound so its replacement is
     rendered from what was bound: an analysis-only scheme always, any other scheme when it spells a query string. A
     retired twin has its own scheme row, and a resource URI with only flags is the canonical form: neither notes."""
-    from ..invocation import RETIREMENTS, request_note
-    if f'scheme:{name}' in RETIREMENTS or not (getattr(adapter, 'ANALYSIS_ONLY', False) or spelled_query):
+    from ..invocation import request_note, request_noted
+    if not request_noted(name) or not (getattr(adapter, 'ANALYSIS_ONLY', False) or spelled_query):
         return
     from .canonical import render_uri_request
     request_note(name, lambda form: render_uri_request(form, name, path, params))

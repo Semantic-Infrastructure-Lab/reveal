@@ -781,11 +781,21 @@ def request_note(scheme: str, replacement_for: Callable[[str], str]) -> Retireme
     return entry
 
 
+def request_noted(scheme: str) -> bool:
+    """Whether a URI request of *scheme* says the one request note: a declared noun (its URI runs the declared route that
+    binds the request) that is not a retired twin (architecture, stats, trace...: its own ``scheme:`` row is its note)."""
+    spec = COMMANDS.get(scheme)
+    return spec is not None and bool(spec.declared_adapter) and f'scheme:{scheme}' not in RETIREMENTS
+
+
 def request_note_covers(key: str) -> bool:
     """Whether a per-key note is the spelling of a request that ``request_note`` replaces: a ``param:``/``value:`` row at
-    the note stage that names a replacement for this noun's own control. A standalone row (a legacy operation with no
-    identical canonical form) and every error-stage row keep their own note."""
+    the note stage, of a scheme that says the request note, naming a replacement for this noun's own control. A
+    standalone row (a legacy operation with no identical canonical form) and every error-stage row keep their own
+    note."""
     if not key.startswith(('param:', 'value:')):
+        return False
+    if not request_noted(key.partition(':')[2].partition('.')[0]):
         return False
     entry = RETIREMENTS.get(key) or _shared_name_retirement(key)
     return entry is not None and entry.stage == 'note' and not entry.standalone and not entry.removed

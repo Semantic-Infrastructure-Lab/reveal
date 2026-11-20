@@ -170,14 +170,12 @@ def _noted_answer(scheme: str, uri: str, overrides: Dict[str, Any], answer):
     result's ``meta.warnings`` as the CLI's JSON carries them (BACK-2654; it used to note declared aliases only).
     A URI request that retires says it once, as the Python call that replaces it (BACK-2716): that note covers the
     per-key notes of the controls it renders."""
-    from .cli.invocation import (COMMANDS, RETIREMENTS, Invocation, invocation_scope, request_note_covers,
-                                 retirement_note, uri_retirement_keys)
+    from .cli.invocation import (Invocation, invocation_scope, request_note_covers, request_noted, retirement_note,
+                                 uri_retirement_keys)
     from .utils.json_utils import attach_invocation_warnings
-    spec = COMMANDS.get(scheme)
-    by_request = spec is not None and bool(spec.declared_adapter) and f'scheme:{scheme}' not in RETIREMENTS
+    by_request = request_noted(scheme)
     keys = uri_retirement_keys(uri) + [f'param:{scheme}.{key}' for key in overrides]
-    if by_request:
-        keys = [key for key in keys if not request_note_covers(key)]
+    keys = [key for key in keys if not request_note_covers(key)]
     with invocation_scope(Invocation.parse(['reveal', uri]), retirements_to_stderr=False, form='python'):
         for key in keys:
             retirement_note(key)

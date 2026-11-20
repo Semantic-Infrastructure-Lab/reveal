@@ -313,20 +313,12 @@ def _note_retired_spellings(uri: str) -> None:
     """The URI route's retirement hook: the scheme, each query parameter and each parameter
     value the URI spells, looked up after parsing and before anything runs (ground rule 7).
     A spelling at the ``error`` stage raises RetiredSpellingError (exit 2, the note's text)."""
-    from ..invocation import RETIREMENTS, request_note_covers
-    scheme = uri.partition('://')[0].lower()
-    covered = f'scheme:{scheme}' not in RETIREMENTS and _noted_by_request(scheme)
+    from ..invocation import request_note_covers
     for key in uri_retirement_keys(uri):
-        if covered and request_note_covers(key):
+        if request_note_covers(key):
             continue  # said once, after binding, as the replacement rendered from the bound request (request_note)
         retirement_note(key)
 
-
-def _noted_by_request(scheme: str) -> bool:
-    """Whether a URI of *scheme* runs through the declared route, which says the one request note after binding."""
-    from ..invocation import COMMANDS
-    spec = COMMANDS.get(scheme)
-    return spec is not None and bool(spec.declared_adapter)
 
 
 def handle_uri(uri: str, element: Optional[str], args: 'Namespace',
