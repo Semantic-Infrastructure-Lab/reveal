@@ -100,6 +100,6 @@ def test_api_query_and_mcp_take_limit(rich, noun):  # noqa: F811
     uri = f'{noun}://proj?{query_text}&limit=1'
     _, cli = _json(uri)
     api = query(f'{noun}://proj?{query_text}', limit=1)
-    mcp = json.loads(reveal_query(uri))
+    mcp = json.loads(reveal_query(uri, provenance=True))  # provenance makes the MCP answer JSON
     assert _lists(api, noun) == _lists(cli, noun) == _lists(mcp, noun)
     assert all(len(rows) <= 1 for rows in _lists(cli, noun).values())

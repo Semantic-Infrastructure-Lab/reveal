@@ -21,7 +21,7 @@ from ..errors import NotApplicableError
 from ..utils.path_utils import TestLayout, is_test_dir
 from ..rendering.adapters.testability import TestabilityRenderer
 from ..utils.query_binding import bind_declared_params, boolean_value, verbose_legacy
-from ..utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSpec,
+from ..utils.query_parser import (CliBinding, LegacySpelling, ParamSpec, QueryParams, ResourceSpec,
                                   param_schema, peek_query_items, whole_number)
 from ..utils.results import AnalysisCompleteness, lost_evidence, result_execution_facts
 
@@ -148,6 +148,10 @@ PRESSURE_SPECS = (
               boolean_value, role='analysis', cli=CliBinding(('--include-unresolved',), action='store_true')),
 )
 
+_PRESSURE_TOP = PRESSURE_SPECS[1]
+_LIMIT = replace(_PRESSURE_TOP, name='limit', cli=CliBinding(('--limit',)),
+                 legacy=(LegacySpelling('top', flag='--top'), verbose_legacy(0, 'limit=0 (--limit 0)')))
+
 
 @register_adapter('testability')
 @register_renderer(TestabilityRenderer)
@@ -156,7 +160,7 @@ class TestabilityAdapter(ResourceAdapter):
     boundary fan-out — where tests over-mock vs. where risky boundary code
     has no patch coverage at all."""
     HELP_CLUSTER = 'Code Analysis'
-    CLI_QUERY_FLAGS = {'all': 'top=1000000', 'limit': 'top={value}', 'respect_gitignore': 'respect_gitignore=false'}  # top= caps each hotspot group (default 20; BACK-1379, BACK-1496)
+    CLI_QUERY_FLAGS = {'all': 'limit=1000000', 'limit': 'limit={value}', 'respect_gitignore': 'respect_gitignore=false'}  # limit= caps each hotspot group (default 20; BACK-1379, BACK-1496)
 
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
     RESOURCE_IS_PATH = True  # a nonexistent path is an error, not an empty result (BACK-1321)
@@ -168,10 +172,10 @@ class TestabilityAdapter(ResourceAdapter):
     BUDGET_LIST_FIELD = ('patch_hotspots', 'boundary_hotspots')
     BUDGET_COUNT_FIELDS = {'patch_hotspots': ('summary.patch_groups_reported',),  # BACK-2653
                            'boundary_hotspots': ('summary.boundary_profiles_reported',)}
-    # verbose lifts the group caps: the legacy word of top=0 (rule 16 parity, BACK-2654 note #17). patches'
-    # pressure view declares PRESSURE_SPECS without it: the word belongs to the retired spelling.
-    PARAM_SPECS = tuple(replace(spec, legacy=(verbose_legacy(0, 'top=0 (--top 0)'),)) if spec.name == 'top' else spec
-                        for spec in PRESSURE_SPECS)
+    # limit is the cap (COMMAND_MODEL "Caps", BACK-2673; each list capped separately): top is its legacy word, the same
+    # value, and verbose lifts the group caps, the legacy word of limit=0 (rule 16 parity, BACK-2654 note #17). patches'
+    # pressure view declares PRESSURE_SPECS as they are: its --limit question is BACK-2625's.
+    PARAM_SPECS = tuple(_LIMIT if spec is _PRESSURE_TOP else spec for spec in PRESSURE_SPECS)
 
     def __init__(self, resource: str, query: Optional[str] = None, *,
                  params: Optional[Dict[str, Any]] = None):
@@ -211,11 +215,11 @@ class TestabilityAdapter(ResourceAdapter):
         return {
             'name': 'testability',
             'description': 'Find testability pressure by joining test patch usage with production boundary fan-out.',
-            'syntax': 'testability://<path>[?tests=tests,integration_tests&top=20&min_patches=3&min_categories=3&include_unresolved=true]',
+            'syntax': 'testability://<path>[?tests=tests,integration_tests&limit=20&min_patches=3&min_categories=3&include_unresolved=true]',
             'examples': [
                 {'uri': 'testability://src', 'description': 'Pressure report for src/ using the selected project test/support policy'},
                 {'uri': 'testability://src?tests=tests,integration_tests', 'description': 'Scan specific test directories'},
-                {'uri': 'testability://src?top=10', 'description': 'Top 10 patch/boundary groups'},
+                {'uri': 'testability://src?limit=10', 'description': 'Top 10 patch/boundary groups'},
             ],
             'features': [
                 'Production patch hotspots: functions/modules most mocked by tests',
@@ -241,7 +245,7 @@ class TestabilityAdapter(ResourceAdapter):
         return {
             'adapter': 'testability',
             'description': 'Test patch/mock pressure joined with production boundary fan-out',
-            'uri_syntax': 'testability://<path>?tests=tests,integration_tests&top=20&min_patches=3&min_categories=3',
+            'uri_syntax': 'testability://<path>?tests=tests,integration_tests&limit=20&min_patches=3&min_categories=3',
             'resource': TestabilityAdapter.RESOURCE_SPEC.schema(),
             'query_params': param_schema(TestabilityAdapter.PARAM_SPECS),
             'elements': {},
@@ -271,18 +275,19 @@ class TestabilityAdapter(ResourceAdapter):
         }
 
     def get_structure(self) -> Dict[str, Any]:
-        return testability_report(self.path, self.query_params)
+        return testability_report(self.path, self.query_params, _LIMIT)
 
 
-def testability_report(resource: str, query_params: Any) -> Dict[str, Any]:
+def testability_report(resource: str, query_params: Any, cap: ParamSpec = _PRESSURE_TOP) -> Dict[str, Any]:
     """The report both ``testability://`` and ``patches://?view=pressure`` answer (BACK-2160): one owner, read from
-    the declared parameters of whichever adapter was asked."""
+    the declared parameters of whichever adapter was asked. *cap*: that adapter's group cap (testability's ``limit``,
+    the pressure view's ``top``)."""
     from reveal.testability.report import build_testability_report
     from reveal.utils.path_utils import as_spelled, detect_non_python_language
 
     path = Path(resource)
     tests = TestabilityAdapter.PARAM_SPECS[0].read(query_params)
-    top = TestabilityAdapter.PARAM_SPECS[1].read(query_params)
+    top = cap.read(query_params)
     min_patches = TestabilityAdapter.PARAM_SPECS[2].read(query_params)
     min_categories = TestabilityAdapter.PARAM_SPECS[3].read(query_params)
     include_unresolved = TestabilityAdapter.PARAM_SPECS[4].read(query_params)

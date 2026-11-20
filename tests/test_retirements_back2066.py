@@ -246,6 +246,8 @@ PRODUCTION_CASES = {
     # Metrics vocabulary (BACK-2621): each legacy spelling alone, on the one source file.
     'param:metrics.hotspots': lambda f: [f'metrics://{f}?hotspots=true'],
     'param:metrics.top': lambda f: [f'metrics://{f}?view=hotspots&top=1'],
+    'param:hotspots.top': lambda f: [f'hotspots://{Path(f).parent}?top=1'],
+    'param:testability.top': lambda f: [f'testability://{Path(f).parent}?tests={Path(f).parent}&top=1'],
     'param:metrics.min_lines': lambda f: [f'metrics://{f}?min_lines=1'],
     'param:metrics.max_lines': lambda f: [f'metrics://{f}?max_lines=1000'],
     'param:metrics.min_functions': lambda f: [f'metrics://{f}?min_functions=0'],
@@ -312,6 +314,7 @@ PRODUCTION_CASES = {
 ALSO_NOTED = {'param:hotspots.functions_only': 'scheme:hotspots', 'param:hotspots.files_only': 'subcommand:hotspots',
               'param:architecture.verbose': 'scheme:architecture', 'param:hotspots.verbose': 'scheme:hotspots',
               'param:testability.verbose': 'scheme:testability', 'param:deps.verbose': 'scheme:deps',
+              'param:hotspots.top': 'scheme:hotspots', 'param:testability.top': 'scheme:testability',
               'param:calls.type': 'param:calls.uncalled', 'param:calls.external': 'param:calls.modules'}
 
 

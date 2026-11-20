@@ -32,8 +32,9 @@ def test_retirement_inventory_matches_the_shipped_migrations():
     BACK-2149 adds the hotspots noun and its two only-flags. BACK-2620 adds the four Imports aliases.
     BACK-2621 adds the ten Metrics legacy spellings. BACK-2654 adds the different words AST type and Markdown
     body-contains and fields, AST's bare depth (rule 8) the four presentation switches' --no-NAME and --no-gitignore (rule 15).
+    BACK-2673 adds Hotspots' and Testability's top.
     """
-    assert sorted(RETIREMENTS) == ['flag:--also-json', 'flag:--calls', 'flag:--catchmap', 'flag:--check', 'flag:--deps',
+    assert sorted(RETIREMENTS) == sorted(['flag:--also-json', 'flag:--calls', 'flag:--catchmap', 'flag:--check', 'flag:--deps',
                                    'flag:--fanout', 'flag:--flowto', 'flag:--ifmap', 'flag:--loopmap', 'flag:--mutations',
                                    'flag:--no-breadcrumbs', 'flag:--no-fallback', 'flag:--no-gitignore', 'flag:--no-group', 'flag:--no-snippets',
                                    'flag:--returns', 'flag:--search', 'flag:--sideeffects', 'flag:--statewrites',
@@ -49,7 +50,8 @@ def test_retirement_inventory_matches_the_shipped_migrations():
                                    'param:metrics.no_churn', 'param:metrics.no_merges', 'param:metrics.summary_only',
                                    'param:metrics.top', 'param:overview.verbose', 'param:pack.verbose',
                                    'param:testability.verbose', 'scheme:architecture', 'scheme:classify', 'scheme:depends', 'scheme:deps', 'scheme:hotspots', 'scheme:python', 'scheme:stats', 'scheme:testability', 'scheme:trace', 'subcommand:architecture', 'subcommand:deps', 'subcommand:hotspots', 'subcommand:review', 'subcommand:scaffold', 'subcommand:testability',
-                                   'subcommand:trace', 'target:health.code', 'target:nav.outline', 'value:ast.show=calls']
+                                   'subcommand:trace', 'target:health.code', 'target:nav.outline', 'value:ast.show=calls',
+                                   'param:hotspots.top', 'param:testability.top'])
 
 
 def test_table_covers_the_four_codes_and_commands_only_reword_them():

@@ -15,7 +15,7 @@ from ..conventions import LanguageConventions, conventions_for, family_for_path
 from ..defaults import TEST_DIR_NAMES, VENDOR_DIR_NAMES
 from ..rendering.adapters.hotspots import HotspotsRenderer
 from ..utils.path_utils import EVIDENCE, resolve_project_root, walk_tree
-from ..utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSpec,
+from ..utils.query_parser import (CliBinding, LegacySpelling, ParamSpec, QueryParams, ResourceSpec,
                                   nonnegative_display_limit, param_schema, whole_number)
 from ..utils.query_binding import bind_declared_params, boolean_value, verbose_legacy
 from ..utils.results import LOST_EVIDENCE, PARSE_RECOVERED, AnalysisCompleteness, ResultBuilder, result_execution_facts
@@ -23,7 +23,7 @@ from ..utils.results import LOST_EVIDENCE, PARSE_RECOVERED, AnalysisCompleteness
 
 def _hotspots_top(value: Any) -> int:
     if isinstance(value, bool):
-        raise ValueError('top requires a whole number, not a boolean')
+        raise ValueError('limit requires a whole number, not a boolean')
     return nonnegative_display_limit(value)
 
 
@@ -44,11 +44,12 @@ def _hotspots_min(value: Any) -> int:
         raise ValueError('min_complexity requires a whole number') from exc
 
 
-_TOP = ParamSpec('top', 'integer', 'Retained items per ranking (0 = all)', 10,
-                 _hotspots_top, ('top=20',), minimum=0, zero_policy='all',
-                 role='presentation', cli=CliBinding(('--top',), metavar='N'),
-                 # verbose lifts both caps: the legacy word of top=0 (rule 16 parity, BACK-2654 note #17)
-                 legacy=(verbose_legacy(0, 'top=0 (--top 0)'),))
+# limit is the cap (COMMAND_MODEL "Caps", BACK-2673; each ranking capped separately); top is its legacy word, the same
+# value, and verbose lifts both caps: the legacy word of limit=0 (rule 16 parity, BACK-2654 note #17)
+_TOP = ParamSpec('limit', 'integer', 'Retained items per ranking (0 = all)', 10,
+                 _hotspots_top, ('limit=20',), minimum=0, zero_policy='all',
+                 role='presentation', cli=CliBinding(('--limit',), metavar='N'),
+                 legacy=(LegacySpelling('top', flag='--top'), verbose_legacy(0, 'limit=0 (--limit 0)')))
 _MIN_COMPLEXITY = ParamSpec('min_complexity', 'integer', 'Minimum complexity to analyze', 10,
                             _hotspots_min, ('min_complexity=15',), role='analysis',
                             cli=CliBinding(('--min-complexity',), metavar='N'))
@@ -349,7 +350,7 @@ class HotspotsAdapter(ResourceAdapter):
     RESOURCE_IS_PATH = True  # a nonexistent path is an error, not an empty result (BACK-1321)
     BUDGET_LIST_FIELD = ('file_hotspots', 'function_hotspots')  # --head/--tail slice both (BACK-1497)
     # default top=10 per ranking; --all lifts it (BACK-1229)
-    CLI_QUERY_FLAGS = {'all': 'top=1000000', 'limit': 'top={value}', 'respect_gitignore': 'respect_gitignore=false'}  # top= caps each list (BACK-1496)
+    CLI_QUERY_FLAGS = {'all': 'limit=1000000', 'limit': 'limit={value}', 'respect_gitignore': 'respect_gitignore=false'}  # limit= caps each list (BACK-1496)
 
     RESULT_TYPE = 'hotspots_scan'
     FINDINGS_POLICIES = ('none', 'findings')
@@ -395,10 +396,10 @@ class HotspotsAdapter(ResourceAdapter):
         return {
             'name': 'hotspots',
             'description': 'Identify high-complexity files and functions that need attention.',
-            'syntax': 'hotspots://<path>[?top=10&min_complexity=10&functions_only=true&files_only=true]',
+            'syntax': 'hotspots://<path>[?limit=10&min_complexity=10&functions_only=true&files_only=true]',
             'examples': [
                 {'uri': 'hotspots://src', 'description': 'Hotspots in a directory'},
-                {'uri': 'hotspots://.?top=20', 'description': 'Top 20 hotspot files'},
+                {'uri': 'hotspots://.?limit=20', 'description': 'Top 20 hotspot files'},
                 {'uri': 'hotspots://.?functions_only=true', 'description': 'Only complex functions'},
                 {'uri': 'hotspots://. --all', 'description': 'Lift the default top-10 cap on both rankings'},
             ],
@@ -433,7 +434,7 @@ class HotspotsAdapter(ResourceAdapter):
         return {
             'adapter': 'hotspots',
             'description': 'High-complexity, low-quality file and function scanner',
-            'uri_syntax': 'hotspots://<path>?top=10&min_complexity=10',
+            'uri_syntax': 'hotspots://<path>?limit=10&min_complexity=10',
             'resource': HotspotsAdapter.RESOURCE_SPEC.schema(),
             'execution_policy': {'default_fail_on': 'none', 'fail_on': ['none', 'findings']},
             'query_params': param_schema(HotspotsAdapter.PARAM_SPECS),

@@ -25,12 +25,12 @@ def test_default_declares_no_cap():
 
 def test_hotspots_declares_top():
     from reveal import adapters  # noqa: F401
-    assert adapters_base.get_adapter_class('hotspots').CLI_QUERY_FLAGS['all'] == 'top=1000000'
+    assert adapters_base.get_adapter_class('hotspots').CLI_QUERY_FLAGS['all'] == 'limit=1000000'  # the cap (BACK-2673)
 
 
 @pytest.mark.parametrize('scheme,fragment', [
     ('ast', 'limit=1000000'), ('patches', 'limit=1000000'),
-    ('testability', 'top=1000000'), ('stats', 'limit=1000000'), ('metrics', 'limit=1000000'),
+    ('testability', 'limit=1000000'), ('stats', 'limit=1000000'), ('metrics', 'limit=1000000'),
     ('overview', 'all=true'),  # Constructor-bound map expansion; does not request assessments.
 ])
 def test_back1379_adapters_declare_all(scheme, fragment):
@@ -60,23 +60,25 @@ def test_git_all_reaches_only_the_answers_that_read_its_cap():
 
 
 def test_all_injects_fragment():
-    assert inject_query_flags('src', 'hotspots', _args(all=True)) == 'src?top=1000000'
+    # Hotspots' cap is limit since BACK-2673 (top is its legacy word).
+    assert inject_query_flags('src', 'hotspots', _args(all=True)) == 'src?limit=1000000'
     assert inject_query_flags('src?functions_only=true', 'hotspots', _args(all=True)) \
-        == 'src?functions_only=true&top=1000000'
+        == 'src?functions_only=true&limit=1000000'
 
 
 def test_an_explicit_uri_value_and_all_conflict():
-    """BACK-2654 rule 1: --all sets top, so beside a different ?top= it is invalid (the URI used to win)."""
+    """BACK-2654 rule 1: --all sets the cap (limit since BACK-2673), so beside a different ?limit= it is invalid (the
+    URI used to win)."""
     from reveal.errors import RequestValidationError
-    for uri in ('src?top=3', 'src?a=1&top=3'):
-        with pytest.raises(RequestValidationError, match='--all conflicts with top=3'):
+    for uri in ('src?limit=3', 'src?a=1&limit=3'):
+        with pytest.raises(RequestValidationError, match='--all conflicts with limit=3'):
             inject_query_flags(uri, 'hotspots', _args(all=True))
-    assert inject_query_flags('src?top=1000000', 'hotspots', _args(all=True)) == 'src?top=1000000'
+    assert inject_query_flags('src?limit=1000000', 'hotspots', _args(all=True)) == 'src?limit=1000000'
 
 
 def test_key_match_is_exact_not_substring():
-    # 'stop=1' contains 'top=1' but is a different parameter.
-    assert inject_query_flags('src?stop=1', 'hotspots', _args(all=True)) == 'src?stop=1&top=1000000'
+    # 'slimit=1' contains 'limit=1' but is a different parameter.
+    assert inject_query_flags('src?slimit=1', 'hotspots', _args(all=True)) == 'src?slimit=1&limit=1000000'
 
 
 def test_without_all_flag_nothing_changes():
@@ -132,7 +134,7 @@ def test_all_lifts_the_cap_of_the_answer_the_request_selects():
             ['hotspots=true', 'top=1000000']
     # Negative controls: nouns whose answers declare no cap of their own keep their declaration.
     assert inject_query_flags('src?hotspots=true', 'calls', _args(all=True)) == 'src?hotspots=true&limit=1000000'
-    assert inject_query_flags('src', 'hotspots', _args(all=True)) == 'src?top=1000000'
+    assert inject_query_flags('src', 'hotspots', _args(all=True)) == 'src?limit=1000000'
 
 
 def test_end_to_end_metrics_all_keeps_the_legacy_ranking_and_notes_nothing_elsewhere(tmp_path):

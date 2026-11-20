@@ -329,10 +329,10 @@ from test_vocabulary_conformance_back2654 import BASE, NOUNS, TARGETS, _adapter,
 
 REFUSED_CONTROL = {'architecture': ('top', '2'), 'ast': ('limit', '2'), 'calls': ('limit', '2'),
                    'claude': ('limit', '2'), 'codex': ('matches', '2'), 'contracts': ('impls', '2'),
-                   'deps': ('top', '2'), 'git': ('limit', '2'), 'hotspots': ('top', '2'), 'imports': ('limit', '2'),
+                   'deps': ('top', '2'), 'git': ('limit', '2'), 'hotspots': ('limit', '2'), 'imports': ('limit', '2'),
                    'json': ('limit', '2'), 'markdown': ('limit', '2'), 'metrics': ('limit', '2'),
                    'overview': ('top', '2'), 'pack': ('budget', '2000'), 'patches': ('limit', '2'),
-                   'surface': ('top', '2'), 'testability': ('top', '2'), 'trace': ('depth', '2')}
+                   'surface': ('top', '2'), 'testability': ('limit', '2'), 'trace': ('depth', '2')}
 
 
 def test_every_declared_noun_with_a_refusal_case():

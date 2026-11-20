@@ -505,13 +505,18 @@ def _retired_spellings(noun):
 
 
 def _owner(surface, line):
-    """The declared noun a printed line speaks for: its surface's noun, else the one the line names."""
+    """The declared noun a printed line speaks for: the noun of a ``reveal NOUN`` command it prints (testability's page
+    teaches ``reveal patches ... --top``, Patches' own pressure cap, BACK-2673), else its surface's noun, else the noun
+    the line names as a URI."""
+    command = re.search(rf"reveal\s+({_SCHEMES})\b(?!://)", line)
+    if command:
+        return command.group(1)
     head = surface.split()[0]
     for noun in NOUNS:
         if head in (noun, f'help://{noun}', f'help://schemas/{noun}') or head.startswith(f'{noun}://'):
             return noun
-    named = re.search(rf"(?:reveal\s+({_SCHEMES})\b|\b({_SCHEMES})://)", line)
-    return (named.group(1) or named.group(2)) if named else None
+    named = re.search(rf"\b({_SCHEMES})://", line)
+    return named.group(1) if named else None
 
 
 def _retired_flag_lines(harness, surfaces):

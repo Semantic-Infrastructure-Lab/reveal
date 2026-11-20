@@ -38,20 +38,20 @@ The rest of this guide describes the retired answer.
 
 | Parameter | Values | Purpose |
 |-----------|--------|---------|
-| `top` | nonnegative integer (default `10`) | Retained items per ranking in text and JSON; `0` = all. |
+| `limit` | nonnegative integer (default `10`) | Retained items per ranking in text and JSON, each ranking capped separately; `0` = all. `top` is its legacy word, with a note. |
 | `min_complexity` | signed integer (default `10`) | Minimum cyclomatic complexity for a function to be reported. |
 | `functions_only` | `true`, `false` (default) | Skip file-level hotspots. |
 | `files_only` | `true`, `false` (default) | Skip function-level hotspots (and the test-index scan below). |
 
 Whole decimal/scientific spellings such as `3.0` and `1e2` are accepted for
-both numeric parameters; fractions and booleans reject. Negative `top` now rejects
+both numeric parameters; fractions and booleans reject. Negative `limit` now rejects
 with usage code 2 rather than expanding the rankings; signed `min_complexity`
 thresholds remain valid. The two only-flags are independent strict booleans.
 
-`top=0` (`--top 0`) lifts both ranking caps in either transport; the legacy `--verbose` is the
-same, with a note, and conflicts with a different explicit `top`. URI `--all` lifts caps
-when no explicit `top` is present; explicit `top` wins. The subcommand rejects
-`--all`. These controls retain their existing acceptance boundaries.
+`limit=0` (`--limit 0`) lifts both ranking caps in either transport; the legacy `--verbose` is the
+same, with a note, and conflicts with a different explicit `limit`. URI `--all` lifts caps
+when no explicit `limit` is present; explicit `limit` wins; the subcommand's `--all` is the same.
+These controls retain their existing acceptance boundaries.
 
 ## Reading The Output
 
@@ -81,7 +81,7 @@ all analyzed file scores before the composite ranking is cut; a high-ranked file
 can have a better quality score than a lower-ranked critical file. When critical
 findings fall outside the displayed rankings, text discloses that fact. Function
 ranking is descending by complexity, so its retained maximum preserves this
-predicate even when `top` cuts the list. `min_complexity` and the two only-flags
+predicate even when `limit` cuts the list. `min_complexity` and the two only-flags
 still define the requested population. Both only-flags may coexist, leaving both
 rankings empty while retaining the statistics coverage scan.
 

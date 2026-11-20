@@ -95,9 +95,11 @@ class TestCreateHotspotsParser(unittest.TestCase):
         self.assertEqual(args.path, './src')
 
     def test_top_flag(self):
+        # --top is the legacy word of the cap, limit (BACK-2673): the parser keeps it under the control's name.
         parser = create_hotspots_parser()
         args = parser.parse_args(['--top', '20'])
-        self.assertEqual(args.top, '20')
+        self.assertEqual(args.limit, '20')
+        self.assertEqual(parser.parse_args(['--limit', '20']).limit, '20')
 
     def test_min_complexity_flag(self):
         parser = create_hotspots_parser()

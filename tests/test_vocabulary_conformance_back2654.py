@@ -138,16 +138,16 @@ SHARED_CONTROLS = {name: _PROBE_VALUES[name] for name in SHARED_CONTROL_NAMES if
 _NO_ALIAS = 'declares no aliased control: there is no alias and name to give twice'
 _NO_LEGACY = 'no note-stage RETIREMENTS row spells this noun: there is no legacy spelling to note'
 EXEMPT = {
-    **{(noun, '1b'): _NO_ALIAS for noun in ('architecture', 'codex', 'contracts', 'deps', 'hotspots', 'json',
-                                            'overview', 'patches', 'surface', 'testability', 'trace')},
+    **{(noun, '1b'): _NO_ALIAS for noun in ('architecture', 'codex', 'contracts', 'deps', 'json',
+                                            'overview', 'patches', 'surface', 'trace')},
     **{(noun, '2'): _NO_LEGACY for noun in ('codex', 'contracts', 'json', 'patches', 'surface')},
     **{(noun, '1d'): 'declares no repeatable control with an alias'
        for noun in NOUNS if noun not in ('ast', 'claude', 'markdown', 'metrics', 'stats')},
     **{(noun, '5'): 'no note-stage param: row whose replacement is a control of this noun' for noun in (
         'codex', 'contracts', 'json', 'patches', 'surface', 'trace')},
     **{(noun, '6'): 'declares no alias: nothing to note or keep note-free' for noun in (
-        'architecture', 'codex', 'contracts', 'deps', 'hotspots', 'json', 'overview', 'patches',
-        'surface', 'testability', 'trace')},
+        'architecture', 'codex', 'contracts', 'deps', 'json', 'overview', 'patches',
+        'surface', 'trace')},
     **{(noun, '8a'): 'no where expression: a bare key is never read as a field'
        for noun in ('architecture', 'calls', 'codex', 'contracts', 'deps', 'hotspots', 'imports', 'overview',
                     'pack', 'patches', 'surface', 'testability', 'trace')},
@@ -220,8 +220,6 @@ _UNRULED_CHECK_WHY = _CHECK_WHY + _UNRULED.format('Claude\'s', 'declares the sam
 _CLAUDE_LEGACY_WHY = ('waits for a ruling: Claude\'s workflow and search readers take the main parser\'s --type and '
                       '--name after the URI (the legacy population tests/test_claude_workflow_selection_back2617.py '
                       'compares with); the subcommand has neither')
-_TOP_LIMIT_WHY = ('waits for a ruling: --limit after the URI caps top through CLI_QUERY_FLAGS, which the subcommand does '
-                  'not take (COMMAND_MODEL "Caps": --limit is the cap, top the divergence)')
 _EQUAL_TERM_WHY = ('waits for a ruling: ?k=A --flag A on a repeatable control combines as ?k=A&k=A and the subcommand\'s '
                    '--flag A --flag A do (the echo reads "A AND A"); rule 1 does not say whether an equal repeated term is '
                    'one term (Claude match dedupes it)')
@@ -233,8 +231,7 @@ RULE_23_CASES = {
     'pack': dict.fromkeys(_SLICES, _SLICE_WHY),
     **{noun: dict.fromkeys(_SLICES, _UNRULED_SLICE_WHY) for noun in ('calls', 'imports', 'patches')},
     **{noun: {**dict.fromkeys(_SLICES, _UNRULED_SLICE_WHY), '--check': _UNRULED_CHECK_WHY} for noun in ('git', 'json')},
-    **{noun: {**dict.fromkeys(_SLICES, _UNRULED_SLICE_WHY), '--limit': _TOP_LIMIT_WHY}
-       for noun in ('hotspots', 'testability')},
+    **{noun: dict.fromkeys(_SLICES, _UNRULED_SLICE_WHY) for noun in ('hotspots', 'testability')},
     'markdown': {**dict.fromkeys(_SLICES, _UNRULED_SLICE_WHY),
                  **dict.fromkeys(('?where=A --where A', '?match=A --match A'), _EQUAL_TERM_WHY)},
 }

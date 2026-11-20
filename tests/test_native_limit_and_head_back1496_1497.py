@@ -46,20 +46,25 @@ NATIVE_CAP = ['hotspots', 'calls', 'depends', 'testability']
 class TestLimitBecomesNativeTop:
     @pytest.mark.parametrize('scheme', NATIVE_CAP)
     def test_injects_top_not_limit(self, scheme):
-        key = 'limit' if scheme == 'calls' else 'top'
+        # Hotspots and Testability declare limit as their cap since BACK-2673 (top is its legacy word).
+        key = 'limit' if scheme in ('calls', 'hotspots', 'testability') else 'top'
         assert inject_query_flags(f'{scheme}://x', scheme, _args(limit=3)) == f'{scheme}://x?{key}=3'
 
     @pytest.mark.parametrize('scheme', NATIVE_CAP)
     def test_zero_means_no_cap(self, scheme):
-        expected = {'calls': 'limit=0', 'hotspots': 'top=0'}.get(scheme, 'top=1000000')
+        expected = {'calls': 'limit=0', 'hotspots': 'limit=0', 'testability': 'limit=1000000'}.get(scheme, 'top=1000000')
         assert inject_query_flags(f'{scheme}://x', scheme, _args(limit=0)) == f'{scheme}://x?{expected}'
 
     def test_typed_top_and_a_different_limit_are_rejected(self):
-        """BACK-2654 rule 1: the typed top used to win over --limit."""
-        from reveal.errors import RequestValidationError
-        with pytest.raises(RequestValidationError, match='--limit conflicts with top=7'):
-            inject_query_flags('hotspots://x?top=7', 'hotspots', _args(limit=3))
-        assert inject_query_flags('hotspots://x?top=7', 'hotspots', _args(limit=7)) == 'hotspots://x?top=7'
+        """BACK-2654 rule 1: the typed top used to win over --limit. Since BACK-2673 top is limit's legacy word, so
+        the two spellings of the cap meet in the binder, which names both."""
+        from reveal.adapters.hotspots import HotspotsAdapter
+        from reveal.utils.query_binding import bind_declared_params
+        query = inject_query_flags('hotspots://x?top=7', 'hotspots', _args(limit=3)).partition('?')[2]
+        with pytest.raises(ValueError, match='top.*limit|limit.*top'):
+            bind_declared_params(HotspotsAdapter.PARAM_SPECS, query, transport='uri')
+        same = inject_query_flags('hotspots://x?top=7', 'hotspots', _args(limit=7)).partition('?')[2]
+        assert bind_declared_params(HotspotsAdapter.PARAM_SPECS, same, transport='uri')['limit'] == 7
 
     @pytest.mark.parametrize('scheme', ['imports', 'architecture', 'deps', 'classify'])
     def test_adapters_without_a_cap_keep_the_universal_key(self, scheme):
@@ -159,11 +164,14 @@ class TestLimitLive:
         text = run_reveal(f'depends://{imported}', '--limit', '1').stdout
         assert 'Top 1 of 2 module(s) imported internally' in text
 
-    @pytest.mark.parametrize('flag', ['--limit', '--head', '--tail'])
-    def test_negative_counts_are_rejected(self, tree, flag):
+    @pytest.mark.parametrize('flag,code,said', [('--limit', 2, 'limit must be a whole number'),
+                                                ('--head', 1, 'Error: --head must be 0 or more, got -1'),
+                                                ('--tail', 1, 'Error: --tail must be 0 or more, got -1')])
+    def test_negative_counts_are_rejected(self, tree, flag, code, said):
+        # The cap is a declared control since BACK-2673: the binder refuses its value as an invalid request, exit 2.
         proc = run_reveal(f'hotspots://{tree}', flag, '-1')
-        assert proc.returncode == 1
-        assert f'Error: {flag} must be 0 or more, got -1' in proc.stderr
+        assert proc.returncode == code
+        assert said in proc.stderr
 
 
 class TestHeadTailRangeOnSeveralLists:

@@ -359,7 +359,10 @@ RETIREMENTS: Dict[str, Retirement] = {
     'param:overview.verbose': Retirement('overview ?verbose (--verbose)', '?all=true (--all), the same uncapped map'),
     'param:architecture.verbose': Retirement('architecture ?verbose (--verbose)',
                                              'overview://<path>?all=true (--all), the same uncapped map'),
-    'param:hotspots.verbose': Retirement('hotspots ?verbose (--verbose)', '?top=0 (--top 0), both rankings uncapped'),
+    'param:hotspots.verbose': Retirement('hotspots ?verbose (--verbose)', '?limit=0 (--limit 0), both rankings uncapped'),
+    # limit is Hotspots' and Testability's cap (COMMAND_MODEL "Caps", BACK-2673): top is the same value's old word.
+    **{f'param:{noun}.top': Retirement(f'{noun} ?top=N (--top N)', '?limit=N (--limit N), which caps each list; 0 is uncapped')
+       for noun in ('hotspots', 'testability')},
     'param:testability.verbose': Retirement('testability ?verbose (--verbose)',
                                             'patches://<path>?view=pressure&top=0 (--top 0), every group'),
     'param:deps.verbose': Retirement('deps ?verbose (--verbose)', '?top=0 (--top 0), every text section uncapped'),

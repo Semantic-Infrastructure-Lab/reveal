@@ -37,7 +37,7 @@ def test_one_declared_path_carries_the_global_verbose():
 # (noun, the control declaring the legacy word verbose, what verbose=true translates to)
 OWNERS = [('imports', 'detail', 'full'), ('git', 'detail', 'full'), ('pack', 'detail', 'full'),
           ('overview', 'all', True), ('architecture', 'all', True),
-          ('hotspots', 'top', 0), ('testability', 'top', 0), ('deps', 'top', 0)]
+          ('hotspots', 'limit', 0), ('testability', 'limit', 0), ('deps', 'top', 0)]  # limit is their cap (BACK-2673)
 
 
 @pytest.mark.parametrize('noun,owner,value', OWNERS)
