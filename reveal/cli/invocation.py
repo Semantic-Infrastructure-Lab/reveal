@@ -306,12 +306,25 @@ _LIMIT_N = '--limit N (?limit=N)'
 _OFFSET = '--offset START-1 --limit END-START+1 (?offset=START-1&limit=END-START+1)'
 _LAST = 'a descending --sort with --limit N (the last N rows have no spelling of their own)'
 _SLICED = {'--head': _LIMIT_N, '--tail': _LAST, '--range': _OFFSET}
+
+
+def _no_check(noun: str) -> Dict[str, str]:
+    """--check and its --lint alias on a noun whose answers they never changed (BACK-2708 ruling 2)."""
+    return dict.fromkeys(('--check', '--lint'),
+                         f'nothing: it never changed a {noun}:// answer; reveal check <path> checks files')
+
 LEGACY_CLI_MODIFIERS: Dict[str, Dict[str, str]] = {
-    **{noun: _SLICED for noun in ('ast', 'git', 'json', 'markdown', 'metrics')},
+    **{noun: _SLICED for noun in ('ast', 'markdown', 'metrics')},
+    **{noun: {**_SLICED, **_no_check(noun)} for noun in ('git', 'json')},
     'calls': {'--head': '--limit N on a ranking (?sort=-callers&limit=N); --depth N on a callers or callees walk',
               '--tail': 'a descending --sort with --limit N on a ranking (the last N rows have no spelling of their own)',
               '--range': 'nothing: calls has no offset; --limit N caps a ranking'},
-    'claude': {'--head': _LIMIT_N, '--range': _OFFSET},  # --tail waits for Scott's ruling (it collides with ?tail=N)
+    # --tail waits for Scott's ruling (it collides with ?tail=N). --type/--name/--search: supported legacy (D18).
+    'claude': {'--head': _LIMIT_N, '--range': _OFFSET,
+               '--type': '--where tool==TYPE (?where=tool==TYPE) on the workflow view',
+               **dict.fromkeys(('--name', '--search'), '--match TEXT (?match=TEXT) on the workflow view and history; '
+                                                       '--where session~=TEXT on the session list'),
+               **_no_check('claude')},
     'hotspots': {'--head': '--limit N (?limit=N), which caps each list',
                  '--tail': 'nothing: each list is ranked worst first; --limit N keeps its worst N',
                  '--range': 'nothing: hotspots has no offset; --limit N caps each list'},

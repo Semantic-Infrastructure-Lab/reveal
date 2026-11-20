@@ -160,7 +160,8 @@ _PARAM_SPECS = (_CALLERS, _CALLEES, _ROOT, _DEPTH, _DETAIL, _RANK, _TOP, _UNCALL
                 _EXTERNAL, _BUILTINS, _TEST_FRAMEWORK, _FORMAT)
 # --head/--tail/--range slice this noun's rows today: flag-only legacy modifiers until the cut, read by the answers named
 # (BACK-2673; their notes are the flag:<noun>.<flag> RETIREMENTS rows).
-_PARAM_SPECS = (*_PARAM_SPECS, *legacy_slices(head=('calls_query', 'calls_callees', 'calls_callees_recursive', 'calls_ranking', 'calls_uncalled'), tail=('calls_query', 'calls_callees', 'calls_callees_recursive', 'calls_ranking', 'calls_uncalled'), range=('calls_query', 'calls_callees', 'calls_callees_recursive', 'calls_ranking', 'calls_uncalled')))
+_SLICED = ('calls_query', 'calls_callees', 'calls_callees_recursive', 'calls_ranking', 'calls_uncalled')
+_PARAM_SPECS = (*_PARAM_SPECS, *legacy_slices(head=_SLICED, tail=_SLICED, range=_SLICED))
 
 # The mode selectors: exactly one per request. The order is the one messages name them in; target binds as
 # callers (a legacy word), so naming both is one mode given twice.

@@ -208,26 +208,20 @@ RULED_EXEMPT_NOUNS = {'stats': 'rule 9: the retired stats:// scheme is deleted a
 # Rule 20 (BACK-2656) conforms on every noun since Step 2d (codex was the last cell). Rule 23 (BACK-2673): since Step 3b-2
 # a declared noun's URI is read by its own parser and its query joins the typed flags, so a cell is left only where a
 # case waits for a ruling; RULE_23_CASES names each case, and a recorded cell fails on any other.
-_PENDING_3B3 = 'pending 3b-3 (ruled 2026-11-19)'
 _CLAUDE_TAIL_WHY = "pending Scott's ruling (claude --tail)"
-_CHECK_WHY = (_PENDING_3B3 + ': the legacy --check transport (LEGACY_CHECK_TRANSPORT) keeps the main parser\'s route '
-              'after the URI until its note-stage RETIREMENTS row lands')
-_CLAUDE_LEGACY_WHY = (_PENDING_3B3 + ': Claude\'s workflow and search readers take the main parser\'s --type and --name '
-                      'after the URI until their note-stage RETIREMENTS rows land')
 _EQUAL_TERM_WHY = ('waits for a ruling: ?k=A --flag A on a repeatable control combines as ?k=A&k=A and the subcommand\'s '
                    '--flag A --flag A do (the echo reads "A AND A"); rule 1 does not say whether an equal repeated term is '
                    'one term (Claude match dedupes it)')
 RULE_23_CASES = {
     'ast': {'?where=A --where A': _EQUAL_TERM_WHY},
-    'claude': {'--tail': _CLAUDE_TAIL_WHY, '--check': _CHECK_WHY, **dict.fromkeys(('--type', '--name'), _CLAUDE_LEGACY_WHY)},
-    **{noun: {'--check': _CHECK_WHY} for noun in ('git', 'json')},
+    'claude': {'--tail': _CLAUDE_TAIL_WHY},
     'markdown': dict.fromkeys(('?where=A --where A', '?match=A --match A'), _EQUAL_TERM_WHY),
 }
 NOT_YET: dict = {(noun, '23'): '; '.join(dict.fromkeys(RULE_23_CASES[noun].values())) for noun in RULE_23_CASES}
 
 NOT_YET_BASELINE = {'1a': 0, '1b': 0, '1c': 0, '1d': 0, '2': 0, '3': 0, '3b': 0, '4': 0, '5': 0, '6': 0,
                     '8a': 0, '8b': 0, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 0, '14': 0, '21j': 0, '22': 0,
-                    '23': 5}
+                    '23': 3}
 
 
 # --- the fixture -------------------------------------------------------------------------------------------

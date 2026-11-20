@@ -176,20 +176,23 @@ def test_element_and_check_keep_legacy_policy_and_stdin_answers_like_the_request
     # The element is named in the URI; api.query's element_name is refused on a declared noun (BACK-2687).
     keyed = api.query(f'{uri}/answer')
     assert (keyed['type'], keyed['path'], keyed['value_type'], keyed['value']) == ('json_value', 'answer', 'int', 42)
+    # --check never changed a JSON answer: a note-stage legacy modifier since BACK-2673 (BACK-2708 ruling 2), noted
+    # once instead of named unused, answering as without it.
     checked = run(uri, '--check', '--format', 'json')
     assert checked.returncode == 0, checked.stderr
-    warnings = [w for w in json.loads(checked.stdout)['meta']['warnings'] if w['type'] == 'unused_flag']
-    assert [(w['code'], w['fields']) for w in warnings] == [('unused_flag', ['--check'])]
+    warnings = json.loads(checked.stdout)['meta']['warnings']
+    assert not [w for w in warnings if w['type'] == 'unused_flag']
+    assert [w['field'] for w in warnings if w['type'] == 'retired_spelling'] == ['flag:json.--check']
     assert 'has no effect' not in checked.stderr
     checked_text = run(uri, '--check')
     assert checked_text.returncode == 0
-    assert checked_text.stderr.count('--check has no effect') == 1
+    assert checked_text.stderr.count('note: json --check is deprecated') == 1
     path.write_text('{INVALID', encoding='utf-8')
     # A positional element on json:// was never read; it is refused before the file is (BACK-2522).
     assert run(uri, 'answer', '--format', 'json').returncode == 2
     failed = run(uri, '--check', '--format', 'json')
-    assert failed.returncode == 1
     direct = run(uri, '--format', 'json')
+    assert failed.returncode == direct.returncode  # --check changes nothing, a failed read included
     batch = _run_reveal_in(tmp_path, '--stdin', '--format', 'json', stdin=uri + '\n')
     assert batch.returncode == direct.returncode == 3  # a --stdin line is the direct request (BACK-2325)
     assert json.loads(batch.stdout)['error']

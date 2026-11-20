@@ -3,7 +3,7 @@ from dataclasses import replace
 from typing import Any, Callable
 
 from ...utils.query_binding import bind_declared_params, legacy_presence_value as presence, string_value as text
-from ...utils.query_parser import CliBinding, LegacySpelling, ParamSpec, ParamValueError, QueryParams, where_param, peek_query_items, nonnegative_display_limit, nonempty_scalar, legacy_slices
+from ...utils.query_parser import CliBinding, LegacySpelling, ParamSpec, ParamValueError, QueryParams, where_param, peek_query_items, nonnegative_display_limit, nonempty_scalar, legacy_check, legacy_slices
 from .schema import _SCHEMA_QUERY_PARAMS
 from .resources import SESSION_VIEW_NAMES
 from .pagination import PAGE_SPECS
@@ -139,7 +139,15 @@ PARAM_SPECS = tuple(_spec(name, schema) for name, schema in _SCHEMA_QUERY_PARAMS
 PARAM_SPECS = (*PARAM_SPECS, *legacy_slices(
     head=('claude_workflow', 'claude_session_list', 'claude_messages', 'claude_message_range',
           'claude_cross_session_search', 'claude_history', 'claude_filtered_results'),
-    range=('claude_workflow', 'claude_messages', 'claude_message_range', 'claude_filtered_results')))
+    range=('claude_workflow', 'claude_messages', 'claude_message_range', 'claude_filtered_results')),
+    # The workflow, catalog and history readers' legacy filters (Scott 2026-11-19, BACK-2708 ruling 3; supported legacy
+    # under D18 until the cut): tests/test_claude_workflow_selection_back2617.py compares the canonical controls with them.
+    ParamSpec('type', 'string', 'Legacy: workflow steps of this tool', None, str, flag_only='applied',
+              cli=CliBinding(('--type',), metavar='TYPE'), answers=('claude_workflow',)),
+    ParamSpec('name', 'string', 'Legacy: rows whose text contains PATTERN', None, str, flag_only='applied',
+              cli=CliBinding(('--name', '--search'), dest='name', metavar='PATTERN'),
+              answers=('claude_workflow', 'claude_session_list', 'claude_history')),
+    legacy_check())
 
 
 def translate_request(query, params, resource=''):

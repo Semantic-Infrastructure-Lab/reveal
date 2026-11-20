@@ -207,7 +207,12 @@ _MODIFIER_REQUESTS = {
     'json': lambda f: [f'json://{Path(f).parent / "rows.json"}'],
     'testability': lambda f: [f'testability://{Path(f).parent}?tests={Path(f).parent}'],
 }
-_MODIFIER_ARGV = {'--head': ['--head', '1'], '--tail': ['--tail', '1'], '--range': ['--range', '1-1']}
+_MODIFIER_ARGV = {'--head': ['--head', '1'], '--tail': ['--tail', '1'], '--range': ['--range', '1-1'],
+                  '--type': ['--type', 'Read'], '--name': ['--name', 'x'], '--search': ['--search', 'x'],
+                  '--check': ['--check'], '--lint': ['--lint']}
+# Claude's legacy filters are read by the workflow view (and --check by every answer).
+_FLAG_REQUESTS = {('claude', flag): (lambda f: ['claude://session/my-session/workflow'])
+                  for flag in ('--type', '--name', '--search')}
 PRODUCTION_CASES = {
     # D9: architecture delegates to the canonical compact overview.
     'subcommand:architecture': lambda f: ['architecture', str(Path(f).parent)],
@@ -324,8 +329,8 @@ PRODUCTION_CASES = {
     # BACK-2673: the main parser's flags a declared noun keeps, typed after an answer that reads them (one row per flag
     # per noun, generated from LEGACY_CLI_MODIFIERS; tests/test_legacy_slice_flags_back2673.py runs each on both
     # spellings).
-    **{f'flag:{noun}.{flag}': (lambda request, typed: lambda f: [*request(f), *typed])(_MODIFIER_REQUESTS[noun],
-                                                                                       _MODIFIER_ARGV[flag])
+    **{f'flag:{noun}.{flag}': (lambda request, typed: lambda f: [*request(f), *typed])(
+        _FLAG_REQUESTS.get((noun, flag), _MODIFIER_REQUESTS[noun]), _MODIFIER_ARGV[flag])
        for noun, flags in LEGACY_CLI_MODIFIERS.items() for flag in flags},
 }
 # The row a case notes beside its own: a parameter of a noun that is itself retired.

@@ -596,6 +596,13 @@ def legacy_slices(**answers: Tuple[str, ...]) -> Tuple[ParamSpec, ...]:
                  for name, (kind, description, convert, metavar) in _SLICE_MODIFIERS.items() if name in answers)
 
 
+def legacy_check() -> ParamSpec:
+    """The main parser's ``--check``/``--lint`` on a noun whose answers it never changed (Scott 2026-11-19, BACK-2708
+    ruling 2; BACK-2673): an inert flag-only modifier, so its ``flag:<noun>.--check`` note is its whole effect."""
+    return ParamSpec('check', 'boolean', 'Legacy: no effect on this noun\'s answers (reveal check <path> checks files)',
+                     False, bool, flag_only='inert', cli=CliBinding(('--check', '--lint'), action='store_true'))
+
+
 def param_schema(specs: Iterable[ParamSpec]) -> Dict[str, Any]:
     """The query parameters: a flag-only modifier is none (``ParamSpec.flag_only``)."""
     return {spec.name: spec.schema() for spec in specs if not spec.flag_only}

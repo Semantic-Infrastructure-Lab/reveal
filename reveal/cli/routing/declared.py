@@ -207,15 +207,11 @@ def uri_flag_message(target, message: str) -> str | None:
 
 
 # Main-parser flags that keep their URI-only answer until a ruling settles them (step 3b-3 of BACK-2673): a request
-# typing one after its noun's URI is still read by the main parser, as before. The table and the branch reading it go
-# when their rows land. --head/--range and --tail elsewhere are flag-only modifiers now (LEGACY_CLI_MODIFIERS).
-# - Claude --tail is held for Scott's ruling: undocumented, it collides with the documented legacy operation ?tail=N.
-# - Claude's workflow and search readers take the main parser's --type and --name (--search): the legacy CLI population
-#   tests/test_claude_workflow_selection_back2617.py compares the canonical controls with.
-# Read from declarations instead: the legacy --check transport (LEGACY_CHECK_TRANSPORT), and a global flag the URI's
-# injection binds through the noun's CLI_QUERY_FLAGS that its subcommand does not take.
-_PENDING_MAIN_FLAGS = {'claude': ('--tail', '--type', '--name', '--search')}
-_LEGACY_CHECK_FLAGS = ('--check', '--lint')
+# typing one after its noun's URI is still read by the main parser, as before. Claude --tail is held for Scott's ruling:
+# undocumented, it collides with the documented legacy operation ?tail=N. Every other main-parser flag a declared noun
+# keeps is a flag-only modifier of its declaration (ParamSpec.flag_only, LEGACY_CLI_MODIFIERS), and a global flag the
+# URI's injection binds through the noun's CLI_QUERY_FLAGS that its subcommand does not take is read from there.
+_PENDING_MAIN_FLAGS = {'claude': ('--tail',)}
 
 
 def _main_option_arity() -> Dict[str, int]:
@@ -252,7 +248,6 @@ def _main_parser_reads(noun: str, adapter, parser, argv, main_modes) -> bool:
     received = getattr(adapter, 'CLI_QUERY_FLAGS', None) or {}
     own = parser._option_string_actions
     pending = (*_PENDING_MAIN_FLAGS.get(noun, ()),
-               *(_LEGACY_CHECK_FLAGS if getattr(adapter, 'LEGACY_CHECK_TRANSPORT', False) else ()),
                *(flag.option for flag in FLAG_SPECS if flag.dest in received and flag.option not in own),
                *(option for option in main_modes if option not in own))
     for token in argv:

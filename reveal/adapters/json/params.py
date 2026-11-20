@@ -4,7 +4,7 @@ from typing import Any, Dict, Optional
 from ...errors import RequestValidationError
 from ...utils.query_binding import boolean_value, given_controls, unread_by_data_warning
 from ...utils.query_parser import (CliBinding, LegacySpelling, ParamSpec, ParamValueError, QueryParams,
-                                   parse_query_params, peek_query_items, legacy_slices)
+                                   parse_query_params, peek_query_items, legacy_check, legacy_slices)
 from ...utils.query_control import declared_result_control as result_control, parse_result_control
 from ...utils.query import parse_query_filters
 
@@ -55,7 +55,7 @@ PARAM_SPECS = (VIEW, WHERE, DETAIL, SORT, LIMIT, OFFSET)
 # --head/--tail/--range slice this noun's rows today: flag-only legacy modifiers until the cut, read by the answers named
 # (BACK-2673; their notes are the flag:<noun>.<flag> RETIREMENTS rows).
 LEGACY_SLICES = legacy_slices(head=('json_value',), tail=('json_value',), range=('json_value',))
-PARAM_SPECS = (*PARAM_SPECS, *LEGACY_SLICES)
+PARAM_SPECS = (*PARAM_SPECS, *LEGACY_SLICES, legacy_check())  # --check never changed a JSON answer (BACK-2708)
 
 
 def result_type(params: Any) -> str:

@@ -17,7 +17,7 @@ import json
 
 from ..base import ResourceAdapter, Stability, register_adapter, register_renderer
 from .renderer import ClaudeRenderer
-from ...utils.query_parser import ResourceSpec
+from ...utils.query_parser import ResourceSpec, param_schema
 from ...errors import RequestValidationError
 from ...utils.results import ResultBuilder, note_warning
 from .params import PARAM_SPECS, bind_query, bind_request
@@ -999,7 +999,7 @@ class ClaudeAdapter(ResourceAdapter):
             'adapter': 'claude',
             'description': 'Claude Code conversation analysis with tool usage, workflow tracking, and error detection',
             'uri_syntax': 'claude://session/{name}[/resource][?query]',
-            'query_params': {spec.name: spec.schema() for spec in PARAM_SPECS},
+            'query_params': param_schema(PARAM_SPECS),  # the one owner: a flag-only modifier is no query parameter
             'pagination': page_schema(),
             'workflow_selection': {'tool_predicate': 'tool==NAME (case-insensitive exact equality)',
                                    'match_rule': MATCH_RULE, 'order': 'selection before sorting, offset and limit'},

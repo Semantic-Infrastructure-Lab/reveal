@@ -59,7 +59,8 @@ PARAM_SPECS = (WHERE, MATCH, VIEW, FIELD, BACKLINKS, AGGREGATE, LINKS, LINT, LIN
                FIELDS, EXPLAIN, SORT, LIMIT, OFFSET)
 # --head/--tail/--range slice this noun's rows today: flag-only legacy modifiers until the cut, read by the answers named
 # (BACK-2673; their notes are the flag:<noun>.<flag> RETIREMENTS rows).
-PARAM_SPECS = (*PARAM_SPECS, *legacy_slices(head=('markdown_query',), tail=('markdown_query',), range=('markdown_query',)))
+_SLICED = ('markdown_query',)  # the list view; links, lint and aggregate have no rows to slice
+PARAM_SPECS = (*PARAM_SPECS, *legacy_slices(head=_SLICED, tail=_SLICED, range=_SLICED))
 
 
 def _enabled(value: Any) -> bool:

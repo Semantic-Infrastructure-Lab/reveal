@@ -2,7 +2,7 @@
 from typing import Any
 
 from ...utils.query_binding import boolean_value, switch_value, verbose_legacy
-from ...utils.query_parser import CliBinding, LegacySpelling, ParamSpec, ParamValueError, nonempty_scalar, nonnegative_display_limit, legacy_slices
+from ...utils.query_parser import CliBinding, LegacySpelling, ParamSpec, ParamValueError, nonempty_scalar, nonnegative_display_limit, legacy_check, legacy_slices
 
 
 def expressions(value: Any) -> list[str]:
@@ -95,7 +95,9 @@ PARAM_SPECS = (VIEW, WHERE, DETAIL, MERGES, NO_MERGES, RAW, SORT, LIMIT, SCAN_LI
                  for name, description in (('since', 'Inclusive starting date'), ('until', 'Inclusive ending date'))))
 # --head/--tail/--range slice this noun's rows today: flag-only legacy modifiers until the cut, read by the answers named
 # (BACK-2673; their notes are the flag:<noun>.<flag> RETIREMENTS rows).
-PARAM_SPECS = (*PARAM_SPECS, *legacy_slices(head=('git_repository', 'git_ref', 'git_file_history', 'git_directory_history'), tail=('git_repository', 'git_ref', 'git_file_history', 'git_directory_history'), range=('git_repository', 'git_ref', 'git_file_history', 'git_directory_history')))
+_SLICED = ('git_repository', 'git_ref', 'git_file_history', 'git_directory_history')
+PARAM_SPECS = (*PARAM_SPECS, *legacy_slices(head=_SLICED, tail=_SLICED, range=_SLICED),
+               legacy_check())  # --check never changed a Git answer (BACK-2708)
 
 
 QUERY_CONTROL_NAMES = frozenset(name for spec in PARAM_SPECS for name in spec.spellings)
