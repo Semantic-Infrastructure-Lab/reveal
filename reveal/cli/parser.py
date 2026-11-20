@@ -384,7 +384,8 @@ def _add_discovery_options(group) -> None:
 def _add_input_output_options(parser: argparse.ArgumentParser) -> None:
     """Add input/output and formatting options."""
     parser.add_argument('--stdin', action='store_true',
-                        help='Read paths/URIs from stdin (one per line) - supports files and any URI scheme (ssl://, claude://, etc.)')
+                        help='Read paths, URIs or command lines from stdin, one per line; a command line '
+                             '(calls src --callers main) answers as reveal LINE plus these options')
     parser.add_argument('--meta', action='store_true', help='Show metadata only')
 
 

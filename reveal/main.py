@@ -248,6 +248,24 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     perf_enabled = invocation.perf or os.environ.get('REVEAL_PERF_LOG') == '1'
     start = time.perf_counter()
     exit_code = 0
+    exited = None
+    try:
+        exited = run_contained(invocation)
+        exit_code = exited or 0
+    except BaseException:  # boundary-ok: broad-except -- records the exit code for telemetry and re-raises; nothing is swallowed
+        exit_code = 1
+        raise
+    finally:
+        if perf_enabled:
+            _log_perf(start, list(invocation.argv), exit_code)
+    if exited is not None:
+        raise SystemExit(exited)
+
+
+def run_contained(invocation: Invocation) -> Optional[int]:
+    """Run one command line as ``reveal`` does and return the code it exited with instead of exiting (None when
+    it returned without exiting): the process entry point and each ``--stdin`` command line (BACK-2707) end
+    the same way."""
     try:
         with invocation_scope(invocation):
             _dispatch_and_run(invocation)
@@ -255,21 +273,16 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         # Each owner supplies an explicit invalid-request origin and public diagnostic.
         message = exc.entry.text if isinstance(exc, RetiredSpellingError) else str(exc)
         print(f'error: {message}', file=sys.stderr)  # boundary-ok: print -- the invalid-invocation error line
-        exit_code = 2
-        raise SystemExit(2) from None
+        return 2
     except ConfigLoadError as exc:  # test_layout's required source included (TestLayoutConfigError)
         print(f'error: {exc}', file=sys.stderr)  # boundary-ok: print -- required selected configuration failure
-        exit_code = 3
-        raise SystemExit(3) from None
+        return 3
     except SystemExit as e:
-        exit_code = e.code if isinstance(e.code, int) else (0 if e.code is None else 1)
-        raise
-    except BaseException:  # boundary-ok: broad-except -- records the exit code for telemetry and re-raises; nothing is swallowed
-        exit_code = 1
-        raise
-    finally:
-        if perf_enabled:
-            _log_perf(start, list(invocation.argv), exit_code)
+        if e.code is None or isinstance(e.code, int):
+            return e.code or 0
+        print(e.code, file=sys.stderr)  # boundary-ok: print -- what the interpreter prints for a non-integer exit
+        return 1
+    return None
 
 
 def _dispatch_and_run(invocation: Invocation, admit: Optional[Callable[[Namespace, Optional[str]], None]] = None) -> None:
@@ -396,7 +409,7 @@ _SPECIAL_MODES: List[Tuple[str, Callable[[Any], Any]]] = [
     ('list_schemas', lambda a: handle_list_schemas()),
     ('discover', lambda a: handle_discover(getattr(a, 'all', False))),
     ('decorator_stats', lambda a: handle_decorator_stats(a.path)),
-    ('stdin', lambda a: handle_stdin_mode(a, handle_file)),  # its routes keep their own ledgers
+    ('stdin', lambda a: handle_stdin_mode(a, handle_file, run_contained)),  # its routes keep their own ledgers
     ('disable_breadcrumbs', lambda a: disable_breadcrumbs_permanently()),
 ]
 # Always-JSON modes: --format json asks for what they print anyway, so it is honoured.
@@ -486,7 +499,7 @@ def _handle_at_file(file_path: str, args):
     old_stdin = sys.stdin
     sys.stdin = io.StringIO('\n'.join(lines))
     try:
-        handle_stdin_mode(args, handle_file)
+        handle_stdin_mode(args, handle_file, run_contained)
     finally:
         sys.stdin = old_stdin
 

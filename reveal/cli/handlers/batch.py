@@ -5,10 +5,12 @@ and multi-URI result rendering.
 """
 
 import os
+import shlex
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional, Dict, List, Any, Literal, Tuple, Iterable, cast
+from typing import TYPE_CHECKING, Callable, Optional, Dict, List, Any, Literal, Tuple, Iterable, cast
 
+from ..invocation import COMMANDS, Invocation, current_invocation
 from ...utils.request_cache import host_request
 from ...utils.results import outcome_of
 
@@ -23,6 +25,70 @@ if TYPE_CHECKING:
 _STDIN_FLAGS = ('stdin',)
 _BATCH_FLAGS = ('stdin', 'batch', 'format', 'summary', 'only_failures')
 _SSL_BATCH_FLAGS = ('stdin', 'format', 'summary', 'only_failures', 'expiring_within')
+
+
+def _command_line_of(target: str) -> Optional[List[str]]:
+    """The words of a batch line that is a command line (BACK-2707): not an existing path, and its first word is
+    a reveal command or a URI (``calls src --callers X``, ``git://app.py@HEAD --limit 5``). None for a path
+    line, which is taken whole because a path may hold spaces. A line with quotes is split as a POSIX shell
+    splits it; an unbalanced quote leaves it a path line."""
+    if os.path.lexists(target):
+        return None
+    try:
+        words = shlex.split(target) if ('"' in target or "'" in target) else target.split()
+    except ValueError:
+        return None
+    if words and (words[0] in COMMANDS or '://' in words[0]):
+        return words
+    return None
+
+
+def _batch_flags(args: 'Namespace') -> List[str]:
+    """The batch's own command line minus what makes it a batch (``--stdin``, an ``@FILE`` list): the options
+    every command line joins, as ``reveal LINE BATCH-FLAGS``."""
+    invocation = current_invocation()
+    listed = getattr(args, 'path', None)
+    at_file = listed if isinstance(listed, str) and listed.startswith('@') else None
+    return [word for word in (invocation.argv if invocation is not None else ())
+            if word != '--stdin' and word != at_file]
+
+
+def _process_stdin_command(words: List[str], target: str, args: 'Namespace',
+                           run_line: Callable[[Invocation], Optional[int]]) -> int:
+    """One command line, answered as the direct request ``reveal LINE BATCH-FLAGS`` (BACK-2707): the CLI's own
+    parse and dispatch, so the line's flags meet the batch's under "Conflicting values"; returns its exit code."""
+    if '--stdin' in words:
+        print(f"Error: {target}: a batch line cannot read --stdin itself", file=sys.stderr)
+        return 2
+    code = run_line(Invocation.parse(['reveal', *words, *_batch_flags(args)])) or 0
+    if code and not getattr(args, 'check', False):
+        print(f"Warning: {target} failed (exit {code}); continuing", file=sys.stderr)
+    return code
+
+
+def _batch_line_error(target: str, words: List[str]) -> dict:
+    """A ``--batch`` row for a command line: --batch aggregates one URI per line."""
+    scheme = words[0].split('://', 1)[0] if '://' in words[0] else words[0]
+    return {'uri': target, 'scheme': scheme, 'status': 'error',
+            'error': '--batch aggregates one URI per line; run the command lines without --batch'}
+
+
+def _process_stdin_request(target: str, args: 'Namespace', run_line: Optional[Callable[[Invocation], Optional[int]]],
+                           is_batch_mode: bool, is_check_mode: bool, batch_results: list,
+                           ssl_check_results: list) -> Optional[int]:
+    """Answer a line that is a command line or a URI and return its exit code; None for a path line. A command
+    line answers as its direct request (BACK-2707); --batch rows and the --check aggregate keep a one-URI line on
+    the aggregating route, and --batch reports a command line as an error row."""
+    words = _command_line_of(target) if run_line is not None else None
+    if run_line is not None and words is not None and (len(words) > 1 or not (is_batch_mode or is_check_mode)):
+        if is_batch_mode:
+            batch_results.append(_batch_line_error(target, words))
+            return 0
+        return _process_stdin_command(words, target, args, run_line)
+    if '://' in target:
+        return _process_stdin_uri(target, args, is_batch_mode, is_check_mode and not is_batch_mode,
+                                  batch_results, ssl_check_results)
+    return None
 
 
 def _passes_ext_filter(target: str, ext_filter: Optional[str]) -> bool:
@@ -195,7 +261,7 @@ def _stdin_check_inputs(is_check_mode: bool, has_file_sinks: bool) -> Iterable[s
     return inputs
 
 
-def handle_stdin_mode(args: 'Namespace', handle_file_func):
+def handle_stdin_mode(args: 'Namespace', handle_file_func, run_line: Optional[Callable[[Invocation], Optional[int]]] = None):
     """Run a --stdin batch as one host request (BACK-2474).
 
     A batch is a long-lived entry point: one request lets the request-owned caches (the calls
@@ -203,17 +269,19 @@ def handle_stdin_mode(args: 'Namespace', handle_file_func):
     sealed on exit, instead of read without revalidation or rebuilt per line.
     """
     with host_request():
-        _run_stdin_mode(args, handle_file_func)
+        _run_stdin_mode(args, handle_file_func, run_line)
 
 
-def _run_stdin_mode(args: 'Namespace', handle_file_func):
+def _run_stdin_mode(args: 'Namespace', handle_file_func, run_line: Optional[Callable[[Invocation], Optional[int]]] = None):
     """Handle --stdin mode to process files/URIs from stdin.
 
     Args:
         args: Parsed arguments
         handle_file_func: Function to handle individual files
+        run_line: Runs one command line as ``reveal`` does and returns its exit code (``main.run_contained``)
 
-    Supports both file paths and URIs (scheme://resource).
+    Supports file paths, URIs (scheme://resource) and command lines (BACK-2707): a line that is not an
+    existing path and starts with a command or a URI answers as ``reveal LINE BATCH-FLAGS``.
     URIs are routed to the appropriate adapter handler.
 
     When --batch is used, results are aggregated across all adapters.
@@ -233,7 +301,6 @@ def _run_stdin_mode(args: 'Namespace', handle_file_func):
     # Check if we're in batch mode (explicit --batch or SSL batch checks)
     is_batch_mode = getattr(args, 'batch', False)
     is_check_mode = getattr(args, 'check', False)
-    is_ssl_batch_check = is_check_mode and not is_batch_mode
 
     # Collect results for batch aggregation
     ssl_check_results: List[Dict[str, Any]] = []
@@ -268,10 +335,10 @@ def _run_stdin_mode(args: 'Namespace', handle_file_func):
                 )
                 sys.exit(1)
 
-        # Check if this is a URI (scheme://resource)
-        if '://' in target:
-            uri_exit = max(uri_exit, _process_stdin_uri(target, args, is_batch_mode, is_ssl_batch_check,
-                                                         batch_results, ssl_check_results))
+        line_exit = _process_stdin_request(target, args, run_line, is_batch_mode, is_check_mode,
+                                           batch_results, ssl_check_results)
+        if line_exit is not None:
+            uri_exit = max(uri_exit, line_exit)
         else:
             # Apply --ext filter for file paths
             if _passes_ext_filter(target, getattr(args, 'ext', None)):
