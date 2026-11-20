@@ -73,8 +73,8 @@ def test_check_answers_as_without_it_with_its_note(rich, noun, uri, sub, flag): 
     for run in (C._run(uri, flag, '--format', 'json'), C._run(*sub, flag, '--format', 'json')):
         assert run.rc == 0, run.brief()
         assert C._answer(run, noun) == C._answer(plain, noun)
-        assert _notes(run, noun) == [f'{noun} {flag} is deprecated; use nothing: it never changed a {noun}:// answer; '
-                                     f'reveal check <path> checks files.']
+        assert _notes(run, noun) == [f'{noun} {flag} is deprecated; use reveal check <path> to check files '
+                                     f'(--check never changed a {noun}:// answer).']
         assert not [w for w in json.loads(run.out)['meta'].get('warnings', []) if w.get('code') == 'unused_flag']
 
 

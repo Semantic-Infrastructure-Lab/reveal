@@ -27,6 +27,12 @@ def test_the_rows_are_generated_from_the_table():
             assert (row.old, row.replacement, row.stage, row.standalone) == (f'{noun} {flag}', replacement, 'note', True)
 
 
+def test_every_note_names_something_to_use():
+    """A note reads '<old> is deprecated; use <replacement>': the replacement is what to type, with the reason after
+    it, never 'nothing: ...' (Scott 2026-11-19: an understandable surface)."""
+    assert [key for key, row in RETIREMENTS.items() if row.replacement.lower().startswith('nothing')] == []
+
+
 def test_every_table_noun_is_a_declared_noun():
     assert set(LEGACY_CLI_MODIFIERS) <= set(DECLARED)
 
