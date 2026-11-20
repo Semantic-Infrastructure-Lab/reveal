@@ -9,6 +9,7 @@ import pytest
 pygit2 = pytest.importorskip('pygit2')
 
 from conftest import _run_reveal_direct as run  # noqa: E402
+from conftest import without_covered_notes, without_request_notes  # noqa: E402
 from reveal import api  # noqa: E402
 from reveal.adapters.architecture import ArchitectureAdapter  # noqa: E402
 from reveal.adapters.overview import OverviewAdapter  # noqa: E402
@@ -151,7 +152,7 @@ def canonical(response, code=0):
 
 
 def same_answer(left, right):
-    left, right = deepcopy(left), deepcopy(right)
+    left, right = without_covered_notes(left), without_request_notes(right)  # the URI request's own note (BACK-2716)
     if 'execution' in left:
         assert left['execution']['command'] and right['execution']['command']
         del left['execution']['command'], right['execution']['command']

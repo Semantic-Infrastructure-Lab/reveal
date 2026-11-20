@@ -6,7 +6,7 @@ from urllib.parse import quote
 
 import pytest
 
-from conftest import _run_reveal_direct
+from conftest import _run_reveal_direct, without_covered_notes, without_request_notes
 
 
 @pytest.fixture
@@ -30,7 +30,7 @@ def run(*args):
 
 def assert_equal_answers(left, right):
     """Only actual invocation spelling may differ, never arbitrary metadata."""
-    a, b = copy.deepcopy(left), copy.deepcopy(right)
+    a, b = without_covered_notes(left), without_request_notes(right)  # the URI request's own note (BACK-2716)
     if 'execution' in a:
         assert a['execution']['command'].startswith('reveal surface ')
         assert b['execution']['command'].startswith('reveal surface://')
@@ -263,7 +263,7 @@ def test_tilde_uri_uses_one_resolved_path(project, monkeypatch):
     a = run('surface://' + project.as_posix(), '--format', 'json', '--no-gitignore')
     b = run('surface://~/proj', '--format', 'json', '--no-gitignore')
     assert a.returncode == b.returncode == 0
-    assert json.loads(a.stdout) == json.loads(b.stdout)
+    assert without_request_notes(json.loads(a.stdout)) == without_request_notes(json.loads(b.stdout))
 
 
 @pytest.mark.parametrize('incomplete,artifact_failure,expected', [

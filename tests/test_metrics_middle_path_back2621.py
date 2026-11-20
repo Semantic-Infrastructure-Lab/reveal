@@ -21,6 +21,7 @@ import subprocess
 import pytest
 
 from conftest import _run_reveal_direct as run
+from conftest import is_request_note
 from reveal.api import query
 from reveal.utils.path_utils import to_posix
 
@@ -146,7 +147,12 @@ def warnings_of(answer, *types):
 
 
 def notes(answer):
-    return [w.get('message', '') for w in warnings_of(answer, 'retired_spelling')]
+    """The answer's own retirement notes: a URI request's one request note (BACK-2716) is `request_notes`."""
+    return [w.get('message', '') for w in warnings_of(answer, 'retired_spelling') if not is_request_note(w)]
+
+
+def request_notes(answer):
+    return [w.get('message', '') for w in warnings_of(answer, 'retired_spelling') if is_request_note(w)]
 
 
 def unread(answer):
@@ -652,7 +658,10 @@ class TestProposedChanges:
         else:
             answer = query(uri(project, 'sort=file'), **{legacy: value})
         assert_equal_answer(answer, expected)
-        assert _first_note_with(answer, legacy, canonical), notes(answer)
+        if transport == 'cli':
+            assert _first_note_with(answer, legacy, canonical), notes(answer)
+        else:  # the URI request's one note replaces the per-spelling note and spells the canonical control (BACK-2716)
+            assert [m for m in request_notes(answer) if canonical in m], request_notes(answer)
         assert not _first_note_with(answer, 'max_complexity<'), 'never translate to the highest-function field'
 
     # -- Decision 4: --churn off and merges on/off ---------------------------------------------------------
@@ -696,7 +705,7 @@ class TestProposedChanges:
 
     def test_no_merges_names_merges_and_conflicts_reject(self, git_project):
         answer = query(uri(git_project, 'hotspots=true&no_merges=true'))
-        assert _first_note_with(answer, 'no_merges', 'merges'), notes(answer)
+        assert [m for m in request_notes(answer) if 'merges=False' in m], request_notes(answer)  # BACK-2716
         result, answer = cli_json(uri(git_project, 'hotspots=true&merges=on&no_merges=true'))
         assert_usage(result, answer, 'merges')
 

@@ -22,7 +22,8 @@ import json
 import pytest
 
 from conftest import _run_reveal_direct as run
-from reveal.cli.invocation import RETIREMENTS, Retirement
+from conftest import is_request_note, without_mcp_request_note, without_request_note_lines
+from reveal.cli.invocation import RETIREMENTS, Retirement, request_note_covers, request_noted
 
 APP = '''\
 def helper(x):
@@ -86,6 +87,22 @@ def _retired(doc):
     return [w for w in (doc.get('meta') or {}).get('warnings') or [] if w.get('code') == 'retired_spelling']
 
 
+def _own_retired(doc):
+    """The retirement warnings without the URI request's one note (BACK-2716)."""
+    return [w for w in _retired(doc) if not is_request_note(w)]
+
+
+def _request_scheme(uri):
+    """The scheme whose request note a URI request says (a retired twin's own row is its note), else None."""
+    scheme, sep, _ = uri.partition('://')
+    return scheme if sep and request_noted(scheme) else None
+
+
+def _says_own_note(key, argv):
+    """Whether the spelling's own note is said: a URI request's note replaces a covered per-key row (BACK-2716)."""
+    return not (_request_scheme(argv[0]) and request_note_covers(key))
+
+
 def _without_retirement(doc):
     """The answer minus the retirement fact, an emptied warnings list or meta dropped; applied to both
     sides, since some answers carry an empty warnings list of their own."""
@@ -112,17 +129,19 @@ def test_a_retired_call_spelling_prints_one_note_and_keeps_its_answer(monkeypatc
     json_run = run(*argv, '--format', 'json')
     text = RETIREMENTS[key].text if key in RETIREMENTS else f'<no {key} row>'
 
-    # One note and nothing else deprecated: reveal trace is not also noted as trace://.
-    assert text_run.stderr.count(f'note: {text}') == 1, text_run.stderr
+    # One note and nothing else deprecated: reveal trace is not also noted as trace://. A URI request to a noted
+    # scheme adds its one request note, which replaces the note of a spelling it covers (BACK-2716).
+    scheme, own = _request_scheme(argv[0]), _says_own_note(key, argv)
+    assert text_run.stderr.count(f'note: {text}') == int(own), text_run.stderr
+    assert text_run.stderr.count('deprecated') == int(own) + int(bool(scheme)), text_run.stderr
     assert json_run.stderr.count('deprecated') == 0, json_run.stderr  # the JSON carries it (BACK-2659)
-    assert text_run.stderr.count('deprecated') == 1
-    assert [w['field'] for w in _retired(json.loads(json_run.stdout))] == [key]
+    assert [w['field'] for w in _retired(json.loads(json_run.stdout))] == [key] * own + [f'request:{scheme}'] * bool(scheme)
 
     with monkeypatch.context() as m:
         _unretired(m, key)
         base_text = run(*argv)
         base_json = run(*argv, '--format', 'json')
-    assert 'deprecated' not in base_text.stderr
+    assert 'deprecated' not in without_request_note_lines(base_text.stderr)
     assert text_run.returncode == base_text.returncode == 0
     assert json_run.returncode == base_json.returncode == 0
     assert text_run.stdout == base_text.stdout
@@ -146,8 +165,8 @@ def test_the_ast_call_filter_notes_point_at_grep_too(key):
 @pytest.mark.parametrize('case', NOT_RETIRED)
 def test_the_replacements_and_their_siblings_print_no_note(project, case):
     result = run(*NOT_RETIRED[case](project), '--format', 'json')
-    assert 'deprecated' not in result.stderr, result.stderr
-    assert not _retired(json.loads(result.stdout))
+    assert 'deprecated' not in without_request_note_lines(result.stderr), result.stderr
+    assert not _own_retired(json.loads(result.stdout))
 
 
 def test_depends_root_notes_its_own_scheme_not_the_calls_parameter(project):
@@ -192,13 +211,15 @@ def test_mcp_reveal_query_returns_the_note_with_the_answer(monkeypatch, project,
     out = reveal_query(uri)
     assert capsys.readouterr().err == ''
     text = RETIREMENTS[key].text if key in RETIREMENTS else f'<no {key} row>'
-    assert out.count(f'[note: {text}]') == 1, out
+    scheme, own = _request_scheme(uri), _says_own_note(key, [uri])
+    assert out.count(f'[note: {text}]') == int(own), out
+    assert (without_mcp_request_note(out) != out) is bool(scheme), out
     doc = json.loads(reveal_query(uri, provenance=True))
-    assert [w['field'] for w in _retired(doc)] == [key]
+    assert [w['field'] for w in _retired(doc)] == [key] * own + [f'request:{scheme}'] * bool(scheme)
     with monkeypatch.context() as m:
         _unretired(m, key)
         base = reveal_query(uri)
-    assert out.startswith(base.rstrip('\n'))
+    assert out.startswith(without_mcp_request_note(base).rstrip('\n'))
 
 
 def test_mcp_reveal_trace_keeps_its_name_and_prints_no_note_until_phase_7(project):

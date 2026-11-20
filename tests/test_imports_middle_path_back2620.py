@@ -18,6 +18,7 @@ import subprocess
 import pytest
 
 from conftest import _run_reveal_direct as run
+from conftest import is_request_note
 from reveal.api import query
 from reveal.utils.path_utils import to_posix
 
@@ -219,8 +220,8 @@ class TestPreservation:
         assert result.returncode == 0
         # Decision 7 (D5): the legacy rank spelling keeps its answer and adds its one retirement note.
         assert [w['type'] for w in without_retirement(refused)['meta']['warnings']] == ['root_rejected']
-        assert [w['field'] for w in refused['meta']['warnings'] if w['type'] in SPELLING_WARNINGS] in (
-            [], ['param:imports.rank'])
+        # On the URI the request's one note replaces the per-spelling note and spells the canonical sort (BACK-2716).
+        assert [w['field'] for w in refused['meta']['warnings'] if w['type'] in SPELLING_WARNINGS] == ['request:imports']
         assert ranking(refused) == RANKING
 
     @pytest.mark.parametrize('controls,needle', [
@@ -542,8 +543,13 @@ class TestProposedChanges:
             assert result.returncode == 0, result.stderr
         assert_equal_answer(answer, expected)
         notes = [w for w in answer['meta']['warnings'] if w.get('type') == 'retired_spelling']
-        assert any(old in w.get('message', '') and new in w.get('message', '') for w in notes), \
-            f'legacy {old} must keep working with a retirement note naming {new}: {notes}'
+        if transport == 'cli':
+            assert any(old in w.get('message', '') and new in w.get('message', '') for w in notes), \
+                f'legacy {old} must keep working with a retirement note naming {new}: {notes}'
+        else:  # the URI request's one note replaces the per-spelling note and spells the canonical control (BACK-2716)
+            assert [w['field'] for w in notes] == ['request:imports'] and is_request_note(notes[0]), notes
+            assert new in notes[0]['message'] or new.replace('-', '_') in notes[0]['message'], \
+                f'legacy {old} must keep working with a request note naming {new}: {notes}'
 
     @pytest.mark.parametrize('controls,replacement', [
         ('rank=fan-in&top=1&limit=2', 'limit'),

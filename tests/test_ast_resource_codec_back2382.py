@@ -8,6 +8,7 @@ from urllib.parse import quote
 import pytest
 
 from conftest import _run_reveal_direct as run
+from conftest import without_request_notes
 from reveal.api import query
 from reveal.adapters.ast.adapter import AstAdapter
 from reveal.adapters.factory import _canonical_init
@@ -27,7 +28,7 @@ def uri(path):
 @pytest.mark.parametrize('name', ['space dir', 'Unicode Ω', 'amp&dir', 'percent%dir', 'plus+dir', "single'quote"])
 def test_encoded_resource_cli_api_factory_and_literal_control(tmp_path, name, transport):
     path = source(tmp_path / name / 'app.py')
-    expected = query(f'ast://{path.as_posix()}?name=alpha')
+    expected = without_request_notes(query(f'ast://{path.as_posix()}?name=alpha'))  # each request's own note names its spelling (BACK-2716)
     assert expected['total_results'] == 1
     encoded = uri(path) + '?name=alpha'
     if transport == 'factory':
@@ -35,11 +36,11 @@ def test_encoded_resource_cli_api_factory_and_literal_control(tmp_path, name, tr
         assert adapter.path == path.as_posix()
         assert adapter.get_structure() == expected
     elif transport == 'api':
-        assert query(encoded) == expected
+        assert without_request_notes(query(encoded)) == expected
     else:
         command = run(encoded, '--format', 'json')
         assert command.returncode == 0, command.stderr
-        assert json.loads(command.stdout) == expected
+        assert without_request_notes(json.loads(command.stdout)) == expected
 
 
 @pytest.mark.parametrize('scheme', ['ast', 'imports', 'metrics'])
@@ -62,8 +63,8 @@ def test_encoded_question_mark_is_not_reparsed_as_query(tmp_path, filename):
     assert answer['total_results'] == 1
     command = run(uri(path) + '?name=alpha&limit=1', '--format', 'json')
     assert command.returncode == 0, command.stderr
-    assert json.loads(command.stdout) == answer
-    assert AstAdapter(path.as_posix(), 'name=alpha').get_structure() == answer
+    assert without_request_notes(json.loads(command.stdout)) == without_request_notes(answer)
+    assert AstAdapter(path.as_posix(), 'name=alpha').get_structure() == without_request_notes(answer)
 
 
 def test_literal_existing_percent_precedence_and_exactly_one_decode(tmp_path):

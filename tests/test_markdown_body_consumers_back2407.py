@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from conftest import _run_reveal_direct as run
+from conftest import without_request_notes
 from reveal import api
 from reveal.errors import RequestValidationError
 from reveal.adapters.markdown import MarkdownQueryAdapter
@@ -61,7 +62,7 @@ def test_python_returns_source_evidence_and_cli_classifies_it(
     assert _names(direct) == names
     response = run(request, '--format', 'json')
     assert response.returncode == code, (response.stdout, response.stderr)
-    assert json.loads(response.stdout) == direct
+    assert without_request_notes(json.loads(response.stdout)) == without_request_notes(direct)  # each says its own form's note (BACK-2716)
     if bad is not None:
         warning, = _warnings(direct, 'unreadable_files')
         assert warning['count'] == 1 and warning['files'] == ['bad.md']
@@ -196,7 +197,7 @@ def test_requested_artifact_failure_preserves_answer_and_json_primary(tmp_path):
     artifact = tmp_path / 'answer.json'
     emitted = run(request, '--output', f'json={artifact}')
     assert emitted.returncode == 0
-    assert json.loads(artifact.read_text(encoding='utf-8')) == api.query(request)
+    assert without_request_notes(json.loads(artifact.read_text(encoding='utf-8'))) == without_request_notes(api.query(request))
     failed = run(request, '--output', f'json={tmp_path}')
     assert failed.returncode == 3 and 'good.md' in failed.stdout
     assert 'Error' in failed.stderr
@@ -288,7 +289,7 @@ def test_sibling_views_retain_partial_results_with_incomplete_status(tmp_path, s
     assert response.returncode == 3
     answer = json.loads(response.stdout)
     assert answer['type'] == expected_type and answer['analysis']['failed_files'] == 1
-    assert answer == api.query(request)
+    assert without_request_notes(answer) == without_request_notes(api.query(request))
 
 
 @pytest.mark.mcp

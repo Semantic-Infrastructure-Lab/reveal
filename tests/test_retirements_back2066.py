@@ -13,7 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from conftest import _run_reveal_direct
+from conftest import _run_reveal_direct, is_request_note, without_mcp_request_note, without_request_note_lines
+from reveal.adapters.base import get_adapter_class
 from reveal.cli import invocation
 from reveal.cli.invocation import (LEGACY_CLI_MODIFIERS, RETIREMENT_KEY, RETIREMENTS, STAGES, Retirement,
                                    uri_retirement_keys)
@@ -53,8 +54,22 @@ def _notes(stderr, text):
     return stderr.count(f'note: {text}')
 
 
-def _warnings(doc):
+def _all_retired(doc):
     return [w for w in (doc.get('meta') or {}).get('warnings') or [] if w.get('code') == 'retired_spelling']
+
+
+def _warnings(doc):
+    """The spellings' own retirement warnings: a URI request's one request note (BACK-2716) is `_request_field`."""
+    return [w for w in _all_retired(doc) if not is_request_note(w)]
+
+
+def _request_field(argv):
+    """The one request note a command line says: a URI to an analysis-only scheme, or any noted scheme that spells a query
+    string; a retired twin's own row is its note (BACK-2716)."""
+    scheme, sep, rest = argv[0].partition('://')
+    if not sep or not invocation.request_noted(scheme):
+        return []
+    return [f'request:{scheme}'] if getattr(get_adapter_class(scheme), 'ANALYSIS_ONLY', False) or '?' in rest else []
 
 
 def _without_retirement_warning(doc):
@@ -90,7 +105,7 @@ def test_a_retired_spelling_prints_one_note_and_the_answer_is_unchanged(monkeypa
     argv = argv(str(source))
     base_json = _run_reveal_direct(*argv, '--format', 'json')
     base_text = _run_reveal_direct(*argv)
-    assert not base_json.stderr.count('deprecated') and not base_text.stderr.count('deprecated')
+    assert not base_json.stderr.count('deprecated') and 'deprecated' not in without_request_note_lines(base_text.stderr)
 
     text = _retire(monkeypatch, key, old)
     as_json = _run_reveal_direct(*argv, '--format', 'json')
@@ -117,7 +132,7 @@ def test_a_spelling_that_is_not_retired_prints_nothing(monkeypatch, source, kind
     key, old, argv = KINDS[kind]
     _retire(monkeypatch, 'scheme:never-spelled', 'never-spelled://')
     result = _run_reveal_direct(*argv(str(source)), '--format', 'json')
-    assert 'deprecated' not in result.stderr
+    assert 'deprecated' not in without_request_note_lines(result.stderr)
     assert not _warnings(json.loads(result.stdout))
 
 
@@ -361,7 +376,9 @@ def test_every_production_row_is_exercised_and_prints_once(source):
         text = RETIREMENTS[key].text
         assert _notes(result.stderr, text) == 0, (key, result.stderr)  # the JSON carries it (BACK-2659)
         expected = [ALSO_NOTED[key], key] if key in ALSO_NOTED else [key]
-        assert sorted(w['field'] for w in _warnings(json.loads(result.stdout))) == sorted(expected)
+        request = _request_field(argv(str(source)))
+        own = [field for field in expected if not (request and invocation.request_note_covers(field))]  # the request note replaces a covered row
+        assert sorted(w['field'] for w in _all_retired(json.loads(result.stdout))) == sorted(own + request), key
 
 
 def test_a_removed_row_says_removed_and_is_an_error_from_the_start():
@@ -406,7 +423,7 @@ def test_mcp_returns_the_note_in_the_result_and_not_on_stderr(monkeypatch, sourc
     out = reveal_query(uri)
     assert capsys.readouterr().err == ''
     assert out.count(text) == 1 and base.count(text) == 0
-    assert out.startswith(base.rstrip('\n'))
+    assert out.startswith(without_mcp_request_note(base).rstrip('\n'))
     # Provenance forces JSON: the fact is a parseable meta.warnings entry.
     doc = json.loads(reveal_query(uri, provenance=True))
     assert [w['old'] for w in _warnings(doc)] == ['ast://?name=']
@@ -417,7 +434,7 @@ def test_mcp_does_not_note_a_spelling_that_is_not_retired(monkeypatch, source):
     from reveal.mcp_server import reveal_query
     _retire(monkeypatch, 'param:ast.type', 'ast://?type=')
     out = reveal_query(f'ast://{source}?name=auth*')
-    assert 'deprecated' not in out
+    assert 'deprecated' not in without_mcp_request_note(out)
     assert not _warnings(json.loads(reveal_query(f'ast://{source}?name=auth*', provenance=True)))
 
 

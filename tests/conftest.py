@@ -665,3 +665,11 @@ def without_covered_notes(document):
 def twin_stderr(text: str) -> str:
     """Stderr without the request note and without the notes of spellings that request note replaces."""
     return ''.join(line for line in without_request_note_lines(text).splitlines(keepends=True) if not covered_note_text(line))
+
+
+_MCP_REQUEST_NOTE = _re.compile(r'\[note: an? \w+:// request is deprecated; use [^\n]*\]\n?')
+
+
+def without_mcp_request_note(text: str) -> str:
+    """An MCP tool result without the request note's ``[note: ...]`` block (BACK-2716)."""
+    return _MCP_REQUEST_NOTE.sub('', text)

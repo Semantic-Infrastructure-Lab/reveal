@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from conftest import _run_reveal_direct as run
+from conftest import without_request_notes
 from reveal import api
 from reveal.errors import RequestValidationError
 from reveal.adapters.markdown import MarkdownQueryAdapter
@@ -50,7 +51,7 @@ def test_markdown_api_preserves_requested_relative_source_spelling(tmp_path, mon
     assert answer['source'] == './docs'
     response = run(request, '--format', 'json')
     assert response.returncode == 0, response.stderr
-    assert json.loads(response.stdout) == answer
+    assert without_request_notes(json.loads(response.stdout)) == without_request_notes(answer)  # each says its own form's note (BACK-2716)
 
 
 @pytest.mark.parametrize('good,bad,suffix,counts,matched,missing,values,code', [
@@ -75,7 +76,7 @@ def test_api_and_cli_keep_aggregate_source_decisions(
     _counts(answer, counts)
     response = run(_uri(tmp_path, suffix), '--format', 'json')
     assert response.returncode == code, (response.stdout, response.stderr)
-    assert json.loads(response.stdout) == answer
+    assert without_request_notes(json.loads(response.stdout)) == without_request_notes(answer)  # each says its own form's note (BACK-2716)
     warnings = answer.get('meta', {}).get('warnings', [])
     assert any(w['type'] == 'unreadable_files' for w in warnings) is (bad is not None)
 

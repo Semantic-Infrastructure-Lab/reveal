@@ -8,6 +8,7 @@ from urllib.parse import quote
 import pytest
 
 from conftest import _run_reveal_direct as run
+from conftest import without_covered_notes, without_request_notes
 from reveal.cli.invocation import RETIREMENTS
 from reveal.adapters.hotspots import HotspotsAdapter
 from reveal.adapters.ast import AstAdapter
@@ -33,7 +34,7 @@ def argv(transport, query='', cli=()):
 
 
 def equal_answers(left, right):
-    left, right = copy.deepcopy(left), copy.deepcopy(right)
+    left, right = without_covered_notes(left), without_request_notes(right)  # the URI request's own note (BACK-2716)
     if 'execution' in left:
         assert left['execution']['command'].startswith('reveal hotspots ')
         assert right['execution']['command'].startswith('reveal hotspots://')
