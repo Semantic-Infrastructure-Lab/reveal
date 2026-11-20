@@ -669,7 +669,7 @@ def reveal_nav(path: str, element: str, flag: str, flag_value: str = '', *,
     # This tool promises text; REVEAL_FORMAT controls CLI defaults only.
     args.format = 'text'
     invocation = _nav_invocation(path, element, flag, flag_value, request)
-    with _capture_lock, invocation_scope(invocation, retirements_to_stderr=False):
+    with _capture_lock, invocation_scope(invocation, retirements_to_stderr=False, form='mcp'):
         try:
             retirement_note('flag:--' + flag)
         except RetiredSpellingError as exc:
@@ -727,7 +727,7 @@ def reveal_query(uri: str, provenance: bool = False) -> str:
     # already serializes -- a concurrent call with provenance=False must not
     # observe this call's flag mid-flight. _capture_lock is an RLock so
     # _run_and_capture's own internal acquisition below doesn't deadlock.
-    with _capture_lock, invocation_scope(invocation, retirements_to_stderr=False):
+    with _capture_lock, invocation_scope(invocation, retirements_to_stderr=False, form='mcp'):
         apply_global_flags(args)
         try:
             return _run_declared_tool(handle_uri, uri, None, args, quiet_usage=provenance)
@@ -819,7 +819,7 @@ def reveal_run(args: list[str]) -> str:
         return _tool_failure("args is the command line after 'reveal' as a list of strings, "
                              "e.g. ['calls', 'src', '--callers', 'main']")
     invocation = Invocation.parse(['reveal', *args])
-    with _capture_lock, invocation_scope(invocation, retirements_to_stderr=False):
+    with _capture_lock, invocation_scope(invocation, retirements_to_stderr=False, form='mcp'):
         try:
             captured = _capture(_dispatch_and_run, invocation, _admit_run)
             log = current_log()
@@ -902,7 +902,7 @@ def reveal_pack(
         return text
 
     invocation = Invocation.parse(argv)
-    with _capture_lock, invocation_scope(invocation, retirements_to_stderr=False):
+    with _capture_lock, invocation_scope(invocation, retirements_to_stderr=False, form='mcp'):
         apply_global_flags(args)
         try:
             return _run_declared_tool(run_declared_command, 'pack', args, render=render)
@@ -1136,7 +1136,7 @@ def reveal_trace(path: str, entry_point: str, depth: int = 2) -> str:
 
     args = _default_args(path=str(p), root=entry_point, depth=depth, format='text')
     invocation = Invocation.parse(['reveal', 'trace', str(p), '--from', entry_point, '--depth', str(depth)])
-    with _capture_lock, invocation_scope(invocation, retirements_to_stderr=False):
+    with _capture_lock, invocation_scope(invocation, retirements_to_stderr=False, form='mcp'):
         apply_global_flags(args)
         try:
             retirement_note('mcp:reveal_trace')

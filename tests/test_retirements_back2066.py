@@ -45,7 +45,7 @@ def commit_sample(path):
 
 
 def _retire(monkeypatch, key, old, replacement='NEW SPELLING', stage='note'):
-    monkeypatch.setitem(RETIREMENTS, key, Retirement(old, replacement, stage))
+    monkeypatch.setitem(RETIREMENTS, key, Retirement(old, replacement, stage, standalone=True))  # the per-key path (a covered row is the request note's)
     return f'{old} is deprecated; use {replacement}.'
 
 

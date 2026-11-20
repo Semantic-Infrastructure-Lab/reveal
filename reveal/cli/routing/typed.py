@@ -192,7 +192,7 @@ def answer_typed_request(noun: str, target: Optional[str], controls: Mapping[str
             raise _failure(answer, facts)
         answers.append(answer)
 
-    with invocation_scope(invocation, retirements_to_stderr=False):
+    with invocation_scope(invocation, retirements_to_stderr=False, form='python'):
         retirement_note(f'subcommand:{noun}')  # a retired noun notes as its subcommand does (main._prepare)
         args = parser.parse_args(invocation.command_argv)
         record_typed_spellings(parser, invocation.command_argv)

@@ -614,3 +614,30 @@ def _reset_provenance_state():
     set_provenance_enabled(False)
     yield
     set_provenance_enabled(False)
+
+
+# The one note of a retiring URI request (BACK-2716): only the URI spelling carries it, so a parity check between a URI
+# request and its subcommand twin compares everything else.
+import re as _re
+_REQUEST_NOTE_TEXT = _re.compile(r'^(?:note: )?an? \w+:// request is deprecated; use ')
+
+
+def is_request_note(entry) -> bool:
+    """Whether a ``meta.warnings`` entry is that note."""
+    return (isinstance(entry, dict) and entry.get('code') == 'retired_spelling'
+            and bool(_REQUEST_NOTE_TEXT.search(str(entry.get('message')))))
+
+
+def without_request_notes(document):
+    """A copy of a JSON answer without the URI request's own note (nothing else is touched)."""
+    import copy
+    result = copy.deepcopy(document)
+    meta = result.get('meta') if isinstance(result, dict) else None
+    if isinstance(meta, dict) and isinstance(meta.get('warnings'), list):
+        meta['warnings'] = [w for w in meta['warnings'] if not is_request_note(w)]
+    return result
+
+
+def without_request_note_lines(text: str) -> str:
+    """Stderr or text output without the request note's line."""
+    return ''.join(line for line in text.splitlines(keepends=True) if not _REQUEST_NOTE_TEXT.search(line))

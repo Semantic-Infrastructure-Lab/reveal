@@ -12,7 +12,7 @@ import json
 
 import pytest
 
-from conftest import _run_reveal_direct
+from conftest import _run_reveal_direct, without_request_note_lines, without_request_notes
 from reveal.cli.invocation import COMMANDS, RETIREMENTS
 from reveal.cli.routing.declared import declared_adapter_class
 
@@ -184,7 +184,7 @@ def architecture_retirement(spelling):
 
 def without_architecture_note(noun, answer, spelling):
     """Validate the one central transport record before removing exactly that record."""
-    result = copy.deepcopy(answer)
+    result = without_request_notes(copy.deepcopy(answer))  # the URI request's own note (BACK-2716)
     if noun == 'architecture':
         warnings = result['meta']['warnings']
         records = [warning for warning in warnings
@@ -206,6 +206,7 @@ def _carries_retirement(stdout):
 
 
 def parity_stderr(noun, stderr, spelling, *, noted=True, stdout=''):
+    stderr = without_request_note_lines(stderr)
     if noun != 'architecture':
         return stderr
     line = f"note: {architecture_retirement(spelling)['message']}\n"
@@ -215,10 +216,10 @@ def parity_stderr(noun, stderr, spelling, *, noted=True, stdout=''):
 
 
 def assert_equal_stdout(noun, left, right):
-    if noun == 'architecture' and left.strip().startswith('{'):
+    if left.strip().startswith('{'):
         assert_equal_answers(noun, json.loads(left), json.loads(right))
     else:
-        assert left == right
+        assert without_request_note_lines(left) == without_request_note_lines(right)
 
 
 def assert_equal_answers(noun, left, right):
@@ -440,8 +441,8 @@ def test_a_harmless_warning_is_shown_and_never_makes_a_complete_answer_fail(proj
         if noun == 'architecture':
             assert answers[-1]['meta']['warnings'].count(
                 {'type': 'informational', 'message': 'harmless observation'}) == 1
-        else:
-            assert answers[-1]['meta']['warnings'][-1]['message'] == 'harmless observation'
+        else:  # the URI request's own note rides beside it (BACK-2716)
+            assert [w for w in without_request_notes(answers[-1])['meta']['warnings']][-1]['message'] == 'harmless observation'
     assert len(calls) == 2, 'the patched entry point was not the one the noun runs'
     assert_equal_answers(noun, *answers)
 

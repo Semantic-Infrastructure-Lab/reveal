@@ -167,15 +167,45 @@ def element(
 def _noted_answer(scheme: str, uri: str, overrides: Dict[str, Any], answer):
     """Answer inside an invocation scope that notes every retired spelling the request uses, as the CLI does:
     RETIREMENTS is the one source (its scheme, parameters, values and typed keywords), and the notes reach the
-    result's ``meta.warnings`` as the CLI's JSON carries them (BACK-2654; it used to note declared aliases only)."""
-    from .cli.invocation import Invocation, invocation_scope, retirement_note, uri_retirement_keys
+    result's ``meta.warnings`` as the CLI's JSON carries them (BACK-2654; it used to note declared aliases only).
+    A URI request that retires says it once, as the Python call that replaces it (BACK-2716): that note covers the
+    per-key notes of the controls it renders."""
+    from .cli.invocation import (COMMANDS, RETIREMENTS, Invocation, invocation_scope, request_note_covers,
+                                 retirement_note, uri_retirement_keys)
     from .utils.json_utils import attach_invocation_warnings
+    spec = COMMANDS.get(scheme)
+    by_request = spec is not None and bool(spec.declared_adapter) and f'scheme:{scheme}' not in RETIREMENTS
     keys = uri_retirement_keys(uri) + [f'param:{scheme}.{key}' for key in overrides]
-    with invocation_scope(Invocation.parse(['reveal', uri]), retirements_to_stderr=False):
+    if by_request:
+        keys = [key for key in keys if not request_note_covers(key)]
+    with invocation_scope(Invocation.parse(['reveal', uri]), retirements_to_stderr=False, form='python'):
         for key in keys:
             retirement_note(key)
+        if by_request:
+            _note_uri_request(scheme, uri, overrides)
         # The retirement notes and every config_warning this invocation recorded (BACK-2659).
         return attach_invocation_warnings(answer())
+
+
+def _note_uri_request(scheme: str, uri: str, overrides: Dict[str, Any]) -> None:
+    """The one note of a retiring URI request, rendered from the request the URI and its keywords bind: an analysis-only
+    scheme always, any other scheme when the URI spells a query string. An invalid request is not noted: the answer
+    raises it."""
+    from .adapters.base import get_adapter_class
+    from .cli.invocation import request_note
+    from .cli.routing.canonical import render_uri_request
+    from .cli.routing.declared import declared_adapter_class
+    from .utils.query_binding import apply_declared_overrides, prepare_declared_params
+    resource, _, query = uri.partition('://')[2].partition('?')
+    adapter = declared_adapter_class(scheme)
+    if not (getattr(get_adapter_class(scheme), 'ANALYSIS_ONLY', False) or query):
+        return
+    try:
+        params = apply_declared_overrides(adapter.PARAM_SPECS, prepare_declared_params(adapter.PARAM_SPECS, query, 'uri'),
+                                          overrides)
+    except (ValueError, TypeError):
+        return
+    request_note(scheme, lambda form: render_uri_request(form, scheme, resource, params))
 
 
 def _query_noun(noun: str, target: Optional[str], controls: Dict[str, Any]) -> Dict[str, Any]:
