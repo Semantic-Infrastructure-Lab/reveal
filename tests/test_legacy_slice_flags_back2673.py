@@ -21,9 +21,8 @@ SLICING = [
      'levels', ALL),
     ('claude', 'claude://sessions', ['claude', 'sessions'], 'recent_sessions', ('--head',)),
     ('claude', 'claude://session/my-session?view=messages', ['claude', 'session/my-session', '--view', 'messages'],
-     'messages', ('--head', '--range')),
-    ('claude', 'claude://session/my-session/workflow', ['claude', 'session/my-session/workflow'], 'workflow',
-     ('--head', '--range')),
+     'messages', ALL),
+    ('claude', 'claude://session/my-session/workflow', ['claude', 'session/my-session/workflow'], 'workflow', ALL),
     ('git', 'git://proj', ['git', 'proj'], 'commits.recent', ALL),
     ('git', 'git://proj/mod_a.py?view=history', ['git', 'proj/mod_a.py', '--view', 'history'], 'commits', ALL),
     ('hotspots', 'hotspots://proj?min_complexity=1', ['hotspots', 'proj', '--min-complexity', '1'],
@@ -52,8 +51,8 @@ NOT_READ = [
     ('markdown', 'markdown://proj?view=links', ['markdown', 'proj', '--view', 'links'], ALL),
     ('markdown', 'markdown://proj?view=lint', ['markdown', 'proj', '--view', 'lint'], ALL),
     ('calls', 'calls://proj?modules', ['calls', 'proj', '--modules'], ALL),
-    ('claude', 'claude://sessions', ['claude', 'sessions'], ('--range',)),
-    ('claude', 'claude://session/my-session', ['claude', 'session/my-session'], ('--head',)),
+    ('claude', 'claude://sessions', ['claude', 'sessions'], ('--range', '--tail')),
+    ('claude', 'claude://session/my-session', ['claude', 'session/my-session'], ('--head', '--tail')),
 ]
 
 
@@ -143,8 +142,11 @@ def test_a_noun_that_never_sliced_still_refuses_the_flags(rich):  # noqa: F811  
         assert run.rc == 2 and "unsupported control '--head'" in run.err
 
 
-def test_claude_tail_is_held_on_its_old_route(rich):  # noqa: F811  (pending Scott's ruling)
-    held = C._run('claude://session/my-session?view=messages', '--tail', '1', '--format', 'json')
-    assert held.rc == 0 and len(json.loads(held.out)['messages']) == 1
-    assert not [m for m in _retired(json.loads(held.out)) if '--tail' in m]
-    assert C._run('claude', 'session/my-session', '--view', 'messages', '--tail', '1').rc == 2
+def test_claude_tail_reads_like_every_nouns_tail(rich):  # noqa: F811
+    """Scott 2026-11-19 (BACK-2709): claude --tail follows ruling 1, as on every other noun. It was held on the main
+    parser's route, where --view after the URI was refused and sessions and the overview ignored it in silence."""
+    query = C._run('claude://session/my-session?view=messages', '--tail', '1', '--format', 'json')
+    flag = C._run('claude://session/my-session', '--view', 'messages', '--tail', '1', '--format', 'json')
+    assert query.rc == flag.rc == 0, (query.err, flag.err)
+    assert json.loads(query.out)['messages'] == json.loads(flag.out)['messages'] and len(json.loads(flag.out)['messages']) == 1
+    assert [m for m in _retired(json.loads(flag.out)) if 'claude --tail' in m]
