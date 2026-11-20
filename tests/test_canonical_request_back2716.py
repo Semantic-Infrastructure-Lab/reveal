@@ -140,3 +140,11 @@ def test_at_the_error_stage_a_uri_request_is_refused_before_it_runs(project, mon
     run = _run_reveal_direct('calls://proj?callers=serve')
     assert run.returncode == 2
     assert 'reveal calls proj --callers serve' in run.stderr
+
+
+def test_a_note_attached_to_an_answer_keeps_metadata_the_same_object_as_meta(project):  # noqa: F811
+    """imports' `metadata` is an alias of `meta` (BACK-2601): attaching the request note rebuilds meta and must keep it."""
+    from reveal import api
+    answer = api.query(f'imports://{project}')
+    assert any(w.get('field') == 'request:imports' for w in answer['meta']['warnings'])
+    assert answer['metadata'] is answer['meta']

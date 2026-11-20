@@ -130,8 +130,9 @@ def test_imports_analysis_metadata_has_one_canonical_meta_owner(tree):
     from reveal.api import query
     answer = query(f'imports://{tree}')
     assert answer['meta']['total_imports'] >= 1
-    assert answer['meta']['warnings'] == []
-    # An additive-stage alias is not another mutable metadata store.
+    from conftest import is_request_note
+    assert [w for w in answer['meta']['warnings'] if not is_request_note(w)] == []  # the URI request's own note aside
+    # An additive-stage alias is not another mutable metadata store, also when a note is attached to meta (BACK-2716).
     assert answer['metadata'] is answer['meta']
 
 

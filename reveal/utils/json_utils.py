@@ -75,7 +75,10 @@ def attach_invocation_warnings(result):
     meta['warnings'] = warnings + [
         entry for entry in entries
         if (entry['code'], entry['field'] if entry['code'] == 'retired_spelling' else entry['message']) not in seen]
-    return {**result, 'meta': meta}
+    merged = {**result, 'meta': meta}
+    if isinstance(result.get('metadata'), dict) and result.get('metadata') is result.get('meta'):
+        merged['metadata'] = meta  # one canonical meta owner: an alias of meta stays that alias (imports, BACK-2601)
+    return merged
 
 
 def file_sinks(args) -> list:
