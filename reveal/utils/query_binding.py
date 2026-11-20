@@ -676,6 +676,12 @@ def _folded_terms(params: Mapping[str, Any], name: str) -> list:
     return [part for part in parts if part and query_key(part) in folded and part in value]
 
 
+def _label(spec: ParamSpec) -> str:
+    """How a message names a control: a flag-only modifier has no URI key, so it is named by its flag (``--head``),
+    the only way a request can spell it; every other control by its name."""
+    return spec.cli.flags[0] if spec.flag_only and spec.cli is not None else spec.name
+
+
 def _as_typed(params: Mapping[str, Any], name: str) -> str:
     """A control named canonically, followed by the bare field keys that spelled it (``'where' (bogus=1)``), so a
     disclosure names what the request said as well as the control it reached."""
@@ -687,10 +693,11 @@ def _unread_controls_message(declarations: tuple, unread: list, facets: tuple, p
     """Named by the control, whatever spelling carried it: a URI key, a flag injected into the query (--limit can
     reach a URI as a legacy key) and a legacy flag all name one control; its retirement note names the old spelling.
     Bare field keys folded into the filter expression are named as typed beside it."""
-    reads = ', '.join(spec.name for spec in declarations if spec.role != 'operation' and _reads(spec, facets))
-    where = '; '.join(f"{spec.name} is read by: {', '.join(spec.answers)}" for spec in unread)
+    reads = ', '.join(_label(spec) for spec in declarations if spec.role != 'operation' and _reads(spec, facets))
+    where = '; '.join(f"{_label(spec)} is read by: {', '.join(spec.answers)}" for spec in unread)
     several = len(unread) > 1
-    return (f"control{'s' if several else ''} {', '.join(_as_typed(params, spec.name) for spec in unread)} "
+    named = ', '.join(repr(_label(spec)) if spec.flag_only else _as_typed(params, spec.name) for spec in unread)
+    return (f"control{'s' if several else ''} {named} "
             f"{'are' if several else 'is'} not read by this answer ({', '.join(facets)}); {where}; "
             f"controls this answer reads: {reads or '(none)'}")
 
