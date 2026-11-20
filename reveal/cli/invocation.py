@@ -252,6 +252,8 @@ class Retirement:
     def text(self) -> str:
         """The one wording, for the note, the error and the JSON warning."""
         state = 'was removed' if self.removed else 'is deprecated'
+        if self.stage == 'note' and not self.removed:
+            state += ' and works until 1.0'  # the agent-help line: old spellings still work until 1.0 (BACK-2716)
         return f'{self.old} {state}; use {self.replacement}.'
 
 
