@@ -7,7 +7,7 @@ beth_topics:
   - claude-code
   - agent-integration
 help_topic: mcp
-help_description: "MCP server setup — 10 tools for Claude Code, Cursor, Windsurf"
+help_description: "MCP server setup — 11 tools for Claude Code, Cursor, Windsurf"
 help_category: ai_guides
 ---
 
@@ -106,9 +106,34 @@ Extract the full implementation of a specific function or class. Use after
 reveal_element("src/auth.py", "validate_token")
 ```
 
+### `reveal_run(args)`
+
+Run one reveal command line: `args` is everything after `reveal`, one list item per word.
+It runs the CLI's own parsing and dispatch, so the grammar, the answer and its meaning are
+the CLI's: nouns take flags, a path reads a file or one element of it, and a resource URI
+(`git://FILE@REF`, `claude://session/NAME`, `sqlite://DB/TABLE`, `json://FILE/KEY`,
+`help://TOPIC`) takes the same flags.
+
+```
+reveal_run(["calls", "src", "--callers", "validate_token", "--depth", "3"])
+reveal_run(["ast", "src", "--kind", "function", "--sort=-complexity", "--limit", "10"])
+reveal_run(["imports", "src", "--unused"])
+reveal_run(["src/auth.py", "validate_token"])
+reveal_run(["git://src/auth.py@main", "--format", "json"])
+reveal_run(["calls", "--help"])                     → the noun's own flags
+```
+
+With `--format json` the result is the CLI's JSON answer exactly. An invalid request (an
+unknown flag, a value outside its choices, a target that matches nothing: CLI exit 2) is a
+tool error whose text names what the noun accepts, carrying the CLI's JSON document in JSON
+mode; findings (exit 1) and an incomplete answer that says so in itself are results. The tool
+is read-only: `--stdin`, `--copy`, file sinks (`--output FORMAT=PATH`) and the `dev` and
+`offline` commands are refused.
+
 ### `reveal_query(uri, provenance=False)`
 
-Run any reveal URI query across all adapters. Same syntax as the CLI.
+Run any reveal URI query across all adapters. Same syntax as the CLI. `reveal_run` takes the
+same requests as a command line; `reveal_query` and its query-string options retire at 1.0.
 
 ```
 reveal_query("ast://src/?complexity>10&sort=-complexity")

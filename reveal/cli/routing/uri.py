@@ -19,6 +19,7 @@ from ...adapters.base import unread_element_message
 from ...rendering.base import emit_rendered
 from ...reveal_types import CONTRACT_VERSION, RevealResult
 from ...utils import print_json_result, write_also_json
+from ...utils.invocation_log import current_log
 from ...utils.json_utils import attach_provenance, write_requested_artifact
 from ...utils.path_utils import to_posix
 from ...utils.warning_render import render_meta_warnings
@@ -59,6 +60,12 @@ class Answer:
     private_diagnostic: Optional[str] = field(default=None, repr=False)
 
     def emit(self, **options: Any) -> None:
+        # The open invocation log keeps the last answer (one, so a long --stdin run holds no list of results), and a
+        # host running the CLI's own dispatch (MCP reveal_run) maps the CLI's outcome facts instead of deciding one
+        # itself (COMMAND_MODEL "Transports").
+        log = current_log()
+        if log is not None:
+            log.last_answer = self
         self.printer(self, **options)
 
 

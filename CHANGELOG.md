@@ -48,6 +48,10 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 - An equal term given twice to `where`, `match` or `exclude` is one term, whether the URI and a flag, one flag twice or one key twice gave it: `reveal ast src --where 'lines>50' --where 'lines>50'` answers and echoes as `--where 'lines>50'`, where it echoed `lines>50 AND lines>50` (AST, Markdown). Different terms still combine (BACK-2715).
 
+### Added
+
+- MCP tool `reveal_run(args)`: any reveal command line, one list item per word, answered as the CLI answers it (`reveal_run(["calls", "src", "--callers", "main", "--format", "json"])` returns the CLI's JSON exactly). An invalid request (CLI exit 2) is a tool error naming what the noun accepts; findings and a self-described incomplete answer are results. It refuses `--stdin`, `--copy`, `--output FORMAT=PATH` and the `dev`/`offline` commands. `reveal_query(uri)` keeps working and retires at 1.0 with query-string options (BACK-2710).
+
 ### Fixed
 
 - The `overview` comparison now leaves the request's `exclude` out of both snapshots on every transport: `overview://P?against=HEAD&exclude=vendor`, `reveal.api.query('overview://P', against='HEAD', exclude=['vendor'])` and the MCP query tool answered as if no exclude was given, while `reveal overview P --against HEAD --exclude vendor` applied it (BACK-2693).

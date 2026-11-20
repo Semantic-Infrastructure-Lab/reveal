@@ -25,6 +25,7 @@ import os
 import sys
 import threading
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, Optional
 
@@ -133,7 +134,9 @@ mcp = MCPServer(
         "this workflow (git, imports, sqlite, env, infra adapters like ssl/"
         "domain/mysql/cpanel, ...)? Start here for an orientation map of "
         "everything else reveal://* can do — it's the full escape hatch, not "
-        "just these 10 named tools.\n\n"
+        "just these named tools.\n"
+        "8. reveal_run(['calls', 'src', '--callers', 'FN']) — any reveal command line, one list "
+        "item per word: the CLI's grammar, answer and exit meaning (flags, not query strings).\n\n"
         "Quality tools — pick one, they answer different questions and CAN "
         "DISAGREE (a coarse PASS from one and real issues from another on the "
         "same path is expected, not a bug):\n"
@@ -185,38 +188,11 @@ def _run_and_capture(fn, *args, capture_stderr: bool = True, **kwargs) -> str:
     on nonzero exit; the sentinel is only a fallback when there is no stdout
     at all (a genuine crash with nothing rendered).
     """
-    out_buf = io.StringIO()
-    err_buf = io.StringIO()
-    exit_code = None
-    captured_exception = None
-    source_failure = None
-    with _capture_lock:
-        old_stdout, old_stderr = sys.stdout, sys.stderr
-        sys.stdout = out_buf
-        sys.stderr = err_buf
-        try:
-            fn(*args, **kwargs)
-        except NavSourceFailure as exc:
-            source_failure = exc
-        except SystemExit as e:
-            exit_code = e.code
-        except Exception as exc:  # boundary-ok: broad-except -- arbitrary adapter code; preserve origin for the registered boundary to mask crashes
-            captured_exception = exc
-        finally:
-            sys.stdout = old_stdout
-            sys.stderr = old_stderr
-
-    out = out_buf.getvalue()
-    err = err_buf.getvalue().strip()
-
-    if source_failure is not None and _execution_failed(source_failure.execution_facts):
-        return _tool_failure(source_failure.public_diagnostic)
-    if captured_exception is not None:
-        from .cli.invocation import RetiredSpellingError
-        return _tool_failure(str(captured_exception),
-                             public=isinstance(captured_exception, (OSError, NavRequestValidationError, TestLayoutValidationError, ConfigValidationError, ConfigLoadError,
-                                                                   RetiredSpellingError)),
-                             exception=captured_exception)
+    captured = _capture(fn, *args, **kwargs)
+    raised = _raised_failure(captured)
+    if raised is not None:
+        return raised
+    out, err, exit_code = captured.out, captured.err, captured.exit_code
     if out.strip():
         return _with_stderr(out, err) if capture_stderr else out
     if exit_code not in (0, None):
@@ -225,6 +201,56 @@ def _run_and_capture(fn, *args, capture_stderr: bool = True, **kwargs) -> str:
     if capture_stderr and err:
         return f"[stderr: {err}]"
     return out
+
+
+@dataclass
+class _Captured:
+    """What one in-process run printed and how it ended: its stdout, its stripped stderr, the code it exited with
+    (None when it returned) and what it raised."""
+    out: str
+    err: str
+    exit_code: object = None
+    exception: Optional[Exception] = None
+    source_failure: Optional[NavSourceFailure] = None
+
+
+def _capture(fn, *args, **kwargs) -> _Captured:
+    """Run fn with stdout and stderr captured, under _capture_lock (they are process globals)."""
+    out_buf = io.StringIO()
+    err_buf = io.StringIO()
+    captured = _Captured('', '')
+    with _capture_lock:
+        old_stdout, old_stderr = sys.stdout, sys.stderr
+        sys.stdout = out_buf
+        sys.stderr = err_buf
+        try:
+            fn(*args, **kwargs)
+        except NavSourceFailure as exc:
+            captured.source_failure = exc
+        except SystemExit as e:
+            captured.exit_code = e.code
+        except Exception as exc:  # boundary-ok: broad-except -- arbitrary adapter code; preserve origin for the registered boundary to mask crashes
+            captured.exception = exc
+        finally:
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
+    captured.out = out_buf.getvalue()
+    captured.err = err_buf.getvalue().strip()
+    return captured
+
+
+def _raised_failure(captured: _Captured) -> str | None:
+    """The tool failure for a run that raised: a failed navigation source, or an exception (public when it is an
+    invalid request or an unusable input the caller can act on, masked otherwise)."""
+    source_failure, exc = captured.source_failure, captured.exception
+    if source_failure is not None and _execution_failed(source_failure.execution_facts):
+        return _tool_failure(source_failure.public_diagnostic)
+    if exc is None:
+        return None
+    from .cli.invocation import RetiredSpellingError
+    return _tool_failure(str(exc), public=isinstance(exc, (OSError, NavRequestValidationError, TestLayoutValidationError,
+                                                          ConfigValidationError, ConfigLoadError, RetiredSpellingError)),
+                         exception=exc)
 
 
 # Error origin belongs to this owner, never to rendered/source text. Keep the
@@ -713,6 +739,102 @@ def reveal_query(uri: str, provenance: bool = False) -> str:
             return _run_declared_tool(handle_uri, uri, None, args, quiet_usage=provenance)
         finally:
             set_provenance_enabled(False)
+
+
+class _RunRefused(Exception):
+    """A reveal_run request this read-only server will not run; the message says why and what to use."""
+
+
+# Commands that write files or download: a terminal's work, not a read-only tool's.
+_RUN_WRITING_COMMANDS = {'dev': 'reveal dev scaffolds files', 'offline': 'reveal offline downloads grammars',
+                         'scaffold': 'reveal scaffold writes files'}
+
+
+def _admit_run(args, command) -> None:
+    """Refuse what would write, download or read this server's own input, before anything runs."""
+    from .utils.json_utils import file_sinks
+    if command in _RUN_WRITING_COMMANDS:
+        raise _RunRefused(f'{_RUN_WRITING_COMMANDS[command]}; reveal_run is read-only: run it in a terminal')
+    if getattr(args, 'stdin', False) is True:
+        raise _RunRefused("--stdin reads this server's own input; send each request as its own reveal_run call")
+    if getattr(args, 'copy', False) is True:
+        raise _RunRefused('--copy writes the clipboard; reveal_run is read-only and returns the answer itself')
+    if file_sinks(args):
+        raise _RunRefused('--output FORMAT=PATH writes a file; reveal_run is read-only: use --format FORMAT '
+                          '(or --output FORMAT), and the answer comes back in this result')
+
+
+def _run_outcome(captured: _Captured, answer=None) -> str:
+    """The CLI's own outcome as an MCP result (COMMAND_MODEL "Transports"): the answer as the CLI prints it, or a
+    tool error when the CLI's request failed. An emitted answer's execution facts decide, as reveal_query's do;
+    otherwise the exit code does: 2 (an invalid request) and an exit with no answer printed are errors. In JSON
+    mode a public failure's text is the CLI's JSON document exactly."""
+    if isinstance(captured.exception, _RunRefused):
+        return _tool_failure(str(captured.exception))
+    raised = _raised_failure(captured)
+    if raised is not None:
+        return raised
+    out, err = captured.out, captured.err
+    failure = (_declared_failure(answer) if answer is not None else None) or _exit_failure(captured)
+    if failure is not None:
+        if isinstance(failure, _ToolFailure) and failure.public and _is_json_document(out):
+            return _tool_failure(out.strip())
+        return failure
+    if out.strip():
+        return _with_stderr(out, err)
+    return f'[stderr: {err}]' if err else out
+
+
+def _exit_failure(captured: _Captured) -> str | None:
+    """The tool failure the CLI's exit code means when no emitted answer decided: 2, an invalid request, and any
+    other non-zero exit that printed no answer (findings, exit 1, print one)."""
+    code = captured.exit_code
+    if code == 2 or (code not in (0, None) and not captured.out.strip()):
+        return _tool_failure(captured.err or f'reveal exited with code {code}')
+    return None
+
+
+@mcp_tool(annotations=_OPEN_WORLD_READONLY, title='Reveal: Run')
+def reveal_run(args: list[str]) -> str:
+    """Run one reveal command line: ``args`` is everything after ``reveal``, one list item per word.
+
+    The same grammar, answer and exit meaning as the CLI. A noun answers a question about a target, its options
+    are flags: reveal_run(['calls', '.', '--callers', 'process_order']),
+    reveal_run(['ast', '.', '--kind', 'function', '--sort=-lines', '--limit', '5']).
+    A path reads a file or one element of it: reveal_run(['app.py']), reveal_run(['app.py', 'process_order']).
+    A resource URI names what a path cannot (git://FILE@REF, claude://session/NAME, sqlite://DB/TABLE,
+    json://FILE/KEY, help://TOPIC) and takes the same flags: reveal_run(['help://quick']).
+    Verbs act on any target: reveal_run(['check', 'app.py']). Each noun lists its own flags:
+    reveal_run(['calls', '--help']).
+
+    Add '--format', 'json' for the CLI's JSON answer exactly. An invalid request (an unknown flag, a value outside
+    its choices, a target that matches nothing) is a tool error whose text names what the noun accepts; findings
+    (exit 1) and an incomplete answer that says so in itself are results. Read-only: --stdin, --copy, file sinks
+    (--output FORMAT=PATH) and the dev/offline commands are refused.
+
+    Args:
+        args: The command line after 'reveal', e.g. ['imports', '<dir>', '--importers', '<dir>/app.py']
+    """
+    from .cli.invocation import Invocation, invocation_scope
+    from .main import _dispatch_and_run
+    from .utils.gitignore import set_gitignore_enabled
+    from .utils.invocation_log import current_log
+    from .utils.json_utils import set_provenance_enabled
+
+    if not isinstance(args, list) or not all(isinstance(word, str) for word in args):
+        return _tool_failure("args is the command line after 'reveal' as a list of strings, "
+                             "e.g. ['calls', 'src', '--callers', 'main']")
+    invocation = Invocation.parse(['reveal', *args])
+    with _capture_lock, invocation_scope(invocation, retirements_to_stderr=False):
+        try:
+            captured = _capture(_dispatch_and_run, invocation, _admit_run)
+            log = current_log()
+            answer = log.last_answer if log is not None else None
+        finally:
+            # The request's process-global flags end with it (reveal_query's own reset, plus --no-gitignore).
+            set_provenance_enabled(False)
+            set_gitignore_enabled(True)
+    return _run_outcome(captured, answer)
 
 
 @mcp_tool(annotations=_LOCAL_READONLY, title='Reveal: Token-Budgeted Context Pack')

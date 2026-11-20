@@ -31,6 +31,7 @@ class InvocationLog:
         self.attached: set = set()           # keys of warnings some JSON document carried
         self.notes_attached: set = set()     # keys of retired spellings some JSON document carried
         self.json_answer = False             # the answer is a JSON document (CLI --format json)
+        self.last_answer: Any = None         # the last URI/declared answer emitted, for a host that maps its outcome
 
 
 _LOG: ContextVar[Optional[InvocationLog]] = ContextVar('reveal_invocation_log', default=None)

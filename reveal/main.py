@@ -272,13 +272,17 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
             _log_perf(start, list(invocation.argv), exit_code)
 
 
-def _dispatch_and_run(invocation: Invocation) -> None:
+def _dispatch_and_run(invocation: Invocation, admit: Optional[Callable[[Namespace, Optional[str]], None]] = None) -> None:
     """Parse the invocation once, apply its global flags, and run it (BACK-1058).
 
     The subcommand and path/URI forms differ only in which parser reads the command line
-    and what runs the result. Everything else is applied here, once, for both.
+    and what runs the result. Everything else is applied here, once, for both. *admit*, from a
+    host that runs this dispatch (MCP ``reveal_run``), sees the parsed request and the command
+    that reads it before anything runs, and raises to refuse it.
     """
     args, run, command = _prepare(invocation)
+    if admit is not None:
+        admit(args, command)
     from .cli.routing.declared import validate_execution_policy
     validate_execution_policy(args, command)
     apply_global_flags(args)

@@ -887,10 +887,11 @@ class TestMcpServerRegistration(unittest.TestCase):
         self.assertIn('reveal_trace', tool_names)
         self.assertIn('reveal_health', tool_names)
         self.assertIn('reveal_review', tool_names)
+        self.assertIn('reveal_run', tool_names)
 
     def test_tool_count(self):
         from reveal.mcp_server import mcp
-        self.assertEqual(len(mcp._tool_manager._tools), 10)
+        self.assertEqual(len(mcp._tool_manager._tools), 11)
 
     def test_every_tool_has_a_title(self):
         # BACK-1143: purely cosmetic (client display name), but every tool
