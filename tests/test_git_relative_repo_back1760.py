@@ -19,7 +19,7 @@ import pytest
 
 pytest.importorskip('pygit2')
 
-from conftest import _run_reveal_direct  # noqa: E402
+from conftest import _run_reveal_direct, without_request_note_lines, without_request_notes  # noqa: E402
 
 pytestmark = [
     pytest.mark.cli,  # the git:// entry point via _run_reveal_direct (BACK-1149)
@@ -77,12 +77,12 @@ def _reveal(cwd: Path, uri: str, *flags: str):
 
 def _answer(result):
     """(exit, JSON, stderr) without ``source``, which echoes the typed resource for some views."""
-    data = json.loads(result.stdout)
+    data = without_request_notes(json.loads(result.stdout))  # each spelling's own note names its own path (BACK-2716)
     data.pop('source', None)
     if data.get('type') == 'git_repository':
         # Repository path, like source, now retains the caller's spelling.
         assert isinstance(data.pop('path'), str)
-    return result.returncode, data, result.stderr
+    return result.returncode, data, without_request_note_lines(result.stderr)
 
 
 @pytest.mark.parametrize('view', VIEWS)

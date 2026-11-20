@@ -9,6 +9,7 @@ from urllib.parse import quote
 import pytest
 
 from conftest import _run_reveal_direct as run
+from conftest import is_request_note, without_request_notes
 from reveal.adapters.contracts import ContractsAdapter
 
 
@@ -27,7 +28,7 @@ def project(tmp_path, monkeypatch):
 
 
 def equal_answers(left, right):
-    left, right = copy.deepcopy(left), copy.deepcopy(right)
+    left, right = copy.deepcopy(left), without_request_notes(right)  # the URI request's own note (BACK-2716)
     if 'execution' in left:
         del left['execution']['command']
         del right['execution']['command']
@@ -294,7 +295,10 @@ def test_harmless_warning_does_not_make_completed_scan_fail(project, monkeypatch
     for argv in (['contracts', 'proj'], ['contracts://proj']):
         result = run(*argv, '--format', 'json', '--fail-on', 'none')
         assert result.returncode == 0, result.stderr
-        assert json.loads(result.stdout)['meta']['warnings'][-1]['message'] == 'harmless observation'
+        answer = json.loads(result.stdout)
+        if argv[0] != 'contracts':  # the URI request's own note rides beside it (BACK-2716)
+            assert sum(map(is_request_note, answer['meta']['warnings'])) == 1
+        assert without_request_notes(answer)['meta']['warnings'][-1]['message'] == 'harmless observation'
 
 
 @pytest.mark.parametrize('transport', ['cli', 'uri'])

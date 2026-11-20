@@ -19,7 +19,7 @@ pytest.importorskip('pygit2')
 
 from reveal.utils.path_utils import to_posix
 
-from conftest import _run_reveal_direct  # noqa: E402
+from conftest import _run_reveal_direct, without_request_note_lines, without_request_notes  # noqa: E402
 
 pytestmark = [
     pytest.mark.cli,  # the git:// and overview:// entry points via _run_reveal_direct (BACK-1149)
@@ -80,10 +80,10 @@ def _abs(path: Path) -> str:
 
 def _answer(result, typed: str):
     """(exit, JSON, stderr); an error envelope's ``source`` echoes the typed resource, so it is checked and dropped."""
-    data = json.loads(result.stdout)
+    data = without_request_notes(json.loads(result.stdout))  # each spelling's own note names its own path (BACK-2716)
     if 'error' in data:
         assert data.pop('source') == typed.partition('?')[0]
-    return result.returncode, data, result.stderr
+    return result.returncode, data, without_request_note_lines(result.stderr)
 
 
 @pytest.mark.parametrize('view', VIEWS)
@@ -142,8 +142,8 @@ def test_work_tree_root_keeps_the_repository_view(layout, spelling, view):
         expected_heading, _, expected_text = expected_text.partition('\n')
         assert actual_heading.removeprefix('Repository: ').rstrip('/\\') == to_posix(repo)
         assert expected_heading == 'Repository: .'
-    assert (actual.returncode, actual_text, actual.stderr) == \
-        (expected.returncode, expected_text, expected.stderr)
+    assert (actual.returncode, actual_text, without_request_note_lines(actual.stderr)) == \
+        (expected.returncode, expected_text, without_request_note_lines(expected.stderr))
 
 
 def test_repository_view_counts_every_commit(layout):

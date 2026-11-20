@@ -4,6 +4,7 @@ Typed parameters with no coercion, exactly one mode per request, D6 exits (0 com
 before analysis, 3 required analysis or output failed) and a `reveal calls` subcommand generated
 from the same declaration, answering like `calls://` through the one execution owner.
 """
+import copy
 import json
 import os
 from pathlib import Path
@@ -11,6 +12,29 @@ from pathlib import Path
 import pytest
 
 from conftest import _run_reveal_direct as run
+from conftest import without_request_note_lines, without_request_notes
+from reveal.cli.invocation import RETIREMENTS, request_note_covers
+
+def covered_note_text(line):
+    """A stderr line that is the note of a ``param:``/``value:`` spelling the URI's request note replaces (BACK-2716)."""
+    return any(line == f'note: {entry.text}\n' for key, entry in RETIREMENTS.items() if request_note_covers(key))
+
+
+def without_covered_notes(document):
+    """The subcommand's answer without the per-spelling notes the URI's one request note replaces: the URI twin names
+    that spelling inside the request note's own replacement (`reveal calls proj --callers helper ...`) instead."""
+    result = copy.deepcopy(document)
+    warnings = (result.get('meta') or {}).get('warnings')
+    if warnings:
+        result['meta']['warnings'] = [w for w in warnings if not (
+            w.get('code') == 'retired_spelling' and request_note_covers(str(w.get('field'))))]
+    return result
+
+
+def twin_stderr(text):
+    """Stderr without the request note and without the notes of spellings that request note replaces."""
+    return ''.join(line for line in without_request_note_lines(text).splitlines(keepends=True) if not covered_note_text(line))
+
 
 APP = '''\
 import os
@@ -105,8 +129,8 @@ def test_subcommand_and_uri_give_equal_json(project, mode, provenance):
     if provenance:
         assert left['execution'].pop('command').startswith('reveal calls proj')
         assert right['execution'].pop('command').startswith('reveal calls://proj')
-    assert left == right
-    assert a.stderr == b.stderr
+    assert without_covered_notes(left) == without_request_notes(right)  # the URI request's own note (BACK-2716)
+    assert twin_stderr(a.stderr) == twin_stderr(b.stderr)
 
 
 @pytest.mark.parametrize('mode', sorted(MODES))
@@ -115,7 +139,7 @@ def test_subcommand_and_uri_give_equal_text(project, mode):
     assert a.returncode == b.returncode == 0, (a.stderr, b.stderr)
     assert a.stdout.strip()
     assert a.stdout == b.stdout
-    assert a.stderr == b.stderr
+    assert twin_stderr(a.stderr) == twin_stderr(b.stderr)
 
 
 @pytest.mark.parametrize('depth', ['abc', '1.5', 'true', ''])
@@ -160,7 +184,8 @@ def test_two_modes_are_rejected_naming_both(project, flags, query, names):
         assert answer['type'].startswith('calls_')
         for name in names:
             assert name in answer['error'] and name in result.stderr
-    assert results[0].stdout == results[1].stdout
+    assert (without_request_notes(json.loads(results[0].stdout))
+            == without_covered_notes(json.loads(results[1].stdout)))
 
 
 def test_a_false_presence_mode_is_not_a_second_mode(project):
@@ -201,7 +226,7 @@ def test_shorthand_selects_target_in_both_spellings(project):
     a, b = both([], '', '--format', 'json', resource='proj/pkg/util.py:fmt')
     assert a.returncode == b.returncode == 0, (a.stderr, b.stderr)
     left, right = json.loads(a.stdout), json.loads(b.stdout)
-    assert left == right
+    assert without_covered_notes(left) == without_request_notes(right)
     assert left['target'] == 'fmt' and left['total_callers'] == 1
     assert left['source'] == 'proj/pkg/util.py'
 

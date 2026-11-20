@@ -11,7 +11,8 @@ import json
 import pytest
 
 from conftest import _run_reveal_direct as run
-from reveal.cli.invocation import COMMANDS
+from conftest import without_request_note_lines, without_request_notes
+from reveal.cli.invocation import COMMANDS, RETIREMENTS, request_note_covers
 from reveal.cli.routing.declared import declared_adapter_class
 
 pytestmark = pytest.mark.component
@@ -30,9 +31,30 @@ def project(tmp_path, monkeypatch):
     return root
 
 
+def covered_note_text(line):
+    """A stderr line that is the note of a ``param:``/``value:`` spelling the URI's request note replaces (BACK-2716)."""
+    return any(line == f'note: {entry.text}\n' for key, entry in RETIREMENTS.items() if request_note_covers(key))
+
+
+def without_covered_notes(document):
+    """The subcommand's answer without the per-spelling notes the URI's one request note replaces: the URI twin names
+    that spelling inside the request note's own replacement instead."""
+    result = copy.deepcopy(document)
+    warnings = ((result.get('meta') or {}).get('warnings'))
+    if warnings:
+        result['meta']['warnings'] = [w for w in warnings if not (
+            w.get('code') == 'retired_spelling' and request_note_covers(str(w.get('field'))))]
+    return result
+
+
+def twin_stderr(text):
+    """Stderr without the notes of spellings the request note replaces (subcommand side) or is (URI side)."""
+    return ''.join(line for line in without_request_note_lines(text).splitlines(keepends=True) if not covered_note_text(line))
+
+
 def equal_answers(noun_spelling, left, right):
     """Only the command spelling may differ; a changed count or a dropped diagnostic must not pass."""
-    a, b = copy.deepcopy(left), copy.deepcopy(right)
+    a, b = without_covered_notes(left), without_request_notes(right)  # the URI request's own note (BACK-2716)
     if 'execution' in a:
         assert a['execution']['command'].startswith('reveal metrics ')
         assert b['execution']['command'].startswith('reveal metrics://')
@@ -83,7 +105,7 @@ def test_json_answers_match(project, cli, query, provenance):
         assert left['execution']['command'].startswith('reveal metrics ')
         assert right['execution']['command'].startswith('reveal metrics://')
     equal_answers(query, left, right)
-    assert a.stderr == b.stderr
+    assert twin_stderr(a.stderr) == twin_stderr(b.stderr)
 
 
 @pytest.mark.parametrize('cli,query', CASES, ids=IDS)
@@ -92,7 +114,7 @@ def test_text_output_matches(project, cli, query):
     b = run(f'metrics://proj{query}', '--no-gitignore')
     assert a.returncode == b.returncode == 0, (a.stderr, b.stderr)
     assert a.stdout.strip() and a.stdout == b.stdout
-    assert a.stderr == b.stderr
+    assert twin_stderr(a.stderr) == twin_stderr(b.stderr)
 
 
 @pytest.mark.parametrize('cli,query', [([], ''), (['--hotspots'], '?hotspots=true')])
@@ -102,7 +124,7 @@ def test_a_file_target_answers_alike(project, cli, query):
     assert a.returncode == b.returncode == 0, (a.stderr, b.stderr)
     left, right = json.loads(a.stdout), json.loads(b.stdout)
     assert left['type'] == 'stats_file'
-    assert left == right
+    assert left == without_request_notes(right)
 
 
 def test_a_directory_and_a_provenance_view_keep_their_own_result_types(project):
@@ -125,7 +147,7 @@ def test_a_bad_value_is_rejected_alike(project, flags, message):
     a = run('metrics', 'proj', *flags, '--format', 'json')
     b = run(f'metrics://proj{query}', '--format', 'json')
     assert a.returncode == b.returncode == 2, (a.stderr, b.stderr)
-    assert a.stdout == b.stdout
+    assert without_covered_notes(json.loads(a.stdout)) == without_request_notes(json.loads(b.stdout))
     assert message in a.stdout + a.stderr
 
 
@@ -133,7 +155,8 @@ def test_a_missing_path_is_rejected_alike(project):
     a = run('metrics', 'absent', '--format', 'json')
     b = run('metrics://absent', '--format', 'json')
     assert a.returncode == b.returncode == 2, (a.stderr, b.stderr)
-    assert a.stdout == b.stdout and a.stderr == b.stderr
+    assert without_covered_notes(json.loads(a.stdout)) == without_request_notes(json.loads(b.stdout))
+    assert twin_stderr(a.stderr) == twin_stderr(b.stderr)
 
 
 def test_the_findings_gate_belongs_to_the_hotspots_view(project):
@@ -144,7 +167,7 @@ def test_the_findings_gate_belongs_to_the_hotspots_view(project):
     a = run('metrics', 'proj', '--fail-on', 'findings')
     b = run('metrics://proj', '--fail-on', 'findings')
     assert a.returncode == b.returncode == 2, (a.stderr, b.stderr)
-    assert a.stderr == b.stderr and 'metrics gates the hotspot ranking' in a.stderr  # names --view hotspots, BACK-2621
+    assert twin_stderr(a.stderr) == twin_stderr(b.stderr) and 'metrics gates the hotspot ranking' in a.stderr  # names --view hotspots, BACK-2621
     assert 'add --view hotspots' in a.stderr
     a = run('metrics', 'proj', '--hotspots', '--fail-on', 'findings', '--format', 'json')
     b = run('metrics://proj?hotspots=true', '--fail-on', 'findings', '--format', 'json')
