@@ -754,7 +754,7 @@ def _retired_fields(doc):
             if w.get('code') == 'retired_spelling']
 
 
-_REQUEST_NOTE = re.compile(r'an? \w+:// request is deprecated; use ')
+_REQUEST_NOTE = re.compile(r'an? \w+:// request is deprecated(?: and works until 1\.0)?; use ')
 
 
 def _noted_as(key, entry, argv):

@@ -620,7 +620,7 @@ def _reset_provenance_state():
 # The one note of a retiring URI request (BACK-2716): only the URI spelling carries it, so a parity check between a URI
 # request and its subcommand twin compares everything else.
 import re as _re
-_REQUEST_NOTE_TEXT = _re.compile(r'^(?:note: )?an? \w+:// request is deprecated; use ')
+_REQUEST_NOTE_TEXT = _re.compile(r'^(?:note: )?an? \w+:// request is deprecated(?: and works until 1\.0)?; use ')
 
 
 def is_request_note(entry) -> bool:
@@ -669,7 +669,7 @@ def twin_stderr(text: str) -> str:
     return ''.join(line for line in without_request_note_lines(text).splitlines(keepends=True) if not covered_note_text(line))
 
 
-_MCP_REQUEST_NOTE = _re.compile(r'\[note: an? \w+:// request is deprecated; use [^\n]*\]\n?')
+_MCP_REQUEST_NOTE = _re.compile(r'\[note: an? \w+:// request is deprecated(?: and works until 1\.0)?; use [^\n]*\]\n?')
 
 
 def without_mcp_request_note(text: str) -> str:

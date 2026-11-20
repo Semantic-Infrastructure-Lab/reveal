@@ -87,7 +87,7 @@ def _findings_exits(argv):
 # The one note of a retiring URI request (BACK-2716): a doc example that still teaches a URI request answers with it. Such
 # examples are counted and may only fall (`test_doc_uri_requests_only_fall`); they move per noun package and in the
 # consumer sweep (BACK-2071), so the clean-stderr check does not fail on the note itself.
-REQUEST_NOTE = re.compile(r'^(?:note: )?an? \w+:// request is deprecated; use ')
+REQUEST_NOTE = re.compile(r'^(?:note: )?an? \w+:// request is deprecated(?: and works until 1\.0)?; use ')
 PROBLEM_LINE = re.compile(r'(?i)\b(error|warning|note|no effect|unknown|not recognized|ignored)\b')
 # stderr lines that are the test environment talking, not the recipe -- or a standing
 # disclosure true of every run of that command (pack without --architecture/--focus, BACK-1006).
