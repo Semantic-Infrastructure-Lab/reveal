@@ -130,6 +130,21 @@ def _accumulated(values: list) -> list:
     return [item for value in values for item in (value if isinstance(value, (list, tuple)) else [value])]
 
 
+def _distinct(items: Iterable[Any]) -> list:
+    """*items* with each equal item kept once, first-seen order: an equal repeated term is one term, as an equal
+    repeated scalar is accepted once (COMMAND_MODEL "Conflicting values"; Scott 2026-11-19, BACK-2715)."""
+    kept: list = []
+    for item in items:
+        if item not in kept:
+            kept.append(item)
+    return kept
+
+
+def _echo_query(source: str) -> str:
+    """The request's query as it echoes in the answer: each equal ``key=value`` part once (BACK-2715)."""
+    return '&'.join(_distinct(part for part in source.split('&') if part))
+
+
 def _conflicting_spellings(spec: ParamSpec, present: list, spelled: Optional[Mapping[str, str]]) -> str:
     """Rule 1's conflict, naming each spelling as typed (*spelled*: key -> the flag that carried it)."""
     return f'{spec.name}: conflicting spellings: ' + ', '.join((spelled or {}).get(name, name) for name in present)
@@ -344,7 +359,7 @@ def _prepare_uri_params(declarations: tuple[ParamSpec, ...], source: str) -> Que
     prepared._aliases = {spec.name: spec.spellings[1:] for spec in declarations}
     prepared._folded = folded  # the bare field keys folded into where (a noun reading where reads them)
     prepared._selectors = selectors
-    prepared._source_query = source
+    prepared._source_query = _echo_query(source)
     prepared._supplied_aliases = {alias for spec in declarations for alias in spec.spellings[1:]
                                   if alias in dict.keys(params)}
     prepared._given = set(dict.keys(prepared))
@@ -459,7 +474,7 @@ def join_uri_and_flags(declarations: Iterable[ParamSpec], uri_params: QueryParam
         joined[spec.name] = _accumulated([given, prepared]) if spec.repeatable and given is not None else prepared
         joined._given.add(spec.name)
         query += spelled_parts
-    joined._source_query = '&'.join(query)
+    joined._source_query = _echo_query('&'.join(query))
     return joined
 
 
@@ -791,6 +806,8 @@ def bind_prepared_params(declarations: Iterable[ParamSpec], params: QueryParams,
                 raise ValueError(f'{spec.name} is required')
             continue
         value = _validate_binding(spec, supplied[spec.name], transport)
+        if spec.repeatable and isinstance(value, list):
+            value = _distinct(value)  # an equal repeated term is one term (BACK-2715)
         params.set_normalized(spec, value)
     return params
 

@@ -206,22 +206,14 @@ RULED_EXEMPT_NOUNS = {'stats': 'rule 9: the retired stats:// scheme is deleted a
 # Cells that do not conform yet: (noun, rule) -> the behaviour observed at fac0718b. May only shrink; every
 # entry reaches zero before the cut.
 # Rule 20 (BACK-2656) conforms on every noun since Step 2d (codex was the last cell). Rule 23 (BACK-2673): since Step 3b-2
-# a declared noun's URI is read by its own parser and its query joins the typed flags, so a cell is left only where a
-# case waits for a ruling; RULE_23_CASES names each case, and a recorded cell fails on any other. Since 3b-3 the main
-# parser's legacy flags are flag-only modifiers of the declarations (--head, --check, Claude --type): what is left is
-# the equal repeated term (Scott 2026-11-19, BACK-2708 ruling 5: no ruling). Claude --tail conforms since BACK-2709.
-_EQUAL_TERM_WHY = ('waits for a ruling: ?k=A --flag A on a repeatable control combines as ?k=A&k=A and the subcommand\'s '
-                   '--flag A --flag A do (the echo reads "A AND A"); rule 1 does not say whether an equal repeated term is '
-                   'one term (Claude match dedupes it)')
-RULE_23_CASES = {
-    'ast': {'?where=A --where A': _EQUAL_TERM_WHY},
-    'markdown': dict.fromkeys(('?where=A --where A', '?match=A --match A'), _EQUAL_TERM_WHY),
-}
-NOT_YET: dict = {(noun, '23'): '; '.join(dict.fromkeys(RULE_23_CASES[noun].values())) for noun in RULE_23_CASES}
+# a declared noun's URI is read by its own parser and its query joins the typed flags; since 3b-3 the main parser's
+# legacy flags are flag-only modifiers of the declarations (--head, --check, Claude --type, Claude --tail since
+# BACK-2709), and an equal repeated term is one term (BACK-2715), so rule 23 conforms on every declared noun.
+NOT_YET: dict = {}
 
 NOT_YET_BASELINE = {'1a': 0, '1b': 0, '1c': 0, '1d': 0, '2': 0, '3': 0, '3b': 0, '4': 0, '5': 0, '6': 0,
                     '8a': 0, '8b': 0, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 0, '14': 0, '21j': 0, '22': 0,
-                    '23': 2}
+                    '23': 0}
 
 
 # --- the fixture -------------------------------------------------------------------------------------------
@@ -2015,11 +2007,6 @@ def test_cell(workspace, noun, rule):
         with open(report, 'a', encoding='utf-8') as sink:
             sink.write(json.dumps({'noun': noun, 'rule': rule, 'state': state, 'cases': len(cases),
                                    'failing': failing}) + '\n')
-    if rule == '23' and noun in RULE_23_CASES:  # recorded case by case: exactly these still fail
-        cases_failing = {case.label.partition(' (')[0] for case in cases if not case.ok}
-        assert cases_failing == set(RULE_23_CASES[noun]), (
-            f'{noun} x 23 fails {sorted(cases_failing)}; RULE_23_CASES records {sorted(RULE_23_CASES[noun])}:\n  '
-            + '\n  '.join(failing or ['no failing cases']))
     if (noun, rule) in OUT_OF_SCOPE or (noun, rule) in STOPPED:
         assert state == 'not_yet', f'{noun} x {rule} now conforms: remove it from OUT_OF_SCOPE/STOPPED'
     elif (noun, rule) in EXEMPT:
