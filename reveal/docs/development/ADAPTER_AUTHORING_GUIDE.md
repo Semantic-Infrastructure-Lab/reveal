@@ -101,6 +101,8 @@ class MyAdapter(ResourceAdapter):
     # "nothing"); declare it only if top= caps the default view, and warn in a mode that
     # ignores top= rather than dropping --limit in silence (BACK-1496). A noun with PARAM_SPECS
     # declares the answers that read each control instead, and the rest refuse it (BACK-2656).
+    # --all sends the declared value, or 0 where the declared cap's zero means every row, the
+    # value --limit 0 sends, so the two are one setting (BACK-2729).
     # CLI_QUERY_FLAGS = {'all': 'top=1000000', 'since': 'since={value}'}
     #
     # If your cap lives in the RENDERER (a `top:` kwarg on render_structure(), not a
