@@ -337,9 +337,9 @@ LEGACY_CLI_MODIFIERS: Dict[str, Dict[str, str]] = {
     'patches': {'--head': '--limit N for the groups, --top N in --view pressure',
                 '--tail': '--limit N, which keeps the first N groups (the groups are ranked)',
                 '--range': '--limit N, which caps the groups (patches has no offset)'},
-    'testability': {'--head': 'reveal patches <path> --view pressure --top N',
-                    '--tail': 'reveal patches <path> --view pressure --top N, which keeps the first N (each list is ranked)',
-                    '--range': 'reveal patches <path> --view pressure --top N, which caps each list (no offset)'},
+    'testability': {'--head': 'reveal patches <path> --view pressure --limit N',
+                    '--tail': 'reveal patches <path> --view pressure --limit N, which keeps the first N (each list is ranked)',
+                    '--range': 'reveal patches <path> --view pressure --limit N, which caps each list (no offset)'},
 }
 
 
@@ -429,7 +429,7 @@ RETIREMENTS: Dict[str, Retirement] = {
     **{f'param:{noun}.top': Retirement(f'{noun} ?top=N (--top N)', '--limit N, which caps each list; 0 is uncapped')
        for noun in ('hotspots', 'testability')},
     'param:testability.verbose': Retirement('testability ?verbose (--verbose)',
-                                            'reveal patches <path> --view pressure --top 0, every group'),
+                                            'reveal patches <path> --view pressure --limit 0, every group'),
     'param:deps.verbose': Retirement('deps ?verbose (--verbose)', '--top 0, every text section uncapped'),
     # Metrics' vocabulary (BACK-2621, Scott 2026-11-15): the hotspot ranking is a view whose rows limit caps,
     # filters are where (the complexity pair is the file average, avg_complexity), switches take on|off.
