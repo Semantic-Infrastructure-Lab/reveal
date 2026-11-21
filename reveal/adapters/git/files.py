@@ -350,9 +350,7 @@ def get_file_timeline(
     """
     import pygit2
 
-    bucket = query.get('bucket', 'month')
-    if bucket not in ('week', 'month'):
-        raise ValueError(f"Invalid bucket: {bucket!r} (expected 'week' or 'month')")
+    bucket = query.get('bucket', 'month')  # its declaration's choices bound it (BACK-2724)
 
     try:
         limit = LIMIT.row_cap(query.get('limit', 20000))

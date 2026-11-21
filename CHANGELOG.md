@@ -36,6 +36,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 - `reveal.api.query` typed keywords on `deps://`, `hotspots://`, `pack://`, `patches://` and `testability://` now bind as their URI keys do and meet the same checks: deps and patches dropped them (`api.query('patches://src', group='file')` answered the default grouping), and hotspots, pack and testability raised Python's unexpected-keyword `TypeError` (BACK-2656).
 
+- `reveal git FILE --view history --bucket day` (and `git://FILE?view=history&bucket=day`) now exits 2 naming the values `bucket` takes (`week`, `month`) before reading history; it exited 3 as a failed analysis, the URI form with a note recommending the same failing command. `reveal.api.query` raises `RequestValidationError` and MCP answers a tool error (BACK-2724).
+
 - `git://` legacy numeric `merges=0` (and `merges=false`) now drops merge commits on every view, as `merges=off` does; outside `view=ownership` it changed nothing and printed a note on stderr (BACK-2656).
 
 - `reveal.api.query(uri, element_name=...)` on a declared noun (all 20, `stats://` included) now raises `RequestValidationError` with the CLI's message before the adapter is built, `json:// takes no positional element ('k'); name it in the URI: json://<file>[/path/to/key][?query]`; name the element in the URI (`json://f.json/k`). Before, `json://`, `markdown://` and `metrics://` answered it without the envelope, others raised `ValueError` "not found", and an element let an unknown keyword through. Plugins and undeclared adapters are unchanged (BACK-2687, BACK-2656).

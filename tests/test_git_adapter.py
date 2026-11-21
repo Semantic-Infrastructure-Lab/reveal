@@ -3043,17 +3043,16 @@ class TestTimeline:
 
     @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
     def test_file_timeline_invalid_bucket_raises(self, git_repo_timeline):
-        adapter = GitAdapter(path=str(git_repo_timeline), subpath='src/app.py',
-                              query={'type': 'history', 'bucket': 'year'})
-        with pytest.raises(ValueError):
-            adapter.get_structure()
+        """An invalid bucket is an invalid request, refused when the declarations bind (BACK-2724), not at analysis."""
+        from reveal.errors import RequestValidationError
+        with pytest.raises(RequestValidationError, match=r"bucket must be one of \('week', 'month'\), got 'year'"):
+            GitAdapter(path=str(git_repo_timeline), subpath='src/app.py', query={'type': 'history', 'bucket': 'year'})
 
     @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
     def test_repo_timeline_invalid_bucket_raises(self, git_repo_timeline):
-        adapter = GitAdapter(path=str(git_repo_timeline),
-                              query={'type': 'history', 'bucket': 'year'})
-        with pytest.raises(ValueError):
-            adapter.get_structure()
+        from reveal.errors import RequestValidationError
+        with pytest.raises(RequestValidationError, match=r"bucket must be one of"):
+            GitAdapter(path=str(git_repo_timeline), query={'type': 'history', 'bucket': 'year'})
 
     @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
     def test_file_timeline_author_filter_composes(self, git_repo_timeline):

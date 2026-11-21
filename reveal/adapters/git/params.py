@@ -88,7 +88,7 @@ CONTEXT = ParamSpec('context', 'integer', 'Context lines for a diff', None,
 PARAM_SPECS = (VIEW, WHERE, DETAIL, MERGES, NO_MERGES, RAW, SORT, LIMIT, SCAN_LIMIT, OFFSET, CONTEXT,
                string('ref', 'Starting branch, tag or commit'),
                string('element', 'Semantic element name', answers=('git_file_history', _BLAME, _DIFF, 'git_timeline')),
-               string('bucket', 'Timeline period: week or month', answers=('git_timeline',)),
+               string('bucket', 'Timeline period: week or month', choices=('week', 'month'), answers=('git_timeline',)),
                string('ignore', 'Blame commit hash prefixes to suppress', answers=(_BLAME,)),
                # since/until are settings (one bound each, COMMAND_MODEL "Conflicting values"), carried as a list
                *(ParamSpec(name, 'array', description, [], expressions, cli=CliBinding(('--' + name,)), answers=_COMMITS)

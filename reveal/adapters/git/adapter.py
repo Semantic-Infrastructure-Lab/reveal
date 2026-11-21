@@ -723,9 +723,7 @@ class GitAdapter(ResourceAdapter):
                 raw = self.query.get('raw') in ('1', 'true', 'yes')
                 return files.get_file_at_ref(repo, self.ref, git_subpath, raw=raw)
         elif query_type == 'history' and 'bucket' in self.query:
-            bucket = self.query.get('bucket', 'month')
-            if bucket not in ('week', 'month'):
-                raise ValueError(f"Invalid bucket: {bucket!r} (expected 'week' or 'month')")
+            bucket = self.query.get('bucket', 'month')  # its declaration's choices bound it (BACK-2724)
             limit = LIMIT.row_cap(self.query.get('limit', 20000))
             return refs.get_ref_timeline(
                 repo, self.ref, bucket,
