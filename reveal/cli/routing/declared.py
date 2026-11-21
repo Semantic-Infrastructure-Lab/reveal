@@ -402,19 +402,40 @@ def _note_retired_flags(name: str, adapter) -> None:
     the same ``param:<name>.<param>`` key, in the order typed (a URI's are in query order). The URI
     route's hook is ``_note_retired_spellings``. A hyphenated flag names its underscore alias
     (``--max-files`` is ``max_files``). A flag-only modifier has no URI key: its row is keyed by the flag,
-    ``flag:<name>.<flag>`` (``ParamSpec.flag_only``)."""
+    ``flag:<name>.<flag>`` (``ParamSpec.flag_only``). The value a flag carries is looked up as the URI's
+    ``value:<name>.<param>=<value>`` key is (``--show calls`` is ``?show=calls``, BACK-2613)."""
     from ..invocation import current_invocation, retirement_note
     invocation = current_invocation()
     if invocation is None:
         return
-    keys = {flag: f'flag:{name}.{flag}' if spec.flag_only else f'param:{name}.{_flag_param(spec, flag)}'
-            for spec in adapter.PARAM_SPECS if spec.cli is not None for flag in spec.flags}
-    for token in invocation.command_argv:
+    flags = {flag: spec for spec in adapter.PARAM_SPECS if spec.cli is not None for flag in spec.flags}
+    argv = invocation.command_argv
+    for index, token in enumerate(argv):
         if token == '--':
             break
-        key = keys.get(token.partition('=')[0])
-        if key is not None:
-            retirement_note(key)
+        flag, has_value, value = token.partition('=')
+        spec = flags.get(flag)
+        if spec is None:
+            continue
+        if spec.flag_only:
+            retirement_note(f'flag:{name}.{flag}')
+            continue
+        param = _flag_param(spec, flag)
+        retirement_note(f'param:{name}.{param}')
+        if not has_value and _flag_takes_value(spec, flag) and index + 1 < len(argv) and argv[index + 1] != '--':
+            has_value, value = '=', argv[index + 1]
+        if has_value:
+            retirement_note(f'value:{name}.{param}={value}')
+
+
+def _flag_takes_value(spec: ParamSpec, flag: str) -> bool:
+    """Whether *flag* of *spec* reads the next word as its value (a switch such as ``--builtins`` reads none)."""
+    entry = spec.legacy_entry(flag)
+    if entry is not None and entry.flag == flag:
+        return entry.flag_value is None
+    cli = spec.cli
+    return cli is not None and cli.action not in ('store_true', 'store_false', 'store_const', 'count') \
+        and cli.nargs not in (0, '?')
 
 
 def note_retired_where_fields(name: str, declarations, params, transport: str) -> None:
