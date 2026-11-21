@@ -36,6 +36,7 @@ INDEX). ``--write`` needs explicit paths. A DOC the extractor does not read is r
 """
 import argparse
 import json
+import os
 import re
 import shlex
 import sys
@@ -140,27 +141,61 @@ def _typed_presentation(words: Sequence[str]) -> bool:
     return any(w.partition('=')[0] in ('--format', '--output') for w in words)
 
 
-def render(uri: str, other_words: Sequence[str]) -> str:
-    """The canonical CLI request for *uri*, as the request note renders it; *other_words* are the reveal command's other
-    words (flags before and after the URI). Raises ``ValueError`` (``UnrenderableRequest`` included) with the reason."""
-    from reveal.cli.routing.canonical import canonical_controls, render_uri_request
+def plain_path(bound: Bound) -> bool:
+    """Whether the URI's resource is a plain path: the noun's resource is a filesystem path (``RESOURCE_SPEC.filesystem``)
+    and its declared ``resource_path`` hook, the part a filesystem preflight resolves, is the whole resource. A JSON key
+    path (``data.json/users``), a ref (``.@main``) or a session names an address a path cannot."""
+    if not bound.adapter.RESOURCE_SPEC.filesystem:
+        return False
+    resolve = getattr(bound.adapter, 'resource_path', None)
+    if not callable(resolve) or not bound.resource:
+        return True
+    return Path(os.path.expanduser(resolve(bound.resource))) == Path(os.path.expanduser(bound.resource))
+
+
+def _parses(bound: Bound, rendered: str, subcommand: bool, other_words: Sequence[str]) -> object:
+    """The noun parser's namespace for the rendered request's target and flags plus the example's other words."""
+    argv = shlex.split(rendered)[1:]
+    target_words = argv[1:] if subcommand else [bound.resource, *argv[1:]]
+    return bound.parser.parse_args([*target_words, *other_words])
+
+
+def render(uri: str, other_words: Sequence[str]) -> Tuple[str, str, bool]:
+    """(the canonical CLI request for *uri*, its form, whether a subcommand rendering fell back) where *other_words* are
+    the reveal command's other words (flags before and after the URI). Raises ``ValueError`` (``UnrenderableRequest``
+    included) with the reason.
+
+    The form (manager ruling, BACK-2726 step 2; D1): the subcommand (``canonical.render_request``) where the noun declares
+    one and the target is a plain path, else the resource URI and flags (``canonical.render_uri_request``, the request
+    note's own form). A subcommand rendering is kept only if it round-trips: the noun parser reads it back with the URI's
+    resource as its target; otherwise the resource form is kept and counted."""
+    from reveal.cli.routing.canonical import canonical_controls, render_request, render_uri_request
     from reveal.errors import RequestValidationError
     bound = bind_uri(uri)
-    rendered = render_uri_request('cli', bound.scheme, bound.resource, bound.params, parser=bound.parser,
-                                  adapter=bound.adapter, walk_policy=bound.walk_policy,
-                                  presentation=not _typed_presentation(other_words))
     controls = canonical_controls(bound.parser, bound.adapter, bound.params, bound.walk_policy)
     flagged = {w[2:].partition('=')[0].replace('-', '_') for w in other_words if w.startswith('--')}
     both = sorted(flagged & set(controls))
     if both:
         raise _Left(f'{BOTH_SPELL} ({", ".join(both)})')
-    argv = shlex.split(rendered)[1:]
-    target_words = argv[1:] if getattr(bound.adapter, 'ANALYSIS_ONLY', False) else [bound.resource, *argv[1:]]
+    keywords = dict(parser=bound.parser, adapter=bound.adapter, walk_policy=bound.walk_policy,
+                    presentation=not _typed_presentation(other_words))
+    analysis_only = getattr(bound.adapter, 'ANALYSIS_ONLY', False)
+    fell_back = False
+    if not analysis_only and plain_path(bound):
+        rendered = render_request('cli', bound.scheme, bound.resource or None, bound.params, **keywords)
+        try:
+            args = _parses(bound, rendered, True, other_words)
+            if getattr(args, bound.adapter.RESOURCE_SPEC.name, None) == (bound.resource or None):
+                return rendered, 'subcommand', False
+        except (RequestValidationError, SystemExit, ValueError):
+            pass
+        fell_back = True
+    rendered = render_uri_request('cli', bound.scheme, bound.resource, bound.params, **keywords)
     try:
-        bound.parser.parse_args([*target_words, *other_words])
+        _parses(bound, rendered, analysis_only, other_words)
     except (RequestValidationError, SystemExit, ValueError) as exc:
         raise _Left(f'{DOES_NOT_PARSE}: {exc}') from None
-    return rendered
+    return rendered, 'subcommand' if analysis_only else 'resource', fell_back
 
 
 class _Left(Exception):
@@ -176,6 +211,8 @@ class Example:
     kind: str = 'none'  # 'rewrite' | 'left'
     reason: str = ''
     new_line: str = ''
+    form: str = ''  # a rewrite's form: 'subcommand' | 'resource'
+    fell_back: bool = False  # a subcommand rendering that did not round-trip: the resource form was kept
 
 
 def _literal_spellings(word: str) -> List[str]:
@@ -230,7 +267,7 @@ def classify(source: str, line: str, tokens: List[str], failing: bool, text: str
         return left(SEVERAL_COMMANDS)
     others = [w for i, w in enumerate(stage, 1) if i != index]
     try:
-        rendered = render(uri, others)
+        rendered, form, fell_back = render(uri, others)
     except _Left as exc:
         return left(str(exc))
     except ValueError as exc:  # UnrenderableRequest is a ValueError; the binder raises ValueError too
@@ -248,7 +285,7 @@ def classify(source: str, line: str, tokens: List[str], failing: bool, text: str
     expected = [*tokens[:index], *shlex.split(rendered)[1:], *tokens[index + 1:]]
     if shlex.split(new_line, comments=True) != expected:
         return left(NOT_LOCATED)
-    example.kind, example.new_line = 'rewrite', new_line
+    example.kind, example.new_line, example.form, example.fell_back = 'rewrite', new_line, form, fell_back
     return example
 
 
@@ -344,7 +381,9 @@ def _summary(examples: Sequence[Example]) -> Dict[str, object]:
     reasons = Counter(e.reason.split(':')[0] for e in examples if e.kind == 'left')
     return {'found': len(examples), 'rewritten': sum(e.kind == 'rewrite' for e in examples),
             'left': sum(e.kind == 'left' for e in examples), 'left_by_reason': dict(reasons.most_common()),
-            'by_scheme': dict(Counter(e.scheme for e in examples).most_common())}
+            'by_scheme': dict(Counter(e.scheme for e in examples).most_common()),
+            'forms': dict(Counter(e.form for e in examples if e.kind == 'rewrite').most_common()),
+            'round_trip_fallbacks': sum(e.kind == 'rewrite' and e.fell_back for e in examples)}
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
@@ -377,7 +416,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             report[name]['lines_written'] = done
     baseline = expected_baseline(names, args.nouns) if args.baseline else None
     if args.format == 'json':
-        detail = {name: [{'line': e.line, 'kind': e.kind, 'reason': e.reason, 'new_line': e.new_line, 'scheme': e.scheme}
+        detail = {name: [{'line': e.line, 'kind': e.kind, 'reason': e.reason, 'new_line': e.new_line, 'scheme': e.scheme,
+                          'form': e.form, 'fell_back': e.fell_back}
                          for e in examples] for name, examples in planned.items()} if args.show else None
         print(json.dumps({'files': report, 'not_extractor_sources': unread, 'detail': detail,
                           'baseline': None if baseline is None else {'now': baseline[0], 'after': baseline[1]}},
@@ -391,8 +431,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             continue
         total.update({k: row[k] for k in ('found', 'rewritten', 'left', 'prose')})
         reasons = '; '.join(f'{n} {r}' for r, n in row['left_by_reason'].items())
-        print(f"{name}: found {row['found']}, {'written' if args.write else 'rewritten'} {row['rewritten']}, "
-              f"left {row['left']}{' (' + reasons + ')' if reasons else ''}; prose mentions {row['prose']}")
+        forms = ', '.join(f'{n} {form}' for form, n in row['forms'].items())
+        fallbacks = f", {row['round_trip_fallbacks']} kept the resource form (no round trip)" \
+            if row['round_trip_fallbacks'] else ''
+        print(f"{name}: found {row['found']}, {'written' if args.write else 'rewritten'} {row['rewritten']}"
+              f"{' (' + forms + fallbacks + ')' if forms else ''}, left {row['left']}{' (' + reasons + ')' if reasons else ''}; prose mentions {row['prose']}")
         if args.show:
             for e in planned[name]:
                 if e.kind == 'rewrite':
