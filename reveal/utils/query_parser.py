@@ -242,7 +242,10 @@ def mark_query_keys(params: Dict[str, Any], *keys: str) -> None:
 
 
 def whole_number(value: Any) -> int:
-    """An integer control's value: 3, '3' and 3.0 are accepted; 1.5 is not (int() would cut it to 1)."""
+    """An integer control's value: 3, '3' and 3.0 are accepted; 1.5 is not (int() would cut it to 1), nor a bool
+    (int(True) is 1: ``matches=False`` meant 0, every snippet; BACK-2727)."""
+    if isinstance(value, bool):
+        raise ValueError(f'{value} is not a whole number')
     if isinstance(value, float) and not value.is_integer():
         raise ValueError(f'{value} is not a whole number')
     return int(value)

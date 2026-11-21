@@ -209,12 +209,23 @@ def _keep_repeated_words(spec: ParamSpec, parts: list, params: QueryParams) -> N
 
 
 def _reject_repeated_setting(spec: ParamSpec, parts: list) -> None:
-    """``?limit=1&limit=2``: one setting, two values (COMMAND_MODEL "Conflicting values"); equal values are one."""
+    """``?limit=1&limit=2``: one setting, two values (COMMAND_MODEL "Conflicting values"); equal values are one,
+    compared as the control reads them (``?full=1&full=true``, a bare presence key beside ``=true``; BACK-2727)."""
     for name in spec.spellings:
         values = list(dict.fromkeys(value if separator else True for key, separator, value in parts if key == name))
-        if len(values) > 1:
+        if len(values) > 1 and not _same_setting(spec, name, values):
             raise RequestValidationError(f'{name} is given twice with different values ({values[0]} and {values[1]}): '
                                          'a setting takes one value; give it once')
+
+
+def _same_setting(spec: ParamSpec, name: str, values: list) -> bool:
+    """Whether the spellings *values* of *name* convert to one value. A value the control rejects is compared as
+    spelled, so its conflict or its value error is reported as before."""
+    try:
+        converted = [_comparable(spec, spec.canonical_value(name, _decode_value(spec, value))) for value in values]
+    except ValueError:
+        return False
+    return all(type(other) is type(converted[0]) and other == converted[0] for other in converted[1:])
 
 
 def _same_selection(spec: ParamSpec, given: Any, first: str) -> bool:
