@@ -54,11 +54,34 @@ def test_a_query_uri_becomes_its_subcommand_and_keeps_its_flags_pipes_and_commen
 
 
 def test_a_resource_keeps_its_address_and_takes_the_flags(tmp_path):
-    """A resource scheme renders as its URI followed by flags, as the request note says (D20 rule 2)."""
+    """A URI that carries a resource address (a JSON key path, a session) renders as that URI followed by flags."""
     planned, _ = _planned(tmp_path, _fenced("reveal 'json://data.json/users?age>25&limit=5'",
                                             "reveal 'claude://session/abc?tools=Bash&errors'"))
     assert [e.new_line for e in planned.values()] == ["reveal json://data.json/users --where 'age>25' --limit 5",
                                                       'reveal claude://session/abc --errors --tools Bash']
+
+
+# The form ruling (manager, step 2; D1 as clarified 2026-11-19): a guide teaches the subcommand where the noun declares
+# one and the target is a plain path, and keeps the resource URI where the URI carries an address (a key path, @ref).
+FORM_PROBES = [
+    ("reveal 'json://config.json?schema'", 'reveal json config.json --view schema', 'subcommand'),
+    ("reveal 'json://config.json?view=keys&limit=2'", 'reveal json config.json --view keys --limit 2', 'subcommand'),
+    ("reveal 'json://config.json/database?keys'", 'reveal json://config.json/database --view keys', 'resource'),
+    ("reveal 'git://.@main?limit=2'", 'reveal git://.@main --limit 2', 'resource'),
+]
+
+
+def test_a_plain_path_teaches_the_subcommand_and_an_address_keeps_the_resource_uri(tmp_path):
+    planned, _ = _planned(tmp_path, _fenced(*(original for original, _, _ in FORM_PROBES)))
+    assert [e.new_line for e in planned.values()] == [new for _, new, _ in FORM_PROBES]
+    assert [e.form for e in planned.values()] == [form for _, _, form in FORM_PROBES]
+
+
+@pytest.mark.parametrize('original,rewritten,form', FORM_PROBES, ids=[o for o, _, _ in FORM_PROBES])
+def test_each_form_answers_as_its_original_on_the_fixture(named_harness, original, rewritten, form):  # noqa: F811
+    assert _answer(named_harness, shlex.split(rewritten)) == _as_uri_answers(_answer(named_harness,
+                                                                                      shlex.split(original)))
+    assert _text(named_harness, shlex.split(rewritten)) == _text(named_harness, shlex.split(original))
 
 
 def test_a_sentence_naming_a_retired_spelling_as_deprecated_stays(tmp_path):
