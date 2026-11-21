@@ -81,7 +81,7 @@ The **metrics adapter** (`metrics://`, formerly `stats://`) analyzes codebase me
 Get aggregate metrics for a directory:
 
 ```bash
-reveal metrics://./src
+reveal metrics ./src
 ```
 
 **Output**:
@@ -107,7 +107,6 @@ same ranking):
 
 ```bash
 reveal metrics ./src --view hotspots
-reveal 'metrics://./src?view=hotspots'          # the same answer as a URI
 reveal metrics ./src --view hotspots --fail-on findings   # exit 1 on a finding (see Findings gate)
 ```
 
@@ -130,7 +129,7 @@ File paths are relative to the path you scanned (`./src`).
 Analyze a specific file:
 
 ```bash
-reveal metrics://./src/app.py
+reveal metrics ./src/app.py
 ```
 
 **Output**:
@@ -152,7 +151,7 @@ A file target prints the same block with `Files: 1`. The comment/empty split, ma
 Find files with high complexity:
 
 ```bash
-reveal 'metrics://./src?complexity>10'
+reveal metrics ./src --where 'complexity>10'
 ```
 
 ### Example 5: Filter with Range
@@ -160,7 +159,7 @@ reveal 'metrics://./src?complexity>10'
 Find medium-sized files (50-200 lines):
 
 ```bash
-reveal 'metrics://./src?lines=50..200'
+reveal metrics ./src --where lines=50..200
 ```
 
 ### Example 6: Sort by Complexity
@@ -168,7 +167,7 @@ reveal 'metrics://./src?lines=50..200'
 Get top 10 most complex files:
 
 ```bash
-reveal 'metrics://./src?sort=-complexity&limit=10'
+reveal metrics ./src --sort=-complexity --limit 10
 ```
 
 ### Example 7: Combine Filters
@@ -176,7 +175,7 @@ reveal 'metrics://./src?sort=-complexity&limit=10'
 Find large, complex files:
 
 ```bash
-reveal 'metrics://./src?lines>100&complexity>10&sort=-complexity&limit=5'
+reveal metrics ./src --where 'lines>100' --where 'complexity>10' --sort=-complexity --limit 5
 ```
 
 ### Example 8: CI/CD Integration
@@ -184,7 +183,7 @@ reveal 'metrics://./src?lines>100&complexity>10&sort=-complexity&limit=5'
 Export as JSON for quality gates:
 
 ```bash
-reveal metrics://./src --format=json > stats.json
+reveal metrics ./src --format=json > stats.json
 jq '.summary.avg_complexity' stats.json
 ```
 
@@ -383,38 +382,38 @@ Use `&` to combine multiple filters:
 
 ```bash
 # Large files with high complexity
-reveal 'metrics://./src?lines>100&complexity>10'
+reveal metrics ./src --where 'lines>100' --where 'complexity>10'
 
 # Medium-sized files with good quality
-reveal 'metrics://./src?lines=50..200&quality>=80'
+reveal metrics ./src --where lines=50..200 --where 'quality>=80'
 
 # Files with functions but no classes
-reveal 'metrics://./src?functions!=0&classes==0'
+reveal metrics ./src --where 'functions!=0' --where classes==0
 
 # Complex files, sorted by complexity
-reveal 'metrics://./src?complexity>10&sort=-complexity&limit=10'
+reveal metrics ./src --where 'complexity>10' --sort=-complexity --limit 10
 ```
 
 ### Examples
 
 **Find refactoring targets**:
 ```bash
-reveal 'metrics://./src?complexity>15&quality<60'
+reveal metrics ./src --where 'complexity>15' --where 'quality<60'
 ```
 
 **Exclude small files**:
 ```bash
-reveal 'metrics://./src?lines>50'
+reveal metrics ./src --where 'lines>50'
 ```
 
 **Find test files with complexity**:
 ```bash
-reveal 'metrics://./src?file~=test&complexity>5'
+reveal metrics ./src --where 'file~=test' --where 'complexity>5'
 ```
 
 **Files in specific range**:
 ```bash
-reveal 'metrics://./src?lines=100..500&complexity=5..15'
+reveal metrics ./src --where lines=100..500 --where complexity=5..15
 ```
 
 ---
@@ -450,31 +449,31 @@ Same as filterable fields:
 
 **Top 10 largest files**:
 ```bash
-reveal 'metrics://./src?sort=-lines&limit=10'
+reveal metrics ./src --sort=-lines --limit 10
 ```
 
 **Top 10 most complex files**:
 ```bash
-reveal 'metrics://./src?sort=-complexity&limit=10'
+reveal metrics ./src --sort=-complexity --limit 10
 ```
 
 **Pagination (results 11-20)**:
 ```bash
-reveal 'metrics://./src?sort=-lines&offset=10&limit=10'
+reveal metrics ./src --sort=-lines --limit 10 --offset 10
 ```
 
 **Lowest quality files**:
 ```bash
-reveal 'metrics://./src?sort=quality&limit=10'
+reveal metrics ./src --sort quality --limit 10
 ```
 
 **Complex files, paginated**:
 ```bash
 # Page 1 (results 1-10)
-reveal 'metrics://./src?complexity>10&sort=-complexity&limit=10'
+reveal metrics ./src --where 'complexity>10' --sort=-complexity --limit 10
 
 # Page 2 (results 11-20)
-reveal 'metrics://./src?complexity>10&sort=-complexity&offset=10&limit=10'
+reveal metrics ./src --where 'complexity>10' --sort=-complexity --limit 10 --offset 10
 ```
 
 ### Truncation Metadata
@@ -591,7 +590,7 @@ failure and exclusion diagnostics qualify what the scan could analyze.
 
 **Example**:
 ```bash
-reveal metrics://./src/app.py --format=json
+reveal metrics ./src/app.py --format=json
 ```
 
 ---
@@ -769,7 +768,6 @@ so a CI run that forgot the ranking passed; BACK-2528).
 
 ```bash
 reveal metrics ./src --view hotspots --fail-on findings          # CI gate: exit 1 on a finding
-reveal 'metrics://./src?view=hotspots' --fail-on findings   # the same answer and exit
 ```
 
 This is the gate `reveal hotspots --fail-on findings` had. The functions themselves are ranked by
@@ -779,7 +777,7 @@ This is the gate `reveal hotspots --fail-on findings` had. The functions themsel
 
 **Request**:
 ```bash
-reveal 'metrics://./src?view=hotspots'
+reveal metrics ./src --view hotspots
 ```
 
 **Result**:
@@ -815,17 +813,17 @@ Top Hotspots (10):
 
 1. **Get hotspot overview**:
    ```bash
-   reveal 'metrics://./src?view=hotspots'
+   reveal metrics ./src --view hotspots
    ```
 
 2. **Filter high complexity files**:
    ```bash
-   reveal 'metrics://./src?complexity>15&sort=-complexity&limit=10'
+   reveal metrics ./src --where 'complexity>15' --sort=-complexity --limit 10
    ```
 
 3. **Analyze specific hotspot**:
    ```bash
-   reveal metrics://./src/core.py
+   reveal metrics ./src/core.py
    ```
 
 4. **Inspect code structure**:
@@ -848,7 +846,7 @@ Top Hotspots (10):
 
 1. **Baseline measurement** (before changes):
    ```bash
-   reveal metrics://./src --format=json > before.json
+   reveal metrics ./src --format=json > before.json
    ```
 
 2. **Make code changes**:
@@ -858,7 +856,7 @@ Top Hotspots (10):
 
 3. **Post-change measurement**:
    ```bash
-   reveal metrics://./src --format=json > after.json
+   reveal metrics ./src --format=json > after.json
    ```
 
 4. **Compare metrics**:
@@ -898,30 +896,30 @@ Top Hotspots (10):
 
 1. **Overall metrics**:
    ```bash
-   reveal metrics://./src
+   reveal metrics ./src
    ```
 
 2. **Core subsystem**:
    ```bash
-   reveal metrics://./src/core
+   reveal metrics ./src/core
    ```
 
 3. **Plugins subsystem**:
    ```bash
-   reveal metrics://./src/plugins
+   reveal metrics ./src/plugins
    ```
 
 4. **API subsystem**:
    ```bash
-   reveal metrics://./src/api
+   reveal metrics ./src/api
    ```
 
 5. **Compare metrics**:
    ```bash
    # Export all subsystem stats
-   reveal metrics://./src/core --format=json > core.json
-   reveal metrics://./src/plugins --format=json > plugins.json
-   reveal metrics://./src/api --format=json > api.json
+   reveal metrics ./src/core --format=json > core.json
+   reveal metrics ./src/plugins --format=json > plugins.json
+   reveal metrics ./src/api --format=json > api.json
 
    # Compare complexity
    jq '.summary.avg_complexity' core.json plugins.json api.json
@@ -943,7 +941,7 @@ Top Hotspots (10):
 1. **Weekly snapshot**:
    ```bash
    DATE=$(date +%Y-%m-%d)
-   reveal metrics://./src --format=json > "stats-$DATE.json"
+   reveal metrics ./src --format=json > "stats-$DATE.json"
    ```
 
 2. **Track metrics over time** (monthly script):
@@ -1013,7 +1011,7 @@ Top Hotspots (10):
 
 1. **Get baseline hotspots**:
    ```bash
-   reveal 'metrics://./src?view=hotspots' --format=json > hotspots-baseline.json
+   reveal metrics ./src --view hotspots --format=json > hotspots-baseline.json
    ```
 
 2. **Target top 5 files**:
@@ -1048,7 +1046,7 @@ Top Hotspots (10):
 5. **Repeat for remaining hotspots**:
    ```bash
    # Track progress
-   reveal 'metrics://./src?view=hotspots'
+   reveal metrics ./src --view hotspots
    ```
 
 **Result**: Systematic codebase quality improvement campaign.
@@ -1062,10 +1060,10 @@ Top Hotspots (10):
 **Extract specific metrics**:
 ```bash
 # Get average complexity
-reveal metrics://./src --format=json | jq '.summary.avg_complexity'
+reveal metrics ./src --format=json | jq '.summary.avg_complexity'
 
 # Get total lines of code
-reveal metrics://./src --format=json | jq '.summary.total_code_lines'
+reveal metrics ./src --format=json | jq '.summary.total_code_lines'
 
 # List files with quality <60
 reveal metrics://./src --format=json | \
@@ -1320,37 +1318,37 @@ echo "Report generated: stats-report.csv"
 **1. Filter early**:
 ```bash
 # ❌ Bad: Analyze everything then filter in jq
-reveal metrics://./src --format=json | jq '.files[] | select(.lines.total > 100)'
+reveal metrics ./src --format=json | jq '.files[] | select(.lines.total > 100)'
 
 # ✅ Good: Filter at adapter level
-reveal 'metrics://./src?lines>100' --format=json
+reveal metrics ./src --where 'lines>100' --format=json
 ```
 
 **2. Use result control**:
 ```bash
 # ❌ Bad: Get all results then head
-reveal metrics://./src --format=json | jq '.files[0:10]'
+reveal metrics ./src --format=json | jq '.files[0:10]'
 
 # ✅ Good: Limit at adapter level
-reveal 'metrics://./src?limit=10' --format=json
+reveal metrics ./src --limit 10 --format=json
 ```
 
 **3. Exclude irrelevant files**:
 ```bash
 # ❌ Bad: Analyze data/config files
-reveal metrics://./src
+reveal metrics ./src
 
 # ✅ Good: Code files only
-reveal 'metrics://./src?code-only=true'
+reveal metrics ./src --code-only
 ```
 
 **4. Use specific paths**:
 ```bash
 # ❌ Bad: Analyze entire repo
-reveal metrics://./
+reveal metrics ./
 
 # ✅ Good: Target specific directory
-reveal metrics://./src/core
+reveal metrics ./src/core
 ```
 
 ### Best Practices
@@ -1484,7 +1482,7 @@ Config is **automatically loaded** from the nearest `.reveal/stats-quality.yaml`
 
 ```bash
 # Uses custom config if exists, otherwise defaults
-reveal metrics://./src
+reveal metrics ./src
 ```
 
 No CLI flag needed - config is detected automatically.
@@ -1546,7 +1544,7 @@ The metrics adapter analyzes **static code** only:
 
 **Symptom**:
 ```bash
-reveal metrics://./src
+reveal metrics ./src
 # Returns empty summary (0 files)
 ```
 
@@ -1560,7 +1558,7 @@ ls -la ./src
 # Verify file extensions are supported (.py, .js, .go, etc.)
 
 # Try broader path
-reveal metrics://./
+reveal metrics ./
 ```
 
 ### Issue 2: Unexpected quality scores
@@ -1572,10 +1570,10 @@ reveal metrics://./
 **Solution**:
 ```bash
 # Get detailed file stats
-reveal metrics://./src/file.py
+reveal metrics ./src/file.py
 
 # Check issues section
-reveal metrics://./src/file.py --format=json | jq '.files[0].issues'
+reveal metrics ./src/file.py --format=json | jq '.files[0].issues'
 
 # Review specific functions
 reveal 'ast://./src/file.py?kind=function'
@@ -1590,23 +1588,23 @@ reveal 'ast://./src/file.py?kind=function'
 **Solution**:
 ```bash
 # ❌ Don't analyze entire repo
-reveal metrics://./
+reveal metrics ./
 
 # ✅ Target specific directories
-reveal metrics://./src/core
+reveal metrics ./src/core
 
 # ✅ Exclude non-code files
-reveal 'metrics://./src?code-only=true'
+reveal metrics ./src --code-only
 
 # ✅ Use filters to reduce results
-reveal 'metrics://./src?lines>100&limit=20'
+reveal metrics ./src --where 'lines>100' --limit 20
 ```
 
 ### Issue 4: Filter not working
 
 **Symptom**:
 ```bash
-reveal 'metrics://./src?lines>100'
+reveal metrics ./src --where 'lines>100'
 # Still shows files with <100 lines
 ```
 
@@ -1617,7 +1615,7 @@ reveal 'metrics://./src?lines>100'
 # ❌ Bad: without quotes the shell treats > as a redirect (it writes a file named 100)
 
 # ✅ Good: quote the URI (single or double quotes)
-reveal 'metrics://./src?lines>100'
+reveal metrics ./src --where 'lines>100'
 
 # ❌ A backslash does not help: 'lines\>100' matches 0 files, silently
 ```
@@ -1626,7 +1624,7 @@ reveal 'metrics://./src?lines>100'
 
 **Symptom**:
 ```bash
-reveal 'metrics://./src?view=hotspots'
+reveal metrics ./src --view hotspots
 # No hotspots section in output
 ```
 
@@ -1635,7 +1633,7 @@ reveal 'metrics://./src?view=hotspots'
 **Solution**:
 ```bash
 # Check if any files have quality <70
-reveal metrics://./src --format=json | jq '.files[] | select(.quality.score < 70)'
+reveal metrics ./src --format=json | jq '.files[] | select(.quality.score < 70)'
 
 # If none, your codebase is high quality! ✅
 
@@ -1689,11 +1687,11 @@ echo "$(date +%Y-%m-%d),$(jq '.summary.avg_complexity' stats.json),$(jq '.summar
 ```bash
 # On main branch
 git checkout main
-reveal metrics://./src --format=json > main-stats.json
+reveal metrics ./src --format=json > main-stats.json
 
 # On feature branch
 git checkout feature-branch
-reveal metrics://./src --format=json > feature-stats.json
+reveal metrics ./src --format=json > feature-stats.json
 
 # Compare
 jq -s '.[0].summary.avg_complexity as $main | .[1].summary.avg_complexity as $feat | {main: $main, feature: $feat, diff: ($feat - $main)}' main-stats.json feature-stats.json
@@ -1724,18 +1722,18 @@ reveal metrics://./src --format=json | \
 **Drill down progressively**:
 ```bash
 # 1. Top-level overview
-reveal metrics://./src
+reveal metrics ./src
 
 # 2. Identify worst subsystem
-reveal metrics://./src/core
-reveal metrics://./src/plugins
-reveal metrics://./src/api
+reveal metrics ./src/core
+reveal metrics ./src/plugins
+reveal metrics ./src/api
 
 # 3. Get hotspots in worst subsystem
-reveal 'metrics://./src/core?view=hotspots'
+reveal metrics ./src/core --view hotspots
 
 # 4. Analyze specific hotspot
-reveal metrics://./src/core/worst-file.py
+reveal metrics ./src/core/worst-file.py
 
 # 5. Review code
 reveal ./src/core/worst-file.py
@@ -1834,8 +1832,8 @@ population. It is what `classify://` answered (`classify://` is a retired spelli
 is the full-population counterpart to the `provenance` field of `view=hotspots` entries (and the retired `hotspots`) and `pack`, which only tag the ranked or capped subset each of them selects.
 
 ```bash
-reveal 'metrics://src?view=provenance'
-reveal 'metrics://src?view=provenance' --format json
+reveal metrics src --view provenance
+reveal metrics src --view provenance --format json
 ```
 
 No file is analyzed and no rule runs: classification reads paths, plus at most the first few
@@ -1934,10 +1932,10 @@ For permanent exclusions, consider using reveal's config system (check reveal do
 **A**: Export as JSON and compare:
 ```bash
 # Project A
-reveal metrics://./project-a/src --format=json > project-a.json
+reveal metrics ./project-a/src --format=json > project-a.json
 
 # Project B
-reveal metrics://./project-b/src --format=json > project-b.json
+reveal metrics ./project-b/src --format=json > project-b.json
 
 # Compare
 jq -s '.[0].summary as $a | .[1].summary as $b | {
@@ -2045,7 +2043,7 @@ mkdir -p stats-reports
 
 # Weekly snapshot
 DATE=$(date +%Y-%m-%d)
-reveal metrics://./src --format=json > stats-reports/stats-$DATE.json
+reveal metrics ./src --format=json > stats-reports/stats-$DATE.json
 
 # Commit snapshots
 git add stats-reports/

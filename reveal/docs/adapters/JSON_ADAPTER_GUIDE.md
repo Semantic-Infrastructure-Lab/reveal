@@ -41,7 +41,7 @@ examples assume `data.json` is an array of objects:
 reveal json data.json --where 'type=book' --where 'price>10' --sort=-price --limit 5
 reveal json data.json --view schema
 reveal json data.json --view flatten --detail raw
-reveal 'json://data.json?where=price%3E10&limit=5'
+reveal json data.json --where 'price>10' --limit 5
 ```
 
 `view` selects `value` (default), `schema`, `flatten`, `type`, `keys`, or `length`.
@@ -87,11 +87,11 @@ reveal json config.json --view flatten
 reveal json package.json/dependencies --view keys
 
 # 7. Filter arrays
-reveal 'json://data.json/users?age>25'
-reveal 'json://data.json/products?price=10..50'
+reveal json://data.json/users --where 'age>25'
+reveal json://data.json/products --where price=10..50
 
 # 8. Sort and limit
-reveal 'json://data.json/users?sort=-age&limit=10'
+reveal json://data.json/users --sort=-age --limit 10
 ```
 
 ---
@@ -325,28 +325,28 @@ Filter arrays of objects using query parameters:
 
 ```bash
 # Exact match
-reveal 'json://data.json/users?status=active'
+reveal json://data.json/users --where status=active
 
 # Numeric comparisons
-reveal 'json://data.json/users?age>25'
-reveal 'json://data.json/users?age>=18'
-reveal 'json://data.json/users?score<50'
+reveal json://data.json/users --where 'age>25'
+reveal json://data.json/users --where 'age>=18'
+reveal json://data.json/users --where 'score<50'
 
 # Range queries
-reveal 'json://data.json/products?price=10..50'
-reveal 'json://data.json/users?age=18..65'
+reveal json://data.json/products --where price=10..50
+reveal json://data.json/users --where age=18..65
 
 # Regex matching
-reveal 'json://data.json/users?name~=^John'
-reveal 'json://data.json/products?category~=electronics'
+reveal json://data.json/users --where 'name~=^John'
+reveal json://data.json/products --where 'category~=electronics'
 
 # Negation
-reveal 'json://data.json/users?status!=inactive'
-reveal 'json://data.json/products?stock!=0'
+reveal json://data.json/users --where 'status!=inactive'
+reveal json://data.json/products --where 'stock!=0'
 
 # Combined filters (AND logic)
-reveal 'json://data.json/users?age>25&status=active'
-reveal 'json://data.json/products?price<100&stock>0'
+reveal json://data.json/users --where 'age>25' --where status=active
+reveal json://data.json/products --where 'price<100' --where 'stock>0'
 ```
 
 ---
@@ -412,8 +412,8 @@ For filtering, field names support dot notation:
 
 ```bash
 # Filter by nested field
-reveal 'json://data.json/users?metadata.verified=true'
-reveal 'json://data.json/orders?customer.tier=premium'
+reveal json://data.json/users --where metadata.verified=true
+reveal json://data.json/orders --where customer.tier=premium
 ```
 
 ---
@@ -468,48 +468,48 @@ Used with arrays of objects:
 
 ```bash
 # Greater than
-reveal 'json://data.json/users?age>25'
+reveal json://data.json/users --where 'age>25'
 
 # Less than
-reveal 'json://data.json/products?price<100'
+reveal json://data.json/products --where 'price<100'
 
 # Greater than or equal
-reveal 'json://data.json/scores?value>=80'
+reveal json://data.json/scores --where 'value>=80'
 
 # Less than or equal
-reveal 'json://data.json/users?age<=65'
+reveal json://data.json/users --where 'age<=65'
 ```
 
 **Equality operators** (any value type):
 
 ```bash
 # Exact match (case-insensitive for strings)
-reveal 'json://data.json/users?status=active'
-reveal 'json://data.json/products?category=electronics'
+reveal json://data.json/users --where status=active
+reveal json://data.json/products --where category=electronics
 
 # Not equal
-reveal 'json://data.json/users?status!=inactive'
-reveal 'json://data.json/products?stock!=0'
+reveal json://data.json/users --where 'status!=inactive'
+reveal json://data.json/products --where 'stock!=0'
 ```
 
 **Pattern operators** (string values):
 
 ```bash
 # Regex match
-reveal 'json://data.json/users?name~=^John'       # Starts with "John"
-reveal 'json://data.json/users?email~=@gmail'     # Contains "@gmail"
-reveal 'json://data.json/products?sku~=^ABC'      # SKU starts with "ABC"
+reveal json://data.json/users --where 'name~=^John'       # Starts with "John"
+reveal json://data.json/users --where 'email~=@gmail'     # Contains "@gmail"
+reveal json://data.json/products --where 'sku~=^ABC'      # SKU starts with "ABC"
 ```
 
 **Range operator** (numeric or string):
 
 ```bash
 # Numeric range
-reveal 'json://data.json/products?price=10..50'
-reveal 'json://data.json/users?age=18..65'
+reveal json://data.json/products --where price=10..50
+reveal json://data.json/users --where age=18..65
 
 # String range (alphabetical)
-reveal 'json://data.json/users?name=A..M'        # Names starting A-M
+reveal json://data.json/users --where name=A..M        # Names starting A-M
 ```
 
 ### Combined Filters
@@ -518,13 +518,13 @@ Multiple filters use AND logic:
 
 ```bash
 # Age AND status
-reveal 'json://data.json/users?age>25&status=active'
+reveal json://data.json/users --where 'age>25' --where status=active
 
 # Price AND stock
-reveal 'json://data.json/products?price<100&stock>0'
+reveal json://data.json/products --where 'price<100' --where 'stock>0'
 
 # Three filters
-reveal 'json://data.json/users?age>18&age<65&status=active'
+reveal json://data.json/users --where 'age>18' --where 'age<65' --where status=active
 ```
 
 ### Nested Field Filtering
@@ -533,9 +533,9 @@ Use dot notation for nested fields:
 
 ```bash
 # Filter by nested field
-reveal 'json://data.json/users?metadata.verified=true'
-reveal 'json://data.json/orders?customer.tier=premium'
-reveal 'json://data.json/products?details.weight>10'
+reveal json://data.json/users --where metadata.verified=true
+reveal json://data.json/orders --where customer.tier=premium
+reveal json://data.json/products --where 'details.weight>10'
 ```
 
 ---
@@ -697,13 +697,13 @@ curl https://api.example.com/users > users.json
 reveal json users.json --view schema
 
 # Step 3: Filter active users
-reveal 'json://users.json/data/users?status=active'
+reveal json://users.json/data/users --where status=active
 
 # Step 4: Sort by age descending
-reveal 'json://users.json/data/users?status=active&sort=-age'
+reveal json://users.json/data/users --where status=active --sort=-age
 
 # Step 5: Get top 10
-reveal 'json://users.json/data/users?status=active&sort=-age&limit=10'
+reveal json://users.json/data/users --where status=active --sort=-age --limit 10
 
 # Step 6: Export to CSV with jq
 reveal 'json://users.json/data/users?status=active' --format=json | \
@@ -794,16 +794,16 @@ Sort arrays by any field:
 
 ```bash
 # Sort by age (ascending)
-reveal 'json://data.json/users?sort=age'
+reveal json://data.json/users --sort age
 
 # Sort by age (descending - oldest first)
-reveal 'json://data.json/users?sort=-age'
+reveal json://data.json/users --sort=-age
 
 # Sort by name (alphabetical)
-reveal 'json://data.json/users?sort=name'
+reveal json://data.json/users --sort name
 
 # Sort by nested field
-reveal 'json://data.json/orders?sort=customer.name'
+reveal json://data.json/orders --sort customer.name
 ```
 
 **Note**: Sorting works on arrays of objects. An object whose field is `null` or missing sorts
@@ -817,13 +817,13 @@ Restrict output to first N items:
 
 ```bash
 # Top 10 results
-reveal 'json://data.json/users?limit=10'
+reveal json://data.json/users --limit 10
 
 # Top 5 oldest users
-reveal 'json://data.json/users?sort=-age&limit=5'
+reveal json://data.json/users --sort=-age --limit 5
 
 # Top 20 cheapest products
-reveal 'json://data.json/products?sort=price&limit=20'
+reveal json://data.json/products --sort price --limit 20
 ```
 
 ### Offset Results
@@ -832,13 +832,13 @@ Skip first N items (pagination):
 
 ```bash
 # Skip first 10 items
-reveal 'json://data.json/users?offset=10'
+reveal json://data.json/users --offset 10
 
 # Pagination: items 11-20
-reveal 'json://data.json/users?offset=10&limit=10'
+reveal json://data.json/users --limit 10 --offset 10
 
 # Next page: items 21-30
-reveal 'json://data.json/users?offset=20&limit=10'
+reveal json://data.json/users --limit 10 --offset 20
 ```
 
 ### Combined Result Control
@@ -847,13 +847,13 @@ All three can be combined:
 
 ```bash
 # Top 10 oldest active users
-reveal 'json://data.json/users?status=active&sort=-age&limit=10'
+reveal json://data.json/users --where status=active --sort=-age --limit 10
 
 # Products paginated, cheapest first
-reveal 'json://data.json/products?sort=price&limit=20&offset=40'
+reveal json://data.json/products --sort price --limit 20 --offset 40
 
 # Complex query: active users over 25, sorted by name, page 2
-reveal 'json://data.json/users?status=active&age>25&sort=name&offset=10&limit=10'
+reveal json://data.json/users --where status=active --where 'age>25' --sort name --limit 10 --offset 10
 ```
 
 ---
@@ -897,7 +897,7 @@ reveal 'json://large_data.json/users[0:10]'
 **Strategy 3: Filter at query time**
 ```bash
 # ✅ Fast: filter during load
-reveal 'json://large_data.json/users?status=active&limit=100'
+reveal json://large_data.json/users --where status=active --limit 100
 
 # ❌ Slower: load all then filter with jq
 reveal json://large_data.json/users --format=json | jq '[.value[] | select(.status == "active")] | .[0:100]'
@@ -1099,7 +1099,7 @@ reveal json data.json/users --view schema
 reveal json://data.json/users/0
 
 # 5. Filter and extract
-reveal 'json://data.json/users?status=active&sort=-age&limit=10'
+reveal json://data.json/users --where status=active --sort=-age --limit 10
 ```
 
 ### When to Use Schema
@@ -1145,16 +1145,16 @@ reveal json://config.json/database/host
 
 ```bash
 # ✅ GOOD: Quoted
-reveal 'json://data.json/users?age>25'
+reveal json://data.json/users --where 'age>25'
 
 # ❌ BAD: Unquoted (shell redirects > to file)
-reveal 'json://data.json/users?age>25'
+reveal json://data.json/users --where 'age>25'
 
 # ✅ GOOD: Quoted with regex
-reveal 'json://data.json/users?name~=^John'
+reveal json://data.json/users --where 'name~=^John'
 
 # ❌ BAD: Unquoted (shell interprets ~)
-reveal 'json://data.json/users?name~=^John'
+reveal json://data.json/users --where 'name~=^John'
 ```
 
 ### Prefer Direct Paths Over Filtering
@@ -1163,7 +1163,7 @@ reveal 'json://data.json/users?name~=^John'
 
 ```bash
 # ❌ Slow: filter then extract
-reveal 'json://data.json/users?id=42' --format=json | jq '.value[0]'
+reveal json://data.json/users --where id=42 --format=json | jq '.value[0]'
 
 # ✅ Fast: direct array index (if you know it)
 reveal json://data.json/users/5
@@ -1173,7 +1173,7 @@ reveal json://data.json/users/5
 
 ```bash
 # ✅ Filter to find it
-reveal 'json://data.json/users?id=42'
+reveal json://data.json/users --where id=42
 ```
 
 ### Use Result Control for Large Arrays
@@ -1185,7 +1185,7 @@ reveal 'json://data.json/users?id=42'
 reveal json://data.json/users
 
 # ✅ Good: limit to 100
-reveal 'json://data.json/users?limit=100'
+reveal json://data.json/users --limit 100
 
 # ✅ Good: slice syntax
 reveal 'json://data.json/users[0:100]'
@@ -1269,7 +1269,7 @@ reveal json response.json --view schema
 
 # Filter API response
 curl -s https://api.example.com/users > users.json
-reveal 'json://users.json/data/users?status=active'
+reveal json://users.json/data/users --where status=active
 ```
 
 ### With Python (Scripting)

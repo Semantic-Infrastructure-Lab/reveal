@@ -36,25 +36,25 @@ category: guide
 
 ```bash
 # 1. Import graph overview (all imports)
-reveal imports://src
+reveal imports src
 
 # 2. Find unused imports (dead code)
-reveal 'imports://src?unused'
+reveal imports src --unused
 
 # 3. Detect circular dependencies
-reveal 'imports://src?circular'
+reveal imports src --circular
 
 # 4. Check layer violations (requires .reveal.yaml)
-reveal 'imports://src?violations'
+reveal imports src --violations
 
 # 5. Single file import inspection
-reveal imports://src/main.py
+reveal imports src/main.py
 
 # 6. Verbose output: every file of each cycle group, plus the cycle edges
-reveal 'imports://src?circular&detail=full'
+reveal imports src --circular --detail full
 
 # 7. JSON output for CI/CD
-reveal 'imports://src?unused' --format=json
+reveal imports src --unused --format=json
 
 ```
 
@@ -84,25 +84,25 @@ imports://<path>[?<query>]
 
 ```bash
 # Directory analysis
-reveal imports://src
-reveal imports://lib/utils
-reveal imports://.  # Current directory
+reveal imports src
+reveal imports lib/utils
+reveal imports .  # Current directory
 
 # File analysis
-reveal imports://src/main.py
-reveal imports://app/__init__.py
+reveal imports src/main.py
+reveal imports app/__init__.py
 
 # Quality checks
-reveal 'imports://src?unused'
-reveal 'imports://src?circular'
-reveal 'imports://src?violations'
+reveal imports src --unused
+reveal imports src --circular
+reveal imports src --violations
 
 # Absolute paths
-reveal imports:///absolute/path/to/project
+reveal imports /absolute/path/to/project
 
 # Current directory
-reveal imports://
-reveal imports://.
+reveal imports
+reveal imports .
 ```
 
 ---
@@ -112,7 +112,7 @@ reveal imports://.
 The default view builds a complete import graph:
 
 ```bash
-reveal imports://src
+reveal imports src
 ```
 
 **Returns** (~300 tokens):
@@ -158,7 +158,7 @@ Query options:
 Find imports that are declared but never used in code:
 
 ```bash
-reveal 'imports://src?unused'
+reveal imports src --unused
 ```
 
 **Returns** (~500 tokens):
@@ -186,7 +186,7 @@ Unused Imports: 12
 ### Verbose Output
 
 ```bash
-reveal 'imports://src?unused&detail=full'
+reveal imports src --unused --detail full
 ```
 
 **Returns**: Full list of all unused imports with file paths and line numbers
@@ -194,7 +194,7 @@ reveal 'imports://src?unused&detail=full'
 ### JSON Output
 
 ```bash
-reveal 'imports://src?unused' --format=json
+reveal imports src --unused --format=json
 ```
 
 **Returns**:
@@ -268,7 +268,7 @@ the target is clean. See [input failure and cycle metadata](#output-types).
 Find import cycle groups (A imports B, B imports A):
 
 ```bash
-reveal 'imports://src?circular'
+reveal imports src --circular
 ```
 
 **Returns** (~400 tokens):
@@ -292,7 +292,7 @@ cycling through a shared registry appear as 1 group, not 30 separate paths.
 ### Verbose Output
 
 ```bash
-reveal 'imports://src?circular&detail=full'
+reveal imports src --circular --detail full
 ```
 
 **Returns**: All groups and all files (no truncation), plus each group's cycle edge sequence (`cycle: a.py → b.py → c.py → a.py`)
@@ -300,7 +300,7 @@ reveal 'imports://src?circular&detail=full'
 ### JSON Output
 
 ```bash
-reveal 'imports://src?circular' --format=json
+reveal imports src --circular --format=json
 ```
 
 **Returns**:
@@ -361,8 +361,8 @@ Each inner array is the **members of one SCC** (sorted, no repeated last node).
 Rank files by how many other files import them — the single most useful architectural signal derivable from code alone:
 
 ```bash
-reveal 'imports://src?sort=-fan-in'
-reveal 'imports://src?sort=-fan-in&limit=20'
+reveal imports src --sort=-fan-in
+reveal imports src --sort=-fan-in --limit 20
 ```
 
 **Returns** (~200 tokens):
@@ -404,13 +404,13 @@ Files: 10 of 45  (fan-in = number of files that import this file)
 
 ```bash
 # Top 10 most-imported files
-reveal 'imports://src?sort=-fan-in&limit=10'
+reveal imports src --sort=-fan-in --limit 10
 ```
 
 ### JSON Output
 
 ```bash
-reveal 'imports://src?sort=-fan-in' --format=json
+reveal imports src --sort=-fan-in --format=json
 ```
 
 **Returns**:
@@ -513,8 +513,8 @@ execution claim. Ruby remains outside default recall coverage. The
 measures only its declared importer/target population, not whole-language or runtime loading.
 
 ```bash
-reveal 'imports://src?sort=-fan-in&lazy=exclude'   # module-level imports only
-reveal 'imports://src?circular&lazy=include'      # a lazy back-edge closes a cycle too
+reveal imports src --sort=-fan-in --lazy exclude   # module-level imports only
+reveal imports src --circular --lazy include      # a lazy back-edge closes a cycle too
 ```
 
 **When to use `sort=-fan-in` vs `importers`:**
@@ -533,7 +533,7 @@ Use `sort=-fan-in` for orientation; use `?importers` for targeted impact analysi
 Enforce architectural boundaries (requires .reveal.yaml configuration):
 
 ```bash
-reveal 'imports://src?violations'
+reveal imports src --violations
 ```
 
 ### Configuration (.reveal.yaml)
@@ -602,7 +602,7 @@ Rows carry no line number. In JSON:
 If `.reveal.yaml` is not configured:
 
 ```bash
-reveal 'imports://src?violations'
+reveal imports src --violations
 ```
 
 **Returns**:
@@ -677,10 +677,10 @@ angle-bracket includes.
 
 ```bash
 # Find unused imports
-reveal 'imports://src?unused'
+reveal imports src --unused
 
 # Detect circular imports (common in Python)
-reveal 'imports://src?circular'
+reveal imports src --circular
 
 # Example unused:
 # from typing import Dict  # Never used
@@ -691,7 +691,7 @@ reveal 'imports://src?circular'
 
 ```bash
 # Find unused ES6 imports
-reveal 'imports://src?unused'
+reveal imports src --unused
 
 # Example unused:
 # import { useState } from 'react';  // Never used
@@ -702,7 +702,7 @@ reveal 'imports://src?unused'
 
 ```bash
 # Find unused imports (Go compiler catches most)
-reveal 'imports://cmd?unused'
+reveal imports cmd --unused
 
 # Example circular:
 # package a imports package b
@@ -713,7 +713,7 @@ reveal 'imports://cmd?unused'
 
 ```bash
 # Find unused use statements
-reveal 'imports://src?unused'
+reveal imports src --unused
 
 # Example unused:
 # use std::collections::HashMap;  // Never used
@@ -801,10 +801,10 @@ path outside the project (`#include "/opt/vendor/x.h"`) is shown as written.
 
 ```bash
 # Correct
-reveal 'imports://src?unused'
+reveal imports src --unused
 
 # Also works (but unnecessary)
-reveal 'imports://src?unused=true'
+reveal imports src --unused
 ```
 
 ---
@@ -822,13 +822,13 @@ reveal 'imports://src?unused=true'
 
 ```bash
 # Verbose unused imports
-reveal 'imports://src?unused&detail=full'
+reveal imports src --unused --detail full
 
 # JSON output for CI/CD
-reveal 'imports://src?circular' --format=json
+reveal imports src --circular --format=json
 
 # Filter unused imports to one package
-reveal 'imports://src?unused' | grep "api/"
+reveal imports src --unused | grep "api/"
 ```
 
 ---
@@ -1123,16 +1123,16 @@ JavaScript the first dotted segment. `languages` says which language each row ca
 
 ```bash
 # 1. Find unused imports
-reveal 'imports://src?unused'
+reveal imports src --unused
 
 # 2. Review list (check for false positives)
-reveal 'imports://src?unused&detail=full'
+reveal imports src --unused --detail full
 
 # 3. Remove unused imports
 # (manually or with automated tools)
 
 # 4. Verify cleanup
-reveal 'imports://src?unused'
+reveal imports src --unused
 # Should show: "✅ No unused imports found!"
 
 # 5. Commit changes
@@ -1150,14 +1150,14 @@ git commit -m "refactor: Remove unused imports"
 
 ```bash
 # 1. Detect circular dependencies
-reveal 'imports://src?circular'
+reveal imports src --circular
 
 # Example output:
 # 1. 2 files  user.py, auth.py   (add &detail=full for the edge sequence: cycle: user.py → auth.py → user.py)
 
 # 2. Analyze the cycle
-reveal imports://src/models/user.py
-reveal imports://src/services/auth.py
+reveal imports src/models/user.py
+reveal imports src/services/auth.py
 
 # 3. Identify the problematic imports
 # - user.py imports auth.py for token generation
@@ -1175,7 +1175,7 @@ reveal imports://src/services/auth.py
 #   Move token generation from auth.py to user.py
 
 # 5. Verify fix
-reveal 'imports://src?circular'
+reveal imports src --circular
 # Should show: "✅ No circular dependencies found!"
 
 # 6. Commit refactoring
@@ -1212,7 +1212,7 @@ architecture:
 EOF
 
 # 2. Check for violations
-reveal 'imports://src?violations'
+reveal imports src --violations
 
 # Example output:
 #   models/user.py -> db/session.py  [domain] domain layer cannot import from db
@@ -1223,7 +1223,7 @@ reveal 'imports://src?violations'
 # - Refactor models to be pure business logic
 
 # 4. Verify compliance
-reveal 'imports://src?violations'
+reveal imports src --violations
 # Should show: "✅ No violations found"
 
 # 5. Add to CI/CD (--fail-on findings exits 1 when a violation is found;
@@ -1248,13 +1248,13 @@ git commit -m "feat: Add architecture layer enforcement"
 
 ```bash
 # 1. Import overview
-reveal imports://src
+reveal imports src
 
 # 2. Check for unused imports
-reveal 'imports://src?unused'
+reveal imports src --unused
 
 # 3. Check for circular dependencies
-reveal 'imports://src?circular'
+reveal imports src --circular
 
 # 4. Generate health report
 cat > import_health_report.md <<EOF
@@ -1311,7 +1311,7 @@ jobs:
           UNUSED=$(reveal 'imports://src?unused' --format=json | jq '.count')
           if [ "$UNUSED" -gt 0 ]; then
             echo "❌ Found $UNUSED unused imports"
-            reveal 'imports://src?unused'
+            reveal imports src --unused
             exit 1
           fi
           echo "✅ No unused imports"
@@ -1321,7 +1321,7 @@ jobs:
           CYCLES=$(reveal 'imports://src?circular' --format=json | jq '.count')
           if [ "$CYCLES" -gt 0 ]; then
             echo "❌ Found $CYCLES circular dependencies"
-            reveal 'imports://src?circular'
+            reveal imports src --circular
             exit 1
           fi
           echo "✅ No circular dependencies"
@@ -1332,7 +1332,7 @@ jobs:
             VIOLATIONS=$(reveal 'imports://src?violations' --format=json | jq '.count')
             if [ "$VIOLATIONS" -gt 0 ]; then
               echo "❌ Found $VIOLATIONS layer violations"
-              reveal 'imports://src?violations'
+              reveal imports src --violations
               exit 1
             fi
             echo "✅ No layer violations"
@@ -1345,7 +1345,7 @@ The same gate without `jq`: `--fail-on findings` exits 1 when the `?circular`, `
 answer has a row (an incomplete answer exits 3 first; the default `--fail-on none` exits 0):
 
 ```bash
-reveal 'imports://src?circular' --fail-on findings
+reveal imports src --circular --fail-on findings
 reveal imports src --unused --fail-on findings
 ```
 
@@ -1357,7 +1357,7 @@ reveal imports src --unused --fail-on findings
 
 ```bash
 # Before refactoring
-reveal 'imports://src?circular' > before_refactor.txt
+reveal imports src --circular > before_refactor.txt
 
 # Perform refactoring
 # - Move functions between modules
@@ -1365,7 +1365,7 @@ reveal 'imports://src?circular' > before_refactor.txt
 # - Rename modules
 
 # After refactoring
-reveal 'imports://src?circular' > after_refactor.txt
+reveal imports src --circular > after_refactor.txt
 
 # Compare
 diff before_refactor.txt after_refactor.txt
@@ -1374,7 +1374,7 @@ diff before_refactor.txt after_refactor.txt
 if [ "$(cat after_refactor.txt | grep 'Circular Dependencies:' | awk '{print $3}')" -gt \
      "$(cat before_refactor.txt | grep 'Circular Dependencies:' | awk '{print $3}')" ]; then
   echo "❌ Refactoring introduced new circular dependencies!"
-  reveal 'imports://src?circular'
+  reveal imports src --circular
   exit 1
 fi
 
@@ -1461,7 +1461,7 @@ UNUSED=$(reveal 'imports://src?unused' --format=json | jq '.count')
 
 if [ "$UNUSED" -gt 0 ]; then
   echo "❌ Cannot commit: Found $UNUSED unused imports"
-  reveal 'imports://src?unused'
+  reveal imports src --unused
   echo ""
   echo "Remove unused imports before committing:"
   echo "  reveal 'imports://src?unused'"
@@ -1570,7 +1570,7 @@ set -e
 echo "Building import graph..."
 
 # Get circular dependencies
-reveal 'imports://src?circular' --format=json > cycles.json
+reveal imports src --circular --format=json > cycles.json
 
 # Generate GraphViz dot file
 cat > imports.dot <<EOF
@@ -1609,13 +1609,13 @@ echo "✅ Graph saved to import_graph.png"
 # analyze-multilang.sh - Analyze imports across languages
 
 echo "Analyzing Python..."
-reveal 'imports://src?unused' --format=json > python_unused.json
+reveal imports src --unused --format=json > python_unused.json
 
 echo "Analyzing JavaScript..."
-reveal 'imports://frontend/src?unused' --format=json > js_unused.json
+reveal imports frontend/src --unused --format=json > js_unused.json
 
 echo "Analyzing Go..."
-reveal 'imports://cmd?unused' --format=json > go_unused.json
+reveal imports cmd --unused --format=json > go_unused.json
 
 # Aggregate results
 cat python_unused.json js_unused.json go_unused.json | \
@@ -1648,19 +1648,19 @@ cat python_unused.json js_unused.json go_unused.json | \
 1. **Scope analysis**
    ```bash
    # Good: Analyze specific directory
-   reveal 'imports://src?unused'
+   reveal imports src --unused
 
    # Bad: Analyze entire project including tests, docs, etc.
-   reveal 'imports://.?unused'
+   reveal imports . --unused
    ```
 
 2. **Use JSON for large results**
    ```bash
    # Fast: JSON output, pipe to jq
-   reveal 'imports://src?unused' --format=json | jq '.count'
+   reveal imports src --unused --format=json | jq '.count'
 
    # Slow: Text output for 1000s of results
-   reveal 'imports://src?unused'
+   reveal imports src --unused
    ```
 
 3. **Cache results**
@@ -1674,11 +1674,11 @@ cat python_unused.json js_unused.json go_unused.json | \
 4. **Progressive checks**
    ```bash
    # Check overview first (fast)
-   reveal imports://src
+   reveal imports src
 
    # Then specific checks if needed
    if has_cycles; then
-     reveal 'imports://src?circular'
+     reveal imports src --circular
    fi
    ```
 
@@ -1718,10 +1718,10 @@ cat python_unused.json js_unused.json go_unused.json | \
 ls -la src
 
 # Use correct relative path
-reveal imports://./src
+reveal imports ./src
 
 # Or absolute path
-reveal imports:///absolute/path/to/src
+reveal imports /absolute/path/to/src
 ```
 
 ### Issue: No unused imports detected (but there are some)
@@ -1731,7 +1731,7 @@ reveal imports:///absolute/path/to/src
 **Solution**:
 ```bash
 # Check file is being analyzed
-reveal imports://src --format=json | jq '.metadata.total_files'
+reveal imports src --format=json | jq '.metadata.total_files'
 
 # Verify import is actually unused (not in __all__)
 grep -n "from module import unused" src/file.py
@@ -1774,7 +1774,7 @@ architecture:
 EOF
 
 # Then run check
-reveal 'imports://src?violations'
+reveal imports src --violations
 ```
 
 ---
@@ -1852,21 +1852,21 @@ private builders outside the host request boundary retain their invocation memo.
 
 ```bash
 # Always check overall health first
-reveal imports://src
+reveal imports src
 
 # Then drill into specific issues
-reveal 'imports://src?unused'
-reveal 'imports://src?circular'
+reveal imports src --unused
+reveal imports src --circular
 ```
 
 ### 2. Use Verbose for Details
 
 ```bash
 # Summary (first 10 results)
-reveal 'imports://src?unused'
+reveal imports src --unused
 
 # Full list
-reveal 'imports://src?unused&detail=full'
+reveal imports src --unused --detail full
 ```
 
 ### 3. Automate in CI/CD
@@ -1875,8 +1875,8 @@ reveal 'imports://src?unused&detail=full'
 # Add to .github/workflows/ci.yml
 - name: Check import quality
   run: |
-    reveal 'imports://src?unused' --format=json | jq -e '.count == 0'
-    reveal 'imports://src?circular' --format=json | jq -e '.count == 0'
+    reveal imports src --unused --format=json | jq -e '.count == 0'
+    reveal imports src --circular --format=json | jq -e '.count == 0'
 ```
 
 ### 4. Track Metrics Over Time
@@ -1893,7 +1893,7 @@ reveal imports://src --format=json | \
 ```bash
 # Don't let cycles accumulate
 # Fix them as soon as they appear
-reveal 'imports://src?circular'
+reveal imports src --circular
 
 # If found, refactor immediately:
 # - Extract interface
@@ -1983,13 +1983,13 @@ See [Workflow 2](#workflow-2-detect-and-fix-circular-dependencies) for detailed 
 
 ```bash
 # Python
-reveal 'imports://backend/src?unused'
+reveal imports backend/src --unused
 
 # JavaScript
-reveal 'imports://frontend/src?unused'
+reveal imports frontend/src --unused
 
 # Go
-reveal 'imports://services/cmd?unused'
+reveal imports services/cmd --unused
 ```
 
 ### Q: What about dynamic imports / lazy loading?
@@ -2052,13 +2052,13 @@ architecture:
 
 ```bash
 # Good: Specific directory
-reveal 'imports://src?unused'
+reveal imports src --unused
 
 # Bad: Entire project
-reveal 'imports://.?unused'
+reveal imports . --unused
 
 # Good: Exclude tests
-reveal 'imports://src?unused'
+reveal imports src --unused
 
 # Bad: Include tests (often have many unused test fixtures)
 reveal 'imports://src?unused' && reveal 'imports://tests?unused'
@@ -2071,11 +2071,11 @@ reveal 'imports://src?unused' && reveal 'imports://tests?unused'
 ```bash
 # Main branch
 git checkout main
-reveal 'imports://src?circular' --format=json > main_cycles.json
+reveal imports src --circular --format=json > main_cycles.json
 
 # Feature branch
 git checkout feature/new-code
-reveal 'imports://src?circular' --format=json > feature_cycles.json
+reveal imports src --circular --format=json > feature_cycles.json
 
 # Compare
 diff <(jq '.count' main_cycles.json) <(jq '.count' feature_cycles.json)

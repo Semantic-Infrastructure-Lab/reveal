@@ -171,7 +171,7 @@ reveal claude://session/infernal-earth-0118
 Get the overview plus per-tool success rates and message sizes:
 
 ```bash
-reveal 'claude://session/infernal-earth-0118?detail=summary'
+reveal claude://session/infernal-earth-0118 --detail summary
 ```
 
 **Returns**: Overview plus per-tool success rates, average/max message size and thinking-block count
@@ -211,7 +211,7 @@ reveal claude://session/infernal-earth-0118/workflow
 Find all errors with context:
 
 ```bash
-reveal 'claude://session/infernal-earth-0118?errors'
+reveal claude://session/infernal-earth-0118 --errors
 ```
 
 **Returns**: Error messages, message IDs, surrounding context
@@ -231,8 +231,8 @@ reveal claude://session/infernal-earth-0118/thinking
 Show only specific tool usage:
 
 ```bash
-reveal 'claude://session/infernal-earth-0118?tools=Bash'
-reveal 'claude://session/infernal-earth-0118?tools=Read'
+reveal claude://session/infernal-earth-0118 --tools Bash
+reveal claude://session/infernal-earth-0118 --tools Read
 ```
 
 **Returns**: Filtered messages/operations for specified tool
@@ -271,8 +271,8 @@ reveal claude://session/infernal-earth-0118/digest      # overview + prompts + n
 Find a term across all text, thinking blocks, tool inputs and tool results:
 
 ```bash
-reveal 'claude://session/infernal-earth-0118?match=verify'
-reveal 'claude://session/infernal-earth-0118?match=path traversal'
+reveal claude://session/infernal-earth-0118 --match verify
+reveal claude://session/infernal-earth-0118 --match 'path traversal'
 ```
 
 **Returns**: Matches with message index, role, block type, and excerpt
@@ -283,7 +283,7 @@ Browse recent prompts across all sessions:
 
 ```bash
 reveal claude://history
-reveal 'claude://history?match=deploy&since=2026-03-01'
+reveal claude://history --since 2026-03-01 --match deploy
 ```
 
 **Returns**: Prompts newest-first (50 by default); consecutive entries are grouped under their project path
@@ -329,7 +329,7 @@ reveal claude://session/my-session/workflow   # Chronological flow
 # Level 3: Deep analysis
 reveal 'claude://session/my-session?errors'     # Error debugging
 reveal claude://session/my-session/thinking   # Token analysis
-reveal 'claude://session/my-session?tools=Bash' # Tool-specific
+reveal claude://session/my-session --tools Bash # Tool-specific
 ```
 
 **Why**: Prevents loading full conversations unnecessarily, saves tokens
@@ -562,13 +562,13 @@ Combine filters for precise analysis:
 
 ```bash
 # Bash tool usage + errors only
-reveal 'claude://session/my-session?tools=Bash&errors'
+reveal claude://session/my-session --errors --tools Bash
 
 # Assistant narrative turns containing specific text
 reveal 'claude://session/my-session/messages?match=reveal'
 
 # Error list (the summary already carries per-tool failure counts)
-reveal 'claude://session/my-session?errors'
+reveal claude://session/my-session --errors
 ```
 
 **Supported combinations**:
@@ -883,7 +883,6 @@ REVEAL_SESSIONS_DIR=~/projects/my-sessions reveal claude://session/revealed-sphi
 **Syntax**:
 ```bash
 reveal 'claude://session/<session-name>/digest'
-reveal 'claude://session/<session-name>?digest'   # query-param alias, same result
 ```
 
 **Example**:
@@ -936,7 +935,7 @@ reveal 'claude://session/<session-name>?detail=summary'
 
 **Example**:
 ```bash
-reveal 'claude://session/infernal-earth-0118?detail=summary'
+reveal claude://session/infernal-earth-0118 --detail summary
 ```
 
 **Output**: The overview fields plus `tool_success_rate` (per tool: success, failure, total, success_rate), `avg_message_size`, `max_message_size` and `thinking_blocks`. There is no timeline, event list or recommendation
@@ -961,7 +960,7 @@ reveal 'claude://session/<session-name>?digest'
 
 **Example**:
 ```bash
-reveal 'claude://session/infernal-earth-0118?digest'
+reveal claude://session/infernal-earth-0118 --digest
 ```
 
 **Output**: Same as `/digest` — see that section for full output shape.
@@ -981,7 +980,7 @@ reveal 'claude://session/<session-name>?tokens'
 
 **Example**:
 ```bash
-reveal 'claude://session/infernal-earth-0118?tokens'
+reveal claude://session/infernal-earth-0118 --tokens
 ```
 
 **Output**: One row per API message: `message_index`, `timestamp`, `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_created_tokens`, `cumulative_input`; `totals` adds `cache_hit_rate`
@@ -1001,7 +1000,7 @@ reveal 'claude://session/<session-name>/files?patches=true'
 
 **Example**:
 ```bash
-reveal 'claude://session/infernal-earth-0118/files?patches=true'
+reveal claude://session/infernal-earth-0118/files --patches true
 ```
 
 **Output**: Each `operations[]` entry gains `patch`, the Edit's structured hunks (`oldStart`, `oldLines`, `newStart`, `newLines`, `lines`); it is `null` for Read, Write and failed edits. The text view is unchanged
@@ -1021,7 +1020,7 @@ reveal 'claude://session/<session-name>?errors'
 
 **Example**:
 ```bash
-reveal 'claude://session/infernal-earth-0118?errors'
+reveal claude://session/infernal-earth-0118 --errors
 ```
 
 **Output**: Only messages with errors, error context, error summary
@@ -1041,9 +1040,9 @@ reveal 'claude://session/<session-name>?tools=<ToolName>'
 
 **Examples**:
 ```bash
-reveal 'claude://session/infernal-earth-0118?tools=Bash'
-reveal 'claude://session/infernal-earth-0118?tools=Read'
-reveal 'claude://session/infernal-earth-0118?tools=Edit'
+reveal claude://session/infernal-earth-0118 --tools Bash
+reveal claude://session/infernal-earth-0118 --tools Read
+reveal claude://session/infernal-earth-0118 --tools Edit
 ```
 
 **Output**: Only messages/operations involving specified tool
@@ -1063,9 +1062,9 @@ reveal 'claude://session/<session-name>?match=<term>'
 
 **Examples**:
 ```bash
-reveal 'claude://session/infernal-earth-0118?match=verify=False'
-reveal 'claude://session/infernal-earth-0118?match=path traversal'
-reveal 'claude://session/infernal-earth-0118?match=credential'
+reveal claude://session/infernal-earth-0118 --match verify=False
+reveal claude://session/infernal-earth-0118 --match 'path traversal'
+reveal claude://session/infernal-earth-0118 --match credential
 ```
 
 **Output**: Matching messages with role, block type (`text`, `thinking`, `tool_use:Bash`, `tool_result`), timestamp, and a 120-char excerpt centered on the match
@@ -1085,9 +1084,9 @@ reveal 'claude://session/<session-name>/messages?match=<text>'
 
 **Examples**:
 ```bash
-reveal 'claude://session/infernal-earth-0118/messages?match=reveal'
-reveal 'claude://session/infernal-earth-0118?tools=Bash&match=error'
-reveal 'claude://session/infernal-earth-0118/messages?match=import pandas'
+reveal claude://session/infernal-earth-0118/messages --match reveal
+reveal claude://session/infernal-earth-0118 --tools Bash --match error
+reveal claude://session/infernal-earth-0118/messages --match 'import pandas'
 ```
 
 **Output**: Case-insensitive match. On `/messages`, the narrative turns that contain the text; with `tools=`, the results of that tool whose output contains it (tool inputs are not searched)
@@ -1109,8 +1108,8 @@ reveal 'claude://session/<session-name>/messages?detail=raw'   # + disable 600-c
 
 **Examples**:
 ```bash
-reveal 'claude://session/infernal-earth-0118/prompts?detail=raw'
-reveal 'claude://session/infernal-earth-0118/messages?detail=raw'
+reveal claude://session/infernal-earth-0118/prompts --detail raw
+reveal claude://session/infernal-earth-0118/messages --detail raw
 ```
 
 **Output**: Every raw record for that role, normalized to a block list — nothing skipped, nothing filtered.
@@ -1130,8 +1129,8 @@ reveal 'claude://session/<session-name>/messages?sort=-message_index&limit=N'
 
 **Examples**:
 ```bash
-reveal 'claude://session/infernal-earth-0118/messages?sort=-message_index&limit=3'
-reveal 'claude://session/infernal-earth-0118/messages?sort=-message_index&limit=1'
+reveal claude://session/infernal-earth-0118/messages --limit 3 --sort=-message_index
+reveal claude://session/infernal-earth-0118/messages --limit 1 --sort=-message_index
 ```
 
 **Use when**: Resuming a session and only need the most recent turns, not the full history
@@ -1157,13 +1156,13 @@ Combine multiple query parameters:
 
 ```bash
 # Bash errors
-reveal 'claude://session/my-session?tools=Bash&errors'
+reveal claude://session/my-session --errors --tools Bash
 
 # Assistant narrative turns about reveal
 reveal 'claude://session/my-session/messages?match=reveal'
 
 # Read operations with errors
-reveal 'claude://session/my-session?tools=Read&errors'
+reveal claude://session/my-session --errors --tools Read
 ```
 
 ---
@@ -1213,9 +1212,9 @@ reveal claude://session/my-session/workflow   # Operation sequence
 
 **Commands**:
 ```bash
-reveal 'claude://session/my-session?errors'           # Only errors
-reveal 'claude://session/my-session?tools=Bash'       # Only Bash usage
-reveal 'claude://session/my-session?match=reveal'    # Text search (whole session)
+reveal claude://session/my-session --errors           # Only errors
+reveal claude://session/my-session --tools Bash       # Only Bash usage
+reveal claude://session/my-session --match reveal    # Text search (whole session)
 ```
 
 **Token cost**: ~400-800 tokens (depends on filter match count)
@@ -1230,9 +1229,9 @@ reveal 'claude://session/my-session?match=reveal'    # Text search (whole sessio
 
 **Commands**:
 ```bash
-reveal 'claude://session/my-session?detail=summary'          # Full summary
+reveal claude://session/my-session --detail summary          # Full summary
 reveal claude://session/my-session/thinking         # All thinking blocks
-reveal 'claude://session/my-session?tools=Bash&errors' # Composite filter
+reveal claude://session/my-session --errors --tools Bash # Composite filter
 ```
 
 **Token cost**: ~1000-2000 tokens
@@ -1560,7 +1559,7 @@ reveal claude://session/my-session
 # Returns: Message count, tool usage, duration, summary
 
 # Step 2: Check for errors
-reveal 'claude://session/my-session?errors'
+reveal claude://session/my-session --errors
 # Returns: Any errors that occurred
 
 # Step 3: Analyze tool usage
@@ -1572,7 +1571,7 @@ reveal claude://session/my-session/files
 # Returns: Files modified, created, read
 
 # Step 5: Comprehensive summary
-reveal 'claude://session/my-session?detail=summary'
+reveal claude://session/my-session --detail summary
 # Returns: Overview plus per-tool success rates and message sizes
 ```
 
@@ -1603,7 +1602,7 @@ reveal claude://session/$SESSION/files
 
 ```bash
 # Step 1: Check for errors
-reveal 'claude://session/failed-build?errors'
+reveal claude://session/failed-build --errors
 # Returns: All errors with context
 
 # Step 2: View workflow to find failure point
@@ -1611,7 +1610,7 @@ reveal claude://session/failed-build/workflow
 # Returns: Chronological operations, identifies where failure occurred
 
 # Step 3: Check specific tool failures
-reveal 'claude://session/failed-build?tools=Bash&errors'
+reveal claude://session/failed-build --errors --tools Bash
 # Returns: Bash command failures specifically
 
 # Step 4: Review error context
@@ -1633,7 +1632,7 @@ reveal claude://session/failed-build/tools
 
 ```bash
 # Step 1: Get summary with token estimates
-reveal 'claude://session/my-session?detail=summary'
+reveal claude://session/my-session --detail summary
 # Returns: Overview with token usage patterns
 
 # Step 2: Analyze thinking blocks
@@ -1641,7 +1640,7 @@ reveal claude://session/my-session/thinking
 # Returns: All thinking blocks with token estimates
 
 # Step 3: Check for repeated Read operations
-reveal 'claude://session/my-session?tools=Read'
+reveal claude://session/my-session --tools Read
 # Returns: All Read operations (look for duplicates)
 
 # Step 4: Identify file hotspots
@@ -1762,14 +1761,14 @@ Start with overview, drill down only when needed:
 
 ```bash
 # ❌ Expensive: Jump to comprehensive analysis
-reveal 'claude://session/my-session?detail=summary'
+reveal claude://session/my-session --detail summary
 
 # ✅ Efficient: Start with overview
 reveal claude://session/my-session
 # If issues detected:
-reveal 'claude://session/my-session?errors'
+reveal claude://session/my-session --errors
 # If deeper analysis needed:
-reveal 'claude://session/my-session?detail=summary'
+reveal claude://session/my-session --detail summary
 ```
 
 **Token savings**: 60-70%
@@ -1785,10 +1784,10 @@ Use filters to reduce output:
 reveal claude://session/my-session
 
 # ✅ Focused: Only Bash usage
-reveal 'claude://session/my-session?tools=Bash'
+reveal claude://session/my-session --tools Bash
 
 # ✅ Even more focused: Bash errors only
-reveal 'claude://session/my-session?tools=Bash&errors'
+reveal claude://session/my-session --errors --tools Bash
 ```
 
 **Output reduction**: 80-90%
@@ -1801,7 +1800,7 @@ Choose specific elements instead of full summary:
 
 ```bash
 # ❌ Heavy: Full summary
-reveal 'claude://session/my-session?detail=summary'
+reveal claude://session/my-session --detail summary
 
 # ✅ Light: Just what you need
 reveal claude://session/my-session/tools  # Only tool analytics
@@ -1906,22 +1905,22 @@ rejecting them from raw JSON text; use `?since` and `?until` to bound large stor
 
 ```bash
 # Find sessions mentioning a term (20 most recent matches by default)
-reveal 'claude://sessions/?match=validate_token'
+reveal claude://sessions/ --match validate_token
 
 # Scope to recent sessions (much faster on large stores)
-reveal 'claude://sessions/?match=auth&since=2026-03-01'
+reveal claude://sessions/ --since 2026-03-01 --match auth
 
 # Path-based alias
 reveal 'claude://search/validate_token'
 
 # Show all matches (no 20-result limit)
-reveal 'claude://sessions/?match=auth' --all
+reveal claude://sessions/ --match auth --all
 
 # Widen the context snippet around each match (default 120, range 60–500)
-reveal 'claude://sessions/?match=validate_token&snippet=300'
+reveal claude://sessions/ --snippet 300 --match validate_token
 
 # Whole-word match (no substring hits: "auth" won't match "authenticate")
-reveal 'claude://sessions/?match=auth&word'
+reveal claude://sessions/ --word --match auth
 ```
 
 **Query parameters:**
@@ -2138,12 +2137,12 @@ or directory lookup loss remains required loss. Switching the store with
 
 ```bash
 # ❌ Wasteful: Jump to deep analysis
-reveal 'claude://session/my-session?detail=summary'
+reveal claude://session/my-session --detail summary
 
 # ✅ Efficient: Progressive disclosure
 reveal claude://session/my-session              # Overview
 # If issues detected:
-reveal 'claude://session/my-session?errors'       # Focus on problems
+reveal claude://session/my-session --errors       # Focus on problems
 # If deeper understanding needed:
 reveal claude://session/my-session/workflow     # Full sequence
 ```
@@ -2156,13 +2155,13 @@ reveal claude://session/my-session/workflow     # Full sequence
 
 ```bash
 # ✅ Focus on specific tool
-reveal 'claude://session/my-session?tools=Bash'
+reveal claude://session/my-session --tools Bash
 
 # ✅ Find errors only
-reveal 'claude://session/my-session?errors'
+reveal claude://session/my-session --errors
 
 # ✅ Combine filters
-reveal 'claude://session/my-session?tools=Bash&errors'
+reveal claude://session/my-session --errors --tools Bash
 ```
 
 **Benefit**: Reduced noise, faster analysis
@@ -2316,7 +2315,7 @@ reveal claude://session/my-session/tools --format json | \
 
 **Count errors** (field is `error_count`, not `count`):
 ```bash
-reveal 'claude://session/my-session?errors' --format json | jq '.error_count'
+reveal claude://session/my-session --errors --format json | jq '.error_count'
 ```
 
 **Extract file paths** (field is `operations[].file_path`, not `files[].path`):
@@ -2610,17 +2609,17 @@ reveal claude://history --all
 reveal claude://history --limit 20   # was: --head 20
 
 # Filter by prompt content
-reveal 'claude://history?match=deploy'
+reveal claude://history --match deploy
 
 # Filter by project path
-reveal 'claude://history?project=my-webapp'
+reveal claude://history --project my-webapp
 
 # Filter by date
-reveal 'claude://history?since=2026-03-01'
-reveal 'claude://history?since=today'
+reveal claude://history --since 2026-03-01
+reveal claude://history --since today
 
 # Combine filters
-reveal 'claude://history?match=migration&since=2026-02-01&project=sdms'
+reveal claude://history --since 2026-02-01 --project sdms --match migration
 ```
 
 **Query Parameters**:
@@ -2667,8 +2666,8 @@ Read `~/.claude/settings.json` — the user preferences file edited via Claude C
 reveal claude://settings
 
 # Extract a specific key (dot-path)
-reveal 'claude://settings?key=permissions.additionalDirectories'
-reveal 'claude://settings?key=cleanupPeriodDays'
+reveal claude://settings --key permissions.additionalDirectories
+reveal claude://settings --key cleanupPeriodDays
 ```
 
 **Query Parameters**:
@@ -2704,7 +2703,7 @@ reveal claude://plans
 reveal claude://plans/my-session-name
 
 # Search plan content
-reveal 'claude://plans?match=deployment'
+reveal claude://plans --match deployment
 ```
 
 **Query Parameters**:
@@ -2748,8 +2747,8 @@ Read `~/.claude.json` — the per-install config file storing feature flags, pro
 reveal claude://config
 
 # Extract a specific value (dot-path)
-reveal 'claude://config?key=numStartups'
-reveal 'claude://config?key=autoUpdates'
+reveal claude://config --key numStartups
+reveal claude://config --key autoUpdates
 ```
 
 **Query Parameters**:
@@ -2789,10 +2788,10 @@ reveal claude://memory
 reveal claude://memory/-home-user-src-myproject
 
 # Search memory file content
-reveal 'claude://memory?match=deployment'
+reveal claude://memory --match deployment
 
 # Combine: filter project + search content
-reveal 'claude://memory/-home-user-src-myproject?match=feedback'
+reveal claude://memory/-home-user-src-myproject --match feedback
 ```
 
 **Sub-resource**:
@@ -2825,7 +2824,7 @@ reveal claude://agents
 reveal claude://agents/my-agent-name
 
 # Search agent content
-reveal 'claude://agents?match=codereview'
+reveal claude://agents --match codereview
 ```
 
 **Query Parameters**:
@@ -3008,7 +3007,7 @@ A: Partly. `reveal 'claude://session/my-session/files?patches=true' --format jso
 A:
 ```bash
 # Step 1: Check errors
-reveal 'claude://session/failed-session?errors'
+reveal claude://session/failed-session --errors
 
 # Step 2: View workflow to find failure point
 reveal claude://session/failed-session/workflow
@@ -3066,7 +3065,7 @@ A: `reveal claude://session/my-session/files` - Look for `access_count > 3`
 
 A: Yes:
 ```bash
-reveal 'claude://session/my-session?tools=Bash&errors'
+reveal claude://session/my-session --errors --tools Bash
 reveal 'claude://session/my-session/messages?match=reveal'
 ```
 
@@ -3084,9 +3083,9 @@ A:
 
 A: Yes — use `claude://sessions/?match=term`:
 ```bash
-reveal 'claude://sessions/?match=error'
-reveal 'claude://sessions/?match=auth&since=2026-03-01'
-reveal 'claude://sessions/?match=validate_token' --all
+reveal claude://sessions/ --match error
+reveal claude://sessions/ --since 2026-03-01 --match auth
+reveal claude://sessions/ --match validate_token --all
 ```
 See the [Cross-session search](#cross-session-search) section for full syntax and filters.
 

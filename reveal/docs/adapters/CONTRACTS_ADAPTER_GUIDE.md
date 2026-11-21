@@ -21,9 +21,9 @@ reveal contracts . --implementations off
 reveal contracts . --implementations-limit 0
 reveal contracts . --output json=contracts.json
 
-reveal 'contracts://src'
-reveal 'contracts://.?abstract_only=true'
-reveal 'contracts://.?implementations=off'
+reveal contracts src
+reveal contracts . --abstract-only
+reveal contracts . --implementations off
 ```
 
 ## Query Parameters

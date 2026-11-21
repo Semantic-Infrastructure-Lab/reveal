@@ -36,16 +36,16 @@ beth_topics:
 
 ```bash
 # Who calls validate_item anywhere in the project? (reverse lookup)
-reveal 'calls://src/?callers=validate_item'
+reveal calls src/ --callers validate_item
 
 # What does validate_item call? (forward lookup)
-reveal 'calls://src/?callees=validate_item'
+reveal calls src/ --callees validate_item
 
 # ... and what those call, level by level (not measured beyond depth 1: W-CALLS-9)
-reveal 'calls://src/?callees=validate_item&depth=2&detail'
+reveal calls src/ --callees validate_item --depth 2 --detail
 
 # Include callers-of-callers (2 levels deep)
-reveal 'calls://src/?callers=validate_item&depth=2'
+reveal calls src/ --callers validate_item --depth 2
 
 # Graphviz dot output (pipe to dot for SVG/PNG)
 reveal 'calls://src/?callers=main&format=dot' | dot -Tsvg > call_graph.svg
@@ -103,37 +103,37 @@ The colon syntax `calls://path:name` is equivalent to `calls://path?callers=name
 
 ```bash
 # These are equivalent:
-reveal 'calls://src/auth.py:validate_token'
-reveal 'calls://src/?callers=validate_token'
+reveal calls src/auth.py:validate_token
+reveal calls src/ --callers validate_token
 
 # Works with directories too:
-reveal 'calls://src:validate_token'
-reveal 'calls://src/?callers=validate_token'
+reveal calls src:validate_token
+reveal calls src/ --callers validate_token
 ```
 
 ### Examples
 
 ```bash
 # Direct callers of process_batch (reverse lookup)
-reveal 'calls://src/?callers=process_batch'
+reveal calls src/ --callers process_batch
 
 # What does process_batch call? (forward lookup)
-reveal 'calls://src/?callees=process_batch'
+reveal calls src/ --callees process_batch
 
 # Callers-of-callers (2 levels)
-reveal 'calls://src/?callers=process_batch&depth=2'
+reveal calls src/ --callers process_batch --depth 2
 
 # Full transitive tree (5 levels max)
-reveal 'calls://src/?callers=entry_point&depth=5'
+reveal calls src/ --callers entry_point --depth 5
 
 # Graphviz for visual diagram
 reveal 'calls://src/?callers=main&format=dot' | dot -Tsvg > main_callers.svg
 
 # JSON for programmatic use
-reveal 'calls://src/?callers=validate_item&format=json'
+reveal calls src/ --callers validate_item --format json
 
 # Whole-project index (use . for current dir)
-reveal 'calls://.?callers=my_function'
+reveal calls . --callers my_function
 ```
 
 ---
@@ -261,10 +261,10 @@ Reverse lookup — who calls this function? The bare function name, no file qual
 
 ```bash
 # Bare name (most common)
-reveal 'calls://src/?callers=validate_item'
+reveal calls src/ --callers validate_item
 
 # Method names work the same way
-reveal 'calls://src/?callers=process'
+reveal calls src/ --callers process
 ```
 
 In JS/TS a call inside an anonymous callback that no listed function, method or class contains
@@ -281,13 +281,13 @@ Forward lookup — what does this function call? Scans all definitions of the fu
 
 ```bash
 # What does validate_item call? (builtins hidden by default)
-reveal 'calls://src/?callees=validate_item'
+reveal calls src/ --callees validate_item
 
 # Include Python builtins (len, str, sorted, ValueError, open, eval, etc.)
-reveal 'calls://src/?callees=validate_item&builtins=true'
+reveal calls src/ --callees validate_item --builtins
 
 # Useful when a function is defined in multiple files
-reveal 'calls://src/?callees=handle_request'
+reveal calls src/ --callees handle_request
 ```
 
 Python builtins (`len`, `str`, `sorted`, `ValueError`, `open`, `print`, etc.) are hidden by default — they add noise without revealing project structure. Use `?builtins=true` when you specifically want to audit dangerous builtins like `eval`, `exec`, or `open`.
@@ -341,8 +341,8 @@ those answers carry W-CALLS-9 ("... not measured in any language"), and `walk_ru
 lists only.
 
 ```bash
-reveal 'calls://src/?callees=handle_request&depth=3'
-reveal 'calls://src/?callees=handle_request&detail' --format=json | jq '.definitions[0].effects'
+reveal calls src/ --callees handle_request --depth 3
+reveal calls src/ --callees handle_request --detail --format=json | jq '.definitions[0].effects'
 ```
 
 > `?builtins` applies to both `?callees` (forward lookup) and `?sort=-callers`. The `?callers` (reverse lookup) is unaffected — callers of builtins are always shown.
@@ -353,10 +353,10 @@ Rank the functions, methods and classes defined under the path by how many uniqu
 
 ```bash
 # Top 10 most-called functions
-reveal 'calls://src/?sort=-callers'
+reveal calls src/ --sort=-callers
 
 # Top 20, every called name including builtins and library methods
-reveal 'calls://src/?sort=-callers&limit=20&builtins=true'
+reveal calls src/ --sort=-callers --limit 20 --builtins
 ```
 
 Output:
@@ -386,9 +386,9 @@ Expands callers transitively (level 1 = direct callers, level 2 = callers of tho
 or walks callees level by level (see [`callees`](#callees)):
 
 ```bash
-reveal 'calls://src/?callers=validate_item&depth=1'   # default — direct callers
-reveal 'calls://src/?callers=validate_item&depth=2'   # direct + their callers
-reveal 'calls://src/?callers=validate_item&depth=5'   # up to 5 levels deep (capped)
+reveal calls src/ --callers validate_item --depth 1   # default — direct callers
+reveal calls src/ --callers validate_item --depth 2   # direct + their callers
+reveal calls src/ --callers validate_item --depth 5   # up to 5 levels deep (capped)
 ```
 
 ---
@@ -528,7 +528,7 @@ in the file, stays a value. Adding a callee is a one-line change there, shown fi
 Structured data for programmatic processing:
 
 ```bash
-reveal 'calls://src/?callers=validate_item' --format=json
+reveal calls src/ --callers validate_item --format=json
 ```
 
 ```json
@@ -615,10 +615,10 @@ Before modifying a function, understand all callers to assess risk:
 
 ```bash
 # Step 1: Direct callers
-reveal 'calls://src/?callers=parse_config'
+reveal calls src/ --callers parse_config
 
 # Step 2: Expand to understand full impact (transitive)
-reveal 'calls://src/?callers=parse_config&depth=3'
+reveal calls src/ --callers parse_config --depth 3
 
 # Step 3: Extract files to review
 reveal 'calls://src/?callers=parse_config' --format=json | \
@@ -628,8 +628,8 @@ reveal 'calls://src/?callers=parse_config' --format=json | \
 ### Workflow 2: Is This Function Used?
 
 ```bash
-reveal 'calls://src/?callers=validate_item'      # every caller the index sees, with file and line
-reveal 'calls://src/?callers=validate_item&depth=2'  # and their callers
+reveal calls src/ --callers validate_item      # every caller the index sees, with file and line
+reveal calls src/ --callers validate_item --depth 2  # and their callers
 ```
 
 An empty answer means no static caller, not that the function is dead: runtime dispatch (framework entry points, console scripts, dispatch tables) leaves no call. For a whole-project dead-code list use the language's own tool (vulture, knip, staticcheck/deadcode, rustc `dead_code`, Roslyn IDE0051, Periphery, Psalm); `?uncalled` is retired because its bare-name matching measured too imprecise to list candidates (see [Retired spellings](#retired-spellings)).
@@ -640,10 +640,10 @@ Starting from an entry point, trace who it calls and what calls it:
 
 ```bash
 # Who calls the entry point?
-reveal 'calls://src/?callers=handle_request'
+reveal calls src/ --callers handle_request
 
 # What does handle_request call, two levels deep?
-reveal 'calls://src/?callees=handle_request&depth=2'
+reveal calls src/ --callees handle_request --depth 2
 ```
 
 ### Workflow 4: Generate Architecture Documentation
@@ -654,7 +654,7 @@ reveal 'calls://src/?callers=main&depth=3&format=dot' | \
   dot -Tsvg -Grankdir=TB > architecture.svg
 
 # JSON for custom visualisation
-reveal 'calls://src/?callers=main&depth=5' --format=json > call_tree.json
+reveal calls src/ --callers main --depth 5 --format=json > call_tree.json
 ```
 
 ### Workflow 5: Verify Refactoring
@@ -663,10 +663,10 @@ After extracting a function, confirm the old callers now use the new name:
 
 ```bash
 # Check old name has no callers (exit 2 "not found" once nothing defines or calls it)
-reveal 'calls://src/?callers=old_parse_config'
+reveal calls src/ --callers old_parse_config
 
 # Check new name has callers
-reveal 'calls://src/?callers=parse_config'
+reveal calls src/ --callers parse_config
 ```
 
 ### Workflow 6: Understand What a Function Does (Forward Lookup)
@@ -675,10 +675,10 @@ Before reviewing or debugging a function, see what it delegates to:
 
 ```bash
 # What does process_request call?
-reveal 'calls://src/?callees=process_request'
+reveal calls src/ --callees process_request
 
 # Useful for understanding a function you've never seen before
-reveal 'calls://src/?callees=initialize_app'
+reveal calls src/ --callees initialize_app
 ```
 
 This is faster than reading the full implementation when you just want to know the collaboration pattern — what it orchestrates, not how.
@@ -760,8 +760,8 @@ separate limits.
 **Scope is per-directory.** The index is built from `path` downward. Callers above the given path are not visible:
 
 ```bash
-reveal 'calls://src/?callers=fn'   # won't see callers in tests/ above src/
-reveal 'calls://.?callers=fn'       # use project root for full coverage
+reveal calls src/ --callers fn   # won't see callers in tests/ above src/
+reveal calls . --callers fn       # use project root for full coverage
 ```
 
 **Top-level callers:** Python, JS/TS, PHP and Ruby source files include a synthetic
@@ -849,10 +849,10 @@ For very large codebases (100K+ lines), point at a subdirectory:
 
 ```bash
 # Faster — only indexes auth/ module
-reveal 'calls://src/auth/?callers=validate_token'
+reveal calls src/auth/ --callers validate_token
 
 # Full project — every CLI run indexes the whole tree; an MCP host reuses the index
-reveal 'calls://src/?callers=validate_token'
+reveal calls src/ --callers validate_token
 ```
 
 ---
@@ -873,7 +873,7 @@ reveal 'calls://src/?callers=process' --format=json | \
 A: Yes. The index normalises `self.foo` → `foo` for lookup. Pass the bare method name:
 
 ```bash
-reveal 'calls://src/?callers=validate'   # matches self.validate(), obj.validate(), validate()
+reveal calls src/ --callers validate   # matches self.validate(), obj.validate(), validate()
 ```
 
 The `call_expr` field in results preserves the original form (`self.validate_item`).
@@ -896,10 +896,10 @@ A: Use `?builtins=true` on a `?callees=` query to include builtins in the output
 
 ```bash
 # Find every function that calls eval
-reveal 'calls://src/?callees=process_input&builtins=true' | grep 'eval'
+reveal calls src/ --callees process_input --builtins | grep 'eval'
 
 # Or scan callers of eval directly (reverse lookup — always includes builtins)
-reveal 'calls://src/?callers=eval'
+reveal calls src/ --callers eval
 ```
 
 The `?callers=` direction (reverse lookup) always returns results regardless of `?builtins` — builtins filtering only applies to the forward `?callees=` direction.

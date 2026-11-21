@@ -18,17 +18,17 @@ production boundary fan-out.
 ## Quick Start
 
 ```bash
-reveal patches://tests
-reveal 'patches://tests?view=target&limit=20'
-reveal 'patches://tests?view=test&min=3'
-reveal 'patches://tests?private=true'
-reveal 'patches://tests?target=ssl'
+reveal patches tests
+reveal patches tests --view target --limit 20
+reveal patches tests --view test --min 3
+reveal patches tests --private
+reveal patches tests --target ssl
 ```
 
 Use JSON when another tool or agent will rank, filter, or store the result:
 
 ```bash
-reveal 'patches://tests?view=target&limit=20' --format json
+reveal patches tests --view target --limit 20 --format json
 ```
 
 ## Default Test Selection
@@ -123,7 +123,7 @@ also considers conventional sibling suites and declared project paths. Explicit
 reveal patches src --view pressure --tests tests
 reveal patches src --view pressure --tests tests --limit 20
 reveal patches src --view pressure --tests tests --format json
-reveal 'patches://src?view=pressure&tests=tests,integration_tests&limit=20&where=patches>=3&where=categories>=3&include_unresolved=true'
+reveal patches src --view pressure --limit 20 --where 'patches>=3' --where 'categories>=3' --tests tests integration_tests --include-unresolved
 ```
 
 The pressure view answers a `testability_report`. Its own parameters are `tests`, `limit`
