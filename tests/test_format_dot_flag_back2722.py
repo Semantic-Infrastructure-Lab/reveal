@@ -122,3 +122,24 @@ def test_format_dot_stays_refused_where_no_noun_declares_it(calls_project, argv)
     result = run(*argv)
     assert result.returncode == 2 and 'dot' in result.stderr, result.stderr
     assert result.stdout == ''
+
+
+# Shared owner (reveal/cli/routing/declared.py, formats.py): the declared parser's --format offers a format the noun
+# declares beyond the presentation layer's own, and only that noun's parser does.
+
+def _format_choices(parser):
+    return next(action.choices for action in parser._actions if '--format' in action.option_strings)
+
+
+def test_a_declared_format_beyond_the_presentation_layers_is_offered_by_that_nouns_parser_only(monkeypatch):
+    from reveal.adapters.ast import AstAdapter
+    from reveal.cli.routing.declared import create_declared_parser
+    from reveal.cli.routing.formats import noun_formats
+    global_choices = list(_format_choices(create_declared_parser('ast')))
+    assert noun_formats(AstAdapter) == ()
+    help_data = AstAdapter.get_help()
+    monkeypatch.setattr(AstAdapter, 'get_help', staticmethod(
+        lambda: {**help_data, 'output_formats': ['text', 'json', 'grep', 'svg']}))
+    assert noun_formats(AstAdapter) == ('svg',)  # grep is the presentation layer's own
+    assert list(_format_choices(create_declared_parser('ast'))) == [*global_choices, 'svg']
+    assert list(_format_choices(create_declared_parser('metrics'))) == global_choices

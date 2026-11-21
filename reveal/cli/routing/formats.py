@@ -39,6 +39,13 @@ def declared_output_formats(adapter_class: Any) -> Optional[Tuple[str, ...]]:
     return tuple(formats) if isinstance(formats, (list, tuple)) else None
 
 
+def noun_formats(adapter_class: Any) -> Tuple[str, ...]:
+    """The output formats *adapter_class* declares that the presentation layer does not render itself (calls and
+    imports ``dot``, Graphviz): only the noun's answer can draw them, so its ``--format`` offers them and a typed one is
+    the noun's own ``format`` control, as the URI spells it (BACK-2722). Empty for every other adapter."""
+    return tuple(fmt for fmt in declared_output_formats(adapter_class) or () if fmt not in _SINK_FORMATS)
+
+
 def _require_supported_sinks(args: Any, supported: Sequence[str], label: str) -> None:
     """Exit 2 when a file sink names a format `label` does not render (``--output grep=PATH`` on a
     command that renders text and json): the same check, and the same list, as --format."""
@@ -80,7 +87,7 @@ def _format_flag_given() -> bool:
     return invocation is not None and invocation.typed('--format')
 
 
-_SINK_FORMATS = ('text', 'json', 'typed', 'grep')
+_SINK_FORMATS = ('text', 'json', 'typed', 'grep')  # what the presentation layer renders: --output's and --format's own
 
 
 class OutputSinkError(ValueError):
