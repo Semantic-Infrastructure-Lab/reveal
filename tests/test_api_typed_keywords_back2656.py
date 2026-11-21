@@ -49,12 +49,16 @@ def test_a_typed_keyword_answers_as_its_uri_spelling(proj, uri, keywords, query)
 
 
 @pytest.mark.parametrize('uri,keywords,control', [
-    ('patches://tests', {'min_patches': 2}, 'min_patches'),
-    ('patches://.', {'view': 'pressure', 'group': 'file'}, 'group'),
+    ('patches://tests', {'min_patches': 2}, 'where'),  # the legacy word is where's term (BACK-2625)
 ])
 def test_a_typed_keyword_meets_the_applicability_check(proj, uri, keywords, control):
     with pytest.raises(RequestValidationError, match=f"control '{control}' is not read by this answer"):
         api.query(uri, **keywords)
+
+
+def test_a_second_view_is_a_conflict_not_an_unread_control(proj):
+    with pytest.raises(ValueError, match='view: conflicting spellings'):
+        api.query('patches://.', view='pressure', group='file')
 
 
 @pytest.mark.parametrize('uri', ['deps://.', 'patches://tests', 'hotspots://.', 'pack://.', 'testability://.'])

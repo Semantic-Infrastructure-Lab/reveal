@@ -257,7 +257,7 @@ def _prepare_expression_params(declarations, source, params, selectors, expressi
         key, separator, value = part.strip().partition('=')
         if key == expression.name and separator:
             terms.append(unquote(value, encoding='utf-8', errors='strict'))
-        elif key and key not in known:
+        elif key and key not in known and key not in _TRANSPORT_KEYS:  # the walk policy is never a field
             dict.pop(params, key, None)
             field = query_key(part)
             if (field in SHARED_CONTROL_NAMES and field not in known  # a declared one (AST kind!=X) folds as before

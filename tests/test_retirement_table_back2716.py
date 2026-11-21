@@ -56,10 +56,10 @@ def test_each_replacement_flag_is_one_the_nouns_parser_reads():
         assert flag in create_declared_parser(noun)._option_string_actions, row
 
 
-def test_a_store_false_flag_replaces_the_key_given_false():
-    """Red control for the step-4 polarity fix: ?suppress=true is patches' default, --no-suppress spells false."""
+def test_a_switch_key_is_replaced_by_its_flag_with_the_value():
+    """?suppress=V is `--suppress V` (patches' former --no-suppress spelled only false: BACK-2625)."""
     row = _request_row('patches', 'suppress')
-    assert row['old'] == 'patches://PATH?suppress=false' and row['replacement'] == 'reveal patches PATH --no-suppress'
+    assert row['old'] == 'patches://PATH?suppress=V' and row['replacement'] == 'reveal patches PATH --suppress V'
 
 
 def test_a_walk_control_with_no_binding_of_its_own_is_its_shared_flag():

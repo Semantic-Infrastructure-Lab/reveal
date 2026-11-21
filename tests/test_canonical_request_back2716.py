@@ -171,12 +171,14 @@ def _render_uri(form, noun, resource, query, walk_policy=None):
                                         adapter=adapter, walk_policy=walk_policy)
 
 
-def test_a_store_false_flag_is_given_for_false_and_left_out_for_true():
-    """patches' --no-suppress spells suppress=false; rendering it for ?suppress=true recommended the opposite request."""
+def test_a_switch_is_given_on_or_off_and_never_its_opposite():
+    """patches' --suppress on|off: ?suppress=false is `--suppress off` and ?suppress=true `--suppress on` (the former
+    --no-suppress flag rendered the opposite request for true; BACK-2625 removed the last store_false flag)."""
     assert shlex.split(_render_uri('cli', 'patches', 'proj', 'suppress=false')) == ['reveal', 'patches', 'proj',
-                                                                                      '--no-suppress']
-    assert shlex.split(_render_uri('cli', 'patches', 'proj', 'suppress=true')) == ['reveal', 'patches', 'proj']
-    assert _render_uri('python', 'patches', 'proj', 'suppress=false') == 'api.query("patches", "proj", no_suppress=True)'
+                                                                                      '--suppress', 'off']
+    assert shlex.split(_render_uri('cli', 'patches', 'proj', 'suppress=true')) == ['reveal', 'patches', 'proj',
+                                                                                     '--suppress', 'on']
+    assert _render_uri('python', 'patches', 'proj', 'suppress=false') == 'api.query("patches", "proj", suppress=\'off\')'
 
 
 def test_a_control_with_no_binding_of_its_own_is_its_shared_flag():

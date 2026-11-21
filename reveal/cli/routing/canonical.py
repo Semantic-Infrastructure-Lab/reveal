@@ -150,10 +150,7 @@ def canonical_controls(parser: Any, adapter: Any, params: Mapping[str, Any],
         keyword = flag[2:].replace('-', '_')
         if keyword in options:
             value = _flag_value(spec, _unread(params, spec.name))
-            action = options[keyword][1]
-            if action.nargs == 0 and action.const is False and isinstance(value, bool):
-                value = not value  # a store_false flag (--no-suppress) spells the control False: given means False
-            elif spec.convert is switch_value and isinstance(value, bool):
+            if spec.convert is switch_value and isinstance(value, bool):
                 value = 'on' if value else 'off'  # a switch is spelled on|off (COMMAND_MODEL "Switches", BACK-2622)
             controls[keyword] = value
     return controls

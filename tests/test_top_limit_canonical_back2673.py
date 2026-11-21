@@ -83,13 +83,14 @@ def test_two_values_for_the_cap_exit_2_naming_both(rich, noun, argv):  # noqa: F
     assert 'top' in run.err and 'limit' in run.err
 
 
-def test_patches_pressure_keeps_top_and_still_refuses_limit(rich):  # noqa: F811  (negative control)
-    flags = ['--view', 'pressure', '--min-patches', '1', '--min-categories', '1', '--include-unresolved']
-    run, doc = _json('patches', 'proj', *flags, '--top', '1')
+def test_patches_pressure_caps_with_limit_and_top_is_its_noted_old_word(rich):  # noqa: F811
+    flags = ['--view', 'pressure', '--where', 'patches>=1', '--where', 'categories>=1', '--include-unresolved']
+    run, doc = _json('patches', 'proj', *flags, '--limit', '1')
     assert run.rc == 0 and not _retired(doc)
     assert [len(doc[field]) for field in ('patch_hotspots', 'boundary_hotspots')] == [1, 1]
-    refused = C._run('patches', 'proj', *flags, '--limit', '1')
-    assert refused.rc == 2 and "control 'limit' is not read by this answer" in refused.err
+    old_run, old = _json('patches', 'proj', *flags, '--top', '1')
+    assert old_run.rc == 0 and _retired(old)  # the same cap, with its note (BACK-2625)
+    assert [len(old[field]) for field in ('patch_hotspots', 'boundary_hotspots')] == [1, 1]
 
 
 @pytest.mark.parametrize('noun', NOUNS)
