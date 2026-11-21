@@ -10,7 +10,7 @@ from urllib.parse import quote, unquote
 from ..errors import RequestValidationError, UnreadControlError, UnsupportedOverrideError
 from .query_parser import (SHARED_CONTROL_NAMES, LegacySpelling, ParamSpec, ParamValueError, QueryParams, ResourceSpec,
                            mark_query_keys, parse_query_params, peek_query_items, query_key,
-                           query_key_recorder)
+                           query_key_recorder, whole_number)
 
 
 def boolean_value(value: Any) -> bool:
@@ -219,13 +219,26 @@ def _reject_repeated_setting(spec: ParamSpec, parts: list) -> None:
 
 
 def _same_setting(spec: ParamSpec, name: str, values: list) -> bool:
-    """Whether the spellings *values* of *name* convert to one value. A value the control rejects is compared as
-    spelled, so its conflict or its value error is reported as before."""
+    """Whether the spellings *values* of *name* state one value. A value that states none (``?last=maybe``,
+    ``?matches=abc``) is compared as spelled, so its conflict or its value error is reported as before."""
     try:
-        converted = [_comparable(spec, spec.canonical_value(name, _decode_value(spec, value))) for value in values]
+        stated = [_stated_value(spec, name, value) for value in values]
     except ValueError:
         return False
-    return all(type(other) is type(converted[0]) and other == converted[0] for other in converted[1:])
+    return all(type(other) is type(stated[0]) and other == stated[0] for other in stated[1:])
+
+
+def _stated_value(spec: ParamSpec, name: str, value: Any) -> Any:
+    """The value a spelling states, as "Conflicting values" compares it: a switch's or flag's on/off (a bare key is on,
+    ``1``, ``true`` and ``yes`` are one value), a whole number's integer (``3`` and ``03``), otherwise the control's own
+    value (a legacy word translated, a percent spelling decoded). Not a lossy codec's output: a legacy presence flag reads
+    ``false`` as on and Claude's ``snippet`` clamps 3 and 7 to one value, yet each pair states two values (cell 1c)."""
+    value = spec.canonical_value(name, _decode_value(spec, value))
+    if spec.type in ('boolean', 'flag'):
+        return switch_value(value)
+    if spec.type == 'integer':
+        return whole_number(value)
+    return _comparable(spec, value)
 
 
 def _same_selection(spec: ParamSpec, given: Any, first: str) -> bool:
