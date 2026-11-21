@@ -345,18 +345,48 @@ def test_b8_invalid_uri_raises_request_validation_error(tree):
 
 # Q1: --all is the shared uncapping word: with --limit 0 it is one setting (BACK-2729).
 
-@pytest.mark.parametrize('argv', [
-    ['ast', 'pkg', '--all', '--limit', '0'], ['ast://pkg?limit=0', '--all'], ['metrics', 'pkg', '--all', '--limit', '0'],
-    ['calls', 'pkg', '--sort=-callers', '--all', '--limit', '0'],
-])
-def test_q1_all_and_limit_0_are_one_setting(tree, argv):
-    code, _, err = doc(tree, *argv)
+MANY = 250  # past ast's 200-row default cap and calls' default ranking of 10
+
+
+@pytest.fixture
+def many(tree):
+    """A package whose answers exceed the default caps: MANY functions, each calling the next (MANY-1 callees)."""
+    big = tree / 'big'
+    big.mkdir()
+    (big / 'many.py').write_text(''.join(f'def f_{i}():\n    return f_{i + 1}()\n\n' for i in range(MANY)), encoding='utf-8')
+    return tree
+
+
+def _rows(answer):
+    return answer.get('results', answer.get('entries', answer.get('files')))
+
+
+# (default request, its row count at the default cap, the uncapped row count); each is asked three ways: as it is,
+# with --limit 0, and with --all --limit 0 (and the URI with ?limit=0 then --all).
+_Q1_REQUESTS = {
+    'ast': (['ast', 'big'], 200, MANY),
+    'ast-uri': (['ast://big?limit=0'], None, MANY),
+    'calls': (['calls', 'big', '--sort=-callers'], 10, MANY - 1),
+}
+
+
+@pytest.mark.parametrize('label', sorted(_Q1_REQUESTS))
+def test_q1_all_with_limit_0_is_the_limit_0_answer(many, label):
+    request, capped, uncapped = _Q1_REQUESTS[label]
+    zero_request = request if label == 'ast-uri' else [*request, '--limit', '0']
+    code, zero, err = doc(many, *zero_request)
+    assert code == 0 and len(_rows(zero)) == uncapped, err
+    if capped is not None:
+        _, default, _ = doc(many, *request)
+        assert len(_rows(default)) == capped  # the default cap is real, so the equality below is not vacuous
+    code, both, err = doc(many, *zero_request, '--all')
     assert code == 0, err
+    assert both == zero
 
 
-def test_q1_ast_all_with_limit_0_answers_as_limit_0(tree):
-    _, zero, _ = doc(tree, 'ast', 'pkg', '--limit', '0')
-    code, both, err = doc(tree, 'ast', 'pkg', '--all', '--limit', '0')
+def test_q1_metrics_all_with_limit_0_is_the_limit_0_answer(many):
+    _, zero, _ = doc(many, 'metrics', 'big', '--limit', '0')
+    code, both, err = doc(many, 'metrics', 'big', '--all', '--limit', '0')
     assert code == 0 and both == zero, err
 
 
