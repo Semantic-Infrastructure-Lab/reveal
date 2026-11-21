@@ -218,3 +218,186 @@ def test_json_view_and_limit_unchanged(tree):
 ])
 def test_sibling_cap_controls(tree, argv, expected):
     assert doc(tree, *argv)[0] == expected
+
+
+# --- REDs: the bugs and rulings of the Step 1 inventory (mevama-1121 mv-ast) --------------------------------
+
+def _request_replacements(document):
+    return [replacement for field, replacement in notes(document) if field == 'request:ast']
+
+
+def _says_calls_noun(document):
+    return any('reveal calls' in (replacement or '') for _field, replacement in notes(document))
+
+
+# B1 / Q3: the retired call-graph view notes its row on every spelling, and no note recommends --view calls.
+
+@pytest.mark.parametrize('argv', [['--view', 'calls'], ['--show', 'calls']])
+def test_b1_calls_view_flag_notes_the_calls_noun(tree, argv):
+    code, answer, _ = doc(tree, 'ast', 'pkg', *argv)
+    assert code == 0 and _says_calls_noun(answer), notes(answer)
+    text = run(tree, 'ast', 'pkg', *argv)
+    assert 'reveal calls' in text.stderr, text.stderr
+
+
+@pytest.mark.parametrize('key', ['show', 'view'])
+def test_b1_calls_view_uri_says_its_row_not_view_calls(tree, key):
+    code, answer, _ = doc(tree, f'ast://pkg?{key}=calls')
+    assert code == 0 and _says_calls_noun(answer), notes(answer)
+    assert not any(r.endswith('--view calls') for r in _request_replacements(answer)), notes(answer)
+
+
+def test_b1_calls_view_api_and_mcp_note(tree):
+    assert _says_calls_noun(_api(tree, view='calls')), notes(_api(tree, view='calls'))
+    from reveal.mcp_server import reveal_run
+    assert 'reveal calls' in reveal_run(['ast', str(tree / 'pkg'), '--view', 'calls'])
+
+
+# B2 / Q2: a retired where field notes its existing row wherever it is spelled.
+
+@pytest.mark.parametrize('argv', [['ast', 'pkg', '--where', 'calls=beta'], ['ast://pkg?where=calls=beta'],
+                                  ['ast', 'pkg', '--where', 'callee_of=beta']])
+def test_b2_retired_where_field_notes_its_row(tree, argv):
+    code, answer, _ = doc(tree, *argv)
+    key = 'callee_of' if 'callee_of' in argv[-1] else 'calls'
+    assert code == 0 and f'param:ast.{key}' in [field for field, _ in notes(answer)], notes(answer)
+
+
+def test_b2_retired_where_field_api_and_text(tree):
+    answer = _api(tree, where=['calls=beta'])
+    assert 'param:ast.calls' in [field for field, _ in notes(answer)], notes(answer)
+    assert 'reveal calls' in run(tree, 'ast', 'pkg', '--where', 'calls=beta').stderr
+
+
+def test_b2_request_note_names_no_retired_field(tree):
+    _, answer, _ = doc(tree, 'ast://pkg?calls=beta')
+    assert not any('calls=beta' in r for r in _request_replacements(answer)), notes(answer)
+
+
+# B3: a control the selected answer does not read exits 2 before analysis; --all on an answer with no cap is quiet.
+
+@pytest.mark.parametrize('argv', [
+    ['--view', 'dict-heatmap', '--limit', '2'], ['--view', 'dict-schemas', '--sort', 'name'],
+    ['--view', 'dict-heatmap', '--kind', 'function'], ['--view', 'dict-heatmap', '--where', 'complexity>1'],
+    ['--view', 'dict-heatmap', '--builtins'], ['--reveal-type', 'd', '--offset', '1'],
+    ['--reveal-type', 'd', '--where', 'complexity>1'],
+])
+def test_b3_unread_control_exits_2(tree, argv):
+    code, _, err = doc(tree, 'ast', 'pkg', *argv)
+    assert code == 2 and 'is not read by this answer' in err, (code, err)
+
+
+def test_b3_unread_control_uri_and_api(tree):
+    code, _, err = doc(tree, 'ast://pkg?view=dict-heatmap&limit=2')
+    assert code == 2 and 'is not read by this answer' in err, (code, err)
+    from reveal.errors import RequestValidationError
+    with pytest.raises(RequestValidationError):
+        _api(tree, view='dict-heatmap', limit=2)
+
+
+@pytest.mark.parametrize('argv', [['--view', 'dict-heatmap', '--all'], ['--reveal-type', 'd', '--all']])
+def test_b3_all_on_an_uncapped_answer_is_quiet(tree, argv):
+    code, answer, err = doc(tree, 'ast', 'pkg', *argv)
+    kinds = [w.get('type') for w in answer['meta']['warnings']]
+    assert code == 0 and 'unused_flag' not in kinds and 'no effect' not in err, (kinds, err)
+
+
+# B4: a view the noun does not have exits 2 naming its views.
+
+@pytest.mark.parametrize('argv', [['ast', 'pkg', '--view', 'bogus'], ['ast', 'pkg', '--view', ''], ['ast://pkg?view=bogus']])
+def test_b4_unknown_view_exits_2_naming_the_views(tree, argv):
+    code, _, err = doc(tree, *argv)
+    assert code == 2 and 'dict-heatmap' in err and 'dict-schemas' in err, (code, err)
+
+
+def test_b4_unknown_view_api(tree):
+    from reveal.errors import RequestValidationError
+    with pytest.raises(RequestValidationError):
+        _api(tree, view='bogus')
+
+
+# B5: two answer selections exit 2 naming both.
+
+def test_b5_reveal_type_and_view_exit_2(tree):
+    code, _, err = doc(tree, 'ast', 'pkg', '--reveal-type', 'd', '--view', 'dict-heatmap')
+    assert code == 2 and 'reveal-type' in err and 'view' in err, (code, err)
+    from reveal.errors import RequestValidationError
+    with pytest.raises(RequestValidationError):
+        _api(tree, reveal_type='d', view='dict-heatmap')
+
+
+# B6 / B7: a bare valueless scalar is an invalid request (exit 2), never a value.
+
+@pytest.mark.parametrize('key', ['limit', 'kind', 'sort', 'reveal_type'])
+def test_b6_b7_bare_scalar_exits_2(tree, key):
+    code, _, err = doc(tree, f'ast://pkg?{key}')
+    assert code == 2, (code, err)
+
+
+# B8: an invalid original URI raises the same error type as the noun form.
+
+def test_b8_invalid_uri_raises_request_validation_error(tree):
+    from reveal import api
+    from reveal.errors import RequestValidationError
+    with pytest.raises(RequestValidationError):
+        api.query(f'ast://{tree / "pkg"}?complexity>abc')
+
+
+# Q1: --all is the shared uncapping word: with --limit 0 it is one setting (BACK-2729).
+
+@pytest.mark.parametrize('argv', [
+    ['ast', 'pkg', '--all', '--limit', '0'], ['ast://pkg?limit=0', '--all'], ['metrics', 'pkg', '--all', '--limit', '0'],
+    ['calls', 'pkg', '--sort=-callers', '--all', '--limit', '0'],
+])
+def test_q1_all_and_limit_0_are_one_setting(tree, argv):
+    code, _, err = doc(tree, *argv)
+    assert code == 0, err
+
+
+def test_q1_ast_all_with_limit_0_answers_as_limit_0(tree):
+    _, zero, _ = doc(tree, 'ast', 'pkg', '--limit', '0')
+    code, both, err = doc(tree, 'ast', 'pkg', '--all', '--limit', '0')
+    assert code == 0 and both == zero, err
+
+
+# Q5: kind is the where field and the echo; type is its legacy field word with the param:ast.type note.
+
+def test_q5_where_type_notes_and_where_kind_does_not(tree):
+    _, legacy, _ = doc(tree, 'ast', 'pkg', '--where', 'type=function')
+    _, canonical, _ = doc(tree, 'ast', 'pkg', '--where', 'kind=function')
+    assert 'param:ast.type' in [field for field, _ in notes(legacy)], notes(legacy)
+    assert notes(canonical) == [] and names(canonical) == FUNCTIONS
+    assert 'param:ast.type' in [field for field, _ in notes(_api(tree, where=['type=function']))]
+
+
+def test_q5_echo_and_request_note_say_kind(tree):
+    assert doc(tree, 'ast', 'pkg', '--kind', 'function')[1]['query'] == 'kind==function'
+    _, answer, _ = doc(tree, 'ast://pkg?type!=function')
+    assert any("kind!=function" in r for r in _request_replacements(answer)), notes(answer)
+
+
+# Q6: --reveal-type names a variable; one with no occurrence is a target that matches nothing (plan rule 9).
+
+def test_q6_reveal_type_no_occurrence_exits_2(tree):
+    code, _, err = doc(tree, 'ast', 'pkg', '--reveal-type', 'nonexistent_zz')
+    assert code == 2 and 'nonexistent_zz' in err, (code, err)
+    assert doc(tree, 'ast://pkg?reveal-type=nonexistent_zz')[0] == 2
+    from reveal.errors import RequestValidationError
+    with pytest.raises(RequestValidationError):
+        _api(tree, reveal_type='nonexistent_zz')
+
+
+# Q10: nesting_depth is the where field; depth its legacy field word, noted; the element key stays depth.
+
+def test_q10_nesting_depth_is_the_where_field(tree):
+    code, answer, _ = doc(tree, 'ast', 'pkg', '--where', 'nesting_depth>1')
+    assert code == 0 and names(answer) == ['alpha', 'delta'] and notes(answer) == []
+    assert all('depth' in row for row in answer['results'])
+
+
+def test_q10_depth_field_notes_nesting_depth(tree):
+    _, answer, _ = doc(tree, 'ast', 'pkg', '--where', 'depth>1')
+    rows = dict(notes(answer))
+    assert 'param:ast.depth' in rows and 'nesting_depth' in rows['param:ast.depth'], notes(answer)
+    _, bare, _ = doc(tree, 'ast://pkg?depth>1')
+    assert any('nesting_depth>1' in r for r in _request_replacements(bare)), notes(bare)
