@@ -133,6 +133,24 @@ def _given_flags(parser: Any, adapter: Any, params: Mapping[str, Any]) -> List[T
     return flags
 
 
+def canonical_where_terms(spec: Any, terms: List[Any]) -> List[Any]:
+    """*terms* of a where control on their canonical fields: a retired field that answers as another field is spelled as
+    that field (``type!=x`` is ``kind!=x``); a retired field without one has no canonical form (``UnrenderableRequest``)."""
+    from ...utils.query_binding import where_fields
+    words = dict(spec.field_words)
+    canonical = []
+    for term in terms:
+        field = next(iter(where_fields({spec.name: [term]}, spec)), '')
+        if field in spec.retired_fields:
+            if field not in words:
+                raise UnrenderableRequest(f'where field {field!r} retired with no canonical field')
+            text = str(term)
+            start = text.index(field)
+            term = text[:start] + words[field] + text[start + len(field):]
+        canonical.append(term)
+    return canonical
+
+
 def canonical_controls(parser: Any, adapter: Any, params: Mapping[str, Any],
                        walk_policy: Optional[bool] = None) -> Dict[str, Any]:
     """keyword -> value for every request control *params* gave, in declaration order.
@@ -150,6 +168,10 @@ def canonical_controls(parser: Any, adapter: Any, params: Mapping[str, Any],
         keyword = flag[2:].replace('-', '_')
         if keyword in options:
             value = _flag_value(spec, _unread(params, spec.name))
+            if spec.retired_values and value in spec.retired_values:
+                raise UnrenderableRequest(f'{spec.name}={value} is a retired value with no canonical form')
+            if spec.retired_fields and isinstance(value, (list, tuple)):
+                value = canonical_where_terms(spec, list(value))
             if spec.convert is switch_value and isinstance(value, bool):
                 value = 'on' if value else 'off'  # a switch is spelled on|off (COMMAND_MODEL "Switches", BACK-2622)
             controls[keyword] = value

@@ -434,6 +434,10 @@ class ParamSpec:
     # A where control's fields whose spelling retired: each has a ``param:<noun>.<field>`` RETIREMENTS row, which a bound
     # where term naming the field notes on every transport (COMMAND_MODEL "Retirement notes"; AST calls/callee_of).
     retired_fields: Tuple[str, ...] = ()
+    # Of those, each one that answers exactly as another field of the noun: (retired field, canonical field) (AST type ->
+    # kind, depth -> nesting_depth). A canonical request spells the term on the canonical field; a retired field without
+    # one (AST calls: another noun) has no canonical form.
+    field_words: Tuple[Tuple[str, str], ...] = ()
     # On an answer selector (role='operation'): the control that caps the rows of the answer it selects, which the
     # global --all lifts (Metrics' legacy hotspots ranking reads top). None: the noun's own --all declaration.
     cap: Optional[str] = None
@@ -478,6 +482,12 @@ class ParamSpec:
         if value is None or (self.zero_uncaps and int(value) == 0):
             return None
         return int(value)
+
+    @property
+    def retired_values(self) -> Tuple[Any, ...]:
+        """Values the control retired but answers until the cut: its value-keyed legacy entries (AST ``view=calls``).
+        Accepted beside ``choices``; a request that gives one has no canonical form."""
+        return tuple(dict.fromkeys(entry.value for entry in self.legacy if entry.value is not None))
 
     @property
     def legacy_words(self) -> Tuple[str, ...]:
@@ -546,7 +556,8 @@ class ParamSpec:
                 raise ValueError(f'{self.name} must be {what}, got {raw!r}') from None
         if self.minimum is not None and value is not None and value < self.minimum:
             raise ValueError(f'{self.name} must be >= {self.minimum}')
-        if self.choices and value is not None and value not in self.choices:  # an absent optional choice
+        if self.choices and value is not None and value not in self.choices \
+                and value not in self.retired_values:  # an absent optional choice; a retired value answers until the cut
             raise ValueError(f'{self.name} must be one of {self.choices!r}, got {value!r}')
         return value
 
@@ -625,7 +636,8 @@ def expression_list(value: Any) -> List[str]:
 def where_param(description: str, examples: Tuple[str, ...] = (),
                 legacy: Tuple['LegacySpelling', ...] = (), *,
                 convert: Optional[Callable[[Any], Any]] = None, default: Any = (),
-                fields: Tuple[str, ...] = (), open_fields: str = '', retired_fields: Tuple[str, ...] = ()) -> ParamSpec:
+                fields: Tuple[str, ...] = (), open_fields: str = '', retired_fields: Tuple[str, ...] = (),
+                field_words: Tuple[Tuple[str, str], ...] = ()) -> ParamSpec:
     """The one declaration of a noun's repeatable where (D18; AST, Metrics and Claude, BACK-2621/2654).
 
     Its role makes the binder fold bare URI operator keys (``?lines>50``) into the same list as
@@ -633,11 +645,12 @@ def where_param(description: str, examples: Tuple[str, ...] = (),
     *convert* is a noun's own term validation (Claude's name predicates); *default* None means an
     omitted where is absent rather than an empty list. *fields* are its filterable fields, or *open_fields*
     describes a field set the data defines. *retired_fields* are fields whose spelling has a ``param:`` RETIREMENTS row of
-    the noun: a term on one notes that row (the declared route's ``note_retired_where_fields``).
+    the noun: a term on one notes that row (the declared route's ``note_retired_where_fields``); *field_words* pair those of
+    them that answer as another field with that field, which a canonical request spells.
     """
     return ParamSpec('where', 'array', description, [] if default == () else default, convert or expression_list,
                      examples, role='filter-expression', repeatable=True, legacy=legacy, cli=CliBinding(('--where',)),
-                     fields=fields, open_fields=open_fields, retired_fields=retired_fields)
+                     fields=fields, open_fields=open_fields, retired_fields=retired_fields, field_words=field_words)
 
 
 def _exclude_patterns(value: Any) -> str:
