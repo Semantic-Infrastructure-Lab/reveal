@@ -177,10 +177,40 @@ def _noted_answer(scheme: str, uri: str, overrides: Dict[str, Any], answer):
     with invocation_scope(Invocation.parse(['reveal', uri]), retirements_to_stderr=False, form='python'):
         for key in keys:
             note_uri_spelling(key)
+        _note_retired_where_fields(scheme, uri, overrides)
         if by_request:
             _note_uri_request(scheme, uri, overrides)
         # The retirement notes and every config_warning this invocation recorded (BACK-2659).
         return attach_invocation_warnings(answer())
+
+
+def _bound_uri_params(scheme: str, uri: str, overrides: Dict[str, Any]):
+    """(declared adapter, resource, bound params, walk policy) of a declared noun's URI request with its keywords, bound
+    as the answer's own path binds them; None for an undeclared scheme or a request binding rejects (the answer says
+    why)."""
+    from .cli.routing.declared import declared_adapter_class
+    from .utils.gitignore import split_respect_gitignore
+    from .utils.query_binding import apply_declared_overrides, prepare_declared_params
+    adapter = declared_adapter_class(scheme)
+    if adapter is None:
+        return None
+    # The walk policy is split off before binding, as the answer's own path does, and repeated as its flag.
+    split, walk_policy = split_respect_gitignore(uri.partition('://')[2])
+    resource, _, query = split.partition('?')
+    try:
+        params = apply_declared_overrides(adapter.PARAM_SPECS, prepare_declared_params(adapter.PARAM_SPECS, query, 'uri'),
+                                          overrides)
+    except (ValueError, TypeError):
+        return None
+    return adapter, resource, params, walk_policy
+
+
+def _note_retired_where_fields(scheme: str, uri: str, overrides: Dict[str, Any]) -> None:
+    """A where term on a retired field notes its row, as on the CLI (``note_retired_where_fields``, BACK-2613)."""
+    bound = _bound_uri_params(scheme, uri, overrides)
+    if bound is not None:
+        from .cli.routing.declared import note_retired_where_fields
+        note_retired_where_fields(scheme, bound[0].PARAM_SPECS, bound[2], 'uri')
 
 
 def _note_uri_request(scheme: str, uri: str, overrides: Dict[str, Any]) -> None:
@@ -190,21 +220,14 @@ def _note_uri_request(scheme: str, uri: str, overrides: Dict[str, Any]) -> None:
     from .adapters.base import get_adapter_class
     from .cli.invocation import request_note
     from .cli.routing.canonical import render_uri_request
-    from .cli.routing.declared import create_declared_parser, declared_adapter_class
-    from .utils.gitignore import split_respect_gitignore
-    from .utils.query_binding import apply_declared_overrides, prepare_declared_params
+    from .cli.routing.declared import create_declared_parser
     spelled_query = uri.partition('?')[2]
-    # The walk policy is split off before binding, as the answer's own path does, and repeated as its flag.
-    split, walk_policy = split_respect_gitignore(uri.partition('://')[2])
-    resource, _, query = split.partition('?')
-    adapter = declared_adapter_class(scheme)
     if not (getattr(get_adapter_class(scheme), 'ANALYSIS_ONLY', False) or spelled_query):
         return
-    try:
-        params = apply_declared_overrides(adapter.PARAM_SPECS, prepare_declared_params(adapter.PARAM_SPECS, query, 'uri'),
-                                          overrides)
-    except (ValueError, TypeError):
+    bound = _bound_uri_params(scheme, uri, overrides)
+    if bound is None:
         return
+    adapter, resource, params, walk_policy = bound
     parser = create_declared_parser(scheme)
     try:
         request_note(scheme, lambda form: render_uri_request(form, scheme, resource, params, parser=parser,

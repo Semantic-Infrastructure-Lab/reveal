@@ -18,7 +18,8 @@ def _legacy_depth(value: object) -> str:
 WHERE = where_param('Filter expressions, ANDed; repeat --where for multiple bounds',
                     legacy=(LegacySpelling('depth', codec=_legacy_depth),),
                     open_fields='any element key the analyzer emits (name, complexity, line_count, ...), plus type, lines, '
-                                'decorator, calls, callee_of, param_type, return_type, has_annotations, callers')
+                                'decorator, calls, callee_of, param_type, return_type, has_annotations, callers',
+                    retired_fields=('calls', 'callee_of'))  # the call filters retired to the calls noun (BACK-2066)
 KIND = ParamSpec('kind', 'string', 'Element kind (function, method, class, struct, import, interface, ...)',
                  None, str, legacy=(LegacySpelling('type', flag='--type'),), cli=CliBinding(('--kind',)))
 VIEW = ParamSpec('view', 'string', 'Answer view: calls, dict-heatmap or dict-schemas (Python evidence)',

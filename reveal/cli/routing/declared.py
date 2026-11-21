@@ -417,6 +417,22 @@ def _note_retired_flags(name: str, adapter) -> None:
             retirement_note(key)
 
 
+def note_retired_where_fields(name: str, declarations, params, transport: str) -> None:
+    """A where term on a field whose spelling retired notes that field's ``param:<name>.<field>`` row (COMMAND_MODEL
+    "Retirement notes", BACK-2613 ruling Q2), however the term was spelled (``--where``, ``?where=``, a bare key). The
+    fields are the noun's data, declared once on its where control (``where_param(retired_fields=...)``). A URI request
+    notes through ``note_uri_spelling``, which leaves a row its request note covers to that note; once per row."""
+    from ..invocation import note_uri_spelling, retirement_note
+    from ...utils.query_binding import where_fields
+    expression = next((spec for spec in declarations if spec.role == 'filter-expression' and spec.retired_fields), None)
+    if expression is None:
+        return
+    note = note_uri_spelling if transport == 'uri' else retirement_note
+    for field in dict.fromkeys(where_fields(params, expression)):
+        if field in expression.retired_fields:
+            note(f'param:{name}.{field}')
+
+
 def _flag_param(spec: ParamSpec, flag: str) -> str:
     """The declared parameter a subcommand flag spells: the legacy word or alias it names, else the canonical name."""
     spelled = flag[2:]
@@ -726,6 +742,7 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
                     source = join_uri_and_flags(adapter.PARAM_SPECS, prepare_declared_params(
                         adapter.PARAM_SPECS, query_resource.partition('?')[2], 'uri'), source, spelled=spelled)
                     transport = 'uri'  # one request now, bound as the URI binds (its path's codec included)
+                note_retired_where_fields(name, adapter.PARAM_SPECS, source, transport)
                 _note_uri_request(name, adapter, path, source, transport, spelled_query, early=True,
                                   walk_policy=note_walk)
             except ValueError as exc:

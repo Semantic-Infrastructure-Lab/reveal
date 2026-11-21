@@ -344,7 +344,7 @@ def _declared_field(key: str, fields: tuple) -> bool:
     return key in fields or ('.' in key and (head in fields or f'{head}.*' in fields))
 
 
-def _where_fields(params: QueryParams, expression: ParamSpec) -> list:
+def where_fields(params: QueryParams, expression: ParamSpec) -> list:
     """The field of every where term, written explicitly or folded from a bare key."""
     terms = params.get(expression.name) or ()  # a decoded where= value may hold a literal '&': one term, one field
     fields = (_FIELD_END.split(str(term).strip().lstrip('!'), 1)[0].strip() for term in terms)
@@ -358,7 +358,7 @@ def _reject_unknown_keys(declarations: tuple[ParamSpec, ...], params: QueryParam
     known = _declared_keys(declarations) | _TRANSPORT_KEYS
     unknown = [*shared, *(key for key in dict.keys(params) if key not in known)]
     if expression is not None and expression.fields and not expression.open_fields:
-        unknown += [key for key in _where_fields(params, expression) if not _declared_field(key, expression.fields)]
+        unknown += [key for key in where_fields(params, expression) if not _declared_field(key, expression.fields)]
     if unknown:
         raise RequestValidationError(unsupported_controls_message(declarations, unknown))
 

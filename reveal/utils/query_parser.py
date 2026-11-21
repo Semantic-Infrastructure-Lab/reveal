@@ -428,6 +428,9 @@ class ParamSpec:
     # data defines (Markdown frontmatter keys, JSON row keys; BACK-2654 note #14): every bare key there is a field.
     fields: Tuple[str, ...] = ()
     open_fields: str = ''
+    # A where control's fields whose spelling retired: each has a ``param:<noun>.<field>`` RETIREMENTS row, which a bound
+    # where term naming the field notes on every transport (COMMAND_MODEL "Retirement notes"; AST calls/callee_of).
+    retired_fields: Tuple[str, ...] = ()
     # On an answer selector (role='operation'): the control that caps the rows of the answer it selects, which the
     # global --all lifts (Metrics' legacy hotspots ranking reads top). None: the noun's own --all declaration.
     cap: Optional[str] = None
@@ -619,18 +622,19 @@ def expression_list(value: Any) -> List[str]:
 def where_param(description: str, examples: Tuple[str, ...] = (),
                 legacy: Tuple['LegacySpelling', ...] = (), *,
                 convert: Optional[Callable[[Any], Any]] = None, default: Any = (),
-                fields: Tuple[str, ...] = (), open_fields: str = '') -> ParamSpec:
+                fields: Tuple[str, ...] = (), open_fields: str = '', retired_fields: Tuple[str, ...] = ()) -> ParamSpec:
     """The one declaration of a noun's repeatable where (D18; AST, Metrics and Claude, BACK-2621/2654).
 
     Its role makes the binder fold bare URI operator keys (``?lines>50``) into the same list as
     explicit ``where=`` values and ``--where`` flags; the noun's own filter parser evaluates them.
     *convert* is a noun's own term validation (Claude's name predicates); *default* None means an
     omitted where is absent rather than an empty list. *fields* are its filterable fields, or *open_fields*
-    describes a field set the data defines.
+    describes a field set the data defines. *retired_fields* are fields whose spelling has a ``param:`` RETIREMENTS row of
+    the noun: a term on one notes that row (the declared route's ``note_retired_where_fields``).
     """
     return ParamSpec('where', 'array', description, [] if default == () else default, convert or expression_list,
                      examples, role='filter-expression', repeatable=True, legacy=legacy, cli=CliBinding(('--where',)),
-                     fields=fields, open_fields=open_fields)
+                     fields=fields, open_fields=open_fields, retired_fields=retired_fields)
 
 
 def _exclude_patterns(value: Any) -> str:
