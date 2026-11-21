@@ -438,7 +438,7 @@ class TestProposedChanges:
         expected = query(uri(project, 'rank=fan-in&top=2'))
         assert expected['type'] == 'fan_in_ranking' and len(expected['entries']) == 2
         if transport == 'api':
-            actual = query(uri(project, 'top=2'), sort='-fan-in')
+            actual = query(uri(project, ''), sort='-fan-in', top=2)  # a URI '?top=2' alone is an invalid request (BACK-2692)
         elif transport == 'mcp':
             actual = mcp_json(uri(project, 'sort=-fan-in&top=2'))
         else:

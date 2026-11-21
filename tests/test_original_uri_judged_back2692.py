@@ -1,6 +1,4 @@
-"""BACK-2692: an api.query override of None cannot hide an inapplicable control of the URI, on every declared noun that
-declares applicability (one check, in the factory). An override that selects another answer is judged as the effective
-request, so a control that answer reads stays applicable (BACK-2608)."""
+"""BACK-2692: an api.query override cannot hide an invalid request: the URI is judged as a request of its own before\nthe typed overrides, on every declared noun that declares applicability (one check, in the factory)."""
 import pytest
 
 from reveal import api
@@ -25,6 +23,10 @@ def test_an_applicable_original_with_an_override_still_answers(src):
     assert api.query(f'metrics://{src}', limit=1)['type']
 
 
-def test_an_override_that_selects_an_answer_reading_the_control_makes_it_applicable(src):
-    # the effective request is judged, as for the Calls overlay (BACK-2608): view=hotspots reads top
-    assert api.query(f'metrics://{src}?top=3', view='hotspots')['type']
+def test_an_override_that_selects_an_answer_reading_the_control_does_not_make_the_original_valid(src):
+    with pytest.raises(RequestValidationError):
+        api.query(f'metrics://{src}?top=3', view='hotspots')  # the URI alone is invalid; give both as overrides
+
+
+def test_a_valid_uri_an_override_changes_is_an_ordinary_override(src):
+    assert api.query(f'metrics://{src}?view=hotspots&top=3', top=None)['type']

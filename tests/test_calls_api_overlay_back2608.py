@@ -69,8 +69,11 @@ def test_invalid_and_contradictory_controls_reject(project, kwargs, exception, m
 
 
 def test_overlay_mode_validates_after_binding_but_uri_values_validate_first(project):
-    # The URI mode forbids detail; the effective overlay changes the mode and permits it.
-    assert ask(project, 'callers=sink&detail=true', callers=None, callees='top') == ask(project, 'callees=top&detail')
+    # The URI mode forbids detail, and an override cannot hide that invalid request (BACK-2692); the same overlay on a
+    # valid URI changes the mode and permits it.
+    with pytest.raises(ValueError, match='detail'):
+        ask(project, 'callers=sink&detail=true', callers=None, callees='top')
+    assert ask(project, 'callers=sink', callers=None, callees='top', detail=True) == ask(project, 'callees=top&detail')
     with pytest.raises(ValueError, match='depth'):
         ask(project, 'callers=sink&depth=bad', depth=2)
     with pytest.raises(TypeError, match='depth'):
