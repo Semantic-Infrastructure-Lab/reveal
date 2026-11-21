@@ -218,7 +218,7 @@ def test_a_finished_guide_rewrite_answers_as_its_original(named_harness, origina
 
 
 def test_the_finished_guide_proof_is_not_vacuous():
-    """While the finished nouns' guides teach URI requests, most rewrites run on the fixture (161 at 6f1c40d8)."""
+    """While the finished nouns' guides teach URI requests, over 100 rewrites run on the fixture (150 of 362 at 6f1c40d8)."""
     rewrites = sum(e.kind == 'rewrite' for examples in migrate.plan(FINISHED_GUIDES, FINISHED_NOUNS).values()
                    for e in examples)
     assert rewrites == 0 or len(FINISHED_REWRITES) > 100, (rewrites, len(FINISHED_REWRITES))
