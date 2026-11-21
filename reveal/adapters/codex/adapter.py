@@ -4,7 +4,6 @@ from reveal.utils.path_utils import to_posix
 import logging
 from copy import deepcopy
 import os
-import re
 import sqlite3
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -18,7 +17,8 @@ from ...utils.query_parser import ResourceSpec, param_schema
 from .params import PARAM_SPECS, _MATCHES, _FULL, bind_query
 from .lookup import SessionLookup, attach_lookup_evidence
 from .catalog import CATALOG_PATHS
-from .qualification import RESULT_VARIANTS, VIEW_TYPES, selected_type, index_request_error
+from .qualification import (RESULT_VARIANTS, SESSION_ID_RE, VIEW_TYPES, selected_type, index_request_error,
+                            validate_resource)
 from .rollout import ROLLOUT_RULE, unavailable_rollout
 from .handlers.sessions import (
     list_sessions as _h_list_sessions,
@@ -47,13 +47,6 @@ from .analysis.workflow import get_workflow as _analysis_get_workflow
 from .analysis.timeline import get_timeline as _analysis_get_timeline
 
 logger = logging.getLogger(__name__)
-
-# UUID detection: full UUID or 7+ hex prefix
-_UUID_RE = re.compile(
-    r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-    r'|^[0-9a-f]{7,}$'
-)
-
 
 
 def _disclose_unrecorded_exec_scripts(result: Dict[str, Any], records: List[Dict[str, Any]]) -> None:
@@ -107,7 +100,7 @@ class CodexAdapter(ResourceAdapter):
         identifier, _, sub = path.partition('/')
         if path in ('config', 'history', 'info') or path in CATALOG_PATHS:
             return cls.execution_facts
-        if not _UUID_RE.match(identifier):
+        if not SESSION_ID_RE.match(identifier):
             return None
         kind = cls.uri_result_type(resource)
         supported = sub in VIEW_TYPES or sub.startswith('message/') or kind in ('codex_messages', 'codex_tokens', 'codex_goal')
@@ -193,7 +186,7 @@ class CodexAdapter(ResourceAdapter):
 
     def _is_uuid(self, s: str) -> bool:
         """Return True if s looks like a Codex session UUID (or prefix)."""
-        return bool(_UUID_RE.match(s))
+        return bool(SESSION_ID_RE.match(s))
 
     def _session_id_from_resource(self) -> Optional[str]:
         """Extract UUID prefix from resource (before any '/')."""
@@ -278,6 +271,7 @@ class CodexAdapter(ResourceAdapter):
 
     def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Route codex:// resource to the appropriate handler."""
+        validate_resource(self.resource)
         self._request_index_error = None
         # Bare or sessions/ → list, search, or content search
         if self._is_session_list_resource():
@@ -295,16 +289,8 @@ class CodexAdapter(ResourceAdapter):
                 handler: Callable[[], Dict[str, Any]] = getattr(self, method_name)
                 return handler()
 
-        # UUID → session analysis
-        session_id = self._session_id_from_resource()
-        if session_id:
-            return self._session_answer(session_id)
-
-        # Unknown resource
-        base = self._get_contract_base()
-        base['type'] = 'codex_error'
-        base['error'] = f'Unknown codex:// resource: {self.resource!r}'
-        return base
+        # A session id (validate_resource refused every other resource)
+        return self._session_answer(self.resource.partition('/')[0])
 
     def _catalog_result(self) -> Dict[str, Any]:
         search = self.query_params.get('search')

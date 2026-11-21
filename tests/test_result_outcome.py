@@ -77,9 +77,9 @@ def test_json_missing_key_exits_nonzero(proj, fmt):
 
 @pytest.mark.parametrize('fmt', FORMATS)
 def test_codex_unknown_resource_exits_nonzero(proj, fmt):
-    """BACK-1520."""
+    """BACK-1520; an unknown resource is an invalid request, exit 2 (D6, BACK-2700)."""
     r = _run_reveal_direct('codex://nonexistent_zz_1059', '--format', fmt)
-    assert r.returncode == 1
+    assert r.returncode == 2
     assert 'Unknown codex:// resource' in r.stdout + r.stderr
 
 
@@ -144,7 +144,7 @@ def test_the_error_is_reported_once_and_first(proj, uri, scheme):
     """The router prints the error line before rendering; renderers add only detail.
     Before, claude/codex/help/calls renderers each printed their own 'Error:' line."""
     r = _run_reveal_direct(uri)
-    assert r.returncode == (2 if scheme in ('calls', 'json') else 1)
+    assert r.returncode == (2 if scheme in ('calls', 'json', 'codex') else 1)  # codex: an unknown resource (BACK-2700)
     assert r.stderr.startswith(f'Error ({scheme}://): '), r.stderr
     assert (r.stdout + r.stderr).count('Error') == 1, r.stdout + r.stderr
 

@@ -182,6 +182,11 @@ Exchange text previews show at most 300 characters per prompt and 600 per answer
 | `codex://plugins` | Installed plugin manifests under `~/.codex/plugins/cache/**/.codex-plugin/plugin.json` |
 | `codex://plugins/<name>` | A single plugin's manifest |
 
+An unknown resource, a session view that does not exist (`codex://<UUID>/bogus`) or a suffix on a
+resource that takes none (`codex://info/x`, `codex://sessions/foo`) exits **2** naming it, before any
+source is read. So does a `skills/<name>` or `plugins/<name>` that matches no installed definition; the
+message names the definitions it searched.
+
 ---
 
 ## Workflow

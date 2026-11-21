@@ -12,7 +12,17 @@ from typing import Any, Dict
 from reveal.reveal_types import CONTRACT_VERSION
 from reveal.utils.lines import split_lines
 
+from ....errors import MissingResourceError
 from ....utils.results import ResultBuilder
+
+
+def _not_found(kind: str, noun: str, name: str, entries) -> MissingResourceError:
+    """A named item that matches no definition is an invalid request naming what was searched (plan rule 9)."""
+    names = [entry['name'] for entry in entries]
+    shown = ', '.join(names[:10]) + (', ...' if len(names) > 10 else '')
+    plural = '' if len(names) == 1 else 's'
+    return MissingResourceError(f'{kind} not found: {name} (searched {len(names)} {noun}{plural}'
+                                  f'{": " + shown if names else ""})')
 
 
 def _parse_skill_frontmatter(content: str) -> Dict[str, Any]:
@@ -64,8 +74,7 @@ def get_skills(codex_home: Path, resource: str) -> Dict[str, Any]:
     if skill_name:
         matches = [e for e in entries if e['name'] == skill_name]
         if not matches:
-            return {**base, 'type': 'codex_skill',
-                    'error': f'Skill not found: {skill_name}', 'name': skill_name}
+            raise _not_found('Skill', 'skill definition', skill_name, entries)
         entry = matches[0]
         skill_path = Path(entry['path'])
         try:
@@ -120,8 +129,7 @@ def get_plugins(codex_home: Path, resource: str) -> Dict[str, Any]:
     if plugin_name:
         matches = [e for e in entries if e['name'] == plugin_name]
         if not matches:
-            return {**base, 'type': 'codex_plugin',
-                    'error': f'Plugin not found: {plugin_name}', 'name': plugin_name}
+            raise _not_found('Plugin', 'plugin manifest', plugin_name, entries)
         entry = matches[0]
         manifest_path = Path(entry['path'])
         try:

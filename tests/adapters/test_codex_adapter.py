@@ -9,7 +9,8 @@ from unittest.mock import patch
 
 import pytest
 
-from reveal.adapters.codex.adapter import CodexAdapter, _UUID_RE
+from reveal.adapters.codex.adapter import CodexAdapter
+from reveal.errors import MissingResourceError
 from reveal.adapters.agent_base import pair_tool_calls
 from codex_session_fixture import (
     CODEX_STAGE1_OUTPUTS_DDL,
@@ -625,8 +626,9 @@ class TestSkillsResource:
         assert 'Body content here.' in result['content']
 
     def test_single_skill_not_found(self, tmp_path):
-        result = self._adapter(tmp_path, resource='skills/nonexistent').get_structure()
-        assert 'error' in result
+        # A named skill that matches no definition is an invalid request (BACK-2700, rule 9).
+        with pytest.raises(MissingResourceError, match='Skill not found: nonexistent'):
+            self._adapter(tmp_path, resource='skills/nonexistent').get_structure()
 
     def test_list_contract_fields(self, tmp_path):
         result = self._adapter(tmp_path).get_structure()
@@ -668,8 +670,9 @@ class TestPluginsResource:
         assert result['manifest']['description'] == 'A test plugin for verifying discovery.'
 
     def test_single_plugin_not_found(self, tmp_path):
-        result = self._adapter(tmp_path, resource='plugins/nonexistent').get_structure()
-        assert 'error' in result
+        # A named plugin that matches no manifest is an invalid request (BACK-2700, rule 9).
+        with pytest.raises(MissingResourceError, match='Plugin not found: nonexistent'):
+            self._adapter(tmp_path, resource='plugins/nonexistent').get_structure()
 
     def test_list_contract_fields(self, tmp_path):
         result = self._adapter(tmp_path).get_structure()

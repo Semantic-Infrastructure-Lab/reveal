@@ -1,8 +1,10 @@
 """Direct Codex transcript identity, required-source evidence and observations."""
+import re
+
 from reveal.utils.path_utils import to_posix
 from typing import Any, Callable, Dict, Tuple
 
-from ...errors import RequestValidationError
+from ...errors import MissingResourceError, RequestValidationError
 from ...utils.jsonl_records import valid_record_proof
 from ...utils.observations import count_observations, validate_observation_counts
 from ...utils.query_parser import peek_query_items
@@ -60,12 +62,48 @@ def _named_type(resource):
     return None
 
 
+_RESOURCES = ('sessions, <UUID>[/VIEW], info, history, config, memories[/pipeline], rules, skills[/NAME], '
+              'plugins[/NAME]')
+_VIEWS = ', '.join((*(view for view in VIEW_TYPES if view), 'message/N'))
+# Named resources that take no suffix (skills/NAME and plugins/NAME name an item, judged by their readers).
+_WHOLE = ('memories/pipeline', 'sessions', 'info', 'history', 'config', 'memories', 'rules')
+
+
+# A session id: a full UUID or a 7+ hex prefix (lower case, as Codex writes them).
+SESSION_ID_RE = re.compile(
+    r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    r'|^[0-9a-f]{7,}$'
+)
+
+
+def validate_resource(resource):
+    """Reject a resource the router would otherwise answer as another one, before any source is read (BACK-2700):
+    an unknown resource, a session view that does not exist, or a suffix on a resource that takes none. A resource
+    that is not there is an invalid request on every transport, exit 2 (``MissingResourceError``, D6)."""
+    if resource in CATALOG_PATHS:
+        return
+    for whole in _WHOLE:
+        if resource.startswith(whole + '/'):
+            raise MissingResourceError(f'codex://{whole} does not support a resource suffix: '
+                                       f'{resource[len(whole) + 1:]}')
+        if resource == whole:
+            return
+    noun = resource.partition('/')[0]
+    if noun in ('skills', 'plugins'):
+        return
+    if not SESSION_ID_RE.match(noun):
+        raise MissingResourceError(f'Unknown codex:// resource: {resource!r}; resources: {_RESOURCES}')
+    sub = resource.partition('/')[2]
+    if sub not in VIEW_TYPES and not sub.startswith('message/'):
+        raise MissingResourceError(f'Unsupported Codex session view: {resource}; views: {_VIEWS}')
+
+
 def selected_type(resource, params):
     named = _named_type(resource)
     if named is not None:
         return named
     values = dict(peek_query_items(params))
-    if resource in CATALOG_PATHS:
+    if resource in CATALOG_PATHS or resource.startswith('sessions/'):  # the router's catalog dispatch
         return 'codex_content_search' if values.get('search') else 'codex_session_list'
     for name, kind in (('last', 'codex_messages'), ('tokens', 'codex_tokens'), ('goal', 'codex_goal')):
         if name in values and values[name] is not None and values[name] is not False:
