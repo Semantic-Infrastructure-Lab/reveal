@@ -1,5 +1,6 @@
 """Direct Codex transcript identity, required-source evidence and observations."""
 import re
+from functools import partial
 
 from reveal.utils.path_utils import to_posix
 from typing import Any, Callable, Dict, Tuple
@@ -18,6 +19,12 @@ from .content import execution_facts as content_facts, answer_requirement_error 
 from .rollout import ROLLOUT_RULE, rollout_lost as _rollout_lost
 from .catalog import (CATALOG_PATHS, execution_facts as catalog_facts,
                       answer_requirement_error as catalog_error)
+from .pipeline import execution_facts as pipeline_facts, answer_requirement_error as pipeline_error
+from .handlers.workspace import execution_facts as workspace_facts, answer_requirement_error as workspace_answer_error
+
+
+def _workspace_error(adapter, result, prior_facts, *, expected_type):
+    return workspace_answer_error(adapter, result, expected_type, prior_facts)
 
 RESOURCE_OWNERS: Dict[str, Tuple[Callable[..., Any], Callable[..., Any]]] = {
     'codex_info': (info_facts, info_error),
@@ -25,6 +32,10 @@ RESOURCE_OWNERS: Dict[str, Tuple[Callable[..., Any], Callable[..., Any]]] = {
     'codex_config': (config_facts, config_error),
     'codex_content_search': (content_facts, content_error),
     'codex_session_list': (catalog_facts, catalog_error),
+    'codex_memories_pipeline': (pipeline_facts, pipeline_error),
+    # The workspace lists and their named items: one owner, told which answer it checks.
+    **{kind: (workspace_facts, partial(_workspace_error, expected_type=kind))
+       for kind in ('codex_memories', 'codex_rules', 'codex_skills', 'codex_skill', 'codex_plugins', 'codex_plugin')},
 }
 
 VIEW_TYPES = {'': 'codex_session_overview', 'messages': 'codex_messages', 'tools': 'codex_tools',
@@ -53,7 +64,7 @@ _NAMED_TYPES = (('memories/pipeline', 'codex_memories_pipeline', 'codex_memories
                 ('plugins', 'codex_plugins', 'codex_plugin'))
 
 
-def _named_type(resource):
+def named_type(resource):
     for prefix, whole, item in _NAMED_TYPES:
         if resource == prefix:
             return whole
@@ -99,7 +110,7 @@ def validate_resource(resource):
 
 
 def selected_type(resource, params):
-    named = _named_type(resource)
+    named = named_type(resource)
     if named is not None:
         return named
     values = dict(peek_query_items(params))

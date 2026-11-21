@@ -611,13 +611,14 @@ class TestSkillsResource:
         assert result['skills'][0]['name'] == 'test-skill'
         assert 'verifying discovery' in result['skills'][0]['description']
 
-    def test_missing_dir_errors_not_crashes(self, tmp_path):
+    def test_missing_dir_is_a_complete_empty_answer(self, tmp_path):
+        # Confirmed absence of an optional install dir is complete, 0, said in the receipt (BACK-2618 ruling Q7).
         adapter = CodexAdapter('skills')
         adapter.CODEX_HOME = tmp_path
         adapter.CODEX_DB = tmp_path / 'state_5.sqlite'
         result = adapter.get_structure()
         assert result['total'] == 0
-        assert 'error' in result
+        assert 'error' not in result and result['meta']['workspace_analysis']['source_absent'] is True
 
     def test_single_skill_read(self, tmp_path):
         result = self._adapter(tmp_path, resource='skills/test-skill').get_structure()
@@ -656,13 +657,14 @@ class TestPluginsResource:
         assert result['plugins'][0]['name'] == 'test-plugin'
         assert result['plugins'][0]['version'] == '0.2.0'
 
-    def test_missing_dir_errors_not_crashes(self, tmp_path):
+    def test_missing_dir_is_a_complete_empty_answer(self, tmp_path):
+        # Confirmed absence of an optional install dir is complete, 0, said in the receipt (BACK-2618 ruling Q7).
         adapter = CodexAdapter('plugins')
         adapter.CODEX_HOME = tmp_path
         adapter.CODEX_DB = tmp_path / 'state_5.sqlite'
         result = adapter.get_structure()
         assert result['total'] == 0
-        assert 'error' in result
+        assert 'error' not in result and result['meta']['workspace_analysis']['source_absent'] is True
 
     def test_single_plugin_read(self, tmp_path):
         result = self._adapter(tmp_path, resource='plugins/test-plugin').get_structure()
@@ -1126,8 +1128,8 @@ class TestMemoriesPipeline:
 
     def test_pipeline_reads_every_column_of_the_real_codex_schema(self, tmp_path):
         """BACK-2295: the query runs against Codex's own DDL (column set and order as shipped)."""
-        from reveal.adapters.codex.handlers.system import get_memories_pipeline
-        result = get_memories_pipeline(self._make_pipeline_db(tmp_path))
+        from reveal.adapters.codex.pipeline import get_memories_pipeline
+        result = get_memories_pipeline(tmp_path / 'no-home', self._make_pipeline_db(tmp_path))
         assert 'error' not in result
         assert [(r['thread_id'], r['rollout_slug'], r['selected_for_phase2'], r['usage_count'])
                 for r in result['recent_outputs']] == [
@@ -1141,8 +1143,8 @@ class TestMemoriesPipeline:
         conn.execute("INSERT INTO stage1_outputs VALUES ('t', 's')")
         conn.commit()
         conn.close()
-        from reveal.adapters.codex.handlers.system import get_memories_pipeline
-        result = get_memories_pipeline(db_path)
+        from reveal.adapters.codex.pipeline import get_memories_pipeline
+        result = get_memories_pipeline(tmp_path / 'no-home', db_path)
         assert 'selected_for_phase2' in result['error']
 
     def test_pipeline_zero_when_empty(self, tmp_path):

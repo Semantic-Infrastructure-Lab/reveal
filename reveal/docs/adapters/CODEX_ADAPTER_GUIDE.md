@@ -347,6 +347,12 @@ The sample is rendered by the real adapter over a `memories_1.sqlite` built from
 
 `[✓]` marks rows with `selected_for_phase2 = 1`; `uses` is the `usage_count` column as Codex stores it (Codex does not document what bumps it). `memories/pipeline` reads the `stage1_outputs` table from `memories_1.sqlite`, where current Codex keeps it, or from `state_5.sqlite` (the session index) on installs that predate that file.
 
+The database opens read-only and the receipt is `meta.pipeline_analysis` (the selected database, each
+operation and a `decision`). No database (`source_absent`) or a database without `stage1_outputs`
+(`table_absent`: the pipeline never ran) is a complete empty answer, exit **0**. A database that cannot be
+opened or queried exits **3**, keeping the counts read before the failure. The recent list holds the newest
+20 rows, and a `truncated` warning says so whenever `stage1_total` is larger.
+
 ---
 
 ## Content Search
@@ -411,6 +417,15 @@ inventory; entirely failed inspection is an error. The path inventory helper is
 shared with Claude, while each adapter owns its named slots and DB queries.
 Owned counts, path observations and source/operation receipts survive
 presentation, and fresh requests refresh all inspection decisions.
+### Workspace lists
+
+`codex://memories`, `rules`, `skills` and `plugins` keep the workspace-list receipt Claude's lists keep
+(`meta.workspace_analysis`: candidate, analyzed and failed entries, discovery failures, each failure's cause).
+A directory that is not there is a complete empty answer, exit **0**, with `source_absent: true`. An
+unreadable directory, file or manifest, or a manifest that is not a JSON object, exits **3**; the readable
+entries are kept and the failure is named by its cause, never its path. `skills/<name>` and
+`plugins/<name>` exit **2** when every definition was read and none matches, and **3** when an unread one
+could be it.
 
 ---
 

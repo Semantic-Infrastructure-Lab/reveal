@@ -1,10 +1,9 @@
-"""System resource handlers for codex:// adapter — info, history, config, memories, rules."""
+"""System resource handlers for codex:// adapter — info, history, config."""
 from reveal.utils.path_utils import to_posix
 
-import json
 import sqlite3
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 from reveal.reveal_types import CONTRACT_VERSION
 
 from ....utils.results import ResultBuilder
@@ -95,104 +94,3 @@ def get_config(codex_home: Path, query_params: Optional[Dict[str, Any]] = None) 
         return read.attach({**base, 'key': key, 'value': val})
 
     return read.attach({**base, 'config': masked})
-
-
-def get_memories(codex_home: Path) -> Dict[str, Any]:
-    """List files in ~/.codex/memories/ with their content."""
-    memories_dir = codex_home / 'memories'
-    base: Dict[str, Any] = ResultBuilder.create(
-        result_type='codex_memories',
-        source=to_posix(memories_dir),
-        source_type='file',
-        contract_version=CONTRACT_VERSION,
-    )
-
-    if not memories_dir.exists():
-        return {**base, 'memories': [], 'total': 0}
-
-    memories: List[Dict[str, Any]] = []
-    # boundary-ok: walker -- the Codex home, not a code tree
-    for path in sorted(memories_dir.rglob('*')):
-        if not path.is_file():
-            continue
-        try:
-            content = path.read_text(encoding='utf-8', errors='replace')
-        except OSError:
-            content = ''
-        memories.append({
-            'path': to_posix(path),
-            'name': path.name,
-            'size_bytes': path.stat().st_size,
-            'content': content,
-        })
-
-    return {**base, 'memories': memories, 'total': len(memories)}
-
-
-def get_memories_pipeline(db_path: Path) -> Dict[str, Any]:
-    """Return Stage1/Stage2 memory pipeline status from stage1_outputs table."""
-    base: Dict[str, Any] = ResultBuilder.create(
-        result_type='codex_memories_pipeline',
-        source=to_posix(db_path),
-        source_type='database',
-        contract_version=CONTRACT_VERSION,
-    )
-
-    if not db_path.exists():
-        return {**base, 'stage1_total': 0, 'stage2_selected': 0, 'recent_outputs': []}
-
-    try:
-        conn = sqlite3.connect(str(db_path))
-        conn.row_factory = sqlite3.Row
-        try:
-            row = conn.execute("SELECT COUNT(*) FROM stage1_outputs").fetchone()
-            total = row[0] if row else 0
-            row2 = conn.execute(
-                "SELECT COUNT(*) FROM stage1_outputs WHERE selected_for_phase2 = 1"
-            ).fetchone()
-            phase2_selected = row2[0] if row2 else 0
-            rows = conn.execute(
-                """SELECT thread_id, rollout_slug, generated_at,
-                          selected_for_phase2, usage_count, last_usage
-                   FROM stage1_outputs ORDER BY source_updated_at DESC LIMIT 20"""
-            ).fetchall()
-            return {
-                **base,
-                'stage1_total': total,
-                'stage2_selected': phase2_selected,
-                'recent_outputs': [dict(r) for r in rows],
-            }
-        finally:
-            conn.close()
-    except sqlite3.Error as exc:
-        return {**base, 'stage1_total': 0, 'stage2_selected': 0, 'recent_outputs': [],
-                'error': str(exc)}
-
-
-def get_rules(codex_home: Path) -> Dict[str, Any]:
-    """List *.rules files in ~/.codex/rules/ with their content."""
-    rules_dir = codex_home / 'rules'
-    base: Dict[str, Any] = ResultBuilder.create(
-        result_type='codex_rules',
-        source=to_posix(rules_dir),
-        source_type='file',
-        contract_version=CONTRACT_VERSION,
-    )
-
-    if not rules_dir.exists():
-        return {**base, 'rules': [], 'total': 0}
-
-    rules: List[Dict[str, Any]] = []
-    for path in sorted(rules_dir.glob('*.rules')):
-        try:
-            content = path.read_text(encoding='utf-8', errors='replace')
-        except OSError:
-            content = ''
-        rules.append({
-            'path': to_posix(path),
-            'name': path.name,
-            'size_bytes': path.stat().st_size,
-            'content': content,
-        })
-
-    return {**base, 'rules': rules, 'total': len(rules)}

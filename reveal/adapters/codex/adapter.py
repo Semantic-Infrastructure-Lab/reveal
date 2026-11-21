@@ -18,7 +18,7 @@ from .params import PARAM_SPECS, _MATCHES, _FULL, bind_query
 from .lookup import SessionLookup, attach_lookup_evidence
 from .catalog import CATALOG_PATHS
 from .qualification import (RESULT_VARIANTS, SESSION_ID_RE, VIEW_TYPES, selected_type, index_request_error,
-                            validate_resource)
+                            validate_resource, named_type)
 from .rollout import ROLLOUT_RULE, unavailable_rollout
 from .handlers.sessions import (
     list_sessions as _h_list_sessions,
@@ -29,12 +29,11 @@ from .handlers.system import (
     get_info as _h_get_info,
     get_history as _h_get_history,
     get_config as _h_get_config,
-    get_memories as _h_get_memories,
-    get_rules as _h_get_rules,
-    get_memories_pipeline as _h_get_memories_pipeline,
 )
 from .handlers.goals import get_goal as _h_get_goal
-from .handlers.workspace import get_skills as _h_get_skills, get_plugins as _h_get_plugins
+from .handlers.workspace import (get_memories as _h_get_memories, get_rules as _h_get_rules,
+                                 get_skills as _h_get_skills, get_plugins as _h_get_plugins)
+from .pipeline import get_memories_pipeline as _h_get_memories_pipeline
 from .analysis.messages import (
     extract_messages, get_last_agent_message, get_token_turns, get_grand_total_tokens,
     get_exchanges as _analysis_get_exchanges, get_message_by_index as _analysis_get_message_by_index,
@@ -98,7 +97,7 @@ class CodexAdapter(ResourceAdapter):
     def uri_execution_facts(cls, resource):
         path = resource.partition('?')[0]
         identifier, _, sub = path.partition('/')
-        if path in ('config', 'history', 'info') or path in CATALOG_PATHS:
+        if named_type(path) is not None or path in CATALOG_PATHS:  # every named resource is qualified
             return cls.execution_facts
         if not SESSION_ID_RE.match(identifier):
             return None
@@ -555,10 +554,10 @@ class CodexAdapter(ResourceAdapter):
         return _h_get_plugins(self.CODEX_HOME, self.resource)
 
     def _get_memories_pipeline(self) -> Dict[str, Any]:
-        # Current Codex keeps the pipeline (stage1_outputs, jobs) in memories_1.sqlite; reading
-        # the state DB answered "no such table: stage1_outputs". Older installs keep it there.
-        memories_db = self.CODEX_HOME / 'memories_1.sqlite'
-        return _h_get_memories_pipeline(memories_db if memories_db.exists() else self.CODEX_DB)
+        # Current Codex keeps the pipeline (stage1_outputs) in memories_1.sqlite; older installs in the state DB.
+        result = _h_get_memories_pipeline(self.CODEX_HOME, self.CODEX_DB, connector=sqlite3.connect)
+        self._pipeline_answer = deepcopy(result)
+        return result
 
     @staticmethod
     def get_schema() -> Dict[str, Any]:
