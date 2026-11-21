@@ -73,8 +73,9 @@ SEVERAL_COMMANDS = 'another reveal command follows on the line (the extractor re
 # A comment that presents the example as the other spelling of a neighbouring command ("# the same answer as a URI"):
 # rewritten, it would repeat that command under a false comment.
 URI_COMMENT = re.compile(r'\bURI\b|\bsame (?:answer|request|result)\b|query[- ]param', re.IGNORECASE)
-# The extractor's placeholder shape (tests/test_example_recipes_run.py ``_named_fixture_skip``), and shell variables.
-PLACEHOLDER_WORD = re.compile(r'<[A-Za-z_-]+>|\$')
+# The extractor's placeholder shape (tests/test_example_recipes_run.py ``_named_fixture_skip``), and shell variables
+# ($file, ${x}, $(cmd)); a regex anchor (name~=Manager$) is a value.
+PLACEHOLDER_WORD = re.compile(r'<[A-Za-z_-]+>|\$[A-Za-z_{(]')
 PROSE_URI = re.compile(r'\b([a-z]+)://[^\s`\'")\]|]*\?[^\s`\'")\]|]*')
 _SHELL_WORDS = {'|', '||', '&&', ';', '>', '>>', '2>&1', '2>/dev/null'}
 

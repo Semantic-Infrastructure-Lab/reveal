@@ -110,18 +110,24 @@ def test_lines_the_script_cannot_place_or_should_not_touch_are_left(tmp_path):
     shown = 'reveal \'calls://src?callers=main\'   # not valid'
     several = "reveal 'imports://src?unused' && reveal 'imports://tests?unused'"
     pair = "reveal 'metrics://src?view=hotspots'   # the same answer as a URI"
-    placeholder = "reveal 'calls://src?callers=<name>'"
+    placeholder, variable = "reveal 'calls://src?callers=<name>'", 'reveal "metrics://$DIR?view=hotspots"'
     both = "reveal 'calls://src?sort=-callers' --sort name"
     continued = "reveal 'calls://src?callers=main' --format=json | \\\n    jq '.levels'"
-    planned, _ = _planned(tmp_path, _fenced(shown, several, pair, placeholder, both, continued))
+    planned, _ = _planned(tmp_path, _fenced(shown, several, pair, placeholder, variable, both, continued))
     reasons = {line.split(' ', 2)[1]: e.reason for line, e in planned.items()}
     assert planned[shown].reason == migrate.SHOWN_FAILING
     assert planned[several].reason == migrate.SEVERAL_COMMANDS
     assert planned[pair].reason == migrate.SHOWS_THE_URI
-    assert planned[placeholder].reason == migrate.PLACEHOLDER
+    assert planned[placeholder].reason == planned[variable].reason == migrate.PLACEHOLDER
     assert planned[both].reason == f'{migrate.BOTH_SPELL} (sort)'
     assert migrate.NOT_ONE_LINE in reasons.values()
     assert all(e.kind == 'left' for e in planned.values())
+
+
+def test_a_regex_anchor_is_a_value_not_a_shell_variable(tmp_path):
+    line = "reveal 'metrics://src?file~=\\.(py|js)$'"
+    planned, _ = _planned(tmp_path, _fenced(line))
+    assert planned[line].new_line == "reveal metrics src --where 'file~=\\.(py|js)$'"
 
 
 def test_a_line_left_anywhere_is_left_everywhere(tmp_path):
