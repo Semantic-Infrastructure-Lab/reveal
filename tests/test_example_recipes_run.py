@@ -625,7 +625,7 @@ DOC_SOURCE_COHORT = {
     ('../../README.md', 'reveal overview .'),
     ('../../README.md', 'reveal markdown docs/ --match retry'),
     ('adapters/OVERVIEW_ADAPTER_GUIDE.md', 'reveal overview . --limit 0'),
-    ('adapters/IMPORTS_ADAPTER_GUIDE.md', 'reveal imports://src'),
+    ('adapters/IMPORTS_ADAPTER_GUIDE.md', 'reveal imports src'),
 }
 
 
@@ -812,6 +812,8 @@ def _named_fixture_skip(tokens, fixture_names=None):
                 bad = [r for r in arg.split('..') if r not in refs]
                 if bad:
                     return f'names ref {bad[0]}, which the named fixture lacks'
+            elif stage[1] == 'calls' and not _URI.match(arg) and ':' in arg and '/' not in arg.rpartition(':')[2]:
+                targets.append(arg.rpartition(':')[0])  # the PATH:NAME shorthand names PATH (calls' resource_path)
             elif _URI.match(arg) or stage[1] not in ('dev', 'scaffold'):
                 targets.append(arg)
         for flag in ('--against', '--since'):

@@ -80,7 +80,7 @@ def _assert_navigation_answer(query, answer):
         assert answer['type'] == 'external_packages'
         assert answer['stdlib_packages'] == [{'package': 'os', 'uses': 1}]
         assert answer['external_packages'] == [] and answer['internal_imports'] == 1
-    elif query == 'reveal imports://src':
+    elif query == 'reveal imports src':
         assert answer['type'] == 'imports'
         assert answer['files']['main.go'][0]['resolved'] == 'helper'
         assert answer['files']['app.py'][0]['classification'] == 'stdlib'

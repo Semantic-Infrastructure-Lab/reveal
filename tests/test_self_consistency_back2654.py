@@ -56,8 +56,9 @@ _RETIRED_SCHEMES = {noun for noun in NOUNS if f'scheme:{noun}' in RETIREMENTS}
 _SCHEMES = '|'.join(sorted(NOUNS, key=len, reverse=True))
 URI = re.compile(rf"(?<![\w/.-])(?:{_SCHEMES})://[^\s'\"`|]*")
 COMMAND = re.compile(rf"(?<![\w/.-])reveal\s+(?:{_SCHEMES})(?=\s|$)[^\n`|#\\]*")
-# Prose that ends a command quoted in a sentence: "reveal calls <path> --callers NAME - CLI subcommand form".
-_PROSE_END = re.compile(r'\s(?:[-\u2014]|or|and|instead|then)(?:\s|$)|\s\(|\s{2,}\S|[,;](?:\s|$)|\.\s|\.$')
+# Prose that ends a command quoted in a sentence: "reveal calls <path> --callers NAME - CLI subcommand form". A shell
+# redirection ends a command as a pipe does (``reveal metrics src --format=json > stats.json``; BACK-2726).
+_PROSE_END = re.compile(r'\s(?:[-\u2014]|or|and|instead|then)(?:\s|$)|\s\(|\s{2,}\S|[,;](?:\s|$)|\.\s|\.$|\s>>?\s')
 # A sentence that shows a request in order to say it is refused: its exit 2 is the point, not a fault.
 _REFUSED = re.compile(r'\bexits? 2\b')
 
@@ -331,7 +332,9 @@ def _command_argv(printed):
             flag = None if eq else flag
         else:
             argv.append(_value(noun, flag or '', token))
-            flag = None
+            # A flag that takes several words keeps reading values (``--tests tests integration_tests``; BACK-2726).
+            spec = _spec(noun, flag) if flag else None
+            flag = flag if spec is not None and getattr(spec.cli, 'nargs', None) == '+' else None
     return argv
 
 
