@@ -1589,7 +1589,7 @@ class TestConfigSecrets:
     def test_key_drilldown_is_masked_too(self, tmp_path):
         from reveal.adapters.codex.handlers.system import get_config
         (tmp_path / 'config.toml').write_text(_FAKE_CONFIG, encoding='utf-8')
-        assert 'FAKESECRET' not in json.dumps(get_config(tmp_path, {'key': 'mcp_servers.github.args'}))
+        assert 'FAKESECRET' not in json.dumps(get_config(tmp_path, key='mcp_servers.github.args'))
 
     @pytest.mark.parametrize('obj', [
         {'keyboard_layout': 'us-intl-alt'}, {'note': 'see task-list-items'},

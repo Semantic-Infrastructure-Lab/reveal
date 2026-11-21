@@ -8,10 +8,11 @@ from typing import Any, Callable, Dict, Tuple
 from ...errors import MissingResourceError, RequestValidationError
 from ...utils.jsonl_records import valid_record_proof
 from ...utils.observations import count_observations, validate_observation_counts
+from ...utils.query_binding import runtime_controls
 from ...utils.query_parser import peek_query_items
 from ...utils.results import (AnalysisCompleteness, FailureCause, failure_execution_facts,
                               result_execution_facts)
-from .params import bind_query
+from .params import PARAM_SPECS, SELECTING_FLAGS, bind_query
 from .info import execution_facts as info_facts, answer_requirement_error as info_error
 from .history import execution_facts as history_facts, answer_requirement_error as history_error
 from .configuration import execution_facts as config_facts, answer_requirement_error as config_error
@@ -113,12 +114,12 @@ def selected_type(resource, params):
     named = named_type(resource)
     if named is not None:
         return named
-    values = dict(peek_query_items(params))
+    given = dict(peek_query_items(runtime_controls(PARAM_SPECS, params)))  # the bound controls, none counted as read
     if resource in CATALOG_PATHS or resource.startswith('sessions/'):  # the router's catalog dispatch
-        return 'codex_content_search' if values.get('search') else 'codex_session_list'
-    for name, kind in (('last', 'codex_messages'), ('tokens', 'codex_tokens'), ('goal', 'codex_goal')):
-        if name in values and values[name] is not None and values[name] is not False:
-            return kind
+        return 'codex_content_search' if given.get('search') else 'codex_session_list'
+    for spec in SELECTING_FLAGS:  # a session selector given picks its answer over the path's view
+        if spec.name in given:
+            return spec.answers[0]
     sub = resource.partition('/')[2]
     return 'codex_message' if sub.startswith('message/') else VIEW_TYPES.get(sub, 'codex_session_overview')
 

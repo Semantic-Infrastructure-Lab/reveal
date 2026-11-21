@@ -41,19 +41,18 @@ def get_info(codex_home: Path, db_path: Path) -> Dict[str, Any]:
     return attach_info_evidence({**base, 'paths': paths, 'db_stats': db_stats}, operations)
 
 
-def get_history(codex_home: Path, query_params: Dict[str, Any]) -> Dict[str, Any]:
+def get_history(codex_home: Path) -> Dict[str, Any]:
     """Read ~/.codex/history.jsonl and return entries."""
     return read_history(codex_home, opener=open)
 
 
-def get_config(codex_home: Path, query_params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def get_config(codex_home: Path, key: Optional[str] = None) -> Dict[str, Any]:
     """Read ~/.codex/config.toml, mask secrets, return parsed dict.
 
-    Supports ?key=dotpath (BACK-944, parity with claude://config, claude://settings)
-    to drill into a single value — applied AFTER secret masking, so a masked value
+    *key* (the bound ``key`` control, a dot path; BACK-944, parity with claude://config, claude://settings)
+    drills into a single value — applied AFTER secret masking, so a masked value
     can never be un-redacted by requesting it directly via ?key=.
     """
-    query_params = query_params or {}
     config_path = codex_home / 'config.toml'
     base: Dict[str, Any] = ResultBuilder.create(
         result_type='codex_config',
@@ -80,7 +79,7 @@ def get_config(codex_home: Path, query_params: Optional[Dict[str, Any]] = None) 
     except (OSError, ValueError) as exc:
         return read.attach({**base, 'config': {}, 'error': str(exc)})
 
-    key = (query_params.get('key') or '').strip()
+    key = (key or '').strip()
     if key:
         val: Any = masked
         found = True

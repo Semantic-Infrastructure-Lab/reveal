@@ -31,13 +31,15 @@ _FLAGS = {
     'tokens': ('Per-request token breakdown, one row per API call', 'codex_tokens'),
     'goal': ('Selected thread goal objective and token budget from goals_1.sqlite', 'codex_goal'),
 }
-PARAM_SPECS = (
-    *(ParamSpec(name, 'string', description, None, string_value, answers=answers, requires=requires)
-      for name, (description, answers, requires) in _STRINGS.items()),
-    *(ParamSpec(name, 'flag', description, None, legacy_presence_value, answers=(selects,))
-      for name, (description, selects) in _FLAGS.items()),
-    _MATCHES, _FULL,
-)
+FILTER, SEARCH, SINCE, UNTIL, KEY = (
+    ParamSpec(name, 'string', description, None, string_value, answers=answers, requires=requires)
+    for name, (description, answers, requires) in _STRINGS.items())
+# The selectors a session's answer is picked by, in the order the router honours them: each names the one answer it
+# selects (``answers``), which the predictor reads.
+SELECTING_FLAGS = LAST, TOKENS, GOAL = tuple(
+    ParamSpec(name, 'flag', description, None, legacy_presence_value, answers=(selects,))
+    for name, (description, selects) in _FLAGS.items())
+PARAM_SPECS = (FILTER, SEARCH, SINCE, UNTIL, KEY, *SELECTING_FLAGS, _MATCHES, _FULL)
 
 
 def bind_query(query, params):

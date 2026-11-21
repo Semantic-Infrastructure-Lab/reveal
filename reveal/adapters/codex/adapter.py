@@ -14,7 +14,7 @@ from .renderer import CodexRenderer
 from ...utils.jsonl_records import TranscriptRecords
 from ...utils.results import note_warning
 from ...utils.query_parser import ResourceSpec, param_schema
-from .params import PARAM_SPECS, _MATCHES, _FULL, bind_query
+from .params import PARAM_SPECS, FILTER, GOAL, KEY, LAST, SEARCH, SINCE, TOKENS, UNTIL, _MATCHES, _FULL, bind_query
 from .lookup import SessionLookup, attach_lookup_evidence
 from .catalog import CATALOG_PATHS
 from .qualification import (RESULT_VARIANTS, SESSION_ID_RE, VIEW_TYPES, selected_type, index_request_error,
@@ -292,11 +292,11 @@ class CodexAdapter(ResourceAdapter):
         return self._session_answer(self.resource.partition('/')[0])
 
     def _catalog_result(self) -> Dict[str, Any]:
-        search = self.query_params.get('search')
-        filter_term = self.query_params.get('filter')
+        search = SEARCH.read(self.query_params)
+        filter_term = FILTER.read(self.query_params)
         if search or filter_term:
-            since = self.query_params.get('since', '')
-            until = self.query_params.get('until', '')
+            since = SINCE.read(self.query_params) or ''
+            until = UNTIL.read(self.query_params) or ''
         if search:
             return _h_search_sessions(self.CODEX_DB, search, _MATCHES.read(self.query_params), since=since, until=until)
         if filter_term:
@@ -329,7 +329,7 @@ class CodexAdapter(ResourceAdapter):
 
     def _goal_selected(self) -> bool:
         return (selected_type(self.resource, self.query_params) == 'codex_goal'
-                and bool(self.query_params.get('goal')))
+                and bool(GOAL.read(self.query_params)))
 
     def _handle_session(self, session_id: str) -> Dict[str, Any]:
         """Handle codex://<UUID>[/sub] requests."""
@@ -349,9 +349,9 @@ class CodexAdapter(ResourceAdapter):
         sub = self._session_sub_path()
 
         # ?last / ?tokens / ?goal → query-param routes
-        if 'last' in self.query_params or self.query_params.get('last') is not None:
+        if LAST.read(self.query_params):
             return self._result_last(records, session_row)
-        if 'tokens' in self.query_params or self.query_params.get('tokens') is not None:
+        if TOKENS.read(self.query_params):
             return self._result_tokens(records, session_row)
 
         if sub == 'messages':
@@ -532,12 +532,12 @@ class CodexAdapter(ResourceAdapter):
         return result
 
     def _get_history(self) -> Dict[str, Any]:
-        result = _h_get_history(self.CODEX_HOME, self.query_params)
+        result = _h_get_history(self.CODEX_HOME)
         self._history_answer = deepcopy(result)
         return result
 
     def _get_config(self) -> Dict[str, Any]:
-        result = _h_get_config(self.CODEX_HOME, self.query_params)
+        result = _h_get_config(self.CODEX_HOME, KEY.read(self.query_params))
         self._config_answer = deepcopy(result)
         return result
 

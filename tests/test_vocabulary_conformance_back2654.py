@@ -2272,8 +2272,7 @@ def test_cell(workspace, noun, rule):
 # field declarations (rule 8) keep their own warning until then; this list only shrinks.
 _OWN_UNKNOWN_KEY_WARNING: set = set()
 # A call kept for another rule: unknown keys never reach it, so it is not an unknown-key check.
-_KEPT_FOR_ANOTHER_RULE = {'codex': 'warns that full is unread outside exchanges (rule 20 applicability, BACK-2656), '
-                                   'on api.query and the adapter too, where the CLI ledger does not reach'}
+_KEPT_FOR_ANOTHER_RULE: dict = {}
 
 
 @pytest.mark.parametrize('noun', [noun for noun in NOUNS
