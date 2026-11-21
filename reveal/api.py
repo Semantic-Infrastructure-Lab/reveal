@@ -169,14 +169,17 @@ def _noted_answer(scheme: str, uri: str, overrides: Dict[str, Any], answer):
     RETIREMENTS is the one source (its scheme, parameters, values and typed keywords), and the notes reach the
     result's ``meta.warnings`` as the CLI's JSON carries them (BACK-2654; it used to note declared aliases only).
     A URI request that retires says it once, as the Python call that replaces it (BACK-2716): that note covers the
-    per-key notes of the controls it renders."""
-    from .cli.invocation import Invocation, invocation_scope, note_uri_spelling, request_noted, uri_retirement_keys
+    per-key notes of the controls it renders. A request that says no request note (a resource URI with no query string)
+    says each legacy keyword's own row: nothing else would."""
+    from .cli.invocation import (Invocation, invocation_scope, note_uri_spelling, request_noted, retirement_note,
+                                 uri_retirement_keys)
     from .utils.json_utils import attach_invocation_warnings
     by_request = request_noted(scheme)
+    says_request = _says_request_note(scheme, uri)
     keys = uri_retirement_keys(uri) + [f'param:{scheme}.{key}' for key in overrides]
     with invocation_scope(Invocation.parse(['reveal', uri]), retirements_to_stderr=False, form='python'):
         for key in keys:
-            note_uri_spelling(key)
+            (note_uri_spelling if by_request and says_request else retirement_note)(key)
         _note_retired_where_fields(scheme, uri, overrides)
         if by_request:
             _note_uri_request(scheme, uri, overrides)
@@ -213,16 +216,20 @@ def _note_retired_where_fields(scheme: str, uri: str, overrides: Dict[str, Any])
         note_retired_where_fields(scheme, bound[0].PARAM_SPECS, bound[2], 'uri')
 
 
-def _note_uri_request(scheme: str, uri: str, overrides: Dict[str, Any]) -> None:
-    """The one note of a retiring URI request, rendered from the request the URI and its keywords bind: an analysis-only
-    scheme always, any other scheme when the URI spells a query string. An invalid request is not noted: the answer
-    raises it."""
+def _says_request_note(scheme: str, uri: str) -> bool:
+    """Whether a URI request says the one request note: an analysis-only scheme always, any other scheme when the URI
+    spells a query string (a bare resource URI is no retiring request)."""
     from .adapters.base import get_adapter_class
+    return bool(uri.partition('?')[2]) or bool(getattr(get_adapter_class(scheme), 'ANALYSIS_ONLY', False))
+
+
+def _note_uri_request(scheme: str, uri: str, overrides: Dict[str, Any]) -> None:
+    """The one note of a retiring URI request (``_says_request_note``), rendered from the request the URI and its
+    keywords bind. An invalid request is not noted: the answer raises it."""
     from .cli.invocation import request_note
     from .cli.routing.canonical import render_uri_request
     from .cli.routing.declared import create_declared_parser
-    spelled_query = uri.partition('?')[2]
-    if not (getattr(get_adapter_class(scheme), 'ANALYSIS_ONLY', False) or spelled_query):
+    if not _says_request_note(scheme, uri):
         return
     bound = _bound_uri_params(scheme, uri, overrides)
     if bound is None:
