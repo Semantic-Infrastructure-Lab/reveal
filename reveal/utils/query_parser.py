@@ -382,6 +382,11 @@ class LegacySpelling:
     owner: str = ''  # the canonical control's name, bound by its ParamSpec
     # The old flag took no value (``--no-churn``): it stands for this legacy value. None: the flag takes one.
     flag_value: Any = None
+    # (control, other control) pairs: in a request that spells this legacy word and selects an answer ``rebinds_when``
+    # accepts (None: any), the control's value is the other control's (git ``type=ownership&limit=N`` is
+    # ``--scan-limit N``, BACK-2616). The binder applies it once the request's sources are joined (``rebind_legacy``).
+    rebinds: Tuple[Tuple[str, str], ...] = ()
+    rebinds_when: Optional[Callable[[Mapping[str, Any]], bool]] = None
 
     def translate(self, raw: Any) -> Dict[str, Any]:
         """The canonical controls the legacy value stands for."""

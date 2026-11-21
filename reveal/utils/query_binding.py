@@ -181,6 +181,42 @@ def _normalize_aliases(declarations: Iterable[ParamSpec], supplied: Mapping[str,
     return result
 
 
+def rebind_legacy(declarations: Iterable[ParamSpec], params: QueryParams, spelled: Iterable[str], *,
+                  replacing: Iterable[str] = (), bound: bool = False) -> None:
+    """A legacy word that changes another control's meaning in its request (``LegacySpelling.rebinds``): when the
+    request spells it (*spelled*: the alias and legacy keys it typed) and selects an answer ``rebinds_when`` accepts,
+    each first control's value moves to the second control (git ``type=ownership&limit=N`` is ``--scan-limit N``,
+    BACK-2616). Called once the request's sources are joined: a URI's or typed keywords' preparation, a flag joining a
+    URI, typed overrides. The second control, given too, is one setting (COMMAND_MODEL "Conflicting values"): equal
+    values are one, different values raise ValueError naming both; a value a typed override gave (*replacing*)
+    replaces the one it overrides. *bound*: the values are converted already (overrides), so the moved one is
+    converted by its new control."""
+    declarations, spelled, replacing = tuple(declarations), set(spelled), set(replacing)
+    values = dict(peek_query_items(params))  # a routing check, not a read
+    owners = {spec.name: spec for spec in declarations}
+    for entry in (entry for spec in declarations for entry in spec.legacy if entry.rebinds and entry.name in spelled):
+        if entry.rebinds_when is not None and not entry.rebinds_when(values):
+            continue
+        for source, target in entry.rebinds:
+            value, given, spec = dict.get(params, source), dict.get(params, target), owners[target]
+            if value is None:
+                continue
+            del params[source]
+            params._given.discard(source)
+            params._given.add(target)
+            if given is not None and (target in replacing) != (source in replacing):
+                if target in replacing:
+                    continue  # the override of the control it moves to stands
+            elif given is not None:
+                if not _same_scalar(spec, given, value):
+                    raise ValueError(_conflicting_spellings(spec, [source, target], None))
+                continue
+            if bound:
+                params.set_normalized(spec, _validate_binding(spec, value, 'typed'))
+            else:
+                params[target] = value
+
+
 def _prepare_repeated_params(declarations: tuple[ParamSpec, ...], source: str, params: QueryParams) -> None:
     """A repeatable control keeps every occurrence of every spelling, in query order (Markdown ``match`` and
     ``body-contains`` AND); a setting given twice with different values is an invalid request."""
@@ -410,6 +446,7 @@ def _prepare_uri_params(declarations: tuple[ParamSpec, ...], source: str) -> Que
     prepared._given = set(dict.keys(prepared))
     for name, selector in selectors.items():
         prepared._aliases[name] += (selector,)
+    rebind_legacy(declarations, prepared, prepared._supplied_aliases)
     return prepared
 
 
@@ -520,6 +557,7 @@ def join_uri_and_flags(declarations: Iterable[ParamSpec], uri_params: QueryParam
         joined._given.add(spec.name)
         query += spelled_parts
     joined._source_query = _echo_query('&'.join(query))
+    rebind_legacy(declarations, joined, joined._supplied_aliases)
     return joined
 
 
@@ -536,6 +574,7 @@ def _prepare_typed_params(declarations: tuple, source: Mapping[str, Any],
         elif spec.name in supplied:
             params[spec.name] = supplied[spec.name]
     params._given = {name for name, value in dict.items(params) if value is not None}  # an omitted flag is None
+    rebind_legacy(declarations, params, params._supplied_aliases)
     from .query_parser import query_key_recorder
     query_key_recorder(*dict.keys(params))
     return params
@@ -856,6 +895,9 @@ def apply_declared_overrides(declarations: Iterable[ParamSpec], params: QueryPar
                 (params._given.discard if raw is None else params._given.add)(spec.name)  # None: the default
                 value = spec.validate(None) if raw is None else _validate_binding(spec, raw, 'typed')
                 params.set_normalized(spec, value)
+        typed_words = {alias for spec in declarations for alias in spec.spellings[1:] if alias in overrides}
+        rebind_legacy(declarations, params, set(params._supplied_aliases) | typed_words,
+                      replacing=[name for name, raw in supplied.items() if raw is not None], bound=True)
     return params
 
 
