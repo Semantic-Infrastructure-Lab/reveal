@@ -4,8 +4,10 @@ The script (``scripts/migrate_doc_uri_examples.py``) finds examples with the exe
 (``scripts/doc_examples.py``) and renders them with ``canonical.render_request`` (a plain path) or
 ``render_uri_request`` (an address). These tests hold its edges on synthetic docs: what it rewrites, and what it must
 leave (a sentence or comment naming a retired spelling, a resource URI with no options, a request with no canonical
-form, a twin or undeclared scheme), and they run each rewrite of the finished nouns' guides beside its original on the
-named doc fixture: same JSON (the echoed command and the request note aside) and same exit.
+form, a twin or undeclared scheme), and they run each rewrite the script would make in the shipped docs beside its
+original on the named doc fixture: same JSON (the echoed command and the request note aside) and same exit. The finished
+nouns' guides were proved that way before they were written (150 pairs at 92b92e42); the docs still to migrate keep the
+proof populated until the last lane writes its guides.
 """
 import json
 import shlex
@@ -17,11 +19,7 @@ from test_canonical_request_back2716 import _without_command
 from test_example_recipes_run import (_fixture_names, _named_fixture_skip, _without_format,  # noqa: F401
                                       named_harness)
 
-FINISHED_NOUNS = ('json', 'imports', 'calls', 'claude', 'metrics', 'overview', 'contracts', 'patches')
-FINISHED_GUIDES = tuple(f'adapters/{name}' for name in (
-    'JSON_ADAPTER_GUIDE.md', 'IMPORTS_ADAPTER_GUIDE.md', 'CALLS_ADAPTER_GUIDE.md', 'CLAUDE_ADAPTER_GUIDE.md',
-    'METRICS_ADAPTER_GUIDE.md', 'STATS_ADAPTER_GUIDE.md', 'OVERVIEW_ADAPTER_GUIDE.md', 'CONTRACTS_ADAPTER_GUIDE.md',
-    'PATCHES_ADAPTER_GUIDE.md'))
+
 
 
 def _docs(tmp_path, body):
@@ -179,24 +177,40 @@ def test_a_rewritten_doc_plans_nothing_more(tmp_path):
 
 def test_check_writes_nothing(tmp_path, capsys):
     before = {p: p.read_bytes() for p in migrate.documented_sources().values()}
-    assert migrate.main(['--check', str(migrate.DOCS / 'adapters' / 'PATCHES_ADAPTER_GUIDE.md')]) == 0
-    assert 'adapters/PATCHES_ADAPTER_GUIDE.md: found ' in capsys.readouterr().out
+    assert migrate.main(['--check']) == 0
+    assert capsys.readouterr().out.splitlines()[-1].startswith('total: found ')
     assert {p: p.read_bytes() for p in migrate.documented_sources().values()} == before
 
 
-# --- the finished nouns' guides: each rewrite answers as its original does -------------------------------------------
+# --- every rewrite the script would make answers as its original does --------------------------------------------------
 
-def _finished_rewrites():
-    """(original, rewritten) once each, for the rewrites of the finished nouns' guides the named fixture runs."""
+def _doc_rewrites():
+    """(original, rewritten) once each, for the rewrites in the shipped docs that the named fixture runs."""
     names, seen = _fixture_names(), {}
-    for examples in migrate.plan(FINISHED_GUIDES, FINISHED_NOUNS).values():
+    for examples in migrate.plan().values():
         for e in examples:
             if e.kind == 'rewrite' and _named_fixture_skip(e.tokens, names) is None:
                 seen.setdefault(shlex.join(e.tokens), shlex.split(e.new_line, comments=True))
     return sorted(seen.items())
 
 
-FINISHED_REWRITES = _finished_rewrites()
+# original -> why its canonical request answers differently today. Strict xfail: a fix fails the run until deleted.
+KNOWN_DIVERGENCES = {
+    "reveal 'git://.?type=ownership&limit=500'": (
+        "git ownership: the URI's limit reports scope.history_window {commits_counted, complete, limit}; the same "
+        "limit as a flag after the URI (git://. --view ownership --limit 500) answers without it (BACK-2616; found "
+        "by BACK-2726)"),
+}
+
+
+def _doc_rewrite_params():
+    return [pytest.param(original, rewritten, id=original,
+                         marks=[pytest.mark.xfail(strict=True, reason=KNOWN_DIVERGENCES[original])]
+                         if original in KNOWN_DIVERGENCES else [])
+            for original, rewritten in DOC_REWRITES]
+
+
+DOC_REWRITES = _doc_rewrites()
 
 
 def _answer(harness, words):
@@ -227,8 +241,8 @@ def _text(harness, words):
     return code, out
 
 
-@pytest.mark.parametrize('original,rewritten', FINISHED_REWRITES, ids=[o for o, _ in FINISHED_REWRITES])
-def test_a_finished_guide_rewrite_answers_as_its_original(named_harness, original, rewritten):  # noqa: F811
+@pytest.mark.parametrize('original,rewritten', _doc_rewrite_params())
+def test_a_doc_rewrite_answers_as_its_original(named_harness, original, rewritten):  # noqa: F811
     """Same JSON and exit, and, where the example prints text, the same text and exit (the request note goes to
     stderr, which is not compared)."""
     assert _answer(named_harness, rewritten) == _as_uri_answers(_answer(named_harness, shlex.split(original)))
@@ -236,8 +250,7 @@ def test_a_finished_guide_rewrite_answers_as_its_original(named_harness, origina
         assert _text(named_harness, rewritten) == _text(named_harness, shlex.split(original))
 
 
-def test_the_finished_guide_proof_is_not_vacuous():
-    """While the finished nouns' guides teach URI requests, over 100 rewrites run on the fixture (150 of 362 at 6f1c40d8)."""
-    rewrites = sum(e.kind == 'rewrite' for examples in migrate.plan(FINISHED_GUIDES, FINISHED_NOUNS).values()
-                   for e in examples)
-    assert rewrites == 0 or len(FINISHED_REWRITES) > 100, (rewrites, len(FINISHED_REWRITES))
+def test_the_doc_rewrite_proof_is_not_vacuous():
+    """While the docs teach URI requests the script rewrites, over 100 of them run on the fixture."""
+    rewrites = sum(e.kind == 'rewrite' for examples in migrate.plan().values() for e in examples)
+    assert rewrites == 0 or len(DOC_REWRITES) > 100, (rewrites, len(DOC_REWRITES))
