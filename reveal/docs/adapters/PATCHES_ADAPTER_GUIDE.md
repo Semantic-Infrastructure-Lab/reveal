@@ -19,8 +19,8 @@ production boundary fan-out.
 
 ```bash
 reveal patches://tests
-reveal 'patches://tests?group=target&limit=20'
-reveal 'patches://tests?group=test&min=3'
+reveal 'patches://tests?view=target&limit=20'
+reveal 'patches://tests?view=test&min=3'
 reveal 'patches://tests?private=true'
 reveal 'patches://tests?target=ssl'
 ```
@@ -28,7 +28,7 @@ reveal 'patches://tests?target=ssl'
 Use JSON when another tool or agent will rank, filter, or store the result:
 
 ```bash
-reveal 'patches://tests?group=target&limit=20' --format json
+reveal 'patches://tests?view=target&limit=20' --format json
 ```
 
 ## Default Test Selection
@@ -48,12 +48,12 @@ Configured selectors are literal files or subtrees; see the
 
 | Parameter | Values | Purpose |
 |-----------|--------|---------|
-| `group` | `target` (default), `test`, `file` | Choose whether repeated patches are grouped by patched target, test function, or file. |
-| `limit` | integer (default `20`) | Maximum groups returned. |
+| `view` | `target` (default), `test`, `file`, `pressure` | `target`, `test` and `file` choose whether repeated patches are grouped by patched target, test function, or file; `pressure` is the report below. |
+| `limit` | integer (default `20`) | Maximum groups returned (each hotspot list in the pressure view); `0` is all. |
 | `min` | integer (default `1`) | Minimum patch count required for a group. |
 | `target` | string or glob | Keep only patch targets matching the substring or glob. |
 | `private` | `true`, `false` | Keep only patches of private/internal targets. |
-| `suppress` | `true` (default), `false` | When true, hides `sys.stdout`, `sys.stderr`, `sys.stdin`, `builtins.print`, and `builtins.input` from grouped output. These are always infrastructure noise. Raw scan totals always include them. |
+| `suppress` | `on` (default), `off` | When on, hides `sys.stdout`, `sys.stderr`, `sys.stdin`, `builtins.print`, and `builtins.input` from grouped output. These are always infrastructure noise. Raw scan totals always include them. |
 
 ## Detected Forms
 
@@ -121,16 +121,19 @@ also considers conventional sibling suites and declared project paths. Explicit
 
 ```bash
 reveal patches src --view pressure --tests tests
-reveal patches src --view pressure --tests tests --top 20
+reveal patches src --view pressure --tests tests --limit 20
 reveal patches src --view pressure --tests tests --format json
-reveal 'patches://src?view=pressure&tests=tests,integration_tests&top=20&min_patches=3&min_categories=3&include_unresolved=true'
+reveal 'patches://src?view=pressure&tests=tests,integration_tests&limit=20&where=patches>=3&where=categories>=3&include_unresolved=true'
 ```
 
-The pressure view answers a `testability_report`. Its own parameters are `tests`, `top`
-(maximum groups per hotspot list, default 20), `min_patches` (default 3), `min_categories`
-(default 3) and `include_unresolved`; `limit`, `min`, `group`, `target`, `private` and
-`suppress` belong to the default scan. A parameter given to the view that does not read it
-exits 2 naming the ones that view reads, and `--all` lifts the pressure view's `top`.
+The pressure view answers a `testability_report`. Its own parameters are `tests`, `limit`
+(maximum groups per hotspot list, default 20), `where` and `include_unresolved`; `where` takes
+only `patches>=N` (target groups with N or more patches, default 3) and `categories>=N`
+(boundary profiles with N or more categories, default 3), repeated terms ANDed. `min`,
+`target`, `private` and `suppress` belong to the default scan. A parameter given to the view
+that does not read it exits 2 naming the ones that view reads, and `--all` lifts the pressure
+view's `limit`. The earlier spellings of the grouping, the cap, the two minimums and
+`--no-suppress` still answer until 1.0 with a replaced-by note.
 `testability://` and `reveal testability` still answer, with a replaced-by note, until the
 cut release.
 

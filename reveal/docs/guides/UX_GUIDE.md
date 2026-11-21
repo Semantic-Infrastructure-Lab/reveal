@@ -224,7 +224,7 @@ reveal 'ast://file.py?name~=auth' --format json | jq -r '.results[].file' | sort
 | `metrics://` | ✅ Metric filtering | `?view=hotspots`, `?avg_complexity>=10` (`stats://` is a deprecated alias: it still answers, with a note) |
 | `git://` | ✅ Commit filtering | `?author=`, `?since=`, `?type=` |
 | `calls://` | ✅ Call graph | `?callers=fn`, `?top=10` |
-| `patches://` | ✅ Test patch pressure | `?group=target`, `?min=3`, `?limit=20` |
+| `patches://` | ✅ Test patch pressure | `?view=target`, `?min=3`, `?limit=20` |
 | `claude://` | ✅ Session filtering | `?summary`, `?errors`, `?contains=` |
 | `xlsx://` | ✅ Sheet/range | `?sheet=Sales`, `?range=A1:D10` |
 | `ssl://` | ✅ Expiry/summary | `?expiring-within=30` (implies `--check`), `?summary` (batch and nginx views) |

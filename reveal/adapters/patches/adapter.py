@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import replace
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -12,9 +13,10 @@ from reveal.reveal_types import CONTRACT_VERSION
 from reveal.testability.patches import (group_patches, language_not_scanned_warning, no_scannable_tests_reason,
                                         scan_patches)
 from reveal.utils.path_utils import TestLayout, to_posix
-from reveal.utils.query_binding import bind_declared_params, boolean_value
-from reveal.utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSpec, legacy_slices, param_schema,
-                                       peek_query_items, whole_number)
+from reveal.utils.query_binding import bind_declared_params, boolean_value, legacy_switch, switch_value
+from reveal.utils.query_parser import (CliBinding, LegacySpelling, ParamSpec, ParamValueError, QueryParams, ResourceSpec,
+                                       expression_list, legacy_slices, param_schema, peek_query_items, whole_number,
+                                       where_param)
 from reveal.utils.results import AnalysisCompleteness, lost_evidence, ResultBuilder, note_truncation, result_execution_facts
 from reveal.utils.validation import require_path_exists
 
@@ -26,8 +28,8 @@ from ..testability import PRESSURE_SPECS, TestabilityAdapter, _report_error, tes
 # The declaration `reveal patches` and patches:// are both generated from (BACK-2160). The default view is the raw
 # scan of a test root; ?view=pressure is testability's report (was testability://), whose path is the production
 # root and whose test files are chosen by the shared is_test_path rule or the explicit tests= override.
-VIEWS = ('pressure',)
 GROUPS = ('target', 'test', 'file')
+VIEWS = (*GROUPS, 'pressure')  # the raw scan's grouping is a view (D20, BACK-2625); omitted is the target grouping
 
 
 def _text(value: Any) -> str:
@@ -48,16 +50,16 @@ def _whole(value: Any) -> int:
 # The answers each control is read by (COMMAND_MODEL "Applicability", BACK-2656): the raw scan's grouping controls, and
 # the pressure report's own, which are testability's.
 _SCAN, _PRESSURE = ('patches_scan',), (TestabilityAdapter.RESULT_TYPE,)
-_VIEW = ParamSpec('view', 'string', 'pressure: testability\'s report (was testability://), patch hotspots joined with production '
-                  'boundary fan-out; the path is then the production root. Omitted: the raw patch scan of a test root',
-                  None, _text, ('view=pressure',), choices=VIEWS, role='operation',
-                  cli=CliBinding(('--view',), metavar='VIEW'), cap='top')  # --all lifts the report's group cap
-_GROUP = ParamSpec('group', 'string', 'Grouping mode: target, test, or file', 'target', _text,
-                   ('group=target',), choices=GROUPS, role='analysis', cli=CliBinding(('--group',), metavar='MODE'),
-                   answers=_SCAN)
-_LIMIT = ParamSpec('limit', 'integer', 'Maximum groups to return', 20, _whole,
-                   ('limit=20',), minimum=0, zero_policy='all', role='presentation',
-                   cli=CliBinding(('--limit',), metavar='N'), answers=_SCAN)
+_VIEW = ParamSpec('view', 'string', 'target, test or file: the raw patch scan of a test root grouped that way (default target; '
+                  'was group); pressure: testability\'s report (was testability://), patch hotspots joined with production '
+                  'boundary fan-out; the path is then the production root',
+                  None, _text, ('view=test', 'view=pressure'), choices=VIEWS, role='operation',
+                  cli=CliBinding(('--view',), metavar='VIEW'), cap='limit',  # --all lifts the report's group cap
+                  legacy=(LegacySpelling('group', flag='--group'),))
+_LIMIT = ParamSpec('limit', 'integer', 'Maximum groups to return (the scan\'s groups, or each pressure hotspot list); 0 is '
+                   'all', 20, _whole, ('limit=20',), minimum=0, zero_policy='all', role='presentation',
+                   cli=CliBinding(('--limit',), metavar='N'), answers=_SCAN + _PRESSURE,
+                   legacy=(LegacySpelling('top', flag='--top'),))
 _MIN = ParamSpec('min', 'integer', 'Minimum patch count for a group', 1, _whole,
                  ('min=3',), minimum=0, zero_policy='no minimum', role='analysis',
                  cli=CliBinding(('--min',), metavar='N'), answers=_SCAN)
@@ -66,14 +68,65 @@ _TARGET = ParamSpec('target', 'string', 'Filter by target substring or glob', ''
 _PRIVATE = ParamSpec('private', 'boolean', 'Only include private/internal patch targets', False, boolean_value,
                      ('private=true',), role='analysis', cli=CliBinding(('--private',), action='store_true'),
                      answers=_SCAN)
-_SUPPRESS = ParamSpec('suppress', 'boolean', 'Hide stdlib I/O noise (sys.stdout/stderr, builtins) from grouped output. '
-                      'Default: true. Raw totals always include them.', True, boolean_value, ('suppress=false',),
-                      role='analysis', cli=CliBinding(('--no-suppress',), action='store_false'), answers=_SCAN)
+_SUPPRESS = ParamSpec('suppress', 'boolean', 'Stdlib I/O noise (sys.stdout/stderr, builtins) in grouped output: on '
+                      '(default) hides it, off shows it. Raw totals always include it.', True, switch_value,
+                      ('suppress=off',), role='analysis', cli=CliBinding(('--suppress',), metavar='on|off'),
+                      legacy=(LegacySpelling('no_suppress', codec=legacy_switch('no_suppress', 'off', 'on'),
+                                             flag='--no-suppress', flag_value=True),), answers=_SCAN)
 # The pressure view's own parameters are testability's, declared once there; here only the pressure report reads them.
-_PRESSURE_SPECS = tuple(replace(spec, answers=_PRESSURE) for spec in PRESSURE_SPECS)
+# The cap is limit (declared above), and the two thresholds are where terms: min_patches is patches>=N, min_categories
+# categories>=N (COMMAND_MODEL "Filters"; D20, BACK-2625).
+_PRESSURE_FIELDS = ('patches', 'categories')
+_PRESSURE_TERM = re.compile(r'\s*(patches|categories)\s*>=\s*([0-9]+)\s*')
+
+
+def _pressure_terms(value: Any) -> List[str]:
+    """The pressure view's where terms: a minimum on one of its two counts, nothing else."""
+    terms = expression_list(value)
+    for term in terms:
+        if not _PRESSURE_TERM.fullmatch(term):
+            raise ParamValueError(f"where on the pressure view takes 'patches>=N' and 'categories>=N', got {term!r}")
+    return terms
+
+
+def _threshold_word(name: str, field: str) -> LegacySpelling:
+    def codec(value: Any) -> str:
+        try:
+            return f'{field}>={_whole(value)}'
+        except (TypeError, ValueError):
+            raise ParamValueError(f'{name} must be a whole number, got {value!r}') from None
+    return LegacySpelling(name, codec=codec, flag='--' + name.replace('_', '-'))
+
+
+_WHERE = replace(where_param(
+    "A minimum on a pressure count: patches>=N keeps the target groups with N or more patches (default 3), "
+    "categories>=N the boundary profiles with N or more categories (default 3); repeat to AND",
+    ('view=pressure&where=patches>=5', 'view=pressure&where=categories>=2'), convert=_pressure_terms, fields=_PRESSURE_FIELDS,
+    legacy=(_threshold_word('min_patches', 'patches'), _threshold_word('min_categories', 'categories'))),
+    answers=_PRESSURE)
+
+
+def pressure_thresholds(params: Any) -> tuple:
+    """(min_patches, min_categories) of the where terms; the strictest of repeated terms, 3 where none is given."""
+    found = {'patches': 3, 'categories': 3}
+    given: Dict[str, int] = {}
+    for term in _WHERE.read(params):
+        matched = _PRESSURE_TERM.fullmatch(term)
+        if matched is None:  # the bound value passed _pressure_terms: unreachable, but never a silent default
+            raise ParamValueError(f'where term {term!r} is not a pressure minimum')
+        field, count = matched.groups()
+        given[field] = max(int(count), given.get(field, 0))
+    found.update(given)
+    if isinstance(params, QueryParams):
+        params.mark(*given)  # a bare ?patches>=N is that where term: its field key is read with it
+    return max(1, found['patches']), max(1, found['categories'])
+
+
+_PRESSURE_SPECS = tuple(replace(spec, answers=_PRESSURE) for spec in PRESSURE_SPECS
+                        if spec.name in ('tests', 'include_unresolved'))
 # --head/--tail/--range slice this noun's rows today: flag-only legacy modifiers until the cut, read by every answer
 # (BACK-2673; their notes are the flag:<noun>.<flag> RETIREMENTS rows).
-PARAM_SPECS = (_VIEW, _GROUP, _LIMIT, _MIN, _TARGET, _PRIVATE, _SUPPRESS, *_PRESSURE_SPECS,
+PARAM_SPECS = (_VIEW, _LIMIT, _MIN, _TARGET, _PRIVATE, _SUPPRESS, _WHERE, *_PRESSURE_SPECS,
                *legacy_slices(head=(), tail=(), range=()))
 
 
@@ -138,11 +191,11 @@ class PatchesAdapter(ResourceAdapter):
         return {
             'name': 'patches',
             'description': 'Scan Python and TypeScript/JavaScript tests for mock/patch pressure grouped by target.',
-            'syntax': 'patches://<tests-path>[?group=target|test|file&limit=N&min=N]',
+            'syntax': 'patches://<tests-path>[?view=target|test|file&limit=N&min=N]',
             'examples': [
                 {'uri': 'patches://tests', 'description': 'Summarize patch pressure in tests/'},
-                {'uri': 'patches://tests?group=target', 'description': 'Group patches by production target'},
-                {'uri': 'patches://tests?group=test&min=3', 'description': 'Find tests with at least 3 patches'},
+                {'uri': 'patches://tests?view=target', 'description': 'Group patches by production target'},
+                {'uri': 'patches://tests?view=test&min=3', 'description': 'Find tests with at least 3 patches'},
                 {'uri': 'patches://tests?target=ssl&limit=10', 'description': 'Show patch groups matching ssl'},
                 {'uri': 'patches://tests?private=true', 'description': 'Show patches of private/internal targets'},
             ],
@@ -171,7 +224,7 @@ class PatchesAdapter(ResourceAdapter):
         return {
             'adapter': 'patches',
             'description': 'Patch pressure scanner for Python and TypeScript/JavaScript tests',
-            'uri_syntax': 'patches://<path>?group=target&limit=20',
+            'uri_syntax': 'patches://<path>?view=target&limit=20',
             'resource': PatchesAdapter.RESOURCE_SPEC.schema(),
             'query_params': param_schema(PatchesAdapter.PARAM_SPECS),
             'elements': {},
@@ -208,7 +261,7 @@ class PatchesAdapter(ResourceAdapter):
             ],
             'example_queries': [
                 {'uri': 'patches://tests', 'description': 'Summarize patch pressure', 'output_type': 'patches_scan'},
-                {'uri': 'patches://tests?group=test&min=3', 'description': 'Find patch-heavy tests', 'output_type': 'patches_scan'},
+                {'uri': 'patches://tests?view=test&min=3', 'description': 'Find patch-heavy tests', 'output_type': 'patches_scan'},
             ],
             'notes': [
                 'Default selection uses the selected project test/support policy, including configured additional paths. Raw scans stay within the target, including direct files; narrowing within a project retains its file roles. Markerless roots use a disclosed fallback.',
@@ -222,7 +275,7 @@ class PatchesAdapter(ResourceAdapter):
 
     def get_structure(self, **kwargs: Any) -> Dict[str, Any]:
         if _VIEW.read(self.query_params) == 'pressure':
-            return testability_report(self.path, self.query_params)
+            return testability_report(self.path, self.query_params, _LIMIT, pressure_thresholds(self.query_params))
         # BACK-1250: scan_patches() silently accepted a nonexistent path and
         # returned a clean, successful-looking empty result (total_uses: 0,
         # errors: [], source_type mislabeled 'file') -- indistinguishable
@@ -246,7 +299,8 @@ class PatchesAdapter(ResourceAdapter):
         # target is a mock-target name), but if that ever changes, follow
         # PackAdapter.get_structure()'s isinstance(value, bool) recovery
         # pattern for ?budget= (BACK-1180).
-        group_by = _GROUP.read(self.query_params)
+        view = _VIEW.read(self.query_params)
+        group_by = view if view in GROUPS else 'target'
         limit = _LIMIT.read(self.query_params)
         min_count = _MIN.read(self.query_params)
         target_filter = _TARGET.read(self.query_params)

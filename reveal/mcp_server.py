@@ -694,7 +694,7 @@ def reveal_query(uri: str, provenance: bool = False) -> str:
     '?limit=N', '?sort=field' (or '?sort=-field' for desc) and '?offset=M'
     are each adapter's own controls, read by the answers its schema lists:
     calls:// and imports:// cap their rankings ('?sort=-callers&limit=N',
-    '?sort=-fan-in&limit=N'), patches://?view=pressure takes '?top=N'. A noun
+    '?sort=-fan-in&limit=N'), patches://?view=pressure takes '?limit=N' too. A noun
     that declares its controls refuses a key it does not take, or one the
     selected answer does not read, with an error naming the ones it does;
     other adapters answer "Unknown query param ... ignored".

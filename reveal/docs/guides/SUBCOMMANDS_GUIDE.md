@@ -923,7 +923,7 @@ See the full guide for uncapped observation counts, path encoding and artifacts.
 ### Usage
 
 ```
-reveal patches [PATH] --view pressure [--tests PATHS...] [--top N] [--min-patches N] [--min-categories N]
+reveal patches [PATH] --view pressure [--tests PATHS...] [--limit N] [--where 'patches>=N'] [--where 'categories>=N']
 ```
 
 ### CLI Flags
@@ -931,9 +931,9 @@ reveal patches [PATH] --view pressure [--tests PATHS...] [--top N] [--min-patche
 | Flag | Description |
 |------|-------------|
 | `--tests PATHS...` | Test paths to scan (default: `tests/`, `test/`, or `spec/` under the source root) |
-| `--top N` | Maximum patch and boundary groups to show (default: 20) |
-| `--min-patches N` | Minimum patches for a target group to be reported (default: 3) |
-| `--min-categories N` | Minimum boundary categories for unpatched functions to be reported (default: 3) |
+| `--limit N` | Maximum patch and boundary groups to show (default: 20; 0 is all) |
+| `--where 'patches>=N'` | Minimum patches for a target group to be reported (default: 3) |
+| `--where 'categories>=N'` | Minimum boundary categories for unpatched functions to be reported (default: 3) |
 | `--include-unresolved` | Include low-count unresolved patch targets in text/JSON results |
 | `--format json` | Machine-readable output |
 
@@ -941,11 +941,11 @@ reveal patches [PATH] --view pressure [--tests PATHS...] [--top N] [--min-patche
 
 ```bash
 reveal patches src --view pressure --tests tests
-reveal patches . --view pressure --tests tests integration_tests --top 20
+reveal patches . --view pressure --tests tests integration_tests --limit 20
 reveal patches src --view pressure --tests tests --format json
 ```
 
 ### See Also
 
-- `reveal 'patches://tests?group=target'` — Raw patch-pressure scan (what this command joins against production boundaries)
+- `reveal 'patches://tests?view=target'` — Raw patch-pressure scan (what this command joins against production boundaries)
 - `reveal help://testability` — Full testability workflow guide (interpretation, boundary taxonomy, false-positive notes)

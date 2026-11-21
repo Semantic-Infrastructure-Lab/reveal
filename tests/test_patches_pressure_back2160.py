@@ -109,7 +109,7 @@ def test_pressure_only_parameters_are_refused_by_the_default_view(repo, output_f
 def test_an_unknown_view_is_rejected(repo):
     done = run(f'patches://{repo}?view=everything', '--format', 'json')
     assert done.returncode == 2, (done.returncode, done.stdout, done.stderr)
-    assert "view must be one of ('pressure',), got 'everything'" in done.stderr
+    assert "view must be one of ('target', 'test', 'file', 'pressure'), got 'everything'" in done.stderr
     assert json.loads(done.stdout)['error']
 
 
@@ -123,7 +123,7 @@ def test_a_missing_suite_is_the_same_failure_in_both_spellings(tmp_path):
 
 
 def test_an_unknown_group_is_rejected_not_silently_target(repo):
-    """patches used to answer any unknown group= as target; it is a declared choice now (a correction)."""
+    """patches used to answer any unknown group= as target; the grouping is a declared view now (a correction)."""
     done = run(f'patches://{repo}/t?group=everything', '--format', 'json')
     assert done.returncode == 2, (done.returncode, done.stderr)
-    assert "group must be one of ('target', 'test', 'file'), got 'everything'" in done.stderr
+    assert "view must be one of ('target', 'test', 'file', 'pressure'), got 'everything'" in done.stderr

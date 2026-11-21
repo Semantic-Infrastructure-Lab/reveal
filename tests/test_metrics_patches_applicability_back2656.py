@@ -154,20 +154,16 @@ _SCAN, _PRESSURE = 'patches_scan, default', 'testability_report, view, view=pres
 
 
 @pytest.mark.parametrize('argv,control,answer', [
-    (('patches://tests?min_patches=2',), "'min_patches'", _SCAN),          # the ledger's note before
-    (('patches://tests?min_categories=2',), "'min_categories'", _SCAN),
+    (('patches://tests?min_patches=2',), "'where'", _SCAN),                # the legacy word is where's term (BACK-2625)
+    (('patches://tests?min_categories=2',), "'where'", _SCAN),
+    (('patches://tests?where=patches>=2',), "'where'", _SCAN),
     (('patches://tests?include_unresolved',), "'include_unresolved'", _SCAN),
     (('patches://tests?tests=tests',), "'tests'", _SCAN),
-    (('patches://tests?top=1',), "'top'", _SCAN),                          # silent before
-    (('patches://.?view=pressure&group=file',), "'group'", _PRESSURE),
-    (('patches://.?view=pressure&limit=2',), "'limit'", _PRESSURE),
     (('patches://.?view=pressure&min=2',), "'min'", _PRESSURE),
     (('patches://.?view=pressure&target=app',), "'target'", _PRESSURE),
     (('patches://.?view=pressure&private',), "'private'", _PRESSURE),
     (('patches://.?view=pressure&suppress=false',), "'suppress'", _PRESSURE),
-    (('patches', 'tests', '--min-patches', '2'), "'min_patches'", _SCAN),    # the subcommand
-    (('patches', '.', '--view', 'pressure', '--limit', '2'), "'limit'", _PRESSURE),
-    (('patches://.?view=pressure', '--limit', '2'), "'limit'", _PRESSURE),   # the URI and a flag
+    (('patches', 'tests', '--min-patches', '2'), "'where'", _SCAN),          # the subcommand
 ])
 def test_patches_refuses_a_control_its_answer_does_not_read(proj, argv, control, answer):
     _refused(argv, control, answer)
@@ -175,9 +171,10 @@ def test_patches_refuses_a_control_its_answer_does_not_read(proj, argv, control,
 
 def test_patches_api_refuses_the_same_request(proj):
     from reveal import api
-    with pytest.raises(RequestValidationError, match=r"control 'min_patches' is not read by this answer \(patches_scan"):
+    with pytest.raises(RequestValidationError, match=r"control 'where' is not read by this answer \(patches_scan"):
         api.query('patches://tests?min_patches=2')
-    with pytest.raises(RequestValidationError, match=r"control 'group' is not read by this answer \(testability_report"):
+    # the grouping is the view now: a second, different view is a conflict, not an unread control (BACK-2625)
+    with pytest.raises(ValueError, match=r"view: conflicting spellings"):
         api.query('patches://.?view=pressure&group=file')
 
 
@@ -185,13 +182,13 @@ def test_patches_api_keyword_reaches_the_same_check(proj):
     """A typed keyword binds through the declarations as the URI does (it went to get_structure(**kwargs) and was
     dropped in silence, tests/test_api_typed_keywords_back2656.py)."""
     from reveal import api
-    with pytest.raises(RequestValidationError, match=r"control 'min_patches' is not read by this answer"):
+    with pytest.raises(RequestValidationError, match=r"control 'where' is not read by this answer"):
         api.query('patches://tests', min_patches=2)
 
 
 @pytest.mark.parametrize('uri', [
-    'patches://tests?group=file&limit=1&min=1&target=app&private&suppress=false',
-    'patches://.?view=pressure&tests=tests&top=1&min_patches=1&min_categories=1&include_unresolved',
+    'patches://tests?view=file&limit=1&min=1&target=app&private&suppress=off',
+    'patches://.?view=pressure&tests=tests&limit=1&where=patches>=1&where=categories>=1&include_unresolved',
 ])
 def test_patches_answers_where_its_controls_are_read(proj, uri):
     run, doc = _run(uri)
@@ -201,11 +198,11 @@ def test_patches_answers_where_its_controls_are_read(proj, uri):
 
 @pytest.mark.parametrize('form', [('patches://.?view=pressure',), ('patches', '.', '--view', 'pressure')])
 def test_all_lifts_the_pressure_view_cap(proj, form):
-    """view=pressure caps each hotspot list with top (default 20): --all lifts it, as ?top=0 does (it was noted
+    """view=pressure caps each hotspot list with limit (default 20): --all lifts it, as ?limit=0 does (it was noted
     unused, and the cap stayed)."""
     capped, _ = _run(*form)
     lifted, doc = _run(*form, '--all')
-    uncapped, expected = _run('patches://.?view=pressure&top=0')
+    uncapped, expected = _run('patches://.?view=pressure&limit=0')
     assert lifted.returncode == capped.returncode == uncapped.returncode == 0, lifted.stderr
     assert not _unread(doc), doc.get('meta')
     assert len(json.loads(capped.stdout)['patch_hotspots']) == 20

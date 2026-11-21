@@ -661,12 +661,12 @@ rules:
 ```bash
 # Raw patch pressure in tests
 reveal patches://tests
-reveal 'patches://tests?group=target&limit=20'
-reveal 'patches://tests?group=test&min=3'
+reveal 'patches://tests?view=target&limit=20'
+reveal 'patches://tests?view=test&min=3'
 
 # Combined report: test patches + production boundary fan-out
 reveal patches src --view pressure --tests tests
-reveal patches src --view pressure --tests tests --top 20
+reveal patches src --view pressure --tests tests --limit 20
 reveal patches src --view pressure --tests tests --format json
 ```
 

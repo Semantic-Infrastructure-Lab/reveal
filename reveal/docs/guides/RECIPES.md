@@ -82,7 +82,7 @@ runs the quality rules on exactly the files the range touched.
 ### Testability pressure
 
 ```bash
-reveal 'patches://tests?group=target&limit=20'
+reveal 'patches://tests?view=target&limit=20'
 reveal patches src --view pressure --tests tests
 ```
 
@@ -382,14 +382,14 @@ reveal 'ast://./src?complexity>10&lines<50'
 
 ```bash
 # What do tests patch most often?
-reveal 'patches://tests?group=target&limit=20'
+reveal 'patches://tests?view=target&limit=20'
 
 # Which tests need many patches?
-reveal 'patches://tests?group=test&min=3'
+reveal 'patches://tests?view=test&min=3'
 
 # Join patch pressure with production boundary fan-out
 reveal patches src --view pressure --tests tests
-reveal patches src --view pressure --tests tests --top 20
+reveal patches src --view pressure --tests tests --limit 20
 reveal patches src --view pressure --tests tests --format json
 ```
 

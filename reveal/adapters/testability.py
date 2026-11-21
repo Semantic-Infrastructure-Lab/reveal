@@ -14,7 +14,7 @@ import re
 import os
 from dataclasses import replace
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from .base import ResourceAdapter, register_adapter, register_renderer
 from ..errors import NotApplicableError
@@ -280,18 +280,20 @@ class TestabilityAdapter(ResourceAdapter):
         return testability_report(self.path, self.query_params, _LIMIT)
 
 
-def testability_report(resource: str, query_params: Any, cap: ParamSpec = _PRESSURE_TOP) -> Dict[str, Any]:
+def testability_report(resource: str, query_params: Any, cap: ParamSpec = _PRESSURE_TOP,
+                       thresholds: Optional[Tuple[int, int]] = None) -> Dict[str, Any]:
     """The report both ``testability://`` and ``patches://?view=pressure`` answer (BACK-2160): one owner, read from
     the declared parameters of whichever adapter was asked. *cap*: that adapter's group cap (testability's ``limit``,
-    the pressure view's ``top``)."""
+    the pressure view's ``limit``); *thresholds*: the minimums when the caller reads them from where."""
     from reveal.testability.report import build_testability_report
     from reveal.utils.path_utils import as_spelled, detect_non_python_language
 
     path = Path(resource)
     tests = TestabilityAdapter.PARAM_SPECS[0].read(query_params)
     top = cap.read(query_params)
-    min_patches = TestabilityAdapter.PARAM_SPECS[2].read(query_params)
-    min_categories = TestabilityAdapter.PARAM_SPECS[3].read(query_params)
+    # (min_patches, min_categories): testability's own parameters, or the pressure view's where terms (BACK-2625)
+    min_patches, min_categories = thresholds or (TestabilityAdapter.PARAM_SPECS[2].read(query_params),
+                                                 TestabilityAdapter.PARAM_SPECS[3].read(query_params))
     include_unresolved = TestabilityAdapter.PARAM_SPECS[4].read(query_params)
 
     by_test_path = not tests

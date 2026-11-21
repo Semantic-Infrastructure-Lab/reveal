@@ -123,6 +123,7 @@ CONTROL_BASES = {('calls', 'kind'): (['--uncalled'], '?uncalled'), ('calls', 'ex
                  ('imports', 'limit'): (['--sort=-fan-in'], '?sort=-fan-in'),
                  ('imports', 'detail'): (['--circular'], '?circular'),
                  ('git', 'detail'): (['--view', 'blame'], '?view=blame'),
+                 ('patches', 'where'): (['--view', 'pressure'], '?view=pressure'),
                  ('codex', 'matches'): (None, '?search=auth'),
                  **{('codex', bound): (None, '?filter=auth') for bound in ('since', 'until')}}
 
@@ -142,23 +143,21 @@ _NO_ALIAS = 'declares no aliased control: there is no alias and name to give twi
 _NO_LEGACY = 'no note-stage RETIREMENTS row spells this noun: there is no legacy spelling to note'
 EXEMPT = {
     **{(noun, '1b'): _NO_ALIAS for noun in ('architecture', 'codex', 'deps', 'json',
-                                            'overview', 'patches', 'surface', 'trace')},
-    **{(noun, '2'): _NO_LEGACY for noun in ('codex', 'json', 'patches', 'surface')},
+                                            'overview', 'surface', 'trace')},
+    **{(noun, '2'): _NO_LEGACY for noun in ('codex', 'json', 'surface')},
     **{(noun, '1d'): 'declares no repeatable control with an alias'
-       for noun in NOUNS if noun not in ('ast', 'claude', 'markdown', 'metrics', 'stats')},
+       for noun in NOUNS if noun not in ('ast', 'claude', 'markdown', 'metrics', 'patches', 'stats')},
     **{(noun, '5'): 'no note-stage param: row whose replacement is a control of this noun' for noun in (
-        'codex', 'json', 'patches', 'surface', 'trace')},
+        'codex', 'json', 'surface', 'trace')},
     **{(noun, '6'): 'declares no alias: nothing to note or keep note-free' for noun in (
-        'architecture', 'codex', 'deps', 'json', 'overview', 'patches',
-        'surface', 'trace')},
+        'architecture', 'codex', 'deps', 'json', 'overview', 'surface', 'trace')},
     **{(noun, '8a'): 'no where expression: a bare key is never read as a field'
        for noun in ('architecture', 'calls', 'codex', 'contracts', 'deps', 'hotspots', 'imports', 'overview',
-                    'pack', 'patches', 'surface', 'testability', 'trace')},
+                    'pack', 'surface', 'testability', 'trace')},
     **{(noun, '8b'): 'declares no where control: there are no field filters' for noun in (
-        'architecture', 'calls', 'codex', 'contracts', 'deps', 'hotspots', 'imports', 'overview', 'pack', 'patches',
-        'surface', 'testability', 'trace')},
+        'architecture', 'calls', 'codex', 'contracts', 'deps', 'hotspots', 'imports', 'overview', 'pack', 'surface', 'testability', 'trace')},
     **{(noun, '16'): 'no legacy word and no standalone legacy parameter: nothing to translate or mark' for noun in (
-        'codex', 'json', 'patches', 'surface', 'trace')},
+        'codex', 'json', 'surface', 'trace')},
     **{(noun, '17'): 'one control at most selects the answer: no two selections to give' for noun in (
         'architecture', 'codex', 'contracts', 'deps', 'hotspots', 'overview', 'pack', 'surface', 'testability',
         'trace')},
@@ -178,7 +177,7 @@ EXEMPT = {
 DEFAULT_NOW = ('1a', '1b', '1c', '1d', '2', '5', '6', '10', '12', '14', '16', '17', '18', '21j')
 # Cells of those rules owned by another package, named by the prompt: each must still fail (a fixed one is removed).
 _SWITCH = 'out of scope: the Switches rule renames this noun\'s no_* flag in its own package'
-OUT_OF_SCOPE = {('patches', '10'): _SWITCH + ' (--no-suppress)'}
+OUT_OF_SCOPE = {}
 # Standalone legacy words kept by a ruling because they answer differently from their replacement (rule 16; Scott
 # 2026-11-16, BACK-2654 notes #9 and #12): (kind, reason). 'operation' selects the answer (role='operation', rule 17);
 # 'modifier' caps, details or filters it and stays without that role, so a legacy cap still combines with the legacy
@@ -261,6 +260,9 @@ def workspace(tmp_path, monkeypatch):
     sample = tmp_path / 'sample' / 'sample.py'
     sample.parent.mkdir()
     sample.write_text(SOURCE, encoding='utf-8')
+    # a test file that patches, so the patches retirement cases have a scan to answer (BACK-2625)
+    (sample.parent / 'test_sample.py').write_text(
+        'from unittest import mock\n\n\n@mock.patch("sample.os.getcwd")\ndef test_it(m):\n    assert m\n', encoding='utf-8')
     commit_sample(sample)
     return sample
 
@@ -700,15 +702,15 @@ def probe_repeatable_aliases(noun):
             if entry is not None and getattr(entry, 'codec', None) is not None:  # a translated word: its own value
                 b = next(raw for raw in ('5', 'true') if _translates(entry, raw))
                 a = b_canonical = entry.translate(b)[spec.name]
-            mixed = _run(_uri(noun, f'{spec.name}={a}', f'{alias}={b}'), '--format', 'json')
-            same = _run(_uri(noun, f'{spec.name}={a}', f'{spec.name}={b_canonical}'), '--format', 'json')
+            mixed = _run(_uri(noun, f'{spec.name}={a}', f'{alias}={b}', control=spec.name), '--format', 'json')
+            same = _run(_uri(noun, f'{spec.name}={a}', f'{spec.name}={b_canonical}', control=spec.name), '--format', 'json')
             cases.append(Case(f'{label} accumulates', same.rc != 2 and _answer(mixed, noun) == _answer(same, noun),
                               f'{mixed.brief()} answers differently from {same.brief()}'))
             name_flag, alias_flag = _flag_spelling(spec, spec.name), _flag_spelling(spec, alias)
             if _sub(noun) is None or name_flag is None or alias_flag is None or alias_flag == name_flag:
                 continue
-            mixed = _run(*_sub(noun, name_flag, a, alias_flag, b), '--format', 'json')
-            same = _run(*_sub(noun, name_flag, a, name_flag, b_canonical), '--format', 'json')
+            mixed = _run(*_sub(noun, name_flag, a, alias_flag, b, control=spec.name), '--format', 'json')
+            same = _run(*_sub(noun, name_flag, a, name_flag, b_canonical, control=spec.name), '--format', 'json')
             cases.append(Case(f'{name_flag} with {alias_flag} accumulates',
                               same.rc != 2 and _answer(mixed, noun) == _answer(same, noun),
                               f'{mixed.brief()} answers differently from {same.brief()}'))
@@ -1147,6 +1149,7 @@ FIELD_SAMPLES = {
     'json': ('proj/rows.json', [('name', '=', 'a'), ('n', '>', '1')]),
     'markdown': ('proj', [('title', '=', 'Guide'), ('n', '>', '1')]),
     'metrics': ('proj', [('lines', '=', '5'), ('lines', '>', '10')]),
+    'patches': ('proj?view=pressure', [('patches', '>=', '1'), ('categories', '>=', '1')]),
     'stats': ('proj', [('lines', '=', '5'), ('lines', '>', '10')]),
 }
 
@@ -1157,8 +1160,9 @@ def probe_bare_field_filters(noun):
     target, samples = FIELD_SAMPLES[noun]
     cases = []
     for field, op, value in samples:
-        bare = _run(f'{noun}://{target}?{field}{op}{value}', '--format', 'json')
-        where = _run(f'{noun}://{target}?where={field}{op}{value}', '--format', 'json')
+        sep = '&' if '?' in target else '?'
+        bare = _run(f'{noun}://{target}{sep}{field}{op}{value}', '--format', 'json')
+        where = _run(f'{noun}://{target}{sep}where={field}{op}{value}', '--format', 'json')
         cases.append(Case(f'?{field}{op}{value}', where.rc != 2 and _answer(bare, noun) == _answer(where, noun),
                           f'{bare.brief()} answers differently from {where.brief()}'))
     return cases
