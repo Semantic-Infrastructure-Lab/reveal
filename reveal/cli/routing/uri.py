@@ -27,7 +27,7 @@ from ...display.formatting import print_result_control_notes
 from ...utils.results import (ExecutionFacts, FailureCause, Outcome, ResultBuilder, echo_source,
                              dotted_holder, failure_execution_facts, note_truncation, outcome_of, restate_shown_counts, slice_items,
                              truncations_of)
-from ..invocation import RetiredSpellingError, retirement_note, uri_retirement_keys
+from ..invocation import RetiredSpellingError, uri_retirement_keys
 from .flag_specs import exclude_fragment, inject_query_flags, strip_result_control_keys
 from .ledger import FlagLedger, complete, delegate, ledger_of, mark, peek
 from .formats import declared_output_formats, require_supported_format
@@ -313,11 +313,10 @@ def _note_retired_spellings(uri: str) -> None:
     """The URI route's retirement hook: the scheme, each query parameter and each parameter
     value the URI spells, looked up after parsing and before anything runs (ground rule 7).
     A spelling at the ``error`` stage raises RetiredSpellingError (exit 2, the note's text)."""
-    from ..invocation import request_note_covers
+    from ..invocation import begin_uri_request, note_uri_spelling
+    begin_uri_request()
     for key in uri_retirement_keys(uri):
-        if request_note_covers(key):
-            continue  # said once, after binding, as the replacement rendered from the bound request (request_note)
-        retirement_note(key)
+        note_uri_spelling(key)  # a covered row is said once, after binding, by the request note (or its own row)
 
 
 

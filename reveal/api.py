@@ -170,15 +170,13 @@ def _noted_answer(scheme: str, uri: str, overrides: Dict[str, Any], answer):
     result's ``meta.warnings`` as the CLI's JSON carries them (BACK-2654; it used to note declared aliases only).
     A URI request that retires says it once, as the Python call that replaces it (BACK-2716): that note covers the
     per-key notes of the controls it renders."""
-    from .cli.invocation import (Invocation, invocation_scope, request_note_covers, request_noted, retirement_note,
-                                 uri_retirement_keys)
+    from .cli.invocation import Invocation, invocation_scope, note_uri_spelling, request_noted, uri_retirement_keys
     from .utils.json_utils import attach_invocation_warnings
     by_request = request_noted(scheme)
     keys = uri_retirement_keys(uri) + [f'param:{scheme}.{key}' for key in overrides]
-    keys = [key for key in keys if not request_note_covers(key)]
     with invocation_scope(Invocation.parse(['reveal', uri]), retirements_to_stderr=False, form='python'):
         for key in keys:
-            retirement_note(key)
+            note_uri_spelling(key)
         if by_request:
             _note_uri_request(scheme, uri, overrides)
         # The retirement notes and every config_warning this invocation recorded (BACK-2659).
@@ -193,10 +191,14 @@ def _note_uri_request(scheme: str, uri: str, overrides: Dict[str, Any]) -> None:
     from .cli.invocation import request_note
     from .cli.routing.canonical import render_uri_request
     from .cli.routing.declared import create_declared_parser, declared_adapter_class
+    from .utils.gitignore import split_respect_gitignore
     from .utils.query_binding import apply_declared_overrides, prepare_declared_params
-    resource, _, query = uri.partition('://')[2].partition('?')
+    spelled_query = uri.partition('?')[2]
+    # The walk policy is split off before binding, as the answer's own path does, and repeated as its flag.
+    split, walk_policy = split_respect_gitignore(uri.partition('://')[2])
+    resource, _, query = split.partition('?')
     adapter = declared_adapter_class(scheme)
-    if not (getattr(get_adapter_class(scheme), 'ANALYSIS_ONLY', False) or query):
+    if not (getattr(get_adapter_class(scheme), 'ANALYSIS_ONLY', False) or spelled_query):
         return
     try:
         params = apply_declared_overrides(adapter.PARAM_SPECS, prepare_declared_params(adapter.PARAM_SPECS, query, 'uri'),
@@ -204,7 +206,11 @@ def _note_uri_request(scheme: str, uri: str, overrides: Dict[str, Any]) -> None:
     except (ValueError, TypeError):
         return
     parser = create_declared_parser(scheme)
-    request_note(scheme, lambda form: render_uri_request(form, scheme, resource, params, parser=parser, adapter=adapter))
+    try:
+        request_note(scheme, lambda form: render_uri_request(form, scheme, resource, params, parser=parser,
+                                                             adapter=adapter, walk_policy=walk_policy))
+    except ValueError:
+        return  # no canonical form (a control no flag spells, or one binding rejects): the answer says why, not this note
 
 
 def _query_noun(noun: str, target: Optional[str], controls: Dict[str, Any]) -> Dict[str, Any]:
@@ -316,6 +322,12 @@ def query(
 
     from .utils.request_cache import host_request
     from .utils.invocation_log import log_scope
+    from .cli.routing.uri import _echo_source
+
+    def _spelled(result: Dict[str, Any]) -> Dict[str, Any]:
+        """``source`` as the caller named the target, as the CLI's URI route reports it (BACK-1366)."""
+        _echo_source(result, adapter_class, resource)
+        return result
 
     # One host request, as an MCP tool call is: owner-registered caches (the calls
     # indexes among them) are reset or revalidated against the tree first (BACK-2093).
@@ -333,7 +345,7 @@ def query(
                     note_incomplete(result, facts_of(result))
                 return result
             bound_result: Dict[str, Any] = _noted_answer(scheme, uri, kwargs, bound_answer)
-            return bound_result
+            return _spelled(bound_result)
         # Only a class's own declaration adopts the check, as with BOUND_QUERY_CALL: a plugin subclass that inherits
         # PARAM_SPECS keeps forwarding its keywords to its own structure call.
         declarations = vars(adapter_class).get('PARAM_SPECS') if isinstance(adapter_class, type) else None
@@ -351,10 +363,10 @@ def query(
             result = _noted_answer(scheme, uri, kwargs, lambda: adapter.get_element(element_name, **kwargs))
             if result is None:
                 raise ValueError(f"Element {element_name!r} not found in {uri}")
-            return result
+            return _spelled(result)
 
         structure: Dict[str, Any] = _noted_answer(scheme, uri, kwargs, lambda: adapter.get_structure(**kwargs))
-        return structure
+        return _spelled(structure)
 
 
 def check(

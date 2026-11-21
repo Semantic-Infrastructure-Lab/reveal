@@ -790,14 +790,49 @@ def request_note(scheme: str, replacement_for: Callable[[str], str]) -> Optional
     built itself (``internal_request``) says nothing."""
     if _INTERNAL.get():
         return None
-    entry = Retirement(f'a {scheme}:// request', replacement_for(request_form()), REQUEST_STAGE)
+    from .routing.canonical import UnrenderableRequest
+    try:
+        replacement = replacement_for(request_form())
+    except UnrenderableRequest:
+        _say_covered_notes()  # no canonical form to recommend: each covered spelling says its own row
+        return None
+    entry = Retirement(f'a {scheme}:// request', replacement, REQUEST_STAGE)
     key = f'request:{scheme}'
     if entry.stage == 'error':
         raise RetiredSpellingError(key, entry)
     log = current_log()
     if log is not None:
+        log.covered.clear()  # this note says them
         (log.recorded if entry.stage == 'phase7' else log.noted).setdefault(key, entry)
     return entry
+
+
+def begin_uri_request() -> None:
+    """A URI request starts: no covered spelling of an earlier request in the same invocation carries over."""
+    log = current_log()
+    if log is not None:
+        log.covered.clear()
+
+
+def note_uri_spelling(key: str) -> None:
+    """A retired spelling a URI request spells: said now (``retirement_note``), or, a per-key row the request note covers,
+    kept on the log until the request note renders. A request with a canonical form drops it (the one note says it); one
+    with none (a control no flag spells) says it after all; a rejected request says neither."""
+    if not request_note_covers(key):
+        retirement_note(key)
+        return
+    log = current_log()
+    if log is not None:
+        log.covered.append(key)
+
+
+def _say_covered_notes() -> None:
+    log = current_log()
+    if log is None:
+        return
+    covered, log.covered = log.covered, []
+    for key in covered:
+        retirement_note(key)
 
 
 def request_noted(scheme: str) -> bool:

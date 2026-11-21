@@ -62,6 +62,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
+- `reveal.api.query('imports://src')` and `api.query('metrics://src')` now answer `source` as the caller named the target (`src`), as the CLI and the noun form do; they returned the absolute path (BACK-2716).
+
 - The `overview` comparison now leaves the request's `exclude` out of both snapshots on every transport: `overview://P?against=HEAD&exclude=vendor`, `reveal.api.query('overview://P', against='HEAD', exclude=['vendor'])` and the MCP query tool answered as if no exclude was given, while `reveal overview P --against HEAD --exclude vendor` applied it (BACK-2693).
 
 - An answer that does not apply to its target now names the options it could not use in one `control_unread_by_data` warning, in JSON and text: `patches://pkg?limit=0` (or `--all`, `--min`, `--target`) on a directory with no test files, and `git://DIR?view=log&limit=2` outside a repository, answered exit 0 with an `unused_query_param` or `unused_flag` warning (text: a stderr note) instead. The exit code is unchanged (BACK-2696).

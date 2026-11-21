@@ -633,7 +633,7 @@ def _spelled_query(uri_query: Optional[str], transport: str, source: Any) -> boo
 
 
 def _note_uri_request(name: str, adapter, path: str, params, transport: str, spelled_query: bool, *,
-                      early: bool = False, answer=None) -> None:
+                      early: bool = False, answer=None, walk_policy: Optional[bool] = None) -> None:
     """The one note of a retiring URI request (BACK-2716 step 3), rendered from what was bound: an analysis-only scheme
     always, any other scheme when it spells a query string. A retired twin has its own scheme row, and a resource URI
     with only flags is the canonical form: neither notes.
@@ -641,7 +641,8 @@ def _note_uri_request(name: str, adapter, path: str, params, transport: str, spe
     At the ``note`` stage it is said once the request has an answer, and not for a rejected request: the command it
     would recommend is the one the request spells, and fails the same way. At the ``error`` stage (the cut) it is
     refused before anything runs (*early*). Rendering never marks a control as read: the answer's own unread-control
-    checks see exactly what the request gave."""
+    checks see exactly what the request gave. *walk_policy* is the request's ``respect_gitignore``, split off before
+    binding, so the recommended command walks as the request does."""
     from ..invocation import REQUEST_STAGE, request_note, request_noted
     if transport != 'uri' or not request_noted(name) or not (getattr(adapter, 'ANALYSIS_ONLY', False) or spelled_query):
         return
@@ -655,9 +656,18 @@ def _note_uri_request(name: str, adapter, path: str, params, transport: str, spe
     from .canonical import render_uri_request
     parser = create_declared_parser(name)
     try:
-        request_note(name, lambda form: render_uri_request(form, name, path, params, parser=parser, adapter=adapter))
+        request_note(name, lambda form: render_uri_request(form, name, path, params, parser=parser, adapter=adapter,
+                                                           walk_policy=walk_policy))
     except ValueError:
         return  # a request that cannot render is invalid: binding says why, with the answer's own type (not this note)
+
+
+def _note_walk_policy(query_policy: Optional[bool], typed_policy: Any) -> Optional[bool]:
+    """The walk policy the request note's command repeats: the URI's ``respect_gitignore``, else a typed off (on is the
+    default, so repeating it changes nothing)."""
+    if query_policy is not None:
+        return query_policy
+    return False if typed_policy is False else None
 
 
 def _run_declared(name: str, args, path: str, source: Any, transport: str, consumed=(), *,
@@ -690,6 +700,7 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
     query_walk_policy = respect
     typed_walk_policy = peek(args, 'respect_gitignore', True)
     respect = respect if respect is not None else peek(args, 'respect_gitignore', True)
+    note_walk = _note_walk_policy(query_walk_policy, typed_walk_policy)
     dispatch = ledger.dispatching(query_resource, name) if ledger is not None else nullcontext()
     try:
         with dispatch:
@@ -702,7 +713,8 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
                     source = join_uri_and_flags(adapter.PARAM_SPECS, prepare_declared_params(
                         adapter.PARAM_SPECS, query_resource.partition('?')[2], 'uri'), source, spelled=spelled)
                     transport = 'uri'  # one request now, bound as the URI binds (its path's codec included)
-                _note_uri_request(name, adapter, path, source, transport, spelled_query, early=True)
+                _note_uri_request(name, adapter, path, source, transport, spelled_query, early=True,
+                                  walk_policy=note_walk)
             except ValueError as exc:
                 consume(_invalid_prepared_answer(adapter, name, path, query_resource, str(exc), args))
                 return
@@ -728,7 +740,8 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
             with exclusion_scope(root, excludes), gitignore_scope(respect):
                 answer = _declared_answer(adapter, name, path, source, transport, args, expected_type,
                                           scope_path=scope_path)
-                _note_uri_request(name, adapter, path, source, transport, spelled_query, answer=answer)
+                _note_uri_request(name, adapter, path, source, transport, spelled_query, answer=answer,
+                                  walk_policy=note_walk)
                 consume(answer)
             complete(args)
     finally:

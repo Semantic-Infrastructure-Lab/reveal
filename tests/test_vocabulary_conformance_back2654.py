@@ -76,6 +76,7 @@ REVEAL_CONFORMANCE_REPORT=<path>: each cell appends one JSON line (state, case c
 import json
 import os
 import re
+import shlex
 from dataclasses import dataclass
 from functools import partial
 
@@ -83,7 +84,7 @@ import pytest
 
 from conftest import _run_reveal_direct
 from test_declared_parity_back2053 import APP, CASES
-from test_retirements_back2066 import PRODUCTION_CASES, SOURCE, commit_sample
+from test_retirements_back2066 import PRODUCTION_CASES, SOURCE, _renders, commit_sample
 from reveal.adapters.base import get_adapter_class, list_supported_schemes
 from reveal.adapters.factory import uses_bound_query_call
 from reveal.cli.invocation import COMMANDS, RETIREMENTS
@@ -101,7 +102,7 @@ def _declared_nouns():
 
 NOUNS = _declared_nouns()
 RULES = ('1a', '1b', '1c', '1d', '2', '3', '3b', '4', '5', '6', '8a', '8b', '10', '12', '16', '17', '18', '20',
-         '14', '21j', '22', '23')
+         '14', '21j', '22', '23', '24')
 
 # The request each noun answers by default: the parity gate's table (CLI argv after the noun, URI suffix), plus
 # the two declared nouns it has no row for. None: no subcommand (codex is URI-only; stats is metrics' retired scheme).
@@ -160,6 +161,10 @@ EXEMPT = {
     **{(noun, '17'): 'one control at most selects the answer: no two selections to give' for noun in (
         'architecture', 'codex', 'contracts', 'deps', 'hotspots', 'overview', 'pack', 'surface', 'testability',
         'trace')},
+    **{(noun, '24'): 'a retired twin: its own scheme: row of RETIREMENTS is its note, not the request note'
+       for noun in ('architecture', 'deps', 'hotspots', 'testability', 'trace')},
+    ('codex', '24'): 'no subcommand to recommend until BACK-2618 declares codex\'s parser (a resource URI with flags '
+                     'then is its canonical form)',
     ('codex', '23'): 'no subcommand to compare the URI form with until BACK-2618 generates codex\'s parser from its '
                      'declarations through the shared builder',
     **{(noun, '20'): 'no answer reports a declared control unread, on any resource ANSWER_TARGETS lists (a control '
@@ -210,11 +215,17 @@ RULED_EXEMPT_NOUNS = {'stats': 'rule 9: the retired stats:// scheme is deleted a
 # a declared noun's URI is read by its own parser and its query joins the typed flags; since 3b-3 the main parser's
 # legacy flags are flag-only modifiers of the declarations (--head, --check, Claude --type, Claude --tail since
 # BACK-2709), and an equal repeated term is one term (BACK-2715), so rule 23 conforms on every declared noun.
-NOT_YET: dict = {}
+# Rule 24 (BACK-2716 step 4) at fbf7715a plus the step-4 renderer fixes:
+NOT_YET: dict = {
+    ('git', '24'): "?no_merges=true and ?raw=true have no flag on git's parser and no RETIREMENTS row: the request says "
+                   "no note and keeps working at the cut (BACK-2616 gives git its D20 spelling)",
+    ('metrics', '24'): '?respect_gitignore=off on a file answers with an unused_input warning; its replacement '
+                       '--respect-gitignore off answers without it (the walk policy on a file read differs by transport)',
+}
 
 NOT_YET_BASELINE = {'1a': 0, '1b': 0, '1c': 0, '1d': 0, '2': 0, '3': 0, '3b': 0, '4': 0, '5': 0, '6': 0,
                     '8a': 0, '8b': 0, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 0, '14': 0, '21j': 0, '22': 0,
-                    '23': 0}
+                    '23': 0, '24': 2}
 
 
 # --- the fixture -------------------------------------------------------------------------------------------
@@ -764,6 +775,8 @@ def _noted_as(key, entry, argv):
     scheme, rendered from the bound request; any other row says its own text under its own key."""
     from reveal.cli.invocation import request_note_covers
     if not request_note_covers(key) or '://' not in argv[0]:  # a CLI flag spelling is no URI request
+        return key, lambda text: entry.text in text
+    if not _renders(*argv[0].split('://', 1)):  # no canonical form (Claude ?last is a word of the flagless ?tail)
         return key, lambda text: entry.text in text
     return f"request:{key[key.index(':') + 1:].partition('.')[0]}", lambda text: bool(_REQUEST_NOTE.search(text))
 
@@ -1704,13 +1717,187 @@ def probe_flags_after_uri(noun):
     return [*_flag_cases(noun), *_join_cases(noun)]
 
 
+# --- rule 24: the one request note of a retiring URI request (D20, BACK-2716) -------------------------------
+
+# The probe's own value where the applicability value is not one the control takes.
+REQUEST_VALUES = {'respect_gitignore': 'off'}
+# Not sent by the column: the global presentation flag it sets itself (every case reads --format json; a URI's
+# ?format=dot is test_a_uri_format_is_the_format_flag_of_the_cli_and_mcp_forms_only).
+_REQUEST_NOT_PROBED = ('format',)
+
+
+def _request_requests(noun):
+    """(label, URI) for every request the note column sends: each answer (the default and each operation selection) on
+    each resource whose path selects one, alone when it retires (an analysis-only scheme, or a query string) and with each
+    other declared control given as a URI key. A request is only sent where its answer exists (Claude's views need a
+    session); one the noun then refuses is a rejected request, which says no note."""
+    analysis_only = getattr(_adapter(noun), 'ANALYSIS_ONLY', False)
+    requests = []
+    for target in ANSWER_TARGETS.get(noun, (TARGETS.get(noun, 'proj'),)):
+        for label, parts in _answers(noun):
+            def uri(*extra, parts=parts, target=target):
+                query = '&'.join([*parts, *extra])
+                return f'{noun}://{target}' + (f'?{query}' if query else '')
+            if _run(uri(), '--format', 'json').rc not in (0, 1, 3):
+                continue
+            where = f"{target or '(root)'} {label}"
+            if analysis_only or parts:
+                requests.append((where, uri()))
+            given = {query_key(part) for part in parts}
+            for spec in _specs(noun):
+                if spec.role != 'operation' and spec.name not in given and spec.name not in _REQUEST_NOT_PROBED:
+                    value = REQUEST_VALUES.get(spec.name) or _applicability_value(noun, spec)
+                    requests.append((f'{where} ?{spec.name}=', uri(f'{spec.name}={value}')))
+    return requests
+
+
+def _request_doc(doc, noun):
+    """An answer compared across spellings: the echoed command and the retirement notes (the spelling's own facts) left
+    out, unused-input warnings compared by the control they name (``_answer``)."""
+    doc = json.loads(json.dumps(doc, default=str))
+    if isinstance(doc, dict) and isinstance(doc.get('execution'), dict):
+        doc['execution'].pop('command', None)
+    return _answer(Run((), 0, json.dumps(doc), ''), noun)[1]
+
+
+def _request_replacements(doc, noun):
+    """The ``replacement`` of each ``request:<noun>`` note on a JSON answer."""
+    return [w.get('replacement') for w in ((doc or {}).get('meta') or {}).get('warnings') or []
+            if w.get('code') == 'retired_spelling' and w.get('field') == f'request:{noun}']
+
+
+_MCP_REQUEST = re.compile(r'request is deprecated and works until 1\.0; use reveal_run\((\[.*\])\)\.')
+
+
+def _at_stage(stage, call):
+    from reveal.cli import invocation
+    before, invocation.REQUEST_STAGE = invocation.REQUEST_STAGE, stage
+    try:
+        return call()
+    except Exception as exc:  # the refusal at the error stage is what is measured
+        return exc
+    finally:
+        invocation.REQUEST_STAGE = before
+
+
+def _standalone_notes(doc, noun, uri):
+    """The standalone legacy words the URI gives that said their own note: such a word has no flag of its noun, so the
+    request has no canonical form to recommend (no request note), and its own row names what replaces it."""
+    keys = {query_key(part) for part in uri.partition('?')[2].split('&') if part}
+    return [field for field in _retired_fields(doc) if field in {f'param:{noun}.{key}' for key in keys}
+            and RETIREMENTS[field].standalone]
+
+
+def _cli_note_cases(where, noun, uri):
+    """CLI text and JSON: one note, its replacement the canonical line that answers with equal JSON and exit and says
+    no note of its own; at the error stage the URI exits 2 naming that line. Returns (cases, whether the other
+    transports are measured): not for a rejected request (no note anywhere), a request that keeps a standalone word's
+    own note (rule 2 measures it on every transport), or a failed analysis (exit 3: api.query raises it and MCP is a
+    tool error, neither an answer to carry a note)."""
+    text, as_json = _run(uri), _run(uri, '--format', 'json')
+    if as_json.rc == 2:  # a rejected request: the command it would recommend fails the same way
+        noted = [line for line in text.err.splitlines() if _REQUEST_NOTE.search(line)]
+        return [Case(f'{where} rejected, no note', not noted and 'request:' not in as_json.out,
+                     f'{as_json.brief()}: request note on a rejected request')], False
+    lines = [line for line in text.err.splitlines() if line.startswith('note: ') and _REQUEST_NOTE.search(line)]
+    doc = json.loads(as_json.out) if as_json.out.strip().startswith('{') else None
+    replacements = _request_replacements(doc, noun)
+    if not replacements and not lines and _standalone_notes(doc, noun, uri):
+        return [Case(f'{where} standalone word, its own note', True, str(_standalone_notes(doc, noun, uri)))], False
+    cases = [Case(f'{where} CLI text', len(lines) == 1, f'{text.brief()} (wants one request note line)'),
+             Case(f'{where} CLI JSON', len(replacements) == 1, f'{as_json.brief()}: request notes {replacements}')]
+    if len(replacements) != 1 or not str(replacements[0]).startswith(f'reveal {noun}'):
+        return cases + [Case(f'{where} CLI round trip', False, f'no canonical CLI line: {replacements}')], False
+    line = replacements[0]
+    cases.append(Case(f'{where} CLI text names it', any(f'use {line}.' in note for note in lines), f'{lines} vs {line}'))
+    canonical = _run(*shlex.split(line)[1:], '--format', 'json')
+    same = canonical.rc == as_json.rc and _request_doc(json.loads(canonical.out or 'null'), noun) == \
+        _request_doc(doc, noun)
+    cases.append(Case(f'{where} CLI round trip', same and 'request:' not in canonical.out,
+                      f'{canonical.brief()} answers differently from {as_json.brief()}'))
+    refused = _at_stage('error', lambda: _run(uri))
+    cases.append(Case(f'{where} CLI error stage', isinstance(refused, Run) and refused.rc == 2 and line in refused.err,
+                      f'{refused.brief() if isinstance(refused, Run) else refused!r} (wants exit 2 naming {line})'))
+    return cases, as_json.rc != 3
+
+
+def _api_note_cases(where, noun, uri):
+    """api.query(URI): one note whose replacement is the Python call that answers equally; at the error stage it raises
+    naming that call."""
+    from reveal import api
+    try:
+        answer = api.query(uri)
+    except Exception as exc:  # recorded as evidence, never a pass
+        return [Case(f'{where} api.query', False, f'api.query({uri!r}) raised {type(exc).__name__}: {str(exc)[:120]}')]
+    calls = _request_replacements(answer, noun)
+    if len(calls) != 1 or not str(calls[0]).startswith(f'api.query("{noun}'):  # the noun, or a resource's URI
+        return [Case(f'{where} api.query', False, f'api.query({uri!r}): request notes {calls}')]
+    try:
+        actual = eval(calls[0], {'api': api})  # noqa: S307 (the replacement under test, with the one name it uses)
+        same = _request_doc(actual, noun) == _request_doc(answer, noun) and not _request_replacements(actual, noun)
+        evidence = f'{calls[0]} answers differently from api.query({uri!r})'
+    except Exception as exc:  # the replacement must run: a raise is a failed round trip
+        same, evidence = False, f'{calls[0]} raised {type(exc).__name__}: {str(exc)[:120]}'
+    refused = _at_stage('error', lambda: api.query(uri))
+    return [Case(f'{where} api.query round trip', same, evidence),
+            Case(f'{where} api.query error stage', isinstance(refused, Exception) and calls[0] in str(refused),
+                 f'{refused!r:.200} (wants a refusal naming {calls[0]})')]
+
+
+def _mcp_note_cases(where, noun, uri):
+    """MCP reveal_query(URI): one note whose replacement is the reveal_run argv that answers equally through the real
+    tool (its JSON as the URI's CLI JSON); at the error stage it is a tool error naming that argv."""
+    from reveal.mcp_server import reveal_query, reveal_run
+    try:
+        out = reveal_query(uri)
+    except Exception as exc:  # a ToolError on an answered request is a failure
+        return [Case(f'{where} MCP', False, f'reveal_query({uri!r}) raised {type(exc).__name__}: {str(exc)[:120]}')]
+    found = _MCP_REQUEST.findall(out)
+    if len(found) != 1:
+        return [Case(f'{where} MCP', False, f'reveal_query({uri!r}): {len(found)} request notes: {out[-200:]!r}')]
+    argv = json.loads(found[0])
+    expected = _run(uri, '--format', 'json')
+    try:
+        canonical = reveal_run([*argv, '--format', 'json'])
+        doc = json.loads(canonical[canonical.index('{'):canonical.rindex('}') + 1])
+        same = _request_doc(doc, noun) == _request_doc(json.loads(expected.out), noun) and \
+            not _MCP_REQUEST.search(reveal_run(argv))
+        evidence = f'reveal_run({argv}) answers differently from {expected.brief()}'
+    except Exception as exc:  # findings and refusals are tool results or errors: either way not this answer
+        same, evidence = False, f'reveal_run({argv}) raised {type(exc).__name__}: {str(exc)[:120]}'
+    refused = _at_stage('error', lambda: reveal_query(uri))
+    return [Case(f'{where} MCP round trip', same, evidence),
+            Case(f'{where} MCP error stage', found[0] in str(refused) and _MCP_REQUEST.search(str(refused)) is None and
+                 (isinstance(refused, Exception) or 'rror' in str(refused)),
+                 f'{str(refused)[:200]!r} (wants a tool error naming {found[0]})')]
+
+
+def probe_request_note(noun):
+    """Rule 24 (D20, BACK-2716): every declared query key and every analysis-only scheme answers with the one request
+    note on CLI text, CLI JSON, api.query and MCP, its replacement the canonical request in that transport's own form,
+    which answers with equal JSON and exit; at the cut (REQUEST_STAGE='error') each exits 2 naming the flag form. None
+    for a noun that says no request note (a retired twin's own scheme row is its note; codex has no subcommand yet)."""
+    from reveal.cli.invocation import request_noted
+    if not request_noted(noun):
+        return []
+    cases = []
+    for where, uri in _request_requests(noun):
+        cli, others = _cli_note_cases(where, noun, uri)
+        cases += cli
+        if others:
+            cases += _api_note_cases(where, noun, uri) + _mcp_note_cases(where, noun, uri)
+    return cases
+
+
 PROBES = {'1a': probe_uri_and_flag, '1b': probe_alias_and_name, '1c': probe_repeated_spelling,
           '1d': probe_repeatable_aliases, '3': probe_unsupported_controls, '3b': probe_unknown_keys,
           '4': probe_verbose_is_detail_full, '8a': probe_bare_shared_keys,
           '8b': probe_bare_field_filters, '10': probe_spellings_declared, '12': probe_repeatability_declared,
           '16': probe_legacy_operations, '17': probe_one_answer, '18': probe_repeated_global_flags,
           '20': probe_applicability, '14': probe_defaults, '21j': probe_invalid_requests_answer_json,
-          '22': probe_config_failures, '23': probe_flags_after_uri}
+          '22': probe_config_failures, '23': probe_flags_after_uri, '24': probe_request_note}
+# These call the MCP tools (the optional mcp extra) besides the CLI.
+MCP_PROBES = ('2', '5', '6', '24')
 # These also run the retirement cases' sample file.
 SAMPLE_PROBES = {'2': probe_retirement_notes, '5': probe_legacy_declarations, '6': probe_alias_notes}
 
@@ -2012,12 +2199,15 @@ POSITIVE_CONTROLS = [('metrics', '1a', '--hotspots vs ?hotspots= conflict'),
                      ('markdown', '1d', '--match with --body-contains accumulates'),
                      ('metrics', '8a', '?match= is the control'),
                      ('ast', '23', '--limit (json)'), ('ast', '23', '?limit=A --limit A'),
-                     ('ast', '23', '?limit=A --limit B conflict')]
+                     ('ast', '23', '?limit=A --limit B conflict'),
+                     ('calls', '24', 'proj default CLI round trip'), ('calls', '24', 'proj default MCP round trip'),
+                     ('calls', '24', 'proj default api.query round trip'), ('calls', '24', 'proj default CLI error stage'),
+                     ('calls', '24', 'proj default MCP error stage'), ('calls', '24', 'proj default api.query error stage')]
 
 
 @pytest.mark.parametrize('noun,rule,label', POSITIVE_CONTROLS)
 def test_a_probe_passes_a_conforming_case(workspace, noun, rule, label):
-    if rule in SAMPLE_PROBES:
+    if rule in MCP_PROBES:
         pytest.importorskip('mcp')
     _state, cases = measure(noun, rule, workspace)
     assert [case.ok for case in cases if case.label == label] == [True], [c for c in cases if c.label == label]
@@ -2044,7 +2234,7 @@ def test_the_matchers_reject_the_answers_the_rules_replace():
 def test_cell(workspace, noun, rule):
     if noun in RULED_EXEMPT_NOUNS:
         pytest.skip(RULED_EXEMPT_NOUNS[noun])
-    if rule in SAMPLE_PROBES:
+    if rule in MCP_PROBES:
         pytest.importorskip('mcp')
     state, cases = measure(noun, rule, workspace)
     failing = [f'{case.label}: {case.evidence}' for case in cases if not case.ok]

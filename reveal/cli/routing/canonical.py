@@ -91,26 +91,77 @@ def typed_words(parser: argparse.ArgumentParser, adapter: Any, controls: Mapping
     return words
 
 
-def canonical_controls(parser: Any, adapter: Any, params: Mapping[str, Any]) -> Dict[str, Any]:
-    """keyword -> value for every declared control *params* gave, in declaration order.
+class UnrenderableRequest(ValueError):
+    """A request that gives a control no flag of its noun spells: it has no canonical form to recommend, so it says no
+    request note (a standalone legacy word keeps its own row's note)."""
+
+
+def spec_flag(spec: Any, parser: argparse.ArgumentParser, adapter: Any) -> Optional[str]:
+    """The long flag that spells *spec*: its own first one, never a legacy flag that shares its dest (calls: --target also
+    writes callers); a spec with no CLI binding of its own is read by the parser's flag whose dest is its name (the walk's
+    ``--all`` and ``--respect-gitignore``, the global ``--format``), unless another declaration binds that flag: Claude's
+    ``--tail`` is the flag-only row slice (``tail_rows``), not the legacy ``?tail`` turn slice."""
+    if spec.cli is not None:
+        return next((flag for flag in spec.cli.flags if flag.startswith('--')), None)
+    bound = {flag for other in adapter.PARAM_SPECS if other.cli is not None for flag in other.cli.flags}
+    for action in parser._actions:
+        if action.dest == spec.name:
+            flag = next((flag for flag in action.option_strings if flag.startswith('--')), None)
+            return None if flag in bound else flag
+    return None
+
+
+def _given_flags(parser: Any, adapter: Any, params: Mapping[str, Any]) -> List[Tuple[Any, str]]:
+    """(spec, flag) for every declared control *params* gave, in declaration order; a given control no flag spells raises
+    ``UnrenderableRequest`` (recommending the request without it would recommend a different request)."""
+    from ...utils.query_binding import given_controls
+    given = given_controls(params)
+    flags = []
+    for spec in adapter.PARAM_SPECS:
+        if spec.name not in given:
+            continue
+        flag = spec_flag(spec, parser, adapter)
+        if flag is None:
+            raise UnrenderableRequest(f'{spec.name} has no flag on this noun')
+        flags.append((spec, flag))
+    return flags
+
+
+def canonical_controls(parser: Any, adapter: Any, params: Mapping[str, Any],
+                       walk_policy: Optional[bool] = None) -> Dict[str, Any]:
+    """keyword -> value for every request control *params* gave, in declaration order.
 
     *params* is a bound ``QueryParams`` (after ``prepare_declared_params`` and ``join_uri_and_flags``: legacy words are
-    already translated, ``top=5`` is ``limit``). A control that has no keyword (no long flag the parser reads) is the
-    request's own spelling problem and is left out; the round-trip test shows it."""
-    from ...utils.query_binding import given_controls
+    already translated, ``top=5`` is ``limit``). *walk_policy* is a URI's ``respect_gitignore`` value, which every URI
+    entry point splits off before binding (``split_respect_gitignore``): ``--respect-gitignore on|off``. A presentation
+    flag the request gave (``--format``) is no request control: ``presentation_words`` spells it for the CLI and MCP
+    forms, and a Python answer is the JSON document."""
     options = typed_options(parser, adapter)
-    given = given_controls(params)
     controls: Dict[str, Any] = {}
-    for spec in adapter.PARAM_SPECS:
-        if spec.name not in given or spec.cli is None:
-            continue
-        # The spec's own first long flag, never a legacy flag that shares its dest (calls: --target also writes callers).
-        own = next((flag for flag in spec.cli.flags if flag.startswith('--')), None)
-        keyword = own[2:].replace('-', '_') if own else None
-        if keyword not in options:
-            continue
-        controls[keyword] = _flag_value(spec, _unread(params, spec.name))
+    if walk_policy is not None and 'respect_gitignore' in options:
+        controls['respect_gitignore'] = 'on' if walk_policy else 'off'
+    for spec, flag in _given_flags(parser, adapter, params):
+        keyword = flag[2:].replace('-', '_')
+        if keyword in options:
+            value = _flag_value(spec, _unread(params, spec.name))
+            action = options[keyword][1]
+            if action.nargs == 0 and action.const is False and isinstance(value, bool):
+                value = not value  # a store_false flag (--no-suppress) spells the control False: given means False
+            controls[keyword] = value
     return controls
+
+
+def presentation_words(parser: Any, adapter: Any, params: Mapping[str, Any]) -> List[str]:
+    """The words of the presentation flags *params* gave (a URI's ``?format=dot`` is ``--format=dot``)."""
+    options = typed_options(parser, adapter)
+    words: List[str] = []
+    for spec, flag in _given_flags(parser, adapter, params):
+        if flag[2:].replace('-', '_') not in options:
+            action, value = parser._option_string_actions[flag], _flag_value(spec, _unread(params, spec.name))
+            if action.choices is not None and value not in action.choices:  # calls ?format=dot: --format has no dot
+                raise UnrenderableRequest(f'{flag} does not offer {value!r}')
+            words.extend(_flag_words(spec.name, flag, action, value))
+    return words
 
 
 def _unread(params: Mapping[str, Any], name: str) -> Any:
@@ -125,7 +176,7 @@ def _flag_value(spec: Any, raw: Any) -> Any:
     several words."""
     from ...utils.query_binding import _decode_value
     value = spec.validate(_decode_value(spec, raw))
-    one_word = spec.cli_action != 'append' and spec.cli.nargs != '+'
+    one_word = spec.cli_action != 'append' and getattr(spec.cli, 'nargs', None) != '+'
     if isinstance(value, (list, tuple)) and one_word:
         return ','.join(str(item) for item in value)
     return value
@@ -177,35 +228,37 @@ def python_call(noun: str, target: Optional[str], controls: Mapping[str, Any]) -
 
 
 def render_request(form: str, noun: str, target: Optional[str], params: Mapping[str, Any], *,
-                   parser: argparse.ArgumentParser, adapter: Any) -> str:
+                   parser: argparse.ArgumentParser, adapter: Any, walk_policy: Optional[bool] = None) -> str:
     """The canonical request for a bound request, in the *form* of one transport (``FORMS``). *parser* and *adapter* are
     the noun's declared parser and adapter class, given by the caller: this module reads declarations and imports no
-    router (the router imports it)."""
+    router (the router imports it). *walk_policy*: ``canonical_controls``."""
     if form not in FORMS:
         raise ValueError(f'form is one of {FORMS}, not {form!r}')
-    controls = canonical_controls(parser, adapter, params)
+    controls = canonical_controls(parser, adapter, params, walk_policy)
     if form == 'python':
         return python_call(noun, target, controls)
-    argv = cli_argv(noun, target, typed_words(parser, adapter, controls))
+    argv = cli_argv(noun, target, [*typed_words(parser, adapter, controls), *presentation_words(parser, adapter, params)])
     if form == 'mcp':
         return f'reveal_run({json.dumps(argv)})'
     return 'reveal ' + shlex.join(argv)
 
 
 def render_uri_request(form: str, scheme: str, resource: str, params: Mapping[str, Any], *,
-                       parser: argparse.ArgumentParser, adapter: Any) -> str:
+                       parser: argparse.ArgumentParser, adapter: Any, walk_policy: Optional[bool] = None) -> str:
     """What a URI request is a retiring spelling of, in one transport's form (BACK-2716 step 3). An analysis-only
     scheme names a path and selects an analysis: ``reveal NOUN TARGET --flags``. A resource keeps its address and takes
     the flags: ``reveal git://app.py@main --limit 5``; on MCP that is ``reveal_run(["git://app.py@main", ...])`` and in
-    Python ``api.query("git://app.py@main", limit=5)``."""
+    Python ``api.query("git://app.py@main", limit=5)``. *walk_policy*: ``canonical_controls``."""
     if getattr(adapter, 'ANALYSIS_ONLY', False):
-        return render_request(form, scheme, resource or None, params, parser=parser, adapter=adapter)
-    controls = canonical_controls(parser, adapter, params)
+        return render_request(form, scheme, resource or None, params, parser=parser, adapter=adapter,
+                              walk_policy=walk_policy)
+    controls = canonical_controls(parser, adapter, params, walk_policy)
     uri = f'{scheme}://{resource}'
     if form == 'python':
         call = python_call(scheme, None, controls)
         return call.replace(f'api.query({json.dumps(scheme)}', f'api.query({json.dumps(uri)}', 1)
-    argv = [*_target_words(uri, _cli_words(typed_words(parser, adapter, controls)))]
+    words = [*typed_words(parser, adapter, controls), *presentation_words(parser, adapter, params)]
+    argv = [*_target_words(uri, _cli_words(words))]
     if form == 'mcp':
         return f'reveal_run({json.dumps(argv)})'
     return 'reveal ' + shlex.join(argv)

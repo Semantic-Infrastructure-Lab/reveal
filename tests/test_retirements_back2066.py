@@ -70,7 +70,26 @@ def _request_field(argv):
     scheme, sep, rest = argv[0].partition('://')
     if not sep or not invocation.request_noted(scheme):
         return []
-    return [f'request:{scheme}'] if getattr(get_adapter_class(scheme), 'ANALYSIS_ONLY', False) or '?' in rest else []
+    if not (getattr(get_adapter_class(scheme), 'ANALYSIS_ONLY', False) or '?' in rest):
+        return []
+    return [f'request:{scheme}'] if _renders(scheme, rest) else []
+
+
+def _renders(scheme, rest):
+    """Whether the bound request has a canonical form: a control no flag of the noun spells (Claude's standalone
+    ``?summary``) has none, so the request says no note and each covered spelling says its own row."""
+    from reveal.cli.routing.canonical import UnrenderableRequest, render_uri_request
+    from reveal.cli.routing.declared import create_declared_parser, declared_adapter_class
+    from reveal.utils.gitignore import split_respect_gitignore
+    from reveal.utils.query_binding import prepare_declared_params
+    resource, _, query = split_respect_gitignore(rest)[0].partition('?')
+    adapter = declared_adapter_class(scheme)
+    try:
+        render_uri_request('cli', scheme, resource, prepare_declared_params(adapter.PARAM_SPECS, query, 'uri'),
+                           parser=create_declared_parser(scheme), adapter=adapter)
+    except UnrenderableRequest:
+        return False
+    return True
 
 
 def _without_retirement_warning(doc):

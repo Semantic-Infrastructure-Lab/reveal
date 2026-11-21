@@ -27,6 +27,7 @@ class InvocationLog:
         self.to_stderr = to_stderr
         self.noted: Dict[str, Any] = {}      # note-stage retired spellings, by RETIREMENTS key
         self.recorded: Dict[str, Any] = {}   # phase7-stage retired spellings, recorded only
+        self.covered: List[str] = []         # per-key retired spellings the request note will say (BACK-2716)
         self.warnings: Dict[Tuple[str, str], Dict[str, Any]] = {}  # meta.warnings entries, by (code, message)
         self.attached: set = set()           # keys of warnings some JSON document carried
         self.notes_attached: set = set()     # keys of retired spellings some JSON document carried
