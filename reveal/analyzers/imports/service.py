@@ -363,6 +363,12 @@ def _outside_root_note(at: ResolvedAt) -> str:
     return f' {at.outside_root} edge(s) resolve outside the scan root, not counted.' if at.outside_root else ''
 
 
+def _ungated_scanned(at: ResolvedAt, scanned: Iterable[Path]) -> set:
+    """The languages of the scanned files that no recall oracle scores (BACK-2703)."""
+    languages = {language_for_extension(Path(f).suffix.lower()) or Path(f).suffix for f in scanned}
+    return languages - set(at.gated)
+
+
 def _resolution_fields(graph: ImportGraph, at: ResolvedAt,
                        scanned: Iterable[Path] = ()) -> Tuple[Dict[str, Any], str]:
     """The rule fields and text an answer resolved through the cascade adds: its root, scope and
@@ -378,10 +384,7 @@ def _resolution_fields(graph: ImportGraph, at: ResolvedAt,
             via[first] = via.get(first, 0) + 1
             if language not in at.gated:
                 ungated[language] = ungated.get(language, 0) + 1
-    for scanned_file in scanned:
-        language = language_for_extension(Path(scanned_file).suffix.lower()) or Path(scanned_file).suffix
-        if language not in at.gated:
-            ungated.setdefault(language, 0)
+    ungated = {**dict.fromkeys(_ungated_scanned(at, scanned), 0), **ungated}
     via = {tag: via[tag] for tag in _VIA_ORDER if tag in via}
     fields = {'root': at.root, 'root_source': at.root_source, 'scope_param': at.scope, 'tests_param': at.tests,
               'via': via, 'ungated_languages': sorted(ungated), 'ungated_edges': sum(ungated.values()),
