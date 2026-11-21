@@ -1,24 +1,20 @@
-"""BACK-2726: the guide-migration script rewrites a documented URI request as the request note's canonical request.
+"""BACK-2726: the guide-migration script rewrites a documented URI request as the canonical request.
 
-The script (``scripts/migrate_doc_uri_examples.py``) finds examples with the executable-docs gate's extractor and
-renders them with ``canonical.render_uri_request``. These tests hold its edges on synthetic docs: what it rewrites, and
-what it must leave (a sentence or comment naming a retired spelling, a resource URI with no options, a request with no
-canonical form, a twin or undeclared scheme), and they run each rewrite of the finished nouns' guides beside its original
-on the named doc fixture: same JSON (the echoed command and the request note aside) and same exit.
+The script (``scripts/migrate_doc_uri_examples.py``) finds examples with the executable-docs gate's extractor
+(``scripts/doc_examples.py``) and renders them with ``canonical.render_request`` (a plain path) or
+``render_uri_request`` (an address). These tests hold its edges on synthetic docs: what it rewrites, and what it must
+leave (a sentence or comment naming a retired spelling, a resource URI with no options, a request with no canonical
+form, a twin or undeclared scheme), and they run each rewrite of the finished nouns' guides beside its original on the
+named doc fixture: same JSON (the echoed command and the request note aside) and same exit.
 """
 import json
 import shlex
-import sys
-from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / 'scripts'))
-
-import migrate_doc_uri_examples as migrate  # noqa: E402
-from test_canonical_request_back2716 import _without_command  # noqa: E402
-from test_example_recipes_run import (_fixture_names, _named_fixture_skip, _without_format,  # noqa: E402,F401
+from scripts import migrate_doc_uri_examples as migrate
+from test_canonical_request_back2716 import _without_command
+from test_example_recipes_run import (_fixture_names, _named_fixture_skip, _without_format,  # noqa: F401
                                       named_harness)
 
 FINISHED_NOUNS = ('json', 'imports', 'calls', 'claude', 'metrics', 'overview', 'contracts', 'patches')

@@ -2,18 +2,20 @@
 """Rewrite the documented URI-request examples as the canonical request the request note recommends (BACK-2726).
 
 A documented command whose first word is a retiring URI request (an analysis-only scheme, or any URI spelling a query
-string; BACK-2716) is rewritten as the executable canonical request rendered from the bound request by
-``reveal.cli.routing.canonical.render_uri_request``, the request note's own renderer: ``reveal NOUN TARGET --flags``
-for an analysis-only scheme, the resource URI followed by flags for a resource (D20). Nothing here parses a URI or
-finds an example on its own:
+string; BACK-2716) is rewritten as the executable canonical request rendered from the bound request by the request
+note's renderers in ``reveal.cli.routing.canonical``: ``reveal NOUN TARGET --flags`` (``render_request``) where the
+noun declares a subcommand and the target is a plain path, the resource URI followed by flags (``render_uri_request``)
+where the URI carries an address (a JSON key path, ``@ref``, a session; D1, D20). Nothing here parses a URI or finds an
+example on its own:
 
-  examples   ``tests/test_example_recipes_run.py`` ``_documented_commands`` (the executable-docs gate's extractor:
-             fenced bash/sh/shell blocks and embedded Markdown tables), and its ``_documented_uri_requests`` predicate
-             for what counts as a retiring URI request (the ``.github/doc_uri_requests_baseline.json`` ratchet);
+  examples   ``scripts/doc_examples.py``, the executable-docs gate's extractor (fenced bash/sh/shell blocks and embedded
+             Markdown tables) and its ``retiring_uri_index`` check (the ``.github/doc_uri_requests_baseline.json``
+             ratchet counts ``documented_uri_requests``);
   binding    the same steps ``reveal.api._note_uri_request`` takes: ``split_respect_gitignore``, then the binder's
              ``prepare_declared_params(..., 'uri')`` over the noun's declarations;
-  rendering  ``render_uri_request(form='cli', ...)``, with the request's typed ``--format``/``--output`` kept as the note
-             keeps it (``presentation=False``);
+  rendering  ``render_request`` / ``render_uri_request`` (form ``cli``), with the request's typed ``--format``/
+             ``--output`` kept as the note keeps it (``presentation=False``); a subcommand rendering the noun parser does
+             not read back with the URI's resource keeps the resource form, counted;
   context    ``scripts/check_retired_names.py`` ``REPLACED_BY_CONTEXT``: a command line that says its spelling is
              deprecated (an inline ``# deprecated`` comment) is left, as prose naming a retired spelling is.
 
@@ -41,15 +43,16 @@ import re
 import shlex
 import sys
 from collections import Counter
-from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterator, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 ROOT = Path(__file__).resolve().parent.parent
-for _path in (ROOT, ROOT / 'tests', ROOT / 'scripts'):
-    if str(_path) not in sys.path:
-        sys.path.insert(0, str(_path))
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from scripts.doc_examples import documented_commands, documented_uri_requests, retiring_uri_index  # noqa: E402
+from scripts.doc_examples import documented_sources as _extractor_sources  # noqa: E402
 
 DOCS = ROOT / 'reveal' / 'docs'
 
@@ -79,27 +82,6 @@ URI_COMMENT = re.compile(r'\bURI\b|\bsame (?:answer|request|result)\b|query[- ]p
 PLACEHOLDER_WORD = re.compile(r'<[A-Za-z_-]+>|\$[A-Za-z_{(]')
 PROSE_URI = re.compile(r'\b([a-z]+)://[^\s`\'")\]|]*\?[^\s`\'")\]|]*')
 _SHELL_WORDS = {'|', '||', '&&', ';', '>', '>>', '2>&1', '2>/dev/null'}
-
-
-def extractor():
-    """The executable-docs gate's extractor module (tests/test_example_recipes_run.py)."""
-    import test_example_recipes_run
-    return test_example_recipes_run
-
-
-def retiring_uri_index(tokens: Sequence[str]) -> Optional[int]:
-    """The index of the URI word when *tokens* is a retiring URI request as ``_documented_uri_requests`` counts one:
-    the first word that is not a flag names a scheme whose adapter is analysis-only, or it spells a query string."""
-    from reveal.adapters.base import get_adapter_class
-    words = [(i, w) for i, w in enumerate(tokens[1:], 1) if not w.startswith('-')]
-    if not words or '://' not in words[0][1]:
-        return None
-    index, word = words[0]
-    scheme, _, rest = word.partition('://')
-    adapter = get_adapter_class(scheme.lower())
-    if adapter is not None and (getattr(adapter, 'ANALYSIS_ONLY', False) or '?' in rest):
-        return index
-    return None
 
 
 @dataclass
@@ -234,7 +216,7 @@ def classify(source: str, line: str, tokens: List[str], failing: bool, text: str
     """The plan for one documented command, or None when it is no retiring URI request. *nouns*: rewrite only these
     schemes' requests (the rest are left, counted)."""
     from reveal.cli.invocation import RETIREMENTS, request_noted
-    from check_retired_names import REPLACED_BY_CONTEXT
+    from scripts.check_retired_names import REPLACED_BY_CONTEXT
     index = retiring_uri_index(tokens)
     if index is None:
         return None
@@ -291,7 +273,7 @@ def classify(source: str, line: str, tokens: List[str], failing: bool, text: str
 
 def documented_sources(docs: Path = DOCS) -> Dict[str, Path]:
     """docs-relative source name -> path, as the extractor names them (*docs*: a ``reveal/docs`` tree)."""
-    return dict(extractor()._documented_sources(docs))
+    return dict(_extractor_sources(docs))
 
 
 def plan(sources: Optional[Sequence[str]] = None, nouns: Optional[Sequence[str]] = None,
@@ -300,7 +282,7 @@ def plan(sources: Optional[Sequence[str]] = None, nouns: Optional[Sequence[str]]
     ``classify``."""
     texts = {name: path.read_text(encoding='utf-8') for name, path in documented_sources(docs).items()}
     out: Dict[str, List[Example]] = {name: [] for name in (sources if sources is not None else texts)}
-    for source, line, tokens, failing in extractor()._documented_commands(docs):
+    for source, line, tokens, failing in documented_commands(docs):
         base = source.removesuffix('#embedded-md')
         if base not in out:
             continue
@@ -340,24 +322,11 @@ def rewrite_text(text: str, examples: Sequence[Example]) -> Tuple[str, int]:
     return '\n'.join(lines), done
 
 
-@contextmanager
-def documented_at(docs: Path) -> Iterator[None]:
-    """The extractor reading *docs* instead of the shipped tree (for the expected baseline after a write)."""
-    module = extractor()
-    original = module._documented_commands
-    module._documented_commands = lambda _docs=None: original(docs)
-    try:
-        yield
-    finally:
-        module._documented_commands = original
-
-
 def expected_baseline(sources: Sequence[str], nouns: Optional[Sequence[str]] = None) -> Tuple[int, int]:
     """(now, after) of the doc URI-request ratchet if *sources* were written (computed on a scratch copy)."""
     import shutil
     import tempfile
-    module = extractor()
-    now = len(module._documented_uri_requests())
+    now = len(documented_uri_requests(DOCS))
     planned = plan(sources, nouns)
     with tempfile.TemporaryDirectory() as tmp:
         docs = Path(tmp) / 'reveal' / 'docs'
@@ -367,8 +336,7 @@ def expected_baseline(sources: Sequence[str], nouns: Optional[Sequence[str]] = N
             path = docs / name
             text, _ = rewrite_text(path.read_text(encoding='utf-8'), examples)
             path.write_text(text, encoding='utf-8')
-        with documented_at(docs):
-            after = len(module._documented_uri_requests())
+        after = len(documented_uri_requests(docs))
     return now, after
 
 
