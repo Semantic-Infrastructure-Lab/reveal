@@ -1860,8 +1860,9 @@ def _mcp_note_cases(where, noun, uri):
     try:
         canonical = reveal_run([*argv, '--format', 'json'])
         doc = json.loads(canonical[canonical.index('{'):canonical.rindex('}') + 1])
+        # The canonical command says no request note of its own: its JSON carries none.
         same = _request_doc(doc, noun) == _request_doc(json.loads(expected.out), noun) and \
-            not _MCP_REQUEST.search(reveal_run(argv))
+            not _request_replacements(doc, noun)
         evidence = f'reveal_run({argv}) answers differently from {expected.brief()}'
     except Exception as exc:  # findings and refusals are tool results or errors: either way not this answer
         same, evidence = False, f'reveal_run({argv}) raised {type(exc).__name__}: {str(exc)[:120]}'
