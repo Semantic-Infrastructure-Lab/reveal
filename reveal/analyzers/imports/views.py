@@ -269,7 +269,8 @@ class ImportView:
             self._graph(), lazy, lazy_default=lazy_default, subject=subject,
             scope='scan_root' if self._scope_is_root() else 'scanned_path',
             tests_counted=tests_counted and not self._tests_excluded(),
-            resolved_at=self._resolved_at(cycles), counted=self._edges(default))
+            resolved_at=self._resolved_at(cycles), counted=self._edges(default),
+            scanned=self.analysis.scanned_files)
         assert self.test_layout is not None
         rule['test_scope'] = self.test_scope()
         basis = rule['test_scope']

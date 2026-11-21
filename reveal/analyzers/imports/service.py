@@ -9,7 +9,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Tuple
 
 from .base import get_extractor, get_all_extensions, scanned_rule_traits
 from . import build_cache, extraction as file_extraction, resolution
@@ -363,9 +363,11 @@ def _outside_root_note(at: ResolvedAt) -> str:
     return f' {at.outside_root} edge(s) resolve outside the scan root, not counted.' if at.outside_root else ''
 
 
-def _resolution_fields(graph: ImportGraph, at: ResolvedAt) -> Tuple[Dict[str, Any], str]:
+def _resolution_fields(graph: ImportGraph, at: ResolvedAt,
+                       scanned: Iterable[Path] = ()) -> Tuple[Dict[str, Any], str]:
     """The rule fields and text an answer resolved through the cascade adds: its root, scope and
-    tests choice, how many counted edges each cascade stage found, and the ungated languages."""
+    tests choice, how many counted edges each cascade stage found, and the ungated languages: those of the counted
+    edges and of every *scanned* file, so a file that resolved no edge is not read as a measured zero (BACK-2703)."""
     via: Dict[str, int] = {}
     ungated: Dict[str, int] = {}
     for src, targets in graph.dependencies.items():
@@ -376,6 +378,10 @@ def _resolution_fields(graph: ImportGraph, at: ResolvedAt) -> Tuple[Dict[str, An
             via[first] = via.get(first, 0) + 1
             if language not in at.gated:
                 ungated[language] = ungated.get(language, 0) + 1
+    for scanned_file in scanned:
+        language = language_for_extension(Path(scanned_file).suffix.lower()) or Path(scanned_file).suffix
+        if language not in at.gated:
+            ungated.setdefault(language, 0)
     via = {tag: via[tag] for tag in _VIA_ORDER if tag in via}
     fields = {'root': at.root, 'root_source': at.root_source, 'scope_param': at.scope, 'tests_param': at.tests,
               'via': via, 'ungated_languages': sorted(ungated), 'ungated_edges': sum(ungated.values()),
@@ -431,7 +437,8 @@ def _tests_phrase(tests_counted: bool) -> str:
 
 def edge_rule(graph: ImportGraph, lazy: str, *, lazy_default: bool, subject: str,
               scope: str, tests_counted: bool = True, hint: Optional[str] = None,
-              resolved_at: Optional[ResolvedAt] = None, counted: Optional[ImportGraph] = None) -> Dict[str, Any]:
+              resolved_at: Optional[ResolvedAt] = None, counted: Optional[ImportGraph] = None,
+              scanned: Iterable[Path] = ()) -> Dict[str, Any]:
     """The counting rule of an edge-derived answer, for its JSON and its text (BACK-2077).
 
     ``lazy`` is the LAZY_MODES value the answer used and ``lazy_default`` whether the
@@ -440,7 +447,8 @@ def edge_rule(graph: ImportGraph, lazy: str, *, lazy_default: bool, subject: str
     default pointer at the other ``&lazy`` values. Edges lacking qualified import scope
     are named and counted separately: include/exclude retain them and only omits them. ``resolved_at``
     (imports://) adds where the answer was resolved and its stage and gating counts over
-    ``counted``, the view the answer counts (the graph itself when not given).
+    ``counted``, the view the answer counts (the graph itself when not given), and over the *scanned* files, whose
+    languages are disclosed as ungated even when none resolved an edge (BACK-2703).
     """
     unclassified = graph.unclassified_edges()
     languages = sorted({language_for_extension(src.suffix.lower()) or src.suffix
@@ -475,7 +483,7 @@ def edge_rule(graph: ImportGraph, lazy: str, *, lazy_default: bool, subject: str
     # A command composing imports answers (inside composed_rules) takes no &scope, &tests or &root
     # and keeps the rule it printed before: the resolution fields are imports://'s own.
     if resolved_at is not None and _RULE_HINT.get() is None:
-        fields, more = _resolution_fields(graph if counted is None else counted, resolved_at)
+        fields, more = _resolution_fields(graph if counted is None else counted, resolved_at, scanned)
         rule.update(fields)
         text += more
     rule['text'] = text

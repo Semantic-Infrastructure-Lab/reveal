@@ -46,6 +46,12 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 - JSON's first bare words `?schema`, `?flatten`, `?gron`, `?type`, `?keys`, `?length` are legacy spellings of `--view`, each with its note until 1.0 and the same answer; the same view named twice (`?gron&view=flatten`) is one setting instead of exit 2, and two different views still exit 2. The json guides teach `reveal json FILE --view VIEW`.
 
+- `reveal.api.query('metrics://P?top=3', top=None)` now exits 2 like the URI alone: on every noun that declares which options its answers read, the original URI's options are judged before typed overrides, so an override cannot hide an inapplicable one.
+
+- `?verbose=false` (the legacy word for a control's default) is no longer a given option: `overview://P?against=HEAD&verbose=false` answers, as `api.query(..., verbose=False)` already did, instead of exiting 2 naming `all`.
+
+- `imports` names a language as not gated by the default recall checks when the scan has files of it, even if none resolved an edge (`ungated_languages`, and the rule text); `ungated_edges` still counts edges.
+
 - `reveal git FILE --view history --bucket day` (and `git://FILE?view=history&bucket=day`) now exits 2 naming the values `bucket` takes (`week`, `month`) before reading history; it exited 3 as a failed analysis, the URI form with a note recommending the same failing command. `reveal.api.query` raises `RequestValidationError` and MCP answers a tool error (BACK-2724).
 
 - `git://` legacy numeric `merges=0` (and `merges=false`) now drops merge commits on every view, as `merges=off` does; outside `view=ownership` it changed nothing and printed a note on stderr (BACK-2656).
