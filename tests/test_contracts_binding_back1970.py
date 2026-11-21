@@ -11,35 +11,37 @@ from reveal.utils.results import AnalysisCompleteness, ResultBuilder, execution_
 @pytest.mark.parametrize('value,expected', [('0', 0), ('1', 1), ('3.0', 3), ('20', 20)])
 def test_impls_conversion_preserves_legacy_whole_decimals(transport, value, expected):
     params = bind_declared_params(ContractsAdapter.PARAM_SPECS,
-                                  {'impls': value} if transport == 'typed' else 'impls='+value,
+                                  {'implementations_limit': value} if transport == 'typed' else 'implementations_limit='+value,
                                   transport=transport)
-    spec = next(s for s in ContractsAdapter.PARAM_SPECS if s.name == 'impls')
+    spec = next(s for s in ContractsAdapter.PARAM_SPECS if s.name == 'implementations_limit')
     assert spec.read(params) == expected
 
 
-@pytest.mark.parametrize('query', ['impls', 'impls=true', 'impls=false', 'impls=-1', 'impls=1.5',
-                                    'impls=1e3', 'impls=1.0e3', 'impls=garbage', 'impls='])
+@pytest.mark.parametrize('query', ['implementations_limit', 'implementations_limit=true', 'implementations_limit=false', 'implementations_limit=-1', 'implementations_limit=1.5',
+                                    'implementations_limit=1e3', 'implementations_limit=1.0e3', 'implementations_limit=garbage', 'implementations_limit='])
 def test_impls_rejects_boolean_fraction_and_scientific_forms(query):
-    with pytest.raises(ValueError, match='impls'):
+    with pytest.raises(ValueError, match='implementations_limit'):
         bind_declared_params(ContractsAdapter.PARAM_SPECS, query, transport='uri')
 
 
 def test_declaration_defaults_roles_polarity_and_consumption():
     specs = {spec.name: spec for spec in ContractsAdapter.PARAM_SPECS}
-    assert set(specs) == {'abstract_only', 'implementations', 'impls'}
+    assert set(specs) == {'abstract_only', 'implementations', 'implementations_limit'}
     assert specs['abstract_only'].default is False
     assert specs['implementations'].default is True
-    assert specs['implementations'].cli.flags == ('--no-implementations',)
-    assert specs['implementations'].cli.action == 'store_false'
+    assert specs['implementations'].cli.flags == ('--implementations',)
+    assert specs['implementations'].cli.metavar == 'on|off'
+    assert [(l.name, l.flag) for l in specs['implementations'].legacy] == [('no_implementations', '--no-implementations')]
+    assert [(l.name, l.flag) for l in specs['implementations_limit'].legacy] == [('impls', '--impls')]
     assert specs['implementations'].role == specs['abstract_only'].role == 'analysis'
-    assert specs['impls'].default == 5 and specs['impls'].role == 'presentation'
-    assert specs['impls'].zero_policy == 'all'
+    assert specs['implementations_limit'].default == 5 and specs['implementations_limit'].role == 'presentation'
+    assert specs['implementations_limit'].zero_policy == 'all'
     with collect_query_keys() as keys:
-        bound = bind_declared_params(ContractsAdapter.PARAM_SPECS, 'impls=3.0', transport='uri')
+        bound = bind_declared_params(ContractsAdapter.PARAM_SPECS, 'implementations_limit=3.0', transport='uri')
         assert keys.used == set()
-        assert set(dict.keys(bound)) == {'impls'}
-        assert specs['impls'].read(bound) == 3
-        assert keys.used == {'impls'}
+        assert set(dict.keys(bound)) == {'implementations_limit'}
+        assert specs['implementations_limit'].read(bound) == 3
+        assert keys.used == {'implementations_limit', 'impls'}  # a read consumes the legacy word's key too
     resource = ContractsAdapter.RESOURCE_SPEC
     assert resource.cli_default == resource.uri_default == '.'
     assert resource.uri_codec == 'existing-path-first'
@@ -74,7 +76,7 @@ def test_schema_preserves_examples_and_declares_roles():
     schema = ContractsAdapter.get_schema()
     params = schema['query_params']
     assert params['abstract_only']['examples'] == ['abstract_only=true']
-    assert params['implementations']['examples'] == ['implementations=false']
-    assert params['impls']['examples'] == ['impls=20', 'impls=0']
-    assert params['impls']['role'] == 'presentation'
+    assert params['implementations']['examples'] == ['implementations=off']
+    assert params['implementations_limit']['examples'] == ['implementations_limit=20', 'implementations_limit=0']
+    assert params['implementations_limit']['role'] == 'presentation'
     assert schema['execution_policy'] == {'default_fail_on': 'none', 'fail_on': ['none']}

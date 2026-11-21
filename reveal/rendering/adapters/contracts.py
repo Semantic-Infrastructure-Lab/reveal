@@ -162,7 +162,7 @@ def _render_group(
             impl_lines = capped_section(
                 impls, impls_cap or None,
                 lambda item: f"{item['name']} ({item['file']}:{item['line']})",
-                indent="    ← ", suffix=" (?impls=0 lists all, ?impls=N widens)")
+                indent="    ← ", suffix=" (--implementations-limit 0 lists all, --implementations-limit N widens)")
             footer = impl_lines.pop() if impls_cap and len(impls) > impls_cap else None
             lines.append(f"    ← implements: {', '.join(impl_lines)}")
             if footer:

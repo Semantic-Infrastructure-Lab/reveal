@@ -37,9 +37,9 @@ def equal_answers(left, right):
 
 @pytest.mark.parametrize('cli,query,cap', [
     ([], '', 5), (['--abstract-only'], '?abstract_only=true', 5),
-    (['--no-implementations'], '?implementations=false', 5),
-    (['--impls', '0'], '?impls=0', 0), (['--impls', '3.0'], '?impls=3.0', 3),
-    (['--impls', '20'], '?impls=20', 20),
+    (['--implementations', 'off'], '?implementations=off', 5),
+    (['--implementations-limit', '0'], '?implementations_limit=0', 0), (['--implementations-limit', '3.0'], '?implementations_limit=3.0', 3),
+    (['--implementations-limit', '20'], '?implementations_limit=20', 20),
 ])
 @pytest.mark.parametrize('provenance', [False, True])
 def test_exact_json_parity_including_ordered_polyglot_implementers(project, cli, query, cap, provenance):
@@ -56,12 +56,12 @@ def test_exact_json_parity_including_ordered_polyglot_implementers(project, cli,
         assert right['execution']['command'] == ' '.join(['reveal', *right_argv])
     equal_answers(left, right)
     assert 'has no effect' not in a.stderr+b.stderr
-    if '--no-implementations' not in cli:
+    if '--implementations' not in cli:
         assert len(left['by_language']['python']['abcs'][0]['implementations']) == 8
 
 
-@pytest.mark.parametrize('cli,query,cut', [([], '', True), (['--impls', '3.0'], '?impls=3.0', True),
-                                          (['--impls', '0'], '?impls=0', False)])
+@pytest.mark.parametrize('cli,query,cut', [([], '', True), (['--implementations-limit', '3.0'], '?implementations_limit=3.0', True),
+                                          (['--implementations-limit', '0'], '?implementations_limit=0', False)])
 def test_text_caps_and_human_artifacts_keep_full_arrays(project, cli, query, cut):
     a = run('contracts', 'proj', *cli, '--also-json', 'a.json')
     b = run('contracts://proj'+query, '--also-json', 'b.json')
@@ -75,9 +75,9 @@ def test_text_caps_and_human_artifacts_keep_full_arrays(project, cli, query, cut
 
 
 @pytest.mark.parametrize('query,cli', [
-    ('impls=-1', ['--impls', '-1']), ('impls=1.5', ['--impls', '1.5']),
-    ('impls=1e3', ['--impls', '1e3']), ('impls=true', ['--impls', 'true']),
-    ('impls', None), ('abstract_only=garbage', None), ('implementations=garbage', None),
+    ('implementations_limit=-1', ['--implementations-limit', '-1']), ('implementations_limit=1.5', ['--implementations-limit', '1.5']),
+    ('implementations_limit=1e3', ['--implementations-limit', '1e3']), ('implementations_limit=true', ['--implementations-limit', 'true']),
+    ('implementations_limit', None), ('abstract_only=garbage', None), ('implementations=garbage', None),
 ])
 def test_resolved_parameter_rejection_is_canonical_usage(project, query, cli):
     requests = [['contracts://proj?'+query]]
@@ -91,7 +91,7 @@ def test_resolved_parameter_rejection_is_canonical_usage(project, query, cli):
 
 
 def test_parser_rejection_has_usage_and_empty_stdout(project):
-    result = run('contracts', 'proj', '--impls')
+    result = run('contracts', 'proj', '--implementations-limit')
     assert result.returncode == 2 and result.stdout == ''
     assert 'usage:' in result.stderr
 

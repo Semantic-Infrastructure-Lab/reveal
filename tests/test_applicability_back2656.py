@@ -328,7 +328,7 @@ def test_a_declared_noun_answers_where_the_control_is_read(project, argv):
 from test_vocabulary_conformance_back2654 import BASE, NOUNS, TARGETS, _adapter, workspace  # noqa: E402,F401
 
 REFUSED_CONTROL = {'architecture': ('top', '2'), 'ast': ('limit', '2'), 'calls': ('limit', '2'),
-                   'claude': ('limit', '2'), 'codex': ('matches', '2'), 'contracts': ('impls', '2'),
+                   'claude': ('limit', '2'), 'codex': ('matches', '2'), 'contracts': ('implementations_limit', '2'),
                    'deps': ('top', '2'), 'git': ('limit', '2'), 'hotspots': ('limit', '2'), 'imports': ('limit', '2'),
                    'json': ('limit', '2'), 'markdown': ('limit', '2'), 'metrics': ('limit', '2'),
                    'overview': ('top', '2'), 'pack': ('budget', '2000'), 'patches': ('limit', '2'),

@@ -27,8 +27,8 @@ from ..utils.path_utils import (
     traversal_failed_warning,
     failure_of,
 )
-from ..utils.query_binding import bind_declared_params, boolean_value
-from ..utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSpec,
+from ..utils.query_binding import bind_declared_params, boolean_value, legacy_switch, switch_value
+from ..utils.query_parser import (CliBinding, LegacySpelling, ParamSpec, QueryParams, ResourceSpec,
                                   nonnegative_display_limit, param_schema)
 from ..utils.results import PARSE_RECOVERED, ResultBuilder
 from ..rendering.adapters.contracts import ContractsRenderer
@@ -933,8 +933,8 @@ def _discovery_error(
 # them all. 0 lists every one (BACK-1384).
 def _contracts_impls(value: Any) -> int:
     if isinstance(value, bool) or (isinstance(value, str) and 'e' in value.lower()):
-        raise ValueError('impls requires a non-negative whole number without scientific notation')
-    return nonnegative_display_limit(value, 'impls')
+        raise ValueError('implementations_limit requires a non-negative whole number without scientific notation')
+    return nonnegative_display_limit(value, 'implementations_limit')
 
 
 _ABSTRACT_ONLY = ParamSpec(
@@ -942,12 +942,16 @@ _ABSTRACT_ONLY = ParamSpec(
     False, boolean_value, ('abstract_only=true',), role='analysis',
     cli=CliBinding(('--abstract-only',), action='store_true'))
 _IMPLEMENTATIONS = ParamSpec(
-    'implementations', 'boolean', 'Show which classes implement each contract', True,
-    boolean_value, ('implementations=false',), role='analysis',
-    cli=CliBinding(('--no-implementations',), action='store_false'))
-_IMPLS = ParamSpec('impls', 'integer', 'Implementers listed per contract in the text view (0 = all; JSON always has all)',
-                   5, _contracts_impls, ('impls=20', 'impls=0'), minimum=0, zero_policy='all',
-                   role='presentation', cli=CliBinding(('--impls',), metavar='N'))
+    'implementations', 'boolean', 'Which classes implement each contract: on (default) or off', True,
+    switch_value, ('implementations=off',), role='analysis',
+    cli=CliBinding(('--implementations',), metavar='on|off'),
+    legacy=(LegacySpelling('no_implementations', codec=legacy_switch('no_implementations', 'off', 'on'),
+                           flag='--no-implementations', flag_value=True),))
+_IMPLS = ParamSpec('implementations_limit', 'integer',
+                   'Implementers listed per contract in the text view (0 = all; JSON always has all)',
+                   5, _contracts_impls, ('implementations_limit=20', 'implementations_limit=0'), minimum=0,
+                   zero_policy='all', role='presentation', cli=CliBinding(('--implementations-limit',), metavar='N'),
+                   legacy=(LegacySpelling('impls', flag='--impls'),))
 
 
 @register_adapter('contracts')
@@ -998,11 +1002,11 @@ class ContractsAdapter(ResourceAdapter):
         return {
             'name': 'contracts',
             'description': 'Find contracts and architectural seams: ABCs, Protocols, TypedDicts, dataclasses, BaseModels.',
-            'syntax': 'contracts://<path>[?abstract_only=true&implementations=false]',
+            'syntax': 'contracts://<path>[?abstract_only=true&implementations=off]',
             'examples': [
                 {'uri': 'contracts://src', 'description': 'All contracts in src/'},
                 {'uri': 'contracts://.?abstract_only=true', 'description': 'Only ABCs and Protocols'},
-                {'uri': 'contracts://.?implementations=false', 'description': "Skip showing which classes implement each contract"},
+                {'uri': 'contracts://.?implementations=off', 'description': "Skip showing which classes implement each contract"},
             ],
             'features': [
                 'Detects ABCs, Protocols, TypedDicts, dataclasses, Pydantic BaseModels (Python)',
@@ -1024,7 +1028,7 @@ class ContractsAdapter(ResourceAdapter):
         return {
             'adapter': 'contracts',
             'description': 'Contract and architectural-seam scanner (ABCs, Protocols, interfaces, traits, mixins)',
-            'uri_syntax': 'contracts://<path>?abstract_only=true&implementations=false',
+            'uri_syntax': 'contracts://<path>?abstract_only=true&implementations=off',
             'resource': ContractsAdapter.RESOURCE_SPEC.schema(),
             'execution_policy': {'default_fail_on': ContractsAdapter.DEFAULT_FAIL_ON,
                                  'fail_on': list(ContractsAdapter.FINDINGS_POLICIES)},

@@ -413,6 +413,8 @@ RETIREMENTS: Dict[str, Retirement] = {
     'param:overview.top': Retirement('overview ?top=N (--top N)', '--limit N, which caps each map section; 0 is uncapped',
                                      standalone=True),
     'param:overview.no_imports': Retirement('overview ?no_imports (--no-imports)', '--imports off'),
+    'param:contracts.impls': Retirement('contracts ?impls=N (--impls N)', '--implementations-limit N'),
+    'param:contracts.no_implementations': Retirement('contracts --no-implementations', '--implementations off'),
     'param:architecture.verbose': Retirement('architecture ?verbose (--verbose)',
                                              'reveal overview <path> --all, the same uncapped map'),
     'param:hotspots.verbose': Retirement('hotspots ?verbose (--verbose)', '--limit 0, both rankings uncapped'),

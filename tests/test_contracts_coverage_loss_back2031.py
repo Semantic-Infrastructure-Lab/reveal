@@ -99,7 +99,7 @@ def _cli(root, spelling='uri', query='', extra=(), fmt='json'):
         if query == '?abstract_only=true':
             args += ['--abstract-only']
         elif query == '?implementations=false':
-            args += ['--no-implementations']
+            args += ['--implementations', 'off']
         else:
             raise AssertionError(query)
     run = _run_reveal_direct(*args, *extra, '--format', fmt, '--no-gitignore')

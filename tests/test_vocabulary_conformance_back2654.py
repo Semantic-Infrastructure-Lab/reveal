@@ -141,15 +141,15 @@ SHARED_CONTROLS = {name: _PROBE_VALUES[name] for name in SHARED_CONTROL_NAMES if
 _NO_ALIAS = 'declares no aliased control: there is no alias and name to give twice'
 _NO_LEGACY = 'no note-stage RETIREMENTS row spells this noun: there is no legacy spelling to note'
 EXEMPT = {
-    **{(noun, '1b'): _NO_ALIAS for noun in ('architecture', 'codex', 'contracts', 'deps', 'json',
+    **{(noun, '1b'): _NO_ALIAS for noun in ('architecture', 'codex', 'deps', 'json',
                                             'overview', 'patches', 'surface', 'trace')},
-    **{(noun, '2'): _NO_LEGACY for noun in ('codex', 'contracts', 'json', 'patches', 'surface')},
+    **{(noun, '2'): _NO_LEGACY for noun in ('codex', 'json', 'patches', 'surface')},
     **{(noun, '1d'): 'declares no repeatable control with an alias'
        for noun in NOUNS if noun not in ('ast', 'claude', 'markdown', 'metrics', 'stats')},
     **{(noun, '5'): 'no note-stage param: row whose replacement is a control of this noun' for noun in (
-        'codex', 'contracts', 'json', 'patches', 'surface', 'trace')},
+        'codex', 'json', 'patches', 'surface', 'trace')},
     **{(noun, '6'): 'declares no alias: nothing to note or keep note-free' for noun in (
-        'architecture', 'codex', 'contracts', 'deps', 'json', 'overview', 'patches',
+        'architecture', 'codex', 'deps', 'json', 'overview', 'patches',
         'surface', 'trace')},
     **{(noun, '8a'): 'no where expression: a bare key is never read as a field'
        for noun in ('architecture', 'calls', 'codex', 'contracts', 'deps', 'hotspots', 'imports', 'overview',
@@ -158,7 +158,7 @@ EXEMPT = {
         'architecture', 'calls', 'codex', 'contracts', 'deps', 'hotspots', 'imports', 'overview', 'pack', 'patches',
         'surface', 'testability', 'trace')},
     **{(noun, '16'): 'no legacy word and no standalone legacy parameter: nothing to translate or mark' for noun in (
-        'codex', 'contracts', 'json', 'patches', 'surface', 'trace')},
+        'codex', 'json', 'patches', 'surface', 'trace')},
     **{(noun, '17'): 'one control at most selects the answer: no two selections to give' for noun in (
         'architecture', 'codex', 'contracts', 'deps', 'hotspots', 'overview', 'pack', 'surface', 'testability',
         'trace')},
@@ -178,8 +178,7 @@ EXEMPT = {
 DEFAULT_NOW = ('1a', '1b', '1c', '1d', '2', '5', '6', '10', '12', '14', '16', '17', '18', '21j')
 # Cells of those rules owned by another package, named by the prompt: each must still fail (a fixed one is removed).
 _SWITCH = 'out of scope: the Switches rule renames this noun\'s no_* flag in its own package'
-OUT_OF_SCOPE = {('contracts', '10'): _SWITCH + ' (--no-implementations)',
-                ('patches', '10'): _SWITCH + ' (--no-suppress)'}
+OUT_OF_SCOPE = {('patches', '10'): _SWITCH + ' (--no-suppress)'}
 # Standalone legacy words kept by a ruling because they answer differently from their replacement (rule 16; Scott
 # 2026-11-16, BACK-2654 notes #9 and #12): (kind, reason). 'operation' selects the answer (role='operation', rule 17);
 # 'modifier' caps, details or filters it and stays without that role, so a legacy cap still combines with the legacy

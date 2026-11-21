@@ -507,7 +507,7 @@ Find all architectural contracts in a codebase: ABCs, Protocols, TypedDicts, `@d
 ### Usage
 
 ```
-reveal contracts [PATH] [--abstract-only] [--no-implementations] [--impls N] [--format FORMAT]
+reveal contracts [PATH] [--abstract-only] [--implementations on|off] [--implementations-limit N] [--format FORMAT]
 ```
 
 ### CLI Flags
@@ -515,8 +515,8 @@ reveal contracts [PATH] [--abstract-only] [--no-implementations] [--impls N] [--
 | Flag | Description |
 |------|-------------|
 | `--abstract-only` | Show only ABCs and Protocols; skip TypedDicts, dataclasses, path-heuristic |
-| `--no-implementations` | Skip showing which classes implement each contract |
-| `--impls N` | Implementers per contract in text (default 5; 0 displays all); JSON arrays remain complete |
+| `--implementations on|off` | Show which classes implement each contract (default on) |
+| `--implementations-limit N` | Implementers per contract in text (default 5; 0 displays all); JSON arrays remain complete |
 | `--output json=PATH` | Write the complete JSON result alongside text output; `--output text=PATH` writes the text render beside a JSON stdout, and the flag repeats for several files |
 | `--fail-on none` | Default policy; required analysis/output failures still exit 3 |
 | `--format` | `text` (default), `json` |
@@ -528,11 +528,11 @@ reveal contracts ./src               # All contracts in src/
 reveal contracts .                   # Entire project
 reveal contracts . --abstract-only   # Only ABCs and Protocols
 reveal contracts . --format json     # Machine-readable output
-reveal contracts . --impls 0          # Display every implementer
+reveal contracts . --implementations-limit 0   # Display every implementer
 ```
 
-Both spellings share declared controls and answers. `--no-implementations`
-matches `?implementations=false`; `--impls 3.0` matches `?impls=3.0` as 3.
+Both spellings share declared controls and answers. `--implementations off`
+matches `?implementations=off`; `--implementations-limit 3.0` matches `?implementations_limit=3.0` as 3.
 Boolean controls reject unrecognized values. Implementer limits reject booleans,
 negative/fractional values and scientific notation. Complete answers exit 0;
 invalid requests exit 2; required missing analysis or output failures exit 3.

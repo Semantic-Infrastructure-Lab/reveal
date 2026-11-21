@@ -1,4 +1,4 @@
-"""BACK-1384: contracts lists 5 implementers per contract in text; ?impls=N widens it and a cut names it."""
+"""BACK-1384: contracts lists 5 implementers per contract in text; ?implementations_limit=N widens it and a cut names it."""
 
 
 import pytest
@@ -26,22 +26,22 @@ def _text(abc_tree, query):
 def test_contracts_default_lists_five_and_names_the_knob(abc_tree):
     text, _ = _text(abc_tree, "")
     assert "Impl4" in text and "Impl5" not in text
-    assert "and 3 more" in text and "?impls=" in text
+    assert "and 3 more" in text and "--implementations-limit" in text
 
 
 def test_contracts_impls_param_widens_and_zero_lists_all(abc_tree):
-    text, _ = _text(abc_tree, "impls=7")
+    text, _ = _text(abc_tree, "implementations_limit=7")
     assert "Impl6" in text and "Impl7" not in text and "and 1 more" in text
-    text, _ = _text(abc_tree, "impls=0")
+    text, _ = _text(abc_tree, "implementations_limit=0")
     assert "Impl7" in text and "more" not in text
 
 
 def test_contracts_json_always_carries_every_implementer(abc_tree):
-    _, result = _text(abc_tree, "impls=2")
+    _, result = _text(abc_tree, "implementations_limit=2")
     assert len(result["abcs"][0]["implementations"]) == 8
 
 
 def test_contracts_impls_param_rejects_bad_values(abc_tree):
-    for bad in ("impls=-1", "impls=x"):
-        with pytest.raises(ValueError, match="impls"):
+    for bad in ("implementations_limit=-1", "implementations_limit=x"):
+        with pytest.raises(ValueError, match="implementations_limit"):
             ContractsAdapter(str(abc_tree), bad).get_structure()

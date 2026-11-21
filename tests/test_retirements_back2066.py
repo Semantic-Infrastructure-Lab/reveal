@@ -293,6 +293,8 @@ PRODUCTION_CASES = {
     'param:overview.verbose': lambda f: [f'overview://{Path(f).parent}?verbose'],
     'param:overview.top': lambda f: ['overview', str(Path(f).parent), '--top', '1'],
     'param:overview.no_imports': lambda f: ['overview', str(Path(f).parent), '--no-imports'],
+    'param:contracts.impls': lambda f: ['contracts', str(Path(f).parent), '--impls', '1'],
+    'param:contracts.no_implementations': lambda f: ['contracts', str(Path(f).parent), '--no-implementations'],
     'param:architecture.verbose': lambda f: [f'architecture://{Path(f).parent}?verbose'],
     'param:hotspots.verbose': lambda f: [f'hotspots://{Path(f).parent}?verbose'],
     'param:testability.verbose': lambda f: [f'testability://{Path(f).parent}?tests={Path(f).parent}&verbose'],

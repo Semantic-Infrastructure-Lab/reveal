@@ -66,10 +66,11 @@ class TestCreateContractsParser(unittest.TestCase):
         args = parser.parse_args(['--abstract-only'])
         self.assertTrue(args.abstract_only)
 
-    def test_no_implementations_flag(self):
+    def test_implementations_switch_and_its_legacy_flag(self):
         parser = create_contracts_parser()
-        args = parser.parse_args(['--no-implementations'])
-        self.assertFalse(args.implementations)
+        self.assertEqual(parser.parse_args(['--implementations', 'off']).implementations, 'off')
+        # the retired flag is its own legacy word, noted and translated when the request binds (BACK-2624)
+        self.assertTrue(parser.parse_args(['--no-implementations']).no_implementations)
 
 
 class TestClassifiers(unittest.TestCase):

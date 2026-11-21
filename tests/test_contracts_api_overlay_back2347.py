@@ -51,7 +51,7 @@ def test_implementation_overlay_changes_actual_observations(project, raw, overri
 
 @pytest.mark.parametrize('value,cap', [(0, 0), (1, 1), (None, 5)])
 def test_impls_overlay_preserves_full_arrays_and_cap_metadata(project, value, cap):
-    answer = api.query(uri(project, 'impls=2'), impls=value)
+    answer = api.query(uri(project, 'implementations_limit=2'), implementations_limit=value)
     assert answer['impls_cap'] == cap
     assert len(answer['abcs'][0]['implementations']) == 8
 
@@ -65,14 +65,14 @@ def test_invalid_typed_impls_rejects_before_analysis(project, monkeypatch, value
         calls.append(True)
         return original(*args, **kwargs)
     monkeypatch.setattr(contracts, '_scan_contracts', scan)
-    with pytest.raises(ValueError, match='impls'):
-        api.query(uri(project), impls=value)
+    with pytest.raises(ValueError, match='implementations_limit'):
+        api.query(uri(project), implementations_limit=value)
     assert calls == []
 
 
 def test_invalid_uri_cannot_be_shadowed_and_unknown_api_keyword_rejects(project):
-    with pytest.raises(ValueError, match='impls'):
-        api.query(uri(project, 'impls=-1'), impls=0)
+    with pytest.raises(ValueError, match='implementations_limit'):
+        api.query(uri(project, 'implementations_limit=-1'), implementations_limit=0)
     with pytest.raises(TypeError, match='nonsense'):
         api.query(uri(project), nonsense=True)
 
@@ -104,12 +104,12 @@ def test_overlay_constructs_once_inside_host_request(project, monkeypatch):
 
 def test_bound_carrier_and_existing_impls_read_accounting_remain(project):
     with collect_query_keys() as keys:
-        adapter = ContractsAdapter(str(project), 'abstract_only=true&impls=0')
+        adapter = ContractsAdapter(str(project), 'abstract_only=true&implementations_limit=0')
         before = list(peek_query_items(adapter.query_params))
         assert not keys.used
         first = adapter.get_structure()
-        assert 'impls' in keys.used and first['impls_cap'] == 0
-        api.query(uri(project), abstract_only=False, impls=1)
+        assert 'implementations_limit' in keys.used and first['impls_cap'] == 0
+        api.query(uri(project), abstract_only=False, implementations_limit=1)
         assert adapter.get_structure() == first
         assert list(peek_query_items(adapter.query_params)) == before
 
@@ -124,7 +124,7 @@ def test_unknown_uri_and_declared_api_resource_codec(project, capsys):
     encoded = project / 'literal%20space'
     answer = api.query(uri(encoded), abstract_only=True)
     assert answer['total_contracts'] > 0 and Path(answer['source']) == decoded
-    adapter = ContractsAdapter(str(project) + '?literal%26+', params={'impls': 0})
+    adapter = ContractsAdapter(str(project) + '?literal%26+', params={'implementations_limit': 0})
     assert adapter.path == str(project) + '?literal%26+'
 
 
@@ -141,8 +141,8 @@ def test_custom_plugin_structure_and_element_forwarding_remain(project, monkeypa
     original = base.get_adapter_class
     monkeypatch.setattr(base, 'get_adapter_class', lambda scheme: Plugin if scheme == 'contracts-plugin' else original(scheme))
     assert api.query(f'contracts-plugin://{project.as_posix()}', nonsense=False) == {'received': {'nonsense': False}}
-    assert api.query(f'contracts-plugin://{project.as_posix()}', element_name='entry', impls=0) == {
-        'element': 'entry', 'received': {'impls': 0}}
+    assert api.query(f'contracts-plugin://{project.as_posix()}', element_name='entry', implementations_limit=0) == {
+        'element': 'entry', 'received': {'implementations_limit': 0}}
 
 
 RUST_SOURCE = ('struct First;\nimpl External for First { fn go(&self) {} }\n'
@@ -151,11 +151,11 @@ RUST_SOURCE = ('struct First;\nimpl External for First { fn go(&self) {} }\n'
 
 def test_implementation_only_zero_contracts_keeps_useful_rows_and_flags(tmp_path):
     (tmp_path / 'visible.rs').write_text(RUST_SOURCE, encoding='utf-8')
-    expected = ContractsAdapter(str(tmp_path), 'impls=1').get_structure()
+    expected = ContractsAdapter(str(tmp_path), 'implementations_limit=1').get_structure()
     assert expected['total_contracts'] == 0
     assert [row['name'] for row in expected['dataclasses']] == ['First', 'Second']
     # The URI request's own note aside; source echoes the URI's spelling (POSIX separators on Windows, BACK-1366/2716).
-    _assert_same_answer_source_spelling(expected, api.query(uri(tmp_path), impls=1))
+    _assert_same_answer_source_spelling(expected, api.query(uri(tmp_path), implementations_limit=1))
     for override in ({'abstract_only': True}, {'implementations': False}):
         answer = api.query(uri(tmp_path), **override)
         assert answer['total_contracts'] == 0 and answer['dataclasses'] == []

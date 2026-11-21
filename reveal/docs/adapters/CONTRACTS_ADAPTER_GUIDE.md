@@ -17,13 +17,13 @@ reveal contracts ./src
 reveal contracts .
 reveal contracts . --format json
 reveal contracts . --abstract-only
-reveal contracts . --no-implementations
-reveal contracts . --impls 0
+reveal contracts . --implementations off
+reveal contracts . --implementations-limit 0
 reveal contracts . --output json=contracts.json
 
 reveal 'contracts://src'
 reveal 'contracts://.?abstract_only=true'
-reveal 'contracts://.?implementations=false'
+reveal 'contracts://.?implementations=off'
 ```
 
 ## Query Parameters
@@ -31,14 +31,16 @@ reveal 'contracts://.?implementations=false'
 | Parameter | Values | Purpose |
 |-----------|--------|---------|
 | `abstract_only` | `true`, `false` (default) | Show only ABCs/Protocols/interfaces/traits — skip TypedDicts, dataclasses, path-heuristic bases. |
-| `implementations` | `true` (default), `false` | Show which classes/types implement each contract. |
-| `impls` | whole number >= 0, default `5` | Implementers listed per contract in text output; `0` lists all. JSON always carries every implementer. |
+| `implementations` | `on` (default), `off` | Show which classes/types implement each contract; `true`/`false` are accepted too. |
+| `implementations_limit` | whole number >= 0, default `5` | Implementers listed per contract in text output; `0` lists all. JSON always carries every implementer. |
 
 Both spellings use the same declarations. `--abstract-only` sets
-`abstract_only=true`; `--no-implementations` sets `implementations=false`.
-`--impls N` matches `?impls=N`, including `3.0` as the whole number 3.
-Negative values, fractions, scientific notation and boolean values for `impls`
-are rejected. Boolean query controls accept `true`/`false`, `yes`/`no` and
+`abstract_only=true`; `--implementations off` sets `implementations=off`.
+`--implementations-limit N` matches `?implementations_limit=N`, including `3.0` as the whole number 3.
+Negative values, fractions, scientific notation and boolean values for `implementations_limit`
+are rejected. The old words still work until 1.0 and print a replaced-by note:
+`--no-implementations` is `--implementations off`, `--impls N` is `--implementations-limit N`;
+a retired and a canonical spelling that disagree exit 2. Boolean query controls accept `true`/`false`, `yes`/`no` and
 `1`/`0`; bare presence means true, and other spellings are rejected.
 
 Omitting the resource defaults to the current directory in both forms. URI
@@ -54,17 +56,17 @@ the filename as an argument.
 ```python
 from reveal import api
 
-report = api.query("contracts://./src", abstract_only=True, implementations=False, impls=0)
+report = api.query("contracts://./src", abstract_only=True, implementations=False, implementations_limit=0)
 ```
 
 Explicit keywords override validated URI values, including `False` and zero.
 `None` selects the declared default; omission leaves the URI value intact. The URI
-validates first, so `?impls=-1` still rejects when a typed override supplies `impls=0`.
+validates first, so `?implementations_limit=-1` still rejects when a typed override supplies `implementations_limit=0`.
 Invalid typed values raise `ValueError` before scanning, and unsupported API keywords
 raise `TypeError`. Unknown URI keys keep their warning behavior. API resource strings
 keep their existing literal-path and `?` splitting behavior.
 
-`impls` keeps its existing metadata contract: results contain the validated
+`implementations_limit` keeps its existing metadata contract: results contain the validated
 `impls_cap`, and implementation arrays stay complete. A cap of one cuts text with a
 remainder notice; zero displays every implementer. `implementations=False` instead
 removes implementation observations from the analysis.
@@ -102,7 +104,7 @@ docstrings in `reveal/adapters/contracts.py` for exactly which field each
 language's contract/implementer pair maps to).
 
 Each entry carries `implementations` (when `implementations=true`) — the
-concrete types satisfying that contract, capped at 5 in text output (`?impls=N` widens it, `?impls=0` lists all) with a
+concrete types satisfying that contract, capped at 5 in text output (`--implementations-limit N` widens it, `--implementations-limit 0` lists all) with a
 "… and N more" tail.
 
 `path_heuristic` (Python only) catches classes in files named like

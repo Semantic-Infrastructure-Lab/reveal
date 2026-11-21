@@ -256,7 +256,7 @@ def query(
             ``UnreadControlError`` (OUTPUT_CONTRACT, "Ignored inputs"). Plugins and undeclared adapters
             forward them to ``get_structure()`` or ``get_element()``.
             Surface accepts type, source_only, by, depth and top; Contracts accepts
-            abstract_only, implementations and impls; Trace accepts from and depth.
+            abstract_only, implementations and implementations_limit; Trace accepts from and depth.
             AST accepts where (a string or list of ANDed expressions), kind, view,
             builtins, reveal-type, sort, limit and offset, using the existing AST parser.
             Calls accepts its declared mode and analysis/presentation controls; mode

@@ -45,8 +45,8 @@ def test_api_implementations_false_removes_actual_edges(project):
 
 @pytest.mark.parametrize('value', [-1, True, False, '1.5', '1e3', 'bad'])
 def test_invalid_typed_impls_rejects(project, value):
-    with pytest.raises(ValueError, match='impls'):
-        query(project, impls=value)
+    with pytest.raises(ValueError, match='implementations_limit'):
+        query(project, implementations_limit=value)
 
 
 def test_unknown_api_keywords_reject(project):
@@ -70,38 +70,38 @@ def test_false_none_and_omission_preserve_uri_precedence(project):
 
 
 def test_zero_none_omission_and_impls_consumption_preserve_cap_contract(project):
-    assert query(project, 'impls=1')['impls_cap'] == 1
-    assert query(project, 'impls=1', impls=None)['impls_cap'] == 5
+    assert query(project, 'implementations_limit=1')['impls_cap'] == 1
+    assert query(project, 'implementations_limit=1', implementations_limit=None)['impls_cap'] == 5
     with collect_query_keys() as keys:
-        result = query(project, impls=0)
-        assert result['impls_cap'] == 0 and 'impls' in keys.used
+        result = query(project, implementations_limit=0)
+        assert result['impls_cap'] == 0 and 'implementations_limit' in keys.used
     assert len(implementations(result)) == 8
     text = ContractsRenderer.render_structure(result, 'text')
     assert 'Impl7' in text and 'more' not in text
-    cut = query(project, impls=1)
+    cut = query(project, implementations_limit=1)
     assert len(implementations(cut)) == 8
     text = ContractsRenderer.render_structure(cut, 'text')
     assert 'Impl1' not in text and 'and 7 more' in text
 
 
 def test_invalid_uri_cannot_be_shadowed_by_valid_typed_override(project):
-    with pytest.raises(ValueError, match='impls'):
-        query(project, 'impls=-1', impls=0)
+    with pytest.raises(ValueError, match='implementations_limit'):
+        query(project, 'implementations_limit=-1', implementations_limit=0)
 
 
 def test_working_constructor_and_uri_siblings(project):
     native = ContractsAdapter(str(project), params={'abstract_only': True, 'implementations': False,
-                                                   'impls': 0}).get_structure()
+                                                   'implementations_limit': 0}).get_structure()
     assert native['total_contracts'] == 1 and implementations(native) == [] and native['impls_cap'] == 0
-    for argv in [(f'contracts://{project}?abstract_only=true&implementations=false&impls=0',),
-                 ('contracts', str(project), '--abstract-only', '--no-implementations', '--impls', '0')]:
+    for argv in [(f'contracts://{project}?abstract_only=true&implementations=false&implementations_limit=0',),
+                 ('contracts', str(project), '--abstract-only', '--implementations', 'off', '--implementations-limit', '0')]:
         response = _run_reveal_direct(*argv, '--format', 'json')
         assert response.returncode == 0
         _assert_same_answer_source_spelling(json.loads(response.stdout), native)
 
 
 def test_single_construction_and_reused_adapter_params_are_not_mutated(project, monkeypatch):
-    adapter = ContractsAdapter(str(project), 'abstract_only=true&impls=1')
+    adapter = ContractsAdapter(str(project), 'abstract_only=true&implementations_limit=1')
     before = adapter.get_structure()
     params = dict(dict.items(adapter.query_params))
     original = ContractsAdapter.__init__
@@ -110,7 +110,7 @@ def test_single_construction_and_reused_adapter_params_are_not_mutated(project, 
         calls.append((resource, query, params))
         original(self, resource, query, params=params)
     monkeypatch.setattr(ContractsAdapter, '__init__', construct)
-    assert query(project, abstract_only=True, impls=0)['total_contracts'] == 1
+    assert query(project, abstract_only=True, implementations_limit=0)['total_contracts'] == 1
     assert len(calls) == 1 and calls[0][0] == str(project)
     assert adapter.get_structure() == before and dict(dict.items(adapter.query_params)) == params
 
@@ -139,8 +139,8 @@ def test_actual_callable_and_declarations_adopt_existing_protocol():
     assert list(inspect.signature(ContractsAdapter.get_structure).parameters) == ['self']
     assert 'from_uri' not in ContractsAdapter.__dict__
     specs = {spec.name: spec for spec in ContractsAdapter.PARAM_SPECS}
-    assert set(specs) == {'abstract_only', 'implementations', 'impls'}
-    assert specs['impls'].role == 'presentation'
+    assert set(specs) == {'abstract_only', 'implementations', 'implementations_limit'}
+    assert specs['implementations_limit'].role == 'presentation'
 
 
 def test_surface_and_ordinary_ast_siblings_keep_their_behavior(project):
