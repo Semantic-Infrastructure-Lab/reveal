@@ -826,6 +826,10 @@ def bind_prepared_params(declarations: Iterable[ParamSpec], params: QueryParams,
             if spec.required:
                 raise ValueError(f'{spec.name} is required')
             continue
+        if supplied[spec.name] is None:  # a legacy codec's "the default" (verbose=false): not given, as typed None is
+            params._given.discard(spec.name)
+            params.set_normalized(spec, spec.validate(None))
+            continue
         value = _validate_binding(spec, supplied[spec.name], transport)
         if spec.repeatable and isinstance(value, list):
             value = _distinct(value)  # an equal repeated term is one term (BACK-2715)
