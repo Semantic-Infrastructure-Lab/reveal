@@ -816,7 +816,7 @@ class GitAdapter(ResourceAdapter):
             'epilog': ('Views: history, blame, diff, ownership; omit view for repository/file inspection.\n'
                        'where repeats to AND commit predicates; content~=TEXT matches literal changed-line text.\n'
                        'limit/offset cap returned rows; scan-limit bounds aggregate commit input (loss exits 3).\n'
-                       'Legacy type= aggregate limits retain input-window meaning during migration.\n'
+                       'A legacy type= aggregate request binds its limit as scan-limit.\n'
                        'detail=raw reads historical file text. Git resolves paths in the requested revision.\n'
                        'URI: git://PATH[@REF]?view=VIEW&where=EXPR.'),
             'examples': [

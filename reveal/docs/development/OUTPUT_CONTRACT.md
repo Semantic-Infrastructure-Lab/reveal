@@ -48,7 +48,7 @@ absence. `meta.blob_text`, `meta.blob_analysis` and repository `meta.ref_sources
 retain source decisions. Known loss is incomplete (3), a proven invalid named target
 is usage (2), and unsupported structural analysis is distinct from a valid empty file.
 Canonical aggregate display caps apply after counting; `scan-limit` bounds input.
-Legacy aggregate `type=` limits retain their input-window meaning during migration.
+A legacy aggregate `type=` request's limit binds as `scan-limit` (its input meaning) until that spelling retires.
 
 ---
 

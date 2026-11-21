@@ -100,11 +100,11 @@ Canonical `limit` and `offset` cap returned authors or time buckets after aggreg
 aggregate totals retain the input population. `scan-limit` bounds aggregate commit
 input (timeline default 20,000; ownership default unbounded). A known input-window
 cut exits 3; a display page remains complete. Python also accepts `scan_limit`.
-Legacy `type=ownership&limit=N` and `type=history&bucket=...&limit=N` preserve their
-input-window meaning until that spelling retires; legacy ownership zero is unbounded.
-Using canonical `view`, an explicit `scan-limit`, or typed view/sort/limit/offset/scan_limit overrides
-selects the separated controls. Retirement notes and final help compression remain
-part of the pre-1.0 command migration.
+Legacy `type=ownership&limit=N` and `type=history&bucket=...&limit=N` still bound the
+commit input: that `limit` binds as `scan-limit` on every transport (its note names
+`--scan-limit N`), so `scan-limit` given too is one setting, and legacy zero is
+`scan-limit` zero, unbounded. Final help compression remains part of the pre-1.0
+command migration.
 
 
 ```bash

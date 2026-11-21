@@ -211,6 +211,32 @@ def test_legacy_aggregate_limit_answers_alike_on_cli_and_api(repo, monkeypatch, 
     assert _without_notes(cli) == _without_notes(api), (run.returncode, cli.get('total_commits'), api.get('total_commits'))
 
 
+# Q1 (A): the legacy aggregate limit is a spelling of scan-limit, so scan-limit given too is one setting; its old zero
+# (no input window) is scan-limit's zero.
+def test_legacy_aggregate_limit_and_scan_limit_are_one_setting(repo):
+    run, doc = _json(repo, 'git://.?type=ownership&limit=2&scan-limit=2')
+    _, canonical = _json(repo, 'git://.', '--view', 'ownership', '--scan-limit', '2')
+    assert run.returncode == 3 and _without_notes(doc) == canonical
+    run, _ = _json(repo, 'git://.?type=ownership&limit=2&scan-limit=5')
+    assert run.returncode == 2 and 'scan-limit: conflicting spellings: limit, scan-limit' in run.stderr, run.stderr
+    run, doc, replacement, canonical, canonical_doc = _round_trip(repo, 'git://.?type=ownership&limit=0')
+    assert '--scan-limit 0' in replacement and run.returncode == 0 and doc['total_commits'] == 7, replacement
+    _assert_same_answer(run, doc, canonical, canonical_doc, replacement)
+
+
+# B5 / BACK-2729: --all binds the value --limit 0 binds on git's commit lists, so the two are one setting; a different
+# limit given with --all still names both. Git has no --all handling of its own.
+@pytest.mark.parametrize('argv', [['git', '.', '--view', 'history'], ['git://.?view=history']])
+def test_all_and_limit_zero_are_one_setting(repo, argv):
+    _, uncapped = _json(repo, *argv, '--limit', '0')
+    assert len(uncapped['history']) == 8
+    for extra in (['--all'], ['--all', '--limit', '0']):
+        run, doc = _json(repo, *argv, *extra)
+        assert run.returncode == 0 and _without_notes(doc) == _without_notes(uncapped), (extra, run.stderr)
+    run, _ = _json(repo, *argv, '--all', '--limit', '3')
+    assert run.returncode == 2 and '--all' in run.stderr, run.stderr
+
+
 # B3: since/until are settings (COMMAND_MODEL "Conflicting values"), on the typed API too.
 def test_typed_since_list_with_two_values_is_refused(repo, monkeypatch):
     """RED: api.query answers with both bounds ANDed where the CLI and URI exit 2."""

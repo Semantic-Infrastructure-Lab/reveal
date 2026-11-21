@@ -91,9 +91,18 @@ _ROWS = (*_COMMITS, 'git_ownership')
 _AGGREGATES = ('git_ownership', 'git_timeline')
 _BLAME, _DIFF = 'git_file_blame', 'git_file_diff'
 
+
+def aggregate_selection(values) -> bool:
+    """Whether a request's controls select an aggregate answer: ownership, or history bucketed into a timeline."""
+    view = values.get('view')
+    return view == 'ownership' or (view in ('history', 'log') and bool(values.get('bucket')))
+
+
 # type and the log view are older words for view (D20; COMMAND_MODEL "Spellings"): their rows note the replacement.
+# A type= aggregate request's limit bounded the commit input, which is scan-limit now (ruling Q1 A): the binder moves it.
 VIEW = string('view', 'history, blame, diff or ownership; omitted preserves resource-dependent inspection',
-              legacy=(LegacySpelling('type'), LegacySpelling('view', value='log')),
+              legacy=(LegacySpelling('type', rebinds=(('limit', 'scan-limit'),), rebinds_when=aggregate_selection),
+                      LegacySpelling('view', value='log')),
               choices=('history', 'log', 'blame', 'diff', 'ownership'), role='operation')
 WHERE = ParamSpec('where', 'array', 'Existing commit predicates; repeat to AND (Git DSL percent-decodes values)',
                   [], predicates, role='filter-expression', repeatable=True, cli=CliBinding(('--where',)),
@@ -111,7 +120,7 @@ MERGES = ParamSpec('merges', 'boolean', 'Include or exclude merge commits; omitt
                    legacy=(LegacySpelling('no_merges', codec=legacy_switch('no_merges', 'off', 'on'),
                                           flag='--no-merges', flag_value=True),), answers=_ROWS)
 SORT = string('sort', 'Commit field; prefix - for descending', answers=_ROWS)
-LIMIT = ParamSpec('limit', 'integer', 'Returned rows; 0 = no cap (legacy type= aggregate requests retain input-window limits)', None,
+LIMIT = ParamSpec('limit', 'integer', 'Returned rows; 0 = no cap (a legacy type= aggregate request binds its limit as scan-limit)', None,
                   lambda v: nonnegative_display_limit(v, name='limit'), minimum=0,
                   zero_policy='no cap', cli_flags=(('all', '1000000'),), cli=CliBinding(('--limit',)), answers=_ROWS)
 SCAN_LIMIT = ParamSpec('scan-limit', 'integer', 'Commit-input budget for ownership or timeline; required loss exits 3',
@@ -191,18 +200,10 @@ def _validate_content_scope(values, subpath):
 
 
 def _aggregate_controls(params, values):
+    """An aggregate answer's row controls apply to its rows, and scan-limit is its commit input (a legacy type=
+    request's limit arrives here as scan-limit, bound so by VIEW's declaration)."""
     from ...utils.query_control import declared_result_control
-    view = values.get('view')
-    aggregate = view == 'ownership' or (view in ('history', 'log') and values.get('bucket'))
-    if not aggregate:
-        return values, None
-    legacy = ('type' in params._supplied_aliases
-              and not params._overrides.intersection({'view', 'sort', 'limit', 'offset', 'scan-limit'})
-              and values.get('scan-limit') is None)
-    if legacy:
-        if view == 'ownership' and values.get('limit') == 0:
-            LIMIT.read(params)  # the old zero explicitly removes the input window
-            values.pop('limit')
+    if not aggregate_selection(values):
         return values, None
     control = declared_result_control(params)
     scan = SCAN_LIMIT.read(params)
