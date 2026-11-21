@@ -46,10 +46,10 @@ reveal 'json://data.json?where=price%3E10&limit=5'
 
 `view` selects `value` (default), `schema`, `flatten`, `type`, `keys`, or `length`.
 `where` accepts the existing array predicate language and repeats to AND constraints.
-Sorting and pagination apply to arrays; `limit=0` is no cap (every row; it used to return an empty page). A filter
-such as `?type=book` still refers to a data field; the first bare `?type` selects
-inspection. Existing first bare inspection selectors remain accepted, including
-`?gron&data-only`, whose JSON document remains a bare array of lines. Canonical
+Sorting and pagination apply to arrays; `limit=0` is no cap (every row; it used to return an empty page). A field
+filter is `--where 'type=book'` (`?where=type%3Dbook`): `type` there is a data field. The legacy first bare
+inspection words (`?schema`, `?keys`, ...) are deprecated spellings of `--view` and answer with a note. The legacy
+`?gron&data-only` is deprecated too: its JSON document remains a bare array of lines, where canonical
 `--view flatten --detail raw` removes text headers while retaining the JSON envelope.
 The Python API accepts the same typed controls through `query(uri, view=..., limit=...)`.
 
