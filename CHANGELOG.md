@@ -44,6 +44,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 - `reveal contracts PATH --implementations on|off` replaces `--no-implementations`, and `--implementations-limit N` (`?implementations_limit=N`) replaces `--impls N` (`?impls=N`). The old words answer as before and note their replacement until 1.0; an old and a new spelling that disagree exit 2. The text hint after a cut names `--implementations-limit`, and the nested cap still never limits the JSON implementer lists (BACK-2624).
 
+- JSON's first bare words `?schema`, `?flatten`, `?gron`, `?type`, `?keys`, `?length` are legacy spellings of `--view`, each with its note until 1.0 and the same answer; the same view named twice (`?gron&view=flatten`) is one setting instead of exit 2, and two different views still exit 2. The json guides teach `reveal json FILE --view VIEW`.
+
 - `reveal git FILE --view history --bucket day` (and `git://FILE?view=history&bucket=day`) now exits 2 naming the values `bucket` takes (`week`, `month`) before reading history; it exited 3 as a failed analysis, the URI form with a note recommending the same failing command. `reveal.api.query` raises `RequestValidationError` and MCP answers a tool error (BACK-2724).
 
 - `git://` legacy numeric `merges=0` (and `merges=false`) now drops merge commits on every view, as `merges=off` does; outside `view=ownership` it changed nothing and printed a note on stderr (BACK-2656).

@@ -1107,10 +1107,10 @@ reveal 'json://data.json/users[0:5]'     # First 5 items
 reveal 'json://data.json/users[-3:]'     # Last 3 items
 
 # Get structure overview
-reveal 'json://config.json?schema'
+reveal json config.json --view schema
 
 # Make grep-able (gron-style)
-reveal 'json://config.json?flatten'
+reveal json config.json --view flatten
 
 # JSONL: Get specific records
 reveal conversation.jsonl --head 10    # First 10 records
@@ -1140,7 +1140,7 @@ reveal conversation.jsonl 42           # Record 42 (as --range 42-42 does)
   }
 }
 
-# reveal 'json://config.json?flatten'
+# reveal json config.json --view flatten
 json.database.host = "localhost"
 json.database.port = 5432
 json.database.name = "mydb"

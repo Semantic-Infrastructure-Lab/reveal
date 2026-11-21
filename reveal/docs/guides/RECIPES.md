@@ -805,7 +805,7 @@ The `json://` adapter turns reveal into a JSON explorer - no jq required for bas
 
 ```bash
 # What's in this JSON file?
-reveal 'json://config.json?schema'
+reveal json config.json --view schema
 
 # Output:
 # Schema:
@@ -840,7 +840,7 @@ reveal 'json://data.json/users[0:3]'        # First 3 users (slice)
 
 ```bash
 # Flatten to grep-able format
-reveal 'json://config.json?flatten'
+reveal json config.json --view flatten
 
 # Output:
 # json = {}
@@ -851,28 +851,28 @@ reveal 'json://config.json?flatten'
 # json.database.credentials.username = "admin"
 
 # Now search!
-reveal 'json://config.json?flatten' | grep -i password
-reveal 'json://large-config.json?flatten' | grep 'api.*key'
+reveal json config.json --view flatten | grep -i password
+reveal json large-config.json --view flatten | grep 'api.*key'
 ```
 
 ### Real-world patterns
 
 ```bash
 # Explore package.json
-reveal 'json://package.json?schema'           # See structure
+reveal json package.json --view schema           # See structure
 reveal json://package.json/dependencies     # List deps
 reveal json://package.json/scripts          # See npm scripts
 
 # Explore tsconfig.json
 reveal json://tsconfig.json/compilerOptions
-reveal 'json://tsconfig.json?flatten' | grep strict
+reveal json tsconfig.json --view flatten | grep strict
 
 # Debug API response (saved to file)
-reveal 'json://api-response.json?schema'      # Understand structure
+reveal json api-response.json --view schema      # Understand structure
 reveal json://api-response.json/data/0      # First result
 ```
 
-**Token savings:** For AI agents, `json://?schema` gives structure understanding in ~100 tokens vs ~5000 tokens for the full file.
+**Token savings:** For AI agents, `reveal json FILE --view schema` gives structure understanding in ~100 tokens vs ~5000 tokens for the full file.
 
 ---
 
@@ -1531,10 +1531,10 @@ reveal 'git://src/module_b.py?type=history'
 
 ```bash
 # 1. Understand config structure
-reveal 'json://config.json?schema'
+reveal json config.json --view schema
 
 # 2. Compare environments
-diff <(reveal 'json://config.dev.json?flatten') <(reveal 'json://config.prod.json?flatten')
+diff <(reveal json config.dev.json --view flatten) <(reveal json config.prod.json --view flatten)
 
 # 3. Check environment variables
 reveal env://

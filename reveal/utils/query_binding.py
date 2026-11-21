@@ -217,6 +217,16 @@ def _reject_repeated_setting(spec: ParamSpec, parts: list) -> None:
                                          'a setting takes one value; give it once')
 
 
+def _same_selection(spec: ParamSpec, given: Any, first: str) -> bool:
+    """``?flatten&view=flatten`` names one view twice, which is one setting (rule 5, COMMAND_MODEL "Conflicting
+    values"); a different view still conflicts."""
+    values = given if isinstance(given, (list, tuple)) else [given]
+    try:
+        return all(spec.validate(value) == spec.validate(first) for value in values)
+    except (ValueError, RequestValidationError):
+        return False
+
+
 def _prepare_legacy_selectors(declarations: tuple[ParamSpec, ...], source: str, params: QueryParams) -> Dict[str, str]:
     """Opted-in first bare words select views; field=value remains dataset syntax."""
     first = source.partition('&')[0].lower()
@@ -224,7 +234,7 @@ def _prepare_legacy_selectors(declarations: tuple[ParamSpec, ...], source: str, 
     for spec in declarations:
         if first not in spec.first_selectors:
             continue
-        if spec.name in params:
+        if spec.name in params and not _same_selection(spec, params[spec.name], first):
             raise RequestValidationError(f'{first} conflicts with {spec.name}')
         dict.pop(params, first, None)
         params[spec.name] = first

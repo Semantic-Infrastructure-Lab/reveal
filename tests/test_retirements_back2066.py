@@ -299,6 +299,13 @@ PRODUCTION_CASES = {
     'param:patches.min_patches': lambda f: ['patches', str(Path(f).parent), '--view', 'pressure', '--min-patches', '2'],
     'param:patches.min_categories': lambda f: ['patches', str(Path(f).parent), '--view', 'pressure',
                                                '--min-categories', '2'],
+    # JSON's first bare selectors (BACK-2615): each alone, on the fixture's rows.json.
+    'param:json.schema': lambda f: [f'json://{Path(f).parent / "rows.json"}?schema'],
+    'param:json.flatten': lambda f: [f'json://{Path(f).parent / "rows.json"}?flatten'],
+    'param:json.gron': lambda f: [f'json://{Path(f).parent / "rows.json"}?gron'],
+    'param:json.type': lambda f: [f'json://{Path(f).parent / "rows.json"}?type'],
+    'param:json.keys': lambda f: [f'json://{Path(f).parent / "rows.json"}?keys'],
+    'param:json.length': lambda f: [f'json://{Path(f).parent / "rows.json"}?length'],
     'param:contracts.impls': lambda f: ['contracts', str(Path(f).parent), '--impls', '1'],
     'param:contracts.no_implementations': lambda f: ['contracts', str(Path(f).parent), '--no-implementations'],
     'param:architecture.verbose': lambda f: [f'architecture://{Path(f).parent}?verbose'],

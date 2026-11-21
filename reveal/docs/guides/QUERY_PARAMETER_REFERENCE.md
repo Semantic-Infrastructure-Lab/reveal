@@ -17,7 +17,7 @@ Query parameters allow filtering, formatting, and modifying adapter behavior usi
 |---------|--------------|---------|
 | **imports://** | `unused`, `circular`, `violations`, `importers`, `sort`, `limit`, `entrypoints`, `components`, `external`, `detail`, `lazy`, `scope`, `tests`, `root`, `scan-limit`, `format` (retired, with a note: `rank`, `top`, `verbose`, `max_files`) | `imports://.?unused` |
 | **git://** | `type`, `detail`, `element`, `author`, `email`, `message`, `hash`, `date`, `since`, `until`, `ref`, `sort`, `limit`, `offset` | `git://file.py?type=history` |
-| **json://** | `schema`, `flatten`, `gron`, `type`, `keys`, `length`, field filters, `sort`, `limit`, `offset` | `json://data.json?type=object` |
+| **json://** | `view` (`value`, `schema`, `flatten`, `type`, `keys`, `length`), `where` (field filters), `detail`, `sort`, `limit`, `offset` (retired, with a note: the first bare words `schema`, `flatten`, `gron`, `type`, `keys`, `length`) | `json://data.json?view=schema` |
 | **markdown://** | field filters (frontmatter), `aggregate`, `body-contains`, `sort`, `limit`, `offset` | `markdown://docs/?status=draft` |
 | **metrics://** | `view` (`hotspots`, `provenance`), `where` (field filters), `code-only`, `churn`, `merges`, `since`, `tests`, `detail`, `exclude`, `sort`, `limit`, `offset` (retired, with a note: `hotspots`, `top`, `min_lines`, `max_lines`, `min_complexity`, `max_complexity`, `min_functions`, `no_merges`, `summary_only`) | `metrics://.?view=hotspots` |
 | **ast://** | `type`, `name`, `complexity`, `lines`, `depth`, `decorator`, `show`, `sort`, `limit`, `offset`, `param_type`, `return_type`, `has_annotations`, `callers`, `reveal_type` (retired, with a note: `calls`, `callee_of`, `show=calls`) | `ast://src?complexity>10` |
@@ -217,7 +217,7 @@ reveal 'git://.?type=history&author~=john&message~=fix'
 
 - **`schema`** (flag) - Show JSON schema instead of data
   ```bash
-  reveal 'json://data.json?schema'
+  reveal json data.json --view schema
   ```
 
 - **Field Filters** - Filter by JSON field values

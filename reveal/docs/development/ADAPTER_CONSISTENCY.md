@@ -195,7 +195,7 @@ Query params change **which resource variant** you see:
 ast://src?complexity>10&lines>50
 
 # JSON structure queries
-json://config.json?keys&flatten
+json://config.json?view=keys
 
 # Markdown frontmatter filtering
 markdown://docs/?status=active&tags=python
@@ -345,7 +345,7 @@ It applies to `--format json` (help://fields).
 
 ```bash
 ast://src?lines>50&complexity>10&decorator=property
-json://config.json?schema&flatten&keys
+json://config.json?view=schema
 markdown://docs/?status=active&!deprecated
 metrics://src?lines=50..200&view=hotspots
 ```

@@ -144,11 +144,11 @@ _NO_LEGACY = 'no note-stage RETIREMENTS row spells this noun: there is no legacy
 EXEMPT = {
     **{(noun, '1b'): _NO_ALIAS for noun in ('architecture', 'codex', 'deps', 'json',
                                             'overview', 'surface', 'trace')},
-    **{(noun, '2'): _NO_LEGACY for noun in ('codex', 'json', 'surface')},
+    **{(noun, '2'): _NO_LEGACY for noun in ('codex', 'surface')},
     **{(noun, '1d'): 'declares no repeatable control with an alias'
        for noun in NOUNS if noun not in ('ast', 'claude', 'markdown', 'metrics', 'patches', 'stats')},
     **{(noun, '5'): 'no note-stage param: row whose replacement is a control of this noun' for noun in (
-        'codex', 'json', 'surface', 'trace')},
+        'codex', 'surface', 'trace')},
     **{(noun, '6'): 'declares no alias: nothing to note or keep note-free' for noun in (
         'architecture', 'codex', 'deps', 'json', 'overview', 'surface', 'trace')},
     **{(noun, '8a'): 'no where expression: a bare key is never read as a field'
@@ -263,6 +263,7 @@ def workspace(tmp_path, monkeypatch):
     # a test file that patches, so the patches retirement cases have a scan to answer (BACK-2625)
     (sample.parent / 'test_sample.py').write_text(
         'from unittest import mock\n\n\n@mock.patch("sample.os.getcwd")\ndef test_it(m):\n    assert m\n', encoding='utf-8')
+    (sample.parent / 'rows.json').write_text('[{"n": 1}, {"n": 2}]', encoding='utf-8')  # JSON's retirement cases (BACK-2615)
     commit_sample(sample)
     return sample
 

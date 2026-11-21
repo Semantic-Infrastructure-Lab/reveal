@@ -78,13 +78,13 @@ reveal 'json://data.json/users[0:3]'       # First 3 users (slice)
 reveal 'json://data.json/users[-1]'        # Last user
 
 # 4. Understand structure (schema inference)
-reveal 'json://config.json?schema'
+reveal json config.json --view schema
 
 # 5. Flatten for grep workflow
-reveal 'json://config.json?flatten'
+reveal json config.json --view flatten
 
 # 6. List keys
-reveal 'json://package.json/dependencies?keys'
+reveal json package.json/dependencies --view keys
 
 # 7. Filter arrays
 reveal 'json://data.json/users?age>25'
@@ -176,13 +176,13 @@ Understand JSON structure without reading entire file:
 
 ```bash
 # Schema of entire file
-reveal 'json://config.json?schema'
+reveal json config.json --view schema
 
 # Schema of nested path
-reveal 'json://data.json/users?schema'
+reveal json data.json/users --view schema
 ```
 
-**Example output** (`reveal 'json://data.json?schema'`):
+**Example output** (`reveal json data.json --view schema`):
 ```
 File: data.json
 Path: (root)
@@ -228,10 +228,10 @@ Convert JSON to grep-able lines:
 
 ```bash
 # Flatten entire file
-reveal 'json://config.json?flatten'
+reveal json config.json --view flatten
 
 # Also accepts ?gron (named after github.com/tomnomnom/gron)
-reveal 'json://config.json?gron'
+reveal json config.json --view flatten
 ```
 
 **Example output:**
@@ -254,13 +254,13 @@ The root is always named `json`, whatever the file is called.
 **Workflow with grep:**
 ```bash
 # Find all database-related config
-reveal 'json://config.json?flatten' | grep -i database
+reveal json config.json --view flatten | grep -i database
 
 # Find all URLs
-reveal 'json://config.json?flatten' | grep url
+reveal json config.json --view flatten | grep url
 
 # Find specific value
-reveal 'json://config.json?flatten' | grep "5432"
+reveal json config.json --view flatten | grep "5432"
 ```
 
 ### 5. **Type Introspection**
@@ -269,17 +269,17 @@ Get type information at any path:
 
 ```bash
 # Type of entire file
-reveal 'json://data.json?type'
+reveal json data.json --view type
 # Output: Type: Object[2 keys]
 #         Length: 2
 
 # Type of nested path
-reveal 'json://data.json/users?type'
+reveal json data.json/users --view type
 # Output: Type: Array[Object[7 keys]]
 #         Length: 15
 
 # Type of value
-reveal 'json://config.json/database/port?type'
+reveal json config.json/database/port --view type
 # Output: Type: int
 ```
 
@@ -289,15 +289,15 @@ List object keys or array indices:
 
 ```bash
 # List object keys
-reveal 'json://package.json?keys'
+reveal json package.json --view keys
 # Output: name, version, description, dependencies, devDependencies, scripts
 
 # List nested keys
-reveal 'json://package.json/dependencies?keys'
+reveal json package.json/dependencies --view keys
 # Output: express, lodash, axios, ...
 
 # For arrays, shows length
-reveal 'json://data.json/users?keys'
+reveal json data.json/users --view keys
 # Output: 150 items
 ```
 
@@ -307,15 +307,15 @@ Get counts and lengths:
 
 ```bash
 # Array length
-reveal 'json://data.json/users?length'
+reveal json data.json/users --view length
 # Output: 150
 
 # Object key count
-reveal 'json://package.json/dependencies?length'
+reveal json package.json/dependencies --view length
 # Output: 45
 
 # String length
-reveal 'json://data.json/users/0/name?length'
+reveal json data.json/users/0/name --view length
 # Output: 12
 ```
 
@@ -645,19 +645,19 @@ reveal json://config.json/database --format=json
 
 ```bash
 # Step 1: Get high-level schema
-reveal 'json://data.json?schema'
+reveal json data.json --view schema
 
 # Step 2: List top-level keys
-reveal 'json://data.json?keys'
+reveal json data.json --view keys
 
 # Step 3: Drill into nested structure
-reveal 'json://data.json/users?schema'
+reveal json data.json/users --view schema
 
 # Step 4: Sample first element
 reveal json://data.json/users/0
 
 # Step 5: Get type of specific field
-reveal 'json://data.json/users/0/metadata?type'
+reveal json data.json/users/0/metadata --view type
 ```
 
 **Expected outcome**: Complete understanding of JSON structure without reading entire file.
@@ -668,16 +668,16 @@ reveal 'json://data.json/users/0/metadata?type'
 
 ```bash
 # Step 1: Flatten entire file
-reveal 'json://config.json?flatten' > flat_config.txt
+reveal json config.json --view flatten > flat_config.txt
 
 # Step 2: Search for database config
-reveal 'json://config.json?flatten' | grep -i database
+reveal json config.json --view flatten | grep -i database
 
 # Step 3: Find all URLs
-reveal 'json://config.json?flatten' | grep url
+reveal json config.json --view flatten | grep url
 
 # Step 4: Find specific port number
-reveal 'json://config.json?flatten' | grep "5432"
+reveal json config.json --view flatten | grep "5432"
 
 # Step 5: Navigate directly to found path
 reveal json://config.json/database/host
@@ -694,7 +694,7 @@ reveal json://config.json/database/host
 curl https://api.example.com/users > users.json
 
 # Step 2: Understand structure
-reveal 'json://users.json?schema'
+reveal json users.json --view schema
 
 # Step 3: Filter active users
 reveal 'json://users.json/data/users?status=active'
@@ -718,15 +718,15 @@ reveal 'json://users.json/data/users?status=active' --format=json | \
 
 ```bash
 # Step 1: Flatten both files
-reveal 'json://config.prod.json?flatten' > prod_flat.txt
-reveal 'json://config.dev.json?flatten' > dev_flat.txt
+reveal json config.prod.json --view flatten > prod_flat.txt
+reveal json config.dev.json --view flatten > dev_flat.txt
 
 # Step 2: Diff flattened output
 diff prod_flat.txt dev_flat.txt
 
 # Or use reveal directly
-diff <(reveal 'json://config.prod.json?flatten') \
-     <(reveal 'json://config.dev.json?flatten')
+diff <(reveal json config.prod.json --view flatten) \
+     <(reveal json config.dev.json --view flatten)
 
 # Step 3: Navigate to specific difference
 reveal json://config.prod.json/database/host
@@ -741,20 +741,20 @@ reveal json://config.dev.json/database/host
 
 ```bash
 # Step 1: Get response schema
-reveal 'json://response.json?schema' > actual_schema.txt
+reveal json response.json --view schema > actual_schema.txt
 
 # Step 2: Compare with expected schema
 # (Manual inspection or diff against documented schema)
 
 # Step 3: Check required fields exist
-reveal 'json://response.json/data/users/0?keys'
+reveal json response.json/data/users/0 --view keys
 
 # Step 4: Validate field types
-reveal 'json://response.json/data/users/0/id?type'      # Should be int
-reveal 'json://response.json/data/users/0/email?type'   # Should be str
+reveal json response.json/data/users/0/id --view type      # Should be int
+reveal json response.json/data/users/0/email --view type   # Should be str
 
 # Step 5: Check array lengths
-reveal 'json://response.json/data/users?length'
+reveal json response.json/data/users --view length
 ```
 
 **Expected outcome**: Verified API contract compliance.
@@ -765,17 +765,17 @@ reveal 'json://response.json/data/users?length'
 
 ```bash
 # Step 1: Generate schema
-reveal 'json://api_response.json?schema' > API_SCHEMA.md
+reveal json api_response.json --view schema > API_SCHEMA.md
 
 # Step 2: List all endpoints
-reveal 'json://swagger.json/paths?keys'
+reveal json swagger.json/paths --view keys
 
 # Step 3: Document each endpoint
 # (path keys such as /users contain '/', which the slash path syntax splits; quote-safe
 # per-endpoint navigation is not possible, so this works only for keys without '/')
-for endpoint in $(reveal 'json://swagger.json/paths?keys' --format=json | jq -r '.keys[]'); do
+for endpoint in $(reveal json swagger.json/paths --view keys --format=json | jq -r '.keys[]'); do
   echo "## $endpoint"
-  reveal "json://swagger.json/paths/$endpoint?schema"
+  reveal json "swagger.json/paths/$endpoint" --view schema
   echo ""
 done > API_DOCS.md
 ```
@@ -906,8 +906,8 @@ reveal json://large_data.json/users --format=json | jq '[.value[] | select(.stat
 **Strategy 4: Use schema first**
 ```bash
 # Understand structure before deep dive
-reveal 'json://large_data.json?schema'
-reveal 'json://large_data.json/users?schema'
+reveal json large_data.json --view schema
+reveal json large_data.json/users --view schema
 # Then: targeted queries
 reveal 'json://large_data.json/users[0:100]'
 ```
@@ -1087,13 +1087,13 @@ Start broad, then narrow:
 
 ```bash
 # 1. Understand structure
-reveal 'json://data.json?schema'
+reveal json data.json --view schema
 
 # 2. List top-level keys
-reveal 'json://data.json?keys'
+reveal json data.json --view keys
 
 # 3. Explore specific section
-reveal 'json://data.json/users?schema'
+reveal json data.json/users --view schema
 
 # 4. Sample first element
 reveal json://data.json/users/0
@@ -1121,7 +1121,7 @@ reveal 'json://data.json/users?status=active&sort=-age&limit=10'
 
 ```bash
 # 1. Flatten entire file
-reveal 'json://config.json?flatten' > flat.txt
+reveal json config.json --view flatten > flat.txt
 
 # 2. Search with grep
 grep -i "database" flat.txt
@@ -1231,33 +1231,33 @@ reveal 'json://data.json/users?status=active' --format=json | \
 
 ```bash
 # Find all database config
-reveal 'json://config.json?flatten' | grep -i database
+reveal json config.json --view flatten | grep -i database
 
 # Find specific values
-reveal 'json://config.json?flatten' | grep "localhost"
+reveal json config.json --view flatten | grep "localhost"
 
 # Case-insensitive search
-reveal 'json://config.json?flatten' | grep -i "api"
+reveal json config.json --view flatten | grep -i "api"
 
 # Count occurrences
-reveal 'json://config.json?flatten' | grep -c "endpoint"
+reveal json config.json --view flatten | grep -c "endpoint"
 ```
 
 ### With diff (Configuration Comparison)
 
 ```bash
 # Compare two JSON configs
-diff <(reveal 'json://prod.json?flatten') \
-     <(reveal 'json://dev.json?flatten')
+diff <(reveal json prod.json --view flatten) \
+     <(reveal json dev.json --view flatten)
 
 # Colorized diff
-diff -u <(reveal 'json://prod.json?flatten') \
-        <(reveal 'json://dev.json?flatten') | colordiff
+diff -u <(reveal json prod.json --view flatten) \
+        <(reveal json dev.json --view flatten) | colordiff
 
 # Just show differences
 diff --suppress-common-lines \
-     <(reveal 'json://prod.json?flatten') \
-     <(reveal 'json://dev.json?flatten')
+     <(reveal json prod.json --view flatten) \
+     <(reveal json dev.json --view flatten)
 ```
 
 ### With curl (API Workflow)
@@ -1265,7 +1265,7 @@ diff --suppress-common-lines \
 ```bash
 # json:// does not read stdin: save then explore
 curl -s https://api.example.com/users > response.json
-reveal 'json://response.json?schema'
+reveal json response.json --view schema
 
 # Filter API response
 curl -s https://api.example.com/users > users.json
@@ -1299,7 +1299,7 @@ for user in users:
 # Process multiple JSON files
 for file in *.json; do
   echo "=== $file ==="
-  reveal "json://$file?schema"
+  reveal json "$file" --view schema
 done
 
 # Extract specific value from multiple files

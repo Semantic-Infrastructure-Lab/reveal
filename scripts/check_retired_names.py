@@ -56,6 +56,10 @@ LIST_ITEM = re.compile(r'\s*(?:[-*+]|\d+\.)\s')
 FILE_ROUTE_CHECK = re.compile(r"reveal\s+(?!@|-|\S*://)[^\s|'\"]+\s[^|\n]*--(?:check|lint)(?![\w-])")
 # `--verbose` is retired on the declared nouns only (it is `--detail full` there, or the noun's legacy word verbose;
 # COMMAND_MODEL "Detail", BACK-2654): the file route, nginx and review keep the live flag.
+# JSON's view words, retired as the first bare word of a query (BACK-2615): `?type=book` filters a data field.
+FIRST_BARE_SELECTORS = {('json', word) for word in ('schema', 'flatten', 'gron', 'type', 'keys', 'length')}
+
+
 def _declared_verbose():
     from reveal.adapters.base import get_adapter_class, list_supported_schemes
     nouns = sorted(s for s in list_supported_schemes() if getattr(get_adapter_class(s), 'PARAM_SPECS', None))
@@ -120,6 +124,8 @@ def _patterns(key):
         return [re.compile(rf'(?<![\w-]){re.escape(rest)}://')]
     if kind == 'param':
         scheme, _, param = rest.partition('.')
+        if (scheme, param) in FIRST_BARE_SELECTORS:  # only the first bare word selects; ?type=x is a data field
+            return [re.compile(rf"{re.escape(scheme)}://[^\s'\"`]*\?{re.escape(param)}(?![\w=-])")]
         return [re.compile(rf"{re.escape(scheme)}://[^\s'\"`]*[?&]{re.escape(param)}(?![\w-])"),
                 re.compile(rf'reveal\s+{re.escape(scheme)}\b[^\n`|]*\s--{re.escape(param)}(?![\w-])')]
     if kind == 'value':
@@ -152,6 +158,8 @@ def _sample(key):
         return f'reveal {rest}://src/'
     if kind == 'param':
         scheme, _, param = rest.partition('.')
+        if (scheme, param) in FIRST_BARE_SELECTORS:
+            return f"reveal '{scheme}://src/?{param}'"
         return f"reveal '{scheme}://src/?{param}=x'"
     if kind == 'value':
         scheme, _, pair = rest.partition('.')

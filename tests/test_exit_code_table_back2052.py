@@ -44,6 +44,7 @@ def test_retirement_inventory_matches_the_shipped_migrations():
                                    'param:calls.external', 'param:calls.modules', 'param:calls.rank', 'param:calls.root', 'param:calls.target', 'param:calls.top', 'param:calls.type', 'param:calls.uncalled',
                                    'param:contracts.impls', 'param:patches.group', 'param:patches.min_categories', 'param:patches.min_patches', 'param:patches.no_suppress', 'param:patches.top', 'param:contracts.no_implementations', 'param:claude.contains', 'param:claude.filter', 'param:claude.full', 'param:claude.last', 'param:claude.raw', 'param:claude.search', 'param:claude.summary', 'param:claude.tail',
                                    'param:deps.verbose', 'param:git.verbose',
+                                   'param:json.flatten', 'param:json.gron', 'param:json.keys', 'param:json.length', 'param:json.schema', 'param:json.type',
                                    'param:hotspots.files_only', 'param:hotspots.functions_only', 'param:hotspots.verbose',
                                    'param:imports.max_files', 'param:imports.rank', 'param:imports.top', 'param:imports.verbose',
                                    'param:markdown.body-contains', 'param:markdown.fields',

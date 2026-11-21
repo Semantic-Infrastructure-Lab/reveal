@@ -420,6 +420,13 @@ RETIREMENTS: Dict[str, Retirement] = {
                                             "--where 'patches>=N'"),
     'param:patches.min_categories': Retirement('the pressure report ?min_categories=N (--min-categories N)',
                                                "--where 'categories>=N'"),
+    # JSON's first bare selectors are views (BACK-2615, D20): the same answer, one spelling.
+    'param:json.schema': Retirement('json ?schema (first bare selector)', '--view schema'),
+    'param:json.flatten': Retirement('json ?flatten (first bare selector)', '--view flatten'),
+    'param:json.gron': Retirement('json ?gron (first bare selector)', '--view flatten'),
+    'param:json.type': Retirement('json ?type (first bare selector)', '--view type'),
+    'param:json.keys': Retirement('json ?keys (first bare selector)', '--view keys'),
+    'param:json.length': Retirement('json ?length (first bare selector)', '--view length'),
     'param:contracts.impls': Retirement('contracts ?impls=N (--impls N)', '--implementations-limit N'),
     'param:contracts.no_implementations': Retirement('contracts --no-implementations', '--implementations off'),
     'param:architecture.verbose': Retirement('architecture ?verbose (--verbose)',
