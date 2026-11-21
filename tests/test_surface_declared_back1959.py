@@ -82,8 +82,11 @@ def test_surface_numeric_controls_reject_bare_presence(tmp_path, name):
         SurfaceAdapter(str(tmp_path), name)
 
 
-def test_shared_numeric_helper_boolean_policy_is_unchanged():
+@pytest.mark.parametrize('value', [True, False])
+def test_shared_numeric_helper_rejects_booleans(value):
+    """BACK-1959 kept the shared helper's bool policy (True was 1); BACK-2727 made whole_number, which it reads,
+    refuse a bool for every integer control, so the helper now refuses one as surface always did."""
     from reveal.utils.query_parser import nonnegative_display_limit
 
-    assert nonnegative_display_limit(True) == 1
-    assert nonnegative_display_limit(False) == 0
+    with pytest.raises(ValueError, match='must be a non-negative integer'):
+        nonnegative_display_limit(value)
