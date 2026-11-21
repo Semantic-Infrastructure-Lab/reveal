@@ -1,5 +1,5 @@
 """Acquisition of named workspace-list entries, before content filtering (Claude and Codex workspace lists)."""
-from reveal.utils.path_utils import to_posix
+from reveal.utils.path_utils import failure_of, to_posix
 import stat
 from pathlib import Path
 from typing import Any, Dict
@@ -8,8 +8,15 @@ from .results import (AnalysisCompleteness, ExecutionFacts, FailureCause,
                       note_warning, result_execution_facts)
 
 
+# The receipt's counting rule unless the caller names its own (Codex's lists have no project scope).
+CLAUDE_COUNT_RULE = ('Named entries after project scope and before content/display filters; analyzed plus failed '
+                     'equals candidates; required ordering/discovery failures count separately; aliases remain '
+                     'separate entries')
+
+
 class WorkspaceScan:
-    def __init__(self, *, legacy_discovery_error=False):
+    def __init__(self, *, legacy_discovery_error=False, count_rule=CLAUDE_COUNT_RULE):
+        self.count_rule = count_rule
         self.candidates: set[str] = set()
         self.completed: set[str] = set()
         self.filtered: set[str] = set()
@@ -83,9 +90,10 @@ class WorkspaceScan:
             'recovered_entries': len(self.recovered),
             'advisory_ordering_failures': len(self.ordering_errors) - len(required_order),
             'request_rejected': self.request_rejected,
-            'failures': [{'phase': phase, 'source': to_posix(p), 'cause': type(e).__name__, 'message': str(e)}
-                         for phase, p, e in failures],
-            'count_rule': 'Named entries after project scope and before content/display filters; analyzed plus failed equals candidates; required ordering/discovery failures count separately; aliases remain separate entries',
+            # The cause without the path (``source`` carries it): str(OSError) embeds the filename (BACK-2249).
+            'failures': [{'phase': phase, 'source': to_posix(p), 'cause': type(e).__name__,
+                          'message': failure_of(e).cause} for phase, p, e in failures],
+            'count_rule': self.count_rule,
         }
         result.setdefault('meta', {})['workspace_analysis'] = proof
         if self.request_rejected:
