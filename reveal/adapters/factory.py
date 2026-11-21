@@ -227,9 +227,17 @@ def _built_with_overrides(adapter_class: type, path: str, query: Optional[str], 
     if getattr(adapter_class, 'SOURCE_BEFORE_CONTROLS', False):
         return _built(adapter_class, path, dict, lambda: adapter_class(path, query, overrides=overrides))
     validate = getattr(adapter_class, 'validate_original_request', None)
+
+    def original(bound: Any) -> None:
+        # The URI's own controls are judged before typed overrides on every noun that declares applicability, so an
+        # override of None cannot hide an inapplicable one (BACK-2692; BACK-2617 for Claude's own checks).
+        if validate:
+            validate(bound, path)
+        if overrides:
+            _reject_unread_controls(adapter_class, bound, path)
+
     bound = bind_declared_params(getattr(adapter_class, 'PARAM_SPECS'), query or '', transport='uri',
-                                 overrides=overrides,
-                                 validate=(lambda bound: validate(bound, path)) if validate else None)
+                                 overrides=overrides, validate=original)
     return _built(adapter_class, path, lambda: bound, lambda: adapter_class(path, params=bound))
 
 
