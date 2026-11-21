@@ -657,9 +657,22 @@ def _note_uri_request(name: str, adapter, path: str, params, transport: str, spe
     parser = create_declared_parser(name)
     try:
         request_note(name, lambda form: render_uri_request(form, name, path, params, parser=parser, adapter=adapter,
-                                                           walk_policy=walk_policy))
+                                                           walk_policy=walk_policy, presentation=not _typed_presentation()))
     except ValueError:
         return  # a request that cannot render is invalid: binding says why, with the answer's own type (not this note)
+
+
+def _typed_presentation() -> bool:
+    """Whether the invocation typed its own ``--format``/``--output``: a URI's ``?format=`` then lost to it, and the request
+    note repeating it would conflict with the flag the caller keeps (rule 18)."""
+    from ..invocation import current_invocation
+    invocation = current_invocation()
+    for token in (invocation.command_argv if invocation is not None else []):
+        if token == '--':
+            break
+        if token.partition('=')[0] in ('--format', '--output'):
+            return True
+    return False
 
 
 def _note_walk_policy(query_policy: Optional[bool], typed_policy: Any) -> Optional[bool]:

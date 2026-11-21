@@ -247,3 +247,11 @@ def test_api_query_of_a_uri_echoes_the_target_as_the_caller_named_it(project):  
     from reveal import api
     for noun in ('imports', 'metrics'):
         assert api.query(f'{noun}://proj')['source'] == 'proj' == api.query(noun, 'proj')['source']
+
+
+def test_a_uri_format_a_typed_format_overrides_is_not_repeated(project):  # noqa: F811
+    """With --format json typed, a URI's ?format=text lost to it: the note names the request without it, since repeating
+    --format text beside the caller's --format json is a conflict (rule 18)."""
+    run = _run_reveal_direct('calls://proj?callers=serve&format=text', '--format', 'json')
+    assert [w['replacement'] for w in _json(run)['meta']['warnings'] if w.get('field') == 'request:calls'] == [
+        'reveal calls proj --callers serve']

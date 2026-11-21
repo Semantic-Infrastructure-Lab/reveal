@@ -228,36 +228,40 @@ def python_call(noun: str, target: Optional[str], controls: Mapping[str, Any]) -
 
 
 def render_request(form: str, noun: str, target: Optional[str], params: Mapping[str, Any], *,
-                   parser: argparse.ArgumentParser, adapter: Any, walk_policy: Optional[bool] = None) -> str:
+                   parser: argparse.ArgumentParser, adapter: Any, walk_policy: Optional[bool] = None,
+                   presentation: bool = True) -> str:
     """The canonical request for a bound request, in the *form* of one transport (``FORMS``). *parser* and *adapter* are
     the noun's declared parser and adapter class, given by the caller: this module reads declarations and imports no
-    router (the router imports it). *walk_policy*: ``canonical_controls``."""
+    router (the router imports it). *walk_policy*: ``canonical_controls``. *presentation* False leaves out the request's
+    presentation flags: the invocation typed its own ``--format``/``--output``, which the URI's lost to."""
     if form not in FORMS:
         raise ValueError(f'form is one of {FORMS}, not {form!r}')
     controls = canonical_controls(parser, adapter, params, walk_policy)
     if form == 'python':
         return python_call(noun, target, controls)
-    argv = cli_argv(noun, target, [*typed_words(parser, adapter, controls), *presentation_words(parser, adapter, params)])
+    shown = presentation_words(parser, adapter, params) if presentation else []
+    argv = cli_argv(noun, target, [*typed_words(parser, adapter, controls), *shown])
     if form == 'mcp':
         return f'reveal_run({json.dumps(argv)})'
     return 'reveal ' + shlex.join(argv)
 
 
 def render_uri_request(form: str, scheme: str, resource: str, params: Mapping[str, Any], *,
-                       parser: argparse.ArgumentParser, adapter: Any, walk_policy: Optional[bool] = None) -> str:
+                       parser: argparse.ArgumentParser, adapter: Any, walk_policy: Optional[bool] = None,
+                       presentation: bool = True) -> str:
     """What a URI request is a retiring spelling of, in one transport's form (BACK-2716 step 3). An analysis-only
     scheme names a path and selects an analysis: ``reveal NOUN TARGET --flags``. A resource keeps its address and takes
     the flags: ``reveal git://app.py@main --limit 5``; on MCP that is ``reveal_run(["git://app.py@main", ...])`` and in
-    Python ``api.query("git://app.py@main", limit=5)``. *walk_policy*: ``canonical_controls``."""
+    Python ``api.query("git://app.py@main", limit=5)``. *walk_policy*, *presentation*: ``render_request``."""
     if getattr(adapter, 'ANALYSIS_ONLY', False):
         return render_request(form, scheme, resource or None, params, parser=parser, adapter=adapter,
-                              walk_policy=walk_policy)
+                              walk_policy=walk_policy, presentation=presentation)
     controls = canonical_controls(parser, adapter, params, walk_policy)
     uri = f'{scheme}://{resource}'
     if form == 'python':
         call = python_call(scheme, None, controls)
         return call.replace(f'api.query({json.dumps(scheme)}', f'api.query({json.dumps(uri)}', 1)
-    words = [*typed_words(parser, adapter, controls), *presentation_words(parser, adapter, params)]
+    words = [*typed_words(parser, adapter, controls), *(presentation_words(parser, adapter, params) if presentation else [])]
     argv = [*_target_words(uri, _cli_words(words))]
     if form == 'mcp':
         return f'reveal_run({json.dumps(argv)})'

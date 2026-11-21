@@ -8,6 +8,7 @@ from conftest import _run_reveal_in, is_request_note
 from reveal import query
 from reveal.cli.invocation import RETIREMENTS, request_note_covers
 from test_claude_source_evidence_back2617 import transcript
+from test_retirements_back2066 import _renders
 
 
 CASES = [
@@ -36,12 +37,16 @@ def test_retirement_adds_exactly_one_notice_and_keeps_the_reader_answer(transcri
     assert result.returncode == 0
     answer = json.loads(result.stdout)
     every = [w for w in answer['meta']['warnings'] if w.get('code') == 'retired_spelling']
-    assert sum(map(is_request_note, every)) == 1  # a URI that spells a query string says its one request note (BACK-2716)
+    # A URI that spells a query string says its one request note when the request has a canonical form (BACK-2716); a
+    # standalone word no flag spells (summary, search, contains, tail and its word last, full, raw) gives it none.
+    renders = _renders('claude', resource)
+    assert sum(map(is_request_note, every)) == (1 if renders else 0)
     records = [w for w in every if not is_request_note(w)]
     key = 'param:claude.' + name
     entry = RETIREMENTS[key]
-    # A covered spelling's note is the request note itself (it spells the canonical request); the rest keep their own.
-    assert len(records) == (0 if request_note_covers(key) else 1)
+    # A covered spelling's note is the request note itself (it spells the canonical request); the rest keep their own,
+    # and so does a covered one whose request has no canonical form (step 4).
+    assert len(records) == (0 if request_note_covers(key) and renders else 1)
     for record in records:
         assert record['field'] == key and record['message'] == entry.text
     assert result.stderr == ''  # the JSON carries the note (BACK-2659)
@@ -76,9 +81,10 @@ def test_sdk_notice_is_json_only_and_fresh_canonical_request_has_none(transcript
             'uri': 'claude://session/my-session?last', 'provenance': True})
         assert not legacy.is_error, _text(legacy)
         answer = json.loads(_text(legacy))
-        notices = [w for w in answer['meta']['warnings'] if w.get('code') == 'retired_spelling' and not is_request_note(w)]
-        assert notices == []  # `last` is covered: the request note replaces its own (BACK-2716)
-        assert [w['field'] for w in answer['meta']['warnings'] if w.get('code') == 'retired_spelling'] == ['request:claude']
+        # `last` is a word of the standalone `tail`, which no flag spells: the request has no canonical form, so it says
+        # no request note and `last` keeps its own (BACK-2716 step 4).
+        assert [w['field'] for w in answer['meta']['warnings'] if w.get('code') == 'retired_spelling'] == [
+            'param:claude.last']
         canonical = await session.call_tool('reveal_query', {
             'uri': 'claude://session/my-session?view=messages&sort=-message_index&limit=1', 'provenance': True})
         assert not canonical.is_error, _text(canonical)
