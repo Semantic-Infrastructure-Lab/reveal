@@ -112,7 +112,7 @@ BASE = {**CASES, 'stats': (None, '')}
 TARGETS = {'claude': 'sessions', 'codex': 'sessions', 'json': 'proj/data.json'}
 # A control that answers only on another target than its noun's default (Claude's turn slice reads one session):
 # the legacy-word probes (1b, 6, 16) send its spellings there, so they compare answers rather than two rejections.
-CONTROL_TARGETS = {('claude', 'tail'): 'session/my-session', ('git', 'detail'): 'proj/app.py',
+CONTROL_TARGETS = {('claude', 'tail'): 'session/my-session', ('git', 'detail'): 'proj/app.py', ('git', 'raw'): 'proj/app.py',
                    # Codex: the resource whose answer reads the control (BACK-2656; the catalog reads few of them)
                    ('codex', 'key'): 'config', ('codex', 'detail'): '019e5cc5-0000-7000-8000-000000000001/exchanges',
                    ('codex', 'view'): '019e5cc5-0000-7000-8000-000000000001'}
@@ -123,6 +123,8 @@ CONTROL_BASES = {('calls', 'kind'): (['--uncalled'], '?uncalled'), ('calls', 'ex
                  ('imports', 'limit'): (['--sort=-fan-in'], '?sort=-fan-in'),
                  ('imports', 'detail'): (['--circular'], '?circular'),
                  ('git', 'detail'): (['--view', 'blame'], '?view=blame'),
+                 # a legacy word read by another answer than its control's base (Git raw is detail=raw: a file's text)
+                 ('git', 'raw'): ([], ''),
                  ('patches', 'where'): (['--view', 'pressure'], '?view=pressure'),
                  ('codex', 'matches'): (['--match', 'auth'], '?match=auth'),
                  **{('codex', bound): (['--where', 'session~=auth'], '?where=session~=auth')
@@ -216,14 +218,11 @@ RULED_EXEMPT_NOUNS = {'stats': 'rule 9: the retired stats:// scheme is deleted a
 # legacy flags are flag-only modifiers of the declarations (--head, --check, Claude --type, Claude --tail since
 # BACK-2709), and an equal repeated term is one term (BACK-2715), so rule 23 conforms on every declared noun.
 # Rule 24 (BACK-2716 step 4) at fbf7715a plus the step-4 renderer fixes:
-NOT_YET: dict = {
-    ('git', '24'): "?no_merges=true and ?raw=true have no flag on git's parser and no RETIREMENTS row: the request says "
-                   "no note and keeps working at the cut (BACK-2616 gives git its D20 spelling)",
-}
+NOT_YET: dict = {}
 
 NOT_YET_BASELINE = {'1a': 0, '1b': 0, '1c': 0, '1d': 0, '2': 0, '3': 0, '3b': 0, '4': 0, '5': 0, '6': 0,
                     '8a': 0, '8b': 0, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 0, '14': 0, '21j': 0, '22': 0,
-                    '23': 0, '24': 1}
+                    '23': 0, '24': 0}
 
 
 # --- the fixture -------------------------------------------------------------------------------------------
@@ -1093,7 +1092,8 @@ def probe_alias_notes(noun, sample):
             if accepted is not None and values[0] != accepted:
                 values = (accepted, _alias_spelling(spec, alias, accepted) or values[1], values[2])
             key = f'param:{noun}.{alias}'
-            uri = _uri(noun, f'{alias}={values[1]}', base=spec.role != 'operation', control=spec.name)
+            control = alias if (noun, alias) in CONTROL_BASES else spec.name  # a word whose answer is not its control's
+            uri = _uri(noun, f'{alias}={values[1]}', base=spec.role != 'operation', control=control)
             noted = not _spelling_only(spec, alias) and (noun, alias) not in DEFERRED_ALIASES
             as_json = _run(uri, '--format', 'json')
             doc = json.loads(as_json.out) if as_json.out.strip().startswith('{') else None

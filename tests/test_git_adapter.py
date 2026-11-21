@@ -1354,17 +1354,18 @@ class TestGitAdapterSchema(unittest.TestCase):
         self.assertIn('query_params', schema)
         query_params = schema['query_params']
 
-        # Should have filtering params
-        self.assertIn('author', query_params)
-        self.assertIn('email', query_params)
-        self.assertIn('message', query_params)
-        self.assertIn('hash', query_params)
+        # The commit filter fields, declared once with the where control that reads them (BACK-2616)
+        fields = schema['filter_fields']
+        for field in ('author', 'email', 'message', 'hash', 'date', 'timestamp', 'content'):
+            self.assertIn(field, fields)
+        self.assertEqual(set(fields), set(next(spec for spec in GitAdapter.PARAM_SPECS if spec.name == 'where').fields))
 
-        # Should have type param for history/blame
-        self.assertIn('type', query_params)
-        type_param = query_params['type']
-        self.assertIn('history', type_param['values'])
-        self.assertIn('blame', type_param['values'])
+        # view selects history/blame; type is its legacy word (D20, BACK-2616), not a parameter of its own
+        self.assertNotIn('type', query_params)
+        view_param = query_params['view']
+        self.assertIn('type', view_param['aliases'])
+        self.assertIn('history', view_param['choices'])
+        self.assertIn('blame', view_param['choices'])
 
     def test_schema_cli_flags(self):
         """Schema should document CLI flags."""
@@ -2861,9 +2862,12 @@ class TestViewScopedParamApplicability:
         assert self._query(git_repo_ownership, since='2020-01-01')['type'] == 'git_repository'
 
     @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
-    def test_no_merges_on_ownership_view_is_refused(self, git_repo_ownership):
-        """Ownership excludes merge commits by default and reads merges=on|off, never the legacy no_merges."""
-        self._refused(git_repo_ownership, 'no_merges', 'git_ownership', view='ownership', no_merges='1')
+    def test_no_merges_on_ownership_view_is_merges_off(self, git_repo_ownership):
+        """Legacy no_merges is merges=off on every answer merges reaches, ownership included (BACK-2616 Q6); it was
+        refused there while no_merges was a control of its own read by commit lists only."""
+        legacy = self._query(git_repo_ownership, view='ownership', no_merges='1')
+        canonical = self._query(git_repo_ownership, view='ownership', merges='off')
+        assert {k: v for k, v in legacy.items() if k != 'meta'} == {k: v for k, v in canonical.items() if k != 'meta'}
 
     @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
     def test_ownership_query_answers_without_inert_params(self, git_repo_ownership):

@@ -80,14 +80,14 @@ _FILE, _BLAME, _DIFF = 'git_file_structure, default', 'git_file_blame, view, vie
     (('git://proj/app.py?view=diff&bucket=week',), 'bucket', _DIFF),
     (('git://proj/app.py?ignore=abc',), 'ignore', _FILE),
     (('git://proj?view=ownership&element=serve',), 'element', 'git_ownership, view, view=ownership'),
-    (('git://proj?view=ownership&no_merges=1',), 'no_merges', 'git_ownership, view, view=ownership'),  # own note
     (('git://proj?view=ownership&since=2023-11-01',), 'since', 'git_ownership, view, view=ownership'),
     (('git://proj/app.py?view=blame&until=2030-01-01',), 'until', _BLAME),
     (('git://proj?view=diff&context=1',), 'context', 'git_ref, view, view=diff'),             # silent before
     (('git://proj?view=blame&ignore=abc',), 'ignore', 'git_ref, view, view=blame'),           # silent before
     (('git://proj?view=history&element=serve',), 'element', 'git_ref, view, view=history'),   # silent before
-    (('git://proj/app.py?view=blame&no_merges=1',), 'no_merges', _BLAME),                     # silent before
-    (('git://proj?raw=1',), 'raw', 'git_repository, default'),                                # silent before
+    # legacy no_merges and raw are spellings of merges and detail (BACK-2616): the refusal names the control
+    (('git://proj/app.py?view=blame&no_merges=1',), 'merges', _BLAME),                        # silent before
+    (('git://proj?raw=1',), 'detail', 'git_repository, default'),                             # silent before
     (('git://proj/app.py?view=history&scan-limit=5',), 'scan-limit', 'git_file_history, view, view=history'),
     (('git', 'proj/app.py', '--view', 'blame', '--limit', '1'), 'limit', _BLAME),             # the subcommand
     (('git://proj/app.py?view=diff', '--limit', '1'), 'limit', _DIFF),                        # the URI and a flag
@@ -131,6 +131,7 @@ def test_git_api_refuses_the_same_request(proj):
     'git://proj/app.py?view=blame&detail=full&ignore=off&element=serve',
     'git://proj/app.py?view=diff&context=1&element=serve',
     'git://proj/app.py?raw=1',
+    'git://proj?view=ownership&no_merges=1',  # merges=off, which ownership reads (BACK-2616 Q6; refused before)
     'git://proj/app.py?detail=raw',
     'git://proj?view=ownership&merges=on&scan-limit=5&sort=-commits&limit=1',
     'git://proj/app.py?view=history&bucket=week&element=serve&scan-limit=5&limit=1&author=Ann',

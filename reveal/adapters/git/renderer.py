@@ -332,7 +332,7 @@ class GitRenderer:
                 print(f"  ... and {len(imports) - 10} more")
             print()
 
-        print(f"Use: reveal 'git://{result['path']}@{result['ref']}?raw=1' for full file contents")
+        print(f"Use: reveal git://{result['path']}@{result['ref']} --detail raw for full file contents")
 
     @staticmethod
     def _render_file_diff(result: dict) -> None:

@@ -405,7 +405,7 @@ File: src/app.py @ main
 Commit: abc1234  2025-02-13  John Doe — "feat: Add new feature"
 Size: 2,345 bytes, 89 lines
 
-Use: reveal 'git://src/app.py@main?raw=1' for full file contents
+Use: reveal git://src/app.py@main --detail raw for full file contents
 ```
 
 With `?raw=1` the result is a `git_file` with the file's `content`; without it, a `git_file_structure` (functions, classes or headings).
@@ -735,19 +735,20 @@ that shares are limited to the fetched history. Run `git fetch --unshallow` firs
 
 | Parameter | Type | Values | Description |
 |-----------|------|--------|-------------|
-| `type` | string | `history`, `blame`, `diff`, `ownership` | Operation type for files/directories |
-| `detail` | string | `full`, `summary` | Blame detail level (default: summary) |
+| `view` | string | `history`, `blame`, `diff`, `ownership` | Which answer for a file, directory or repository (`type` is its deprecated spelling) |
+| `detail` | string | `normal`, `full`, `raw` | Blame detail level (default: normal; `summary` is its deprecated spelling), or `raw` for a historical file's text (`raw=1` is its deprecated spelling) |
 | `element` | string | function/class name | Semantic blame target, or scope for `type=history`/`type=diff` |
 | `context` | integer | lines | Context lines around each hunk for `type=diff` |
 | `ref` | string | branch/tag/commit | Override the starting ref — alias for `@ref` in the URI (e.g., `?ref=v0.63.0`) |
-| `merges` | string | `1` | Include merge commits in ownership walk (default: excluded) |
+| `merges` | string | `on`, `off` | Include or exclude merge commits (ownership excludes them by default, commit lists include them; `no_merges` is the deprecated spelling of `off`) |
 | `bucket` | string | `week`, `month` | Modifier on `type=history`: bucket commits into periods (commit_count + distinct author_count per period) instead of a flat list |
 | `ignore` | string | comma-separated hash prefixes | For `type=blame`: suppress these commits (any prefix length, 4–7 chars typical) |
-| `raw` | string | `1` | For file-at-ref: return raw file contents instead of structural view |
 
 ### Filter Parameters
 
-| Parameter | Type | Operators | Description |
+The fields a `where` expression (or a bare `FIELD OP VALUE` key) filters commits on; `since` and `until` are settings.
+
+| Field | Type | Operators | Description |
 |-----------|------|-----------|-------------|
 | `author` | string | `=`, `~=` | Filter by author name (case-insensitive) |
 | `email` | string | `=`, `~=` | Filter by author email |
@@ -2058,8 +2059,8 @@ cat commits.json | jq '.history[] | {date, author, message}'
 
 ```bash
 # View file at two refs
-reveal 'git://config.yaml@main?raw=1' > main.txt
-reveal 'git://config.yaml@develop?raw=1' > develop.txt
+reveal git://config.yaml@main --detail raw > main.txt
+reveal git://config.yaml@develop --detail raw > develop.txt
 diff main.txt develop.txt
 
 # Or use diff:// adapter

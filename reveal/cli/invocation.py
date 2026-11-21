@@ -411,6 +411,13 @@ RETIREMENTS: Dict[str, Retirement] = {
                                           '--scan-limit N, the same input budget'),
     # verbose where it adds detail (BACK-2654 rule 4) or only lifts caps (note #17): translated, the same answer.
     'param:git.verbose': Retirement('git ?verbose (--verbose)', '--detail full'),
+    # Git vocabulary (BACK-2616, D20): no_merges and raw are legacy values of the merges switch and the detail level; log
+    # and summary are older values of view and detail. type (view's older word) gets its row with the guide migration,
+    # after its aggregate limit answers as --scan-limit (BACK-2616 steps 4 and 6).
+    'param:git.no_merges': Retirement('git ?no_merges (--no-merges)', '--merges off'),
+    'param:git.raw': Retirement('git ?raw=1', '--detail raw, the historical file text'),
+    'value:git.view=log': Retirement('git --view log (?type=log)', '--view history, the same answer'),
+    'value:git.detail=summary': Retirement('git --detail summary', '--detail normal, the same answer'),
     'param:pack.verbose': Retirement('pack ?verbose (--verbose)',
                                      '--detail full; JSON keeps "verbose": true'),
     'param:overview.verbose': Retirement('overview ?verbose (--verbose)', '--all, the same uncapped map'),

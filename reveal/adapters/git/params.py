@@ -1,7 +1,7 @@
 """Declared Git controls, applied through the existing resource and predicate owners."""
 from typing import Any
 
-from ...utils.query_binding import boolean_value, switch_value, verbose_legacy
+from ...utils.query_binding import boolean_value, legacy_switch, switch_value, verbose_legacy
 from ...utils.query_parser import CliBinding, LegacySpelling, ParamSpec, ParamValueError, nonempty_scalar, nonnegative_display_limit, legacy_check, legacy_slices
 
 
@@ -40,6 +40,41 @@ def detail(value: Any) -> str:
     return 'normal' if name == 'summary' else name
 
 
+def raw_detail(value: Any) -> Any:
+    """Legacy ``raw`` as the detail level it stands for: true is ``detail=raw``; false is not given (the structure)."""
+    try:
+        return 'raw' if boolean_value(value) else None
+    except ValueError:
+        raise ParamValueError(f'raw must be a valid boolean, got {value!r}: use detail=raw (--detail raw)') from None
+
+
+def one_value(value: Any) -> str:
+    """A setting's one value (COMMAND_MODEL "Conflicting values"): a typed list of equal values is that value, two
+    different values are an invalid request naming both."""
+    if isinstance(value, (list, tuple)):
+        distinct = list(dict.fromkeys(value))
+        if len(distinct) > 1:
+            raise ParamValueError(f'a setting takes one value, got {distinct[0]!r} and {distinct[1]!r}; give it once')
+        value = distinct[0] if distinct else value
+    return nonempty_scalar(value)
+
+
+# The commit fields where filters and bare URI keys read (COMMAND_MODEL "Bare URI keys": a closed field set), each
+# described once: the schema's filter_fields and the where declaration read this table.
+COMMIT_FILTER_FIELDS = {
+    'author': ('string', 'Commit author name (case-insensitive; ~= is a regex)'),
+    'email': ('string', 'Commit author email (case-insensitive; ~= is a regex)'),
+    'date': ('string', 'Commit date: =, !=, >, <, >=, <= and a range =a..b with an ISO date or timestamp. A year, '
+                       'month or day bound (2026, 2026-01, 2026-01-31) is the whole period; a zone (Z, +02:00) is '
+                       'converted to the local time commit dates are written in'),
+    'hash': ('string', 'Commit short hash (7 characters)'),
+    'message': ('string', 'Commit message (~= is a regex)'),
+    'timestamp': ('integer', 'Commit time in epoch seconds (>, <, >=, <=, =, !=)'),
+    'content': ('string', 'Changed-line pickaxe: commits whose diff added or removed a line containing the literal '
+                          'text (content~=TEXT; flat history or repository recent commits only)'),
+}
+
+
 def string(name, description, *, legacy=(), choices=(), role=None, answers=()):
     return ParamSpec(name, 'string', description, None, nonempty_scalar, legacy=legacy, choices=choices, role=role,
                      cli=CliBinding(('--' + name,)), answers=answers)
@@ -56,21 +91,25 @@ _ROWS = (*_COMMITS, 'git_ownership')
 _AGGREGATES = ('git_ownership', 'git_timeline')
 _BLAME, _DIFF = 'git_file_blame', 'git_file_diff'
 
+# type and the log view are older words for view (D20; COMMAND_MODEL "Spellings"): their rows note the replacement.
 VIEW = string('view', 'history, blame, diff or ownership; omitted preserves resource-dependent inspection',
-              legacy=(LegacySpelling('type'),), choices=('history', 'log', 'blame', 'diff', 'ownership'), role='operation')
+              legacy=(LegacySpelling('type'), LegacySpelling('view', value='log')),
+              choices=('history', 'log', 'blame', 'diff', 'ownership'), role='operation')
 WHERE = ParamSpec('where', 'array', 'Existing commit predicates; repeat to AND (Git DSL percent-decodes values)',
                   [], predicates, role='filter-expression', repeatable=True, cli=CliBinding(('--where',)),
-                  fields=('author', 'email', 'date', 'hash', 'message', 'timestamp', 'content'), answers=_COMMITS)
+                  fields=tuple(COMMIT_FILTER_FIELDS), answers=_COMMITS)
+# Legacy raw is detail=raw (raw=false: the structure, the omitted level); summary is the older word for normal.
 DETAIL = ParamSpec('detail', 'string', 'normal, full blame, or raw historical file content', None, detail,
                    choices=('normal', 'full', 'raw'), cli=CliBinding(('--detail',)),
-                   legacy=(verbose_legacy('full', 'detail=full (--detail full)'),), answers=(_BLAME, 'git_file'))
-# One on/off switch on every view (COMMAND_MODEL "Switches"): a legacy boolean spelling (merges=0/1) is its value.
+                   legacy=(verbose_legacy('full', 'detail=full (--detail full)'), LegacySpelling('raw', codec=raw_detail),
+                           LegacySpelling('detail', value='summary')),
+                   answers=(_BLAME, 'git_file'))
+# One on/off switch on every view (COMMAND_MODEL "Switches"): a legacy boolean spelling (merges=0/1) is its value, and
+# legacy no_merges is merges=off (the Metrics declaration, BACK-2621).
 MERGES = ParamSpec('merges', 'boolean', 'Include or exclude merge commits; omitted preserves each view default',
-                   None, switch_value, cli=CliBinding(('--merges',)), answers=_ROWS)
-NO_MERGES = ParamSpec('no_merges', 'boolean', 'Legacy exclusion of merge commits in history', None, boolean_value,
-                      answers=_COMMITS)
-RAW = ParamSpec('raw', 'boolean', 'Legacy raw historical file content', None, boolean_value,
-                answers=('git_file', 'git_file_structure'))
+                   None, switch_value, cli=CliBinding(('--merges',)),
+                   legacy=(LegacySpelling('no_merges', codec=legacy_switch('no_merges', 'off', 'on'),
+                                          flag='--no-merges', flag_value=True),), answers=_ROWS)
 SORT = string('sort', 'Commit field; prefix - for descending', answers=_ROWS)
 LIMIT = ParamSpec('limit', 'integer', 'Returned rows; 0 = no cap (legacy type= aggregate requests retain input-window limits)', None,
                   lambda v: nonnegative_display_limit(v, name='limit'), minimum=0,
@@ -85,13 +124,13 @@ OFFSET = ParamSpec('offset', 'integer', 'Rows skipped after sorting', 0,
 CONTEXT = ParamSpec('context', 'integer', 'Context lines for a diff', None,
                     lambda v: nonnegative_display_limit(v, name='context'), minimum=0,
                     cli=CliBinding(('--context',)), answers=(_DIFF,))
-PARAM_SPECS = (VIEW, WHERE, DETAIL, MERGES, NO_MERGES, RAW, SORT, LIMIT, SCAN_LIMIT, OFFSET, CONTEXT,
+PARAM_SPECS = (VIEW, WHERE, DETAIL, MERGES, SORT, LIMIT, SCAN_LIMIT, OFFSET, CONTEXT,
                string('ref', 'Starting branch, tag or commit'),
                string('element', 'Semantic element name', answers=('git_file_history', _BLAME, _DIFF, 'git_timeline')),
                string('bucket', 'Timeline period: week or month', choices=('week', 'month'), answers=('git_timeline',)),
                string('ignore', 'Blame commit hash prefixes to suppress', answers=(_BLAME,)),
-               # since/until are settings (one bound each, COMMAND_MODEL "Conflicting values"), carried as a list
-               *(ParamSpec(name, 'array', description, [], expressions, cli=CliBinding(('--' + name,)), answers=_COMMITS)
+               # since/until are settings (one bound each, COMMAND_MODEL "Conflicting values")
+               *(ParamSpec(name, 'string', description, None, one_value, cli=CliBinding(('--' + name,)), answers=_COMMITS)
                  for name, description in (('since', 'Inclusive starting date'), ('until', 'Inclusive ending date'))))
 # --head/--tail/--range slice this noun's rows today: flag-only legacy modifiers until the cut, read by the answers named
 # (BACK-2673; their notes are the flag:<noun>.<flag> RETIREMENTS rows).
@@ -109,19 +148,13 @@ def runtime_query(params):
     values, aggregate_control = _aggregate_controls(params, dict(peek_query_items(params)))
     query = QueryParams({key: value for key, value in values.items()
                          if value is not None and value != []
-                         and key not in ('where', 'view', 'detail', 'raw', 'merges', 'no_merges', 'scan-limit')})
+                         and key not in ('where', 'view', 'detail', 'merges', 'scan-limit')})
     view = VIEW.read(params)
     if view is not None:
         query['type'] = 'history' if view == 'log' else view
     _runtime_detail(params, query)
     _runtime_merges(params, query)
-    items: list[tuple[str, Any]] = []
-    for key, value in list(peek_query_items(query)):
-        if key in ('since', 'until'):
-            items.extend((key, date) for date in value)
-            query[key] = value[-1]
-        else:
-            items.append((key, value))
+    items: list[tuple[str, Any]] = list(peek_query_items(query))
     for expression in WHERE.read(params):
         for part in expression.split('&'):
             for key, value in peek_query_items(parse_query_params(part)):
@@ -145,10 +178,6 @@ def validate_resource_controls(params, subpath):
     if values.get('element') is not None and not subpath:
         raise RequestValidationError("element names an element of a file: give the file's path "
                                      '(git://PATH/FILE?view=history&element=NAME)')
-    if values.get('detail') is not None and values.get('raw') is not None:
-        raise RequestValidationError('detail and legacy raw cannot be supplied together')
-    if values.get('merges') is not None and values.get('no_merges') is not None:
-        raise RequestValidationError('merges and legacy no_merges cannot be supplied together')
 
 
 def _validate_content_scope(values, subpath):
@@ -207,21 +236,15 @@ def apply_aggregate_rows(result: dict, control) -> dict:
 
 def _runtime_detail(params, query):
     level = DETAIL.read(params)
-    raw = RAW.read(params)
     if level == 'raw':
         query['raw'] = '1'
     elif level is not None:
         query['detail'] = 'summary' if level == 'normal' else level
-    if raw is not None:
-        query['raw'] = '1' if raw else '0'
 
 
 def _runtime_merges(params, query):
     merges = MERGES.read(params)
-    no_merges = NO_MERGES.read(params)
     if merges is not None:
         key = 'merges' if query.get('type') == 'ownership' else 'no_merges'
         included = merges if key == 'merges' else not merges
         query[key] = '1' if included else '0'
-    if no_merges is not None:
-        query['no_merges'] = '1' if no_merges else '0'

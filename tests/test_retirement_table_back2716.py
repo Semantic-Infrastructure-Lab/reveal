@@ -68,7 +68,9 @@ def test_a_walk_control_with_no_binding_of_its_own_is_its_shared_flag():
 
 def test_a_key_no_flag_spells_says_so_and_names_its_own_row_when_it_has_one():
     assert _request_row('claude', 'search')['replacement'].endswith('(param:claude.search)')
-    assert _request_row('git', 'no_merges')['replacement'] == NO_FLAG_YET
+    # git ?no_merges and ?raw were the last keys with no flag; they are legacy spellings of --merges and --detail now
+    # (BACK-2616), so no request row is left without a flag or its own row.
+    assert not [row for row in _rows() if row['replacement'] == NO_FLAG_YET]
 
 
 def test_the_markdown_table_has_one_line_per_row(capsys):

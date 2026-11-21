@@ -25,30 +25,10 @@ from ...utils.results import note_warning
 from ...utils.path_utils import to_posix
 from .renderer import GitRenderer
 from . import refs, commits, files, queries
-from .params import LIMIT, PARAM_SPECS, runtime_query, apply_aggregate_rows, validate_resource_controls
+from .params import (COMMIT_FILTER_FIELDS, LIMIT, PARAM_SPECS, runtime_query, apply_aggregate_rows,
+                     validate_resource_controls)
 from .qualification import execution_facts, answer_requirement_error, qualify_source_evidence, portable_repository_paths
 
-_SCHEMA_QUERY_PARAMS = {
-    'type': {'type': 'string', 'description': 'Query type for file operations', 'values': ['history', 'blame', 'diff', 'ownership'], 'examples': ['?type=history', '?type=blame', '?type=ownership']},
-    'merges': {'type': 'string', 'description': 'on/off (legacy 1/0): include or exclude merge commits; ownership excludes them by default, every other commit list includes them', 'examples': ['?type=ownership&merges=on', '?type=history&merges=off']},
-    'detail': {'type': 'string', 'description': 'Detail level for blame', 'values': ['full', 'summary'], 'examples': ['?type=blame&detail=full']},
-    'element': {'type': 'string', 'description': 'Semantic element (function/class name) for blame, history/log and diff', 'examples': ['?type=blame&element=load_config', '?type=history&element=load_config']},
-    'context': {'type': 'integer', 'description': 'For diff: number of context lines around each hunk (default: 3)', 'examples': ['?type=diff&context=10']},
-    'author': {'type': 'string', 'description': 'Filter commits by author name (case-insensitive)', 'examples': ['?author=John', '?author~=john']},
-    'email': {'type': 'string', 'description': 'Filter commits by author email (case-insensitive)', 'examples': ['?email=john@example.com', '?email~=@example.com']},
-    'message': {'type': 'string', 'description': 'Filter commits by message (supports regex with ~=)', 'examples': ['?message~=bug', '?message=Initial commit']},
-    'hash': {'type': 'string', 'description': 'Filter commits by hash prefix', 'examples': ['?hash=a1b2c3d']},
-    'date': {'type': 'string', 'description': 'Filter commits by date — supports =, !=, >, <, >=, <= and a range =a..b with an ISO date or timestamp. A year, month or day bound (2026, 2026-01, 2026-01-31) is the whole period: date=P is any time in it, date>P is after its end, date<P before its start, date>=P/date<=P include it. A timestamp may separate day and time with a space or T, and may end in a zone (Z, +02:00), which is converted to the local time commit dates are written in. ?since=D is an ergonomic alias for date>=D', 'examples': ['?date>2026-01-01']},
-    'timestamp': {'type': 'integer', 'description': 'Filter commits by commit time in epoch seconds (>, <, >=, <=, =, !=)', 'examples': ['?timestamp>1767225600']},
-    'ref': {'type': 'string', 'description': 'Override starting ref — alias for @ref in the URI (branch, tag, or commit)', 'examples': ['?type=history&ref=v0.63.0', '?ref=main']},
-    'bucket': {'type': 'string', 'description': 'Modifier on type=history: bucket commits into periods (commit_count + distinct author_count per period) instead of a flat list. Works on a file, directory, or the whole repo.', 'values': ['week', 'month'], 'examples': ['?type=history&bucket=month', '?type=history&bucket=week']},
-    'no_merges': {'type': 'string', 'description': 'Set to "1" to exclude merge commits (commits with more than one parent)', 'examples': ['?type=history&no_merges=1']},
-    'since': {'type': 'string', 'description': 'Ergonomic alias for date>=YYYY-MM-DD (rewritten into a date filter)', 'examples': ['?since=2026-01-01']},
-    'until': {'type': 'string', 'description': 'Ergonomic alias for date<=YYYY-MM-DD (rewritten into a date filter)', 'examples': ['?until=2026-01-01']},
-    'ignore': {'type': 'string', 'description': 'For blame: comma-separated commit hash prefixes to suppress', 'examples': ['?type=blame&ignore=69b0093,f5fcac0']},
-    'raw': {'type': 'string', 'description': 'For file-at-ref: "1" returns raw file contents instead of structural view', 'examples': ['?raw=1']},
-    'content~': {'type': 'string', 'description': 'Pickaxe search: only commits where a changed diff line contains the literal string', 'examples': ['?content~=TODO']},
-}
 
 def _git_output_type(type_name: str, description: str, extra_props: dict) -> dict:
     base = {
@@ -812,7 +792,10 @@ class GitAdapter(ResourceAdapter):
             'adapter': 'git',
             'description': 'Git repository inspection with history, blame, and file tracking',
             'uri_syntax': 'git://<path>[/<subpath>][@<ref>][?<query>]',
-            'query_params': {**_SCHEMA_QUERY_PARAMS, **param_schema(PARAM_SPECS)},
+            'query_params': param_schema(PARAM_SPECS),
+            # The where fields (bare URI keys too), from the one declaration where reads (COMMAND_MODEL "Bare URI keys")
+            'filter_fields': {field: {'type': kind, 'description': description}
+                              for field, (kind, description) in COMMIT_FILTER_FIELDS.items()},
             'resource': GitAdapter.RESOURCE_SPEC.schema(),
             'elements': {},
             'cli_flags': [],

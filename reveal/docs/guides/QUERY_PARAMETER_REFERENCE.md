@@ -125,11 +125,11 @@ reveal 'imports://src?circular&detail=full'   # Cycle paths
     reveal 'git://app.py?type=blame'     # Git blame for file
     ```
 
-- **`detail`** - Detail level for blame
-  - **Values**: `full`, `summary`
+- **`detail`** - Detail level for blame (`normal`, `full`) or `raw` for a file's historical text
+  - **Values**: `normal`, `full`, `raw` (`summary` is the deprecated spelling of `normal`)
   - **Example**:
     ```bash
-    reveal 'git://app.py?type=blame&detail=summary'
+    reveal git app.py --view blame --detail full
     ```
 
 - **`element`** - Semantic element for blame (function/class name)
