@@ -242,8 +242,9 @@ def test_overview_malformed_uri_still_resolves_comparison_identity(project, quer
     assert canonical(response, 2)['error']
 
 
-@pytest.mark.parametrize('control', ['no_imports', 'all', 'verbose'])
-@pytest.mark.parametrize('value', ['true', 'false'])
+# verbose=false is the default of the control verbose stands for, so it is not a given control (BACK-2701)
+@pytest.mark.parametrize('control,value', [('no_imports', 'true'), ('no_imports', 'false'), ('all', 'true'),
+                                           ('all', 'false'), ('verbose', 'true')])
 def test_overview_comparison_rejects_explicit_ordinary_uri_controls(project, control, value):
     assert canonical(invoke(project, transport='uri', query=f'{control}={value}'), 2)['error']
 

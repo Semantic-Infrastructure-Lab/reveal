@@ -220,25 +220,42 @@ def _canonical_init(adapter_class: type, resource: str, *, params: Optional[Any]
 def _built_with_overrides(adapter_class: type, path: str, query: Optional[str], overrides: Mapping[str, Any],
                           empty_default: str) -> Any:
     """Typed overrides bind after validating the URI query, then reach the constructor as params."""
-    from ..utils.query_binding import bind_declared_params, bind_resource_path
+    from ..utils.query_binding import bind_declared_params, bind_resource_path, given_controls
     from ..utils.query_parser import ResourceSpec
     spec = getattr(adapter_class, 'RESOURCE_SPEC', ResourceSpec(uri_default=empty_default))
     path = bind_resource_path(spec, path, transport='uri', resolve=getattr(adapter_class, 'resource_path', None))
     if getattr(adapter_class, 'SOURCE_BEFORE_CONTROLS', False):
         return _built(adapter_class, path, dict, lambda: adapter_class(path, query, overrides=overrides))
     validate = getattr(adapter_class, 'validate_original_request', None)
+    given: set = set()
 
     def original(bound: Any) -> None:
-        # The URI's own controls are judged before typed overrides on every noun that declares applicability, so an
-        # override of None cannot hide an inapplicable one (BACK-2692; BACK-2617 for Claude's own checks).
+        given.update(given_controls(bound))
         if validate:
             validate(bound, path)
-        if overrides:
-            _reject_unread_controls(adapter_class, bound, path)
 
     bound = bind_declared_params(getattr(adapter_class, 'PARAM_SPECS'), query or '', transport='uri',
                                  overrides=overrides, validate=original)
+    _judge_cleared_controls(adapter_class, bound, path, given, overrides)
     return _built(adapter_class, path, lambda: bound, lambda: adapter_class(path, params=bound))
+
+
+def _judge_cleared_controls(adapter_class: type, bound: Any, path: str, given: set, overrides: Mapping[str, Any]) -> None:
+    """A control the URI gave and a typed override cleared (``top=None``) is still judged against the effective answer,
+    so clearing it cannot hide an inapplicable one (BACK-2692). A control the override's other values make applicable
+    (a mode change that reads it) is read, as the effective request is judged everywhere else (BACK-2608)."""
+    if not (given and overrides and _declares_applicability(adapter_class)):
+        return
+    cleared = {spec.name for spec in getattr(adapter_class, 'PARAM_SPECS') if spec.name in given
+               and any(overrides.get(spelling, '') is None for spelling in spec.spellings)}
+    held = cleared - set(getattr(bound, '_given', ()))
+    if not held:
+        return
+    bound._given.update(held)
+    try:
+        _reject_unread_controls(adapter_class, bound, path)
+    finally:
+        bound._given.difference_update(held)
 
 
 def _built(adapter_class: type, path: str, bound: Callable[[], Any], construct: Callable[[], Any]) -> Any:

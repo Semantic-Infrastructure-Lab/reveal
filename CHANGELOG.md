@@ -46,7 +46,7 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 - JSON's first bare words `?schema`, `?flatten`, `?gron`, `?type`, `?keys`, `?length` are legacy spellings of `--view`, each with its note until 1.0 and the same answer; the same view named twice (`?gron&view=flatten`) is one setting instead of exit 2, and two different views still exit 2. The json guides teach `reveal json FILE --view VIEW`.
 
-- `reveal.api.query('metrics://P?top=3', top=None)` now exits 2 like the URI alone: on every noun that declares which options its answers read, the original URI's options are judged before typed overrides, so an override cannot hide an inapplicable one.
+- `reveal.api.query('metrics://P?top=3', top=None)` now exits 2 like the URI alone: on every noun that declares which options its answers read, a URI option that a typed `None` clears is still judged against the answer, so clearing it cannot hide an inapplicable one (an override that selects another answer which reads the option still makes it applicable).
 
 - `?verbose=false` (the legacy word for a control's default) is no longer a given option: `overview://P?against=HEAD&verbose=false` answers, as `api.query(..., verbose=False)` already did, instead of exiting 2 naming `all`.
 

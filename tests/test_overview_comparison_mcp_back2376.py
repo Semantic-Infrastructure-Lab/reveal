@@ -65,7 +65,7 @@ def test_registered_overview_comparison_matches_cli_and_live_edits(tmp_path, pro
 
         for query_text in ('against=missing-ref', 'against=', 'against',
                            'against=HEAD&no_imports=false', 'against=HEAD&all=true',
-                           'against=HEAD&verbose=false'):
+                           'against=HEAD&verbose=true'):  # verbose=false is the default (BACK-2701)
             rejected = await query(query_text)
             assert rejected.is_error and _text(rejected).strip(), query_text
         (root / 'app.py').write_text('def broken(\n', encoding='utf-8')

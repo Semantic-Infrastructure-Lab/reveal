@@ -86,7 +86,7 @@ def test_text_and_artifact_parity(project, mode):
     ('against=HEAD&top=-1', ['--against', 'HEAD', '--top', '-1']),
     ('against=HEAD&no_imports=false', None),
     ('against=HEAD&no_imports=true', ['--against', 'HEAD', '--no-imports']),
-    ('against=HEAD&verbose=false', None),
+    ('against=HEAD&verbose=true', None),  # verbose=false is the default, not a given control (BACK-2701)
     ('against=no-such-ref', ['--against', 'no-such-ref']),
 ])
 def test_invalid_diff_keeps_resolved_identity(project, query, cli):
