@@ -2,8 +2,9 @@
 from dataclasses import replace
 from typing import Any, Callable, cast
 
-from ...utils.query_binding import bind_declared_params, legacy_presence_value as presence, string_value as text
-from ...utils.query_parser import CliBinding, LegacySpelling, ParamSpec, ParamValueError, QueryParams, where_param, peek_query_items, nonnegative_display_limit, nonempty_scalar, legacy_check, legacy_slices
+from ...utils.query_binding import (bind_declared_params, legacy_presence_value as presence, runtime_controls,
+                                    string_value as text)
+from ...utils.query_parser import CliBinding, LegacySpelling, ParamSpec, ParamValueError, where_param, nonnegative_display_limit, nonempty_scalar, legacy_check, legacy_slices
 from .schema import _SCHEMA_QUERY_PARAMS
 from .resources import SESSION_VIEW_NAMES
 from .pagination import PAGE_SPECS
@@ -162,9 +163,7 @@ def translate_request(query, params, resource=''):
     its path, a detail level its legacy control, match the reader's search, contains or match. The answer predictor
     reads this, so a request the checks will refuse still names the answer it selects."""
     bound = bind_declared_params(PARAM_SPECS, query or '', transport='uri') if params is None else params
-    # Presence readers must not mistake an explicit False/None override for a flag.
-    runtime = QueryParams({key: value for key, value in peek_query_items(bound)
-                           if value is not None and not (key in PRESENCE_FLAGS and value is False)})
+    runtime = runtime_controls(PARAM_SPECS, bound)  # presence readers never mistake a False/None override for a flag
     runtime._aliases = dict(getattr(bound, '_aliases', {}))  # reading where reads legacy filter (last: tail)
     folded = tuple(getattr(bound, '_folded', ()))
     if folded:  # and a bare ?session~=TEXT folded into it

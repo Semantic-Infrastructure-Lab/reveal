@@ -1,6 +1,7 @@
 """Existing Codex query controls, bound before SQLite and JSONL session reads."""
-from ...utils.query_binding import bind_declared_params, boolean_value, legacy_presence_value, string_value
-from ...utils.query_parser import ParamSpec, QueryParams, peek_query_items, whole_number
+from ...utils.query_binding import (bind_declared_params, boolean_value, legacy_presence_value, runtime_controls,
+                                    string_value)
+from ...utils.query_parser import ParamSpec, whole_number
 
 # The answers each control is read by (COMMAND_MODEL "Applicability", BACK-2656): the path selects most answers
 # (qualification.selected_type); search selects the content search and last/tokens/goal a session's last message, token
@@ -14,7 +15,6 @@ _FULL = ParamSpec('full', 'boolean',
                   'For /exchanges: show complete prompts and answers in text output; JSON already contains full text',
                   False, boolean_value, ('codex://019e5cc5/exchanges?full', 'codex://019e5cc5/exchanges?full=false'),
                   answers=('codex_exchanges',))
-PRESENCE_FLAGS = frozenset(('last', 'tokens', 'goal'))
 _BOUNDS = (_LIST, _SEARCH)
 _STRINGS = {  # name -> (description, the answers that read it, the controls it requires)
     'filter': ('Metadata filter by title/first-message substring in the SQLite session index; not content search',
@@ -42,8 +42,7 @@ PARAM_SPECS = (
 
 def bind_query(query, params):
     bound = bind_declared_params(PARAM_SPECS, query or '', transport='uri') if params is None else params
-    runtime = QueryParams({key: value for key, value in peek_query_items(bound)
-                           if value is not None and not (key in PRESENCE_FLAGS and value is False)})
+    runtime = runtime_controls(PARAM_SPECS, bound)
     for spec in PARAM_SPECS:
         if spec.name in dict.keys(runtime):
             runtime.set_normalized(spec, dict.__getitem__(runtime, spec.name))

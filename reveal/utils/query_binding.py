@@ -629,6 +629,15 @@ def given_controls(params: Mapping[str, Any]) -> set:
     return set(given) if given is not None else {key for key, value in peek_query_items(params) if value is not None}
 
 
+def runtime_controls(declarations: Iterable[ParamSpec], params: Mapping[str, Any]) -> QueryParams:
+    """The controls a bound request gives, as a noun's readers see them: an omitted control (None) is absent, and so is
+    a legacy presence flag given off (a typed False restores omission: the controls whose codec is
+    ``legacy_presence_value``, Claude's and Codex's URI flags). Walking *params* here reads none of them."""
+    presence = {spec.name for spec in declarations if spec.convert is legacy_presence_value}
+    return QueryParams({key: value for key, value in peek_query_items(params)
+                        if value is not None and not (key in presence and value is False)})
+
+
 def _reads(spec: ParamSpec, facets: tuple) -> bool:
     """An entry names the answer when every ``+`` part of it does (``claude_messages+default``: that type, no
     operation); empty answers: every answer."""
