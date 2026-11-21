@@ -121,7 +121,6 @@ class QueryParams(Dict[str, Any]):
         self._supplied_aliases: set[str] = set()
         self._folded: Tuple[str, ...] = ()  # bare field keys the binder folded into where
         self._source_query: Optional[str] = None
-        self._overrides: set[str] = set()
         # The declared controls the request gave a value (an omitted typed flag arrives as None, an API override of
         # None selects the default): what the applicability check judges (COMMAND_MODEL "Applicability", BACK-2656).
         self._given: set[str] = set()

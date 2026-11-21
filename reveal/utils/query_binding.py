@@ -888,7 +888,6 @@ def apply_declared_overrides(declarations: Iterable[ParamSpec], params: QueryPar
             raise UnsupportedOverrideError(unsupported_controls_message(declarations, unknown))
         from .query_parser import query_key_recorder
         query_key_recorder(*supplied)
-        params._overrides.update(supplied)
         for spec in declarations:
             if spec.name in supplied:
                 raw = supplied[spec.name]
