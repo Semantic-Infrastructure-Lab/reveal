@@ -11,8 +11,9 @@ example on its own:
   examples   ``scripts/doc_examples.py``, the executable-docs gate's extractor (fenced bash/sh/shell blocks and embedded
              Markdown tables) and its ``retiring_uri_index`` check (the ``.github/doc_uri_requests_baseline.json``
              ratchet counts ``documented_uri_requests``);
-  binding    the same steps ``reveal.api._note_uri_request`` takes: ``split_respect_gitignore``, then the binder's
-             ``prepare_declared_params(..., 'uri')`` over the noun's declarations;
+  binding    ``reveal.api._bound_uri_params``, the binding ``reveal.api._note_uri_request`` and the answer share (the
+             walk policy split off, then the binder's ``prepare_declared_params(..., 'uri')``); a request it refuses is
+             reported with the binder's own error;
   rendering  ``render_request`` / ``render_uri_request`` (form ``cli``), with the request's typed ``--format``/
              ``--output`` kept as the note keeps it (``presentation=False``); a subcommand rendering the noun parser does
              not read back with the URI's resource keeps the resource form, counted;
@@ -95,18 +96,31 @@ class Bound:
 
 
 def bind_uri(uri: str) -> Bound:
-    """The request a URI binds, by the steps ``reveal.api._note_uri_request`` takes (the walk policy split off first)."""
-    from reveal.cli.routing.declared import create_declared_parser, declared_adapter_class
-    from reveal.utils.gitignore import split_respect_gitignore
-    from reveal.utils.query_binding import prepare_declared_params
-    scheme, _, rest = uri.partition('://')
-    split, walk_policy = split_respect_gitignore(rest)
-    resource, _, query = split.partition('?')
-    adapter = declared_adapter_class(scheme)
-    params = prepare_declared_params(adapter.PARAM_SPECS, query, 'uri')
+    """The request a URI binds: ``reveal.api._bound_uri_params``, the binding the request note and the answer share."""
+    from reveal.api import _bound_uri_params
+    from reveal.cli.routing.declared import create_declared_parser
+    scheme = uri.partition('://')[0]
+    bound = _bound_uri_params(scheme, uri, {})
+    if bound is None:
+        raise _binder_refusal(scheme, uri)
+    adapter, resource, params, walk_policy = bound
     parser = create_declared_parser(scheme)
     parser.raise_usage_errors = True
     return Bound(scheme, resource, params, walk_policy, adapter, parser)
+
+
+def _binder_refusal(scheme: str, uri: str) -> Exception:
+    """The binder's own error for a URI ``_bound_uri_params`` refuses: the helper answers None and leaves the reason to the
+    answer, and this report names it, so the one step that raises (``prepare_declared_params``) runs again for it."""
+    from reveal.cli.routing.declared import declared_adapter_class
+    from reveal.utils.gitignore import split_respect_gitignore
+    from reveal.utils.query_binding import prepare_declared_params
+    query = split_respect_gitignore(uri.partition('://')[2])[0].partition('?')[2]
+    try:
+        prepare_declared_params(declared_adapter_class(scheme).PARAM_SPECS, query, 'uri')
+    except (ValueError, TypeError) as exc:
+        return exc
+    return ValueError(f'{uri}: the request binds no declared request')
 
 
 def _stage(tokens: Sequence[str], start: int) -> List[str]:
