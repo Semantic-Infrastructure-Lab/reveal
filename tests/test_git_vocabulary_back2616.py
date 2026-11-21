@@ -154,3 +154,204 @@ def test_an_equal_ref_given_twice_is_one_setting(repo):
     twice, b = _json(repo, 'git', 'code.py@HEAD~1', '--ref', 'HEAD~1')
     assert plain.returncode == twice.returncode == 0, twice.stderr
     assert a == b
+
+
+# --- discriminating REDs: each fails on 6f1c40d8 for the reason in its docstring ----------------------------------
+
+def _notes(doc):
+    return [w for w in _warnings(doc) if w.get('code') == 'retired_spelling']
+
+
+def _without_notes(doc):
+    import copy
+    result = copy.deepcopy(doc)
+    result['meta']['warnings'] = [w for w in _warnings(result) if w.get('code') != 'retired_spelling']
+    return result
+
+
+def _round_trip(repo, *argv):
+    """The request's one note, and its replacement run as written: (legacy run, legacy doc, replacement, run, doc)."""
+    run, doc = _json(repo, *argv)
+    notes = _notes(doc)
+    assert len(notes) == 1, (run.returncode, run.stderr[-400:], notes)
+    replacement = notes[0]['replacement']
+    canonical, canonical_doc = _json(repo, *shlex.split(replacement)[1:])
+    return run, doc, replacement, canonical, canonical_doc
+
+
+def _assert_same_answer(run, doc, canonical, canonical_doc, replacement):
+    assert canonical.returncode == run.returncode, (replacement, run.returncode, canonical.returncode, canonical.stderr)
+    assert not _notes(canonical_doc), replacement
+    assert _without_notes(doc) == canonical_doc, replacement
+
+
+# B1 / Q1 (A): the legacy aggregate limit is the input budget, so the note must name --scan-limit and answer alike.
+@pytest.mark.parametrize('uri', ['git://.?type=ownership&limit=2', 'git://.?type=history&bucket=month&limit=2'])
+def test_legacy_aggregate_limit_note_names_scan_limit_and_answers_alike(repo, uri):
+    """RED: the note recommends --limit 2, a row cap over the whole history (exit 0), not the 2-commit window (exit 3)."""
+    run, doc, replacement, canonical, canonical_doc = _round_trip(repo, uri)
+    assert '--scan-limit 2' in replacement and '--limit' not in replacement.replace('--scan-limit', ''), replacement
+    _assert_same_answer(run, doc, canonical, canonical_doc, replacement)
+
+
+# B2 / Q1: one request, one answer on every transport (no override sniffing).
+@pytest.mark.parametrize('uri,flags,typed', [
+    ('git://.?type=ownership&limit=2', ['--sort', 'name'], {'sort': 'name'}),
+    ('git://.?type=ownership', ['--limit', '2'], {'limit': 2}),
+])
+def test_legacy_aggregate_limit_answers_alike_on_cli_and_api(repo, monkeypatch, uri, flags, typed):
+    """RED: a typed override flips the API to the row cap while the CLI keeps the input window, and the CLI's
+    legacy path leaves --sort unread (the ledger's unused_flag warning, which must not fire on a declared noun)."""
+    from reveal.api import query
+    run, cli = _json(repo, uri, *flags)
+    monkeypatch.chdir(repo)
+    api = query(uri, **typed)
+    unread = [w for w in _warnings(cli) + _warnings(api) if w.get('type') in ('unused_flag', 'unused_query_param')]
+    assert not unread, unread
+    assert _without_notes(cli) == _without_notes(api), (run.returncode, cli.get('total_commits'), api.get('total_commits'))
+
+
+# B3: since/until are settings (COMMAND_MODEL "Conflicting values"), on the typed API too.
+def test_typed_since_list_with_two_values_is_refused(repo, monkeypatch):
+    """RED: api.query answers with both bounds ANDed where the CLI and URI exit 2."""
+    from reveal.api import query
+    from reveal.errors import RequestValidationError
+    monkeypatch.chdir(repo)
+    with pytest.raises(RequestValidationError):
+        query('git://.?view=history&limit=0', since=['2023-11-15', '2023-11-18'])
+
+
+def test_typed_since_list_of_one_value_is_that_value(repo, monkeypatch):
+    """RED: an equal list answers once, but its note renders since='D,D', which is not the request."""
+    from reveal.api import query
+    monkeypatch.chdir(repo)
+    listed = query('git://.?view=history&limit=0', since=['2023-11-16', '2023-11-16'])
+    single = query('git://.?view=history&limit=0', since='2023-11-16')
+    assert _without_notes(listed) == _without_notes(single)
+    replacements = [w['replacement'] for w in _notes(listed)]
+    assert replacements and all(',' not in r for r in replacements), replacements
+
+
+# B6: a legacy spelling and its canonical control given with equal meaning are one setting.
+def test_no_merges_and_merges_off_together_are_one_setting(repo):
+    """RED: a hand-written check refuses them together (exit 2) though they agree."""
+    run, doc = _json(repo, 'git://.?view=history&limit=0&no_merges=1&merges=off')
+    _, canonical = _json(repo, 'git', '.', '--view', 'history', '--limit', '0', '--merges', 'off')
+    assert run.returncode == 0, run.stderr
+    assert _without_notes(doc)['history'] == canonical['history']
+
+
+def test_raw_and_detail_raw_together_are_one_setting(repo):
+    """RED: a hand-written check refuses them together (exit 2) though they agree."""
+    run, doc = _json(repo, 'git://code.py?raw=1&detail=raw')
+    _, canonical = _json(repo, 'git', 'code.py', '--detail', 'raw')
+    assert run.returncode == 0, run.stderr
+    assert _without_notes(doc) == canonical
+
+
+# Q6: no_merges is merges=off on every answer merges reaches, ownership included.
+def test_no_merges_on_ownership_answers_as_merges_off(repo):
+    """RED: ownership refuses no_merges (exit 2, not read by this answer)."""
+    run, doc = _json(repo, 'git://.?type=ownership&no_merges=1')
+    _, canonical = _json(repo, 'git', '.', '--view', 'ownership', '--merges', 'off')
+    assert run.returncode == 0, run.stderr
+    assert _without_notes(doc) == canonical
+
+
+# B7: a diff that did not run is not "no changes".
+def test_a_failed_git_diff_is_a_failed_answer(repo, monkeypatch):
+    """RED: get_file_diff ignores git's exit status and answers "(no changes ...)", exit 0."""
+    import subprocess
+    run, doc = _json(repo, 'git', 'pkg/app.py@HEAD~2', '--view', 'diff')
+    assert run.returncode == 0 and 'return 3' in doc['diff_text']  # positive control: the real diff
+    real = subprocess.run
+
+    def failing_git_diff(cmd, *args, **kwargs):
+        if isinstance(cmd, list) and cmd[:1] == ['git'] and 'diff' in cmd:
+            return subprocess.CompletedProcess(cmd, 128, b'', b'fatal: simulated failure\n')
+        return real(cmd, *args, **kwargs)
+    monkeypatch.setattr(subprocess, 'run', failing_git_diff)
+    run, doc = _json(repo, 'git', 'pkg/app.py@HEAD~2', '--view', 'diff')
+    assert run.returncode == 3, (run.returncode, (doc or {}).get('diff_text'))
+
+
+# B8 (BACK-2690) and B9 / Q8 (plan rule 9): a target that matches nothing exits 2 naming what was searched.
+def test_an_element_on_a_directory_history_is_an_invalid_request(repo):
+    """RED: exit 3, '_pygit2.Tree' object has no attribute 'data'."""
+    run, _ = _json(repo, 'git', 'pkg', '--view', 'history', '--element', 'serve')
+    assert run.returncode == 2, run.stderr
+
+
+@pytest.mark.parametrize('target,flags', [
+    ('pkg/app.py', ['--view', 'history', '--element', 'nosuch']),
+    ('pkg/app.py@HEAD~2', ['--view', 'diff', '--element', 'nosuch']),
+])
+def test_an_unknown_element_exits_2_naming_it(repo, target, flags):
+    """RED: history answers 0 commits and diff prints the whole diff, both exit 0 (blame already exits 2)."""
+    run, _ = _json(repo, 'git', target, *flags)
+    assert run.returncode == 2 and 'nosuch' in run.stderr, (run.returncode, run.stderr)
+
+
+def test_an_unknown_element_controls(repo):
+    """Controls for the RED above: blame already refuses, and a real element still answers."""
+    blame, _ = _json(repo, 'git', 'pkg/app.py', '--view', 'blame', '--element', 'nosuch')
+    assert blame.returncode == 2 and 'nosuch' in blame.stderr
+    run, doc = _json(repo, 'git', 'pkg/app.py', '--view', 'history', '--element', 'serve')
+    assert run.returncode == 0 and doc['commits']
+
+
+def test_a_path_never_in_history_exits_2_naming_it(repo):
+    """RED: exit 0 with count 0 (a deleted file, which history touched, keeps exit 0: preservation above)."""
+    run, _ = _json(repo, 'git', 'nosuch.py', '--view', 'history')
+    assert run.returncode == 2 and 'nosuch.py' in run.stderr, (run.returncode, run.stderr)
+
+
+# Conformance cell 24 (BACK-2716 step 4) and B20: every legacy spelling notes, on every transport, and its replacement
+# answers alike.
+@pytest.mark.parametrize('uri,replacement', [
+    ('git://.?view=history&limit=0&no_merges=true', '--merges off'),
+    ('git://code.py?raw=true', '--detail raw'),
+])
+def test_legacy_no_merges_and_raw_note_their_flag_and_answer_alike(repo, uri, replacement):
+    """RED: no flag spells them, so the request says no note (UnrenderableRequest) and would keep working at the cut."""
+    run, doc, rendered, canonical, canonical_doc = _round_trip(repo, uri)
+    assert replacement in rendered, rendered
+    _assert_same_answer(run, doc, canonical, canonical_doc, rendered)
+
+
+@pytest.mark.parametrize('uri,typed,word', [
+    ('git://code.py', {'type': 'history'}, 'type'),
+    ('git://.', {'view': 'history', 'no_merges': True}, 'no_merges'),
+    ('git://code.py', {'raw': True}, 'raw'),
+])
+def test_typed_legacy_keywords_on_a_resource_uri_note(repo, monkeypatch, uri, typed, word):
+    """RED: api.query accepts these keywords on a resource URI with no note."""
+    from reveal.api import query
+    monkeypatch.chdir(repo)
+    notes = _notes(query(uri, **typed))
+    assert any(word in str(n.get('old', '')) + str(n.get('message', '')) for n in notes), notes
+
+
+def test_git_legacy_spellings_have_note_stage_rows():
+    """RED: type, no_merges and raw have no RETIREMENTS row (type was D18-deferred; D20 adopts it), nor detail=summary."""
+    from reveal.cli.invocation import RETIREMENTS
+    keys = ('param:git.type', 'param:git.no_merges', 'param:git.raw', 'value:git.detail=summary')
+    assert {key: RETIREMENTS[key].stage if key in RETIREMENTS else None for key in keys} == dict.fromkeys(keys, 'note')
+
+
+# Q4: summary is a legacy value of detail.
+def test_detail_summary_notes_detail_normal_and_answers_alike(repo):
+    """RED: --detail summary is silently normal, with no note."""
+    run, doc = _json(repo, 'git', 'code.py', '--view', 'blame', '--detail', 'summary')
+    _, canonical = _json(repo, 'git', 'code.py', '--view', 'blame', '--detail', 'normal')
+    assert run.returncode == 0, run.stderr
+    assert any('--detail normal' in str(n.get('replacement')) for n in _notes(doc)), _notes(doc)
+    assert _without_notes(doc) == canonical
+
+
+# Q5: F@REF and --ref / ?ref= are one setting.
+@pytest.mark.parametrize('argv', [('git', 'code.py@HEAD~1', '--ref', 'HEAD~2'), ('git://code.py@HEAD~1?ref=HEAD~2',)])
+def test_a_different_ref_given_twice_exits_2_naming_both(repo, argv):
+    """RED: --ref / ?ref= silently wins over @REF (exit 0 at HEAD~2)."""
+    run, _ = _json(repo, *argv)
+    assert run.returncode == 2 and 'HEAD~1' in run.stderr and 'HEAD~2' in run.stderr, (run.returncode, run.stderr)
