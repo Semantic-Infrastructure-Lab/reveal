@@ -59,7 +59,8 @@ def test_complete_baseline_answer_survives_estimate_omission(tmp_path, case):
     # The API answer is the CLI's: the native answer plus the incomplete marker when it is incomplete (BACK-2650).
     expected_answer = copy.deepcopy(native)
     note_incomplete(expected_answer, adapter.execution_facts(native))
-    assert result == expected_answer
+    # source echoes the URI's spelling (POSIX separators on Windows, BACK-1366/BACK-2716); every other field is exact.
+    _assert_same_answer_source_spelling(expected_answer, result)
     legacy = copy.deepcopy(native)
     assert legacy.pop('test_scope') == {
         'anchor': '.', 'source': 'scan_root_fallback', 'include_anchor_name': True,
@@ -87,7 +88,7 @@ def test_loss_repair_reuse_and_siblings_keep_evidence(tmp_path, fault, stage):
     _absent(lost)
     fault['denied'] = set()
     assert adapter.get_structure() == clean
-    assert without_request_notes(api.query(f'surface://{tmp_path}?respect_gitignore=false', type='env', top=0)) == clean
+    _assert_same_answer_source_spelling(clean, api.query(f'surface://{tmp_path}?respect_gitignore=false', type='env', top=0))
     _absent(clean)
     sibling = api.query(f'ast://{tmp_path}?name=absent')
     assert sibling['meta']['confidence'] == 1.0

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from conftest import _run_reveal_direct, _assert_same_answer_source_spelling, without_request_notes
+from conftest import _run_reveal_direct, _assert_same_answer_source_spelling
 from reveal import api
 from reveal.adapters.contracts import ContractsAdapter
 from reveal.utils.query_parser import collect_query_keys, peek_query_items
@@ -154,7 +154,8 @@ def test_implementation_only_zero_contracts_keeps_useful_rows_and_flags(tmp_path
     expected = ContractsAdapter(str(tmp_path), 'impls=1').get_structure()
     assert expected['total_contracts'] == 0
     assert [row['name'] for row in expected['dataclasses']] == ['First', 'Second']
-    assert without_request_notes(api.query(uri(tmp_path), impls=1)) == expected  # the URI request's own note aside (BACK-2716)
+    # The URI request's own note aside; source echoes the URI's spelling (POSIX separators on Windows, BACK-1366/2716).
+    _assert_same_answer_source_spelling(expected, api.query(uri(tmp_path), impls=1))
     for override in ({'abstract_only': True}, {'implementations': False}):
         answer = api.query(uri(tmp_path), **override)
         assert answer['total_contracts'] == 0 and answer['dataclasses'] == []
