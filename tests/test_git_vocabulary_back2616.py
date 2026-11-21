@@ -229,7 +229,7 @@ def test_typed_since_list_of_one_value_is_that_value(repo, monkeypatch):
     single = query('git://.?view=history&limit=0', since='2023-11-16')
     assert _without_notes(listed) == _without_notes(single)
     replacements = [w['replacement'] for w in _notes(listed)]
-    assert replacements and all(',' not in r for r in replacements), replacements
+    assert replacements and all("since='2023-11-16')" in r for r in replacements), replacements
 
 
 # B6: a legacy spelling and its canonical control given with equal meaning are one setting.
