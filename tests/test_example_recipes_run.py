@@ -40,6 +40,12 @@ from reveal.cli.invocation import COMMANDS
 from claude_session_fixture import build_claude_home
 from codex_session_fixture import build_codex_home
 from test_output_contract_compliance import _Harness, _build_tree
+from scripts.doc_examples import (DOCUMENTED_FAILURE as _DOCUMENTED_FAILURE,  # noqa: F401  (re-exported)
+                                  documented_commands as _documented_commands,
+                                  documented_sources as _documented_sources,
+                                  documented_uri_requests as _documented_uri_requests,
+                                  embedded_markdown_commands as _embedded_markdown_commands,  # noqa: F401
+                                  shell_reveal_commands as _shell_reveal_commands)
 
 pytestmark = pytest.mark.contract
 
@@ -585,39 +591,10 @@ def test_pipeline_and_positive_claim_guards_bite(harness):
 
 
 # Fourth source: enumerate AGENT_HELP and guides, beginning with discovery commands.
-# Target-specific commands remain visible skips until their named fixtures are added.
-def _shell_reveal_commands(block):
-    """Keep backslash continuations and quoted multiline arguments together."""
-    pending = ''
-    for line in block.replace('\\\n', ' ').splitlines():
-        if not pending and not line.strip().startswith('reveal '):
-            continue
-        pending = pending + '\n' + line if pending else line.strip()
-        try:
-            tokens = shlex.split(pending, comments=True)
-        except ValueError:
-            continue  # an open quote can legally continue onto the next line
-        yield pending, tokens
-        pending = ''
-    assert not pending, f'Unterminated documented command: {pending}'
-
-
+# Target-specific commands remain visible skips until their named fixtures are added. The extractor itself lives in
+# scripts/doc_examples.py, shared with the guide-migration script (BACK-2726).
 DISCOVERY_FLAGS = {'--adapters', '--languages', '--discover', '--agent-help', '--help',
                    '--help-all', '--profiles', '--language-info', '--capabilities', '--explain-file'}
-
-
-# A command the doc itself shows failing: `# not valid` beside it, or its `# Error:` output below.
-_DOCUMENTED_FAILURE = re.compile(r'#.*\b(not valid|invalid)\b|#\s*Error\b', re.IGNORECASE)
-
-
-def _documented_sources(docs):
-    """Canonical source inventory; inventory is broader than qualified execution."""
-    sources = [docs / 'AGENT_HELP.md', *sorted((docs / 'guides').glob('*.md')),
-               docs.parent.parent / 'README.md', *sorted((docs / 'adapters').glob('*.md')),
-               *(docs / name for name in ('QUICK_START.md', 'WHY_REVEAL.md', 'INDEX.md'))]
-    for source in sources:
-        if source.is_file():
-            yield os.path.relpath(source, docs).replace(os.sep, '/'), source
 
 
 # Whole sources whose every command runs, like guides/*.md and adapters/*.md. QUICK_START and
@@ -670,40 +647,6 @@ def _source_cohort_reason(source, tokens):
     if (source, shlex.join(tokens)) in DOC_SOURCE_COHORT | DOC_NAMED_SOURCE_COHORT:
         return None
     return f'source cohort not yet qualified: {source} (BACK-1365)'
-
-
-def _embedded_markdown_commands(text):
-    """Inventory single-backtick commands in embedded Markdown tables/lists only."""
-    for fence, kind, block in re.findall(r'^(`{3,}|~{3,})([^\n]*)\n(.*?)^\1[ \t]*$', text, re.M | re.S):
-        if kind not in ('md', 'markdown'):
-            continue
-        for line in block.split('\n'):
-            if re.match(r'\s*(?:\||(?:\d+[.)]|[-+*])\s+)', line):
-                for command in re.findall(r'(?<!`)`([^`\n]+)`(?!`)', line):
-                    for command_text, tokens in _shell_reveal_commands(command):
-                        if len(tokens) > 1:
-                            yield command_text, tokens
-
-
-def _documented_commands(docs=None):
-    """(docs-relative source, text, tokens, shown failing) per documented command."""
-    from pathlib import Path
-    import reveal
-    docs = docs or Path(reveal.__file__).parent / 'docs'
-    embedded = []
-    for source_name, source in _documented_sources(docs):
-        text = source.read_text(encoding='utf-8')
-        for block in re.findall(r'```(?:bash|sh|shell)\n(.*?)```', text, re.S):
-            for line, tokens in _shell_reveal_commands(block):
-                if tokens:
-                    after = block.split(line, 1)[-1].lstrip('\n').split('\n', 1)[0]
-                    failing = bool(_DOCUMENTED_FAILURE.search(line) or _DOCUMENTED_FAILURE.match(after))
-                    yield source_name, line, tokens, failing
-        embedded.extend((source_name + '#embedded-md', line, tokens, bool(_DOCUMENTED_FAILURE.search(line)))
-                        for line, tokens in _embedded_markdown_commands(text) if tokens)
-    # Keep every existing shell occurrence first: an unqualified embedded copy must
-    # never shadow a later shell example when named fixtures deduplicate commands.
-    yield from embedded
 
 
 def _documented_command_identities(docs=None):
@@ -1066,22 +1009,6 @@ def test_agent_help_routing_rows_execute(harness, task, target, kind, field):
 
 
 DOC_URI_BASELINE = Path(__file__).resolve().parent.parent / '.github' / 'doc_uri_requests_baseline.json'
-
-
-def _documented_uri_requests():
-    """The distinct documented commands whose first word is a URI request that retires: an analysis-only scheme, or any
-    URI spelling a query string (BACK-2716)."""
-    from reveal.adapters.base import get_adapter_class
-    found = set()
-    for _source, _line, tokens, _failing in _documented_commands(None):
-        words = [w for w in tokens[1:] if not w.startswith('-')]
-        if not words or '://' not in words[0]:
-            continue
-        scheme, _, rest = words[0].partition('://')
-        adapter = get_adapter_class(scheme.lower())
-        if adapter is not None and (getattr(adapter, 'ANALYSIS_ONLY', False) or '?' in rest):
-            found.add(shlex.join(tokens))
-    return found
 
 
 def test_doc_uri_requests_only_fall():
