@@ -38,9 +38,8 @@ Both spellings use the same declarations. `--abstract-only` sets
 `abstract_only=true`; `--implementations off` sets `implementations=off`.
 `--implementations-limit N` matches `?implementations_limit=N`, including `3.0` as the whole number 3.
 Negative values, fractions, scientific notation and boolean values for `implementations_limit`
-are rejected. The old words still work until 1.0 and print a replaced-by note:
-`--no-implementations` is `--implementations off`, `--impls N` is `--implementations-limit N`;
-a retired and a canonical spelling that disagree exit 2. Boolean query controls accept `true`/`false`, `yes`/`no` and
+are rejected. The earlier spellings of both still answer until 1.0 and print a replaced-by note;
+one that disagrees with its canonical spelling exits 2. Boolean query controls accept `true`/`false`, `yes`/`no` and
 `1`/`0`; bare presence means true, and other spellings are rejected.
 
 Omitting the resource defaults to the current directory in both forms. URI
