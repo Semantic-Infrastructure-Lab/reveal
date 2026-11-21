@@ -36,7 +36,9 @@ def test_hotspots_declares_top():
 def test_back1379_adapters_declare_all(scheme, fragment):
     from reveal import adapters  # noqa: F401
     assert adapters_base.get_adapter_class(scheme).CLI_QUERY_FLAGS['all'] == fragment
-    assert inject_query_flags('src', scheme, _args(all=True)) == f'src?{fragment}'
+    # --all binds the value --limit 0 binds where the cap's zero is every row (BACK-2729); testability's is not
+    injected = fragment if scheme in ('testability', 'overview') else 'limit=0'
+    assert inject_query_flags('src', scheme, _args(all=True)) == f'src?{injected}'
 
 
 def test_calls_all_reaches_only_the_answers_that_read_its_cap():
@@ -44,8 +46,8 @@ def test_calls_all_reaches_only_the_answers_that_read_its_cap():
     limit; a callers request has no cap, so --all is satisfied there and nothing is injected."""
     from reveal import adapters  # noqa: F401
     assert adapters_base.get_adapter_class('calls').CLI_QUERY_FLAGS['all'] == 'limit=1000000'
-    assert inject_query_flags('src?sort=-callers', 'calls', _args(all=True)) == 'src?sort=-callers&limit=1000000'
-    assert inject_query_flags('src?uncalled', 'calls', _args(all=True)) == 'src?uncalled&limit=1000000'
+    assert inject_query_flags('src?sort=-callers', 'calls', _args(all=True)) == 'src?sort=-callers&limit=0'
+    assert inject_query_flags('src?uncalled', 'calls', _args(all=True)) == 'src?uncalled&limit=0'
     assert inject_query_flags('src?callers=main', 'calls', _args(all=True)) == 'src?callers=main'
 
 
@@ -54,16 +56,16 @@ def test_git_all_reaches_only_the_answers_that_read_its_cap():
     row cap, so --all is satisfied there and nothing is injected (BACK-2656)."""
     from reveal import adapters  # noqa: F401
     assert adapters_base.get_adapter_class('git').CLI_QUERY_FLAGS['all'] == 'limit=1000000'
-    assert inject_query_flags('.', 'git', _args(all=True)) == '.?limit=1000000'
-    assert inject_query_flags('src?view=history', 'git', _args(all=True)) == 'src?view=history&limit=1000000'
+    assert inject_query_flags('.', 'git', _args(all=True)) == '.?limit=0'
+    assert inject_query_flags('src?view=history', 'git', _args(all=True)) == 'src?view=history&limit=0'
     assert inject_query_flags('src', 'git', _args(all=True)) == 'src'
 
 
 def test_all_injects_fragment():
-    # Hotspots' cap is limit since BACK-2673 (top is its legacy word).
-    assert inject_query_flags('src', 'hotspots', _args(all=True)) == 'src?limit=1000000'
+    # Hotspots' cap is limit since BACK-2673 (top is its legacy word); --all binds its uncapping 0 (BACK-2729).
+    assert inject_query_flags('src', 'hotspots', _args(all=True)) == 'src?limit=0'
     assert inject_query_flags('src?functions_only=true', 'hotspots', _args(all=True)) \
-        == 'src?functions_only=true&limit=1000000'
+        == 'src?functions_only=true&limit=0'
 
 
 def test_an_explicit_uri_value_and_all_conflict():
@@ -73,12 +75,15 @@ def test_an_explicit_uri_value_and_all_conflict():
     for uri in ('src?limit=3', 'src?a=1&limit=3'):
         with pytest.raises(RequestValidationError, match='--all conflicts with limit=3'):
             inject_query_flags(uri, 'hotspots', _args(all=True))
-    assert inject_query_flags('src?limit=1000000', 'hotspots', _args(all=True)) == 'src?limit=1000000'
+    # the value --all binds is --limit 0's (BACK-2729): equal, one setting; the old sentinel is a different value
+    assert inject_query_flags('src?limit=0', 'hotspots', _args(all=True)) == 'src?limit=0'
+    with pytest.raises(RequestValidationError, match='--all conflicts with limit=1000000'):
+        inject_query_flags('src?limit=1000000', 'hotspots', _args(all=True))
 
 
 def test_key_match_is_exact_not_substring():
     # 'slimit=1' contains 'limit=1' but is a different parameter.
-    assert inject_query_flags('src?slimit=1', 'hotspots', _args(all=True)) == 'src?slimit=1&limit=1000000'
+    assert inject_query_flags('src?slimit=1', 'hotspots', _args(all=True)) == 'src?slimit=1&limit=0'
 
 
 def test_without_all_flag_nothing_changes():
@@ -121,20 +126,20 @@ def test_all_lifts_the_cap_of_the_answer_the_request_selects():
     --all there is the canonical limit (it used to inject top, which those answers never read)."""
     from reveal.cli.defaults import _default_args
     for scheme in ('metrics', 'stats'):
-        assert _pairs(inject_query_flags('src', scheme, _args(all=True))) == ['limit=1000000']
+        assert _pairs(inject_query_flags('src', scheme, _args(all=True))) == ['limit=0']
         assert _pairs(inject_query_flags('src?view=hotspots', scheme, _args(all=True))) == \
-            ['limit=1000000', 'view=hotspots']
+            ['limit=0', 'view=hotspots']
         assert _pairs(inject_query_flags('src?hotspots=false', scheme, _args(all=True))) == \
-            ['hotspots=false', 'limit=1000000']
+            ['hotspots=false', 'limit=0']
         for legacy in ('hotspots=true', 'hotspots', 'hotspots=1'):
             assert _pairs(inject_query_flags(f'src?{legacy}', scheme, _args(all=True))) == \
-                sorted([legacy, 'top=1000000'])
+                sorted([legacy, 'top=0'])
         # the global --hotspots selects the same legacy answer, whatever order the flags were typed in
         assert _pairs(inject_query_flags('src', scheme, _default_args(all=True, hotspots=True))) == \
-            ['hotspots=true', 'top=1000000']
+            ['hotspots=true', 'top=0']
     # Negative controls: nouns whose answers declare no cap of their own keep their declaration.
-    assert inject_query_flags('src?hotspots=true', 'calls', _args(all=True)) == 'src?hotspots=true&limit=1000000'
-    assert inject_query_flags('src', 'hotspots', _args(all=True)) == 'src?limit=1000000'
+    assert inject_query_flags('src?hotspots=true', 'calls', _args(all=True)) == 'src?hotspots=true&limit=0'
+    assert inject_query_flags('src', 'hotspots', _args(all=True)) == 'src?limit=0'
 
 
 def test_end_to_end_metrics_all_keeps_the_legacy_ranking_and_notes_nothing_elsewhere(tmp_path):

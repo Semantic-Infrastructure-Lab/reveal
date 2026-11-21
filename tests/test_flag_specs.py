@@ -139,7 +139,7 @@ def test_all_and_verbose_stay_silent_on_adapters_without_a_declaration():
 
 
 def test_all_and_verbose_inject_where_declared():
-    assert _inject('.', 'hotspots', all=True)[0] == '.?limit=1000000'  # hotspots' cap is limit (BACK-2673)
+    assert _inject('.', 'hotspots', all=True)[0] == '.?limit=0'  # hotspots' cap is limit (BACK-2673), --all its 0 (BACK-2729)
     # BACK-2654 rule 4: --verbose binds from the noun's declarations, never CLI_QUERY_FLAGS: imports declares the
     # legacy word verbose (detail=full), claude only detail
     assert _inject('.', 'imports', verbose=True)[0] == '.?verbose=true'

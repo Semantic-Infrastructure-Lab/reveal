@@ -215,6 +215,15 @@ def _native_uncapped_value(adapter_class: Any, fragment: str, fallback: int) -> 
     return 0 if declaration is not None and declaration.zero_uncaps else fallback
 
 
+def uncapping_fragment(adapter_class: Any, fragment: str) -> str:
+    """*fragment* (``KEY=N``, an uncapping flag's declared value) at the value ``--limit 0`` binds: ``KEY=0`` where the
+    declared cap reads zero as every row, unchanged otherwise (BACK-2729: ``--all --limit 0`` is one setting)."""
+    key, _, value = fragment.partition('=')
+    if not value.isdigit():
+        return fragment
+    return f'{key}={_native_uncapped_value(adapter_class, fragment, int(value))}'
+
+
 def _reject_unreceived_control(adapter_class: Any, spec: FlagSpec) -> None:
     """An explicit control flag a declared noun does not receive (rule 3, BACK-2654): exit 2 with the binder's
     teaching (its supported controls), not a note."""
@@ -264,7 +273,9 @@ def declared_flag_fragment(spec: FlagSpec, adapter_class: Any, selection: Any, p
     *selection* selects (a raw URI query or a subcommand's typed values) when the flag lifts a cap. One answer for
     both forms of a request: the URI injection and the declared subcommand both read it (BACK-2654). A cap-lifting
     flag reaches the selected answer's cap only: None when that answer does not read the cap (its declared answers,
-    on *path*), or the noun declares none, so the flag is satisfied (``lifts_no_cap``)."""
+    on *path*), or the noun declares none, so the flag is satisfied (``lifts_no_cap``). It binds the value ``--limit 0``
+    binds where that cap's zero means every row, so the two are one setting (BACK-2729); a cap whose zero does not
+    uncap keeps the noun's declared value."""
     fragment = _declared(adapter_class).get(spec.dest)
     declarations = getattr(adapter_class, 'PARAM_SPECS', None)
     if spec.answer_cap and fragment and declarations:
@@ -275,6 +286,7 @@ def declared_flag_fragment(spec: FlagSpec, adapter_class: Any, selection: Any, p
             fragment = f"{cap}={fragment.partition('=')[2]}"
         if not answer_reads_control(adapter_class, fragment.partition('=')[0], selection, path):
             return None
+        fragment = uncapping_fragment(adapter_class, fragment)
     return fragment
 
 

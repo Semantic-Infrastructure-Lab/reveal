@@ -91,7 +91,7 @@ from reveal.adapters.factory import uses_bound_query_call
 from reveal.cli.invocation import COMMANDS, RETIREMENTS
 from reveal.cli.parser import create_argument_parser
 from reveal.cli.routing.declared import create_declared_parser, declared_adapter_class
-from reveal.cli.routing.flag_specs import FLAG_SPECS
+from reveal.cli.routing.flag_specs import FLAG_SPECS, uncapping_fragment
 from reveal.utils.query_parser import SHARED_CONTROL_NAMES, query_key
 
 
@@ -440,6 +440,8 @@ def _received(noun, flag):
         return None
     key = fragment.partition('=')[0]
     walk_policy = key == 'respect_gitignore' and adapter.RESOURCE_SPEC.walks
+    if flag.answer_cap:  # --all binds its cap's uncapping value, the one --limit 0 binds (BACK-2729)
+        fragment = uncapping_fragment(adapter, fragment)
     return fragment if walk_policy or _spec_for(noun, key) is not None else None
 
 
