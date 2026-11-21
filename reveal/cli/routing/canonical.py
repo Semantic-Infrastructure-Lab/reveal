@@ -12,6 +12,8 @@ import shlex
 import argparse
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
+from ...utils.query_binding import switch_value
+
 
 FORMS = ('cli', 'mcp', 'python')
 
@@ -28,6 +30,10 @@ def _request_dests(adapter: Any) -> set:
         if spec.cli is not None:
             dests.add(spec.cli.dest or spec.name)
         dests.update(legacy_flag_dests(spec))
+    # The global --verbose binds where verbose_binding takes it (the noun's legacy word, else detail=full), so the
+    # keyword answers as the flag does (BACK-2622: api.query('overview', P, verbose=True) was an unsupported control).
+    if any('verbose' in spec.spellings or spec.name == 'detail' for spec in adapter.PARAM_SPECS):
+        dests.add('verbose')
     return dests
 
 
@@ -147,6 +153,8 @@ def canonical_controls(parser: Any, adapter: Any, params: Mapping[str, Any],
             action = options[keyword][1]
             if action.nargs == 0 and action.const is False and isinstance(value, bool):
                 value = not value  # a store_false flag (--no-suppress) spells the control False: given means False
+            elif spec.convert is switch_value and isinstance(value, bool):
+                value = 'on' if value else 'off'  # a switch is spelled on|off (COMMAND_MODEL "Switches", BACK-2622)
             controls[keyword] = value
     return controls
 

@@ -1521,9 +1521,9 @@ See the [metrics guide](adapters/METRICS_ADAPTER_GUIDE.md#findings-gate).
 ```bash
 reveal overview .                  # Compact map: scope, components, imports
 reveal overview ./src              # Scope to a subdirectory
-reveal overview . --top 10         # Expand graph rows and nested cycle details
-reveal overview . --top 0          # Totals without graph rows
-reveal overview . --no-imports     # Explicit scope-only map
+reveal overview . --limit 10       # Expand graph rows and nested cycle details
+reveal overview . --limit 0        # Every graph row, uncapped
+reveal overview . --imports off    # Explicit scope-only map
 reveal overview . --format json    # The same bounded map for tools
 ```
 
@@ -1546,7 +1546,7 @@ incomplete comparisons exit 3. See the [overview guide](adapters/OVERVIEW_ADAPTE
 ```bash
 reveal overview src/ --against HEAD
 reveal overview src/ --against v1.2.0 --format json
-reveal 'overview://src?against=HEAD&top=5' --format json
+reveal overview src --against HEAD --limit 5 --format json
 ```
 
 The tracked base is materialized read-only; the live working tree is the head,
@@ -1556,10 +1556,10 @@ fan-in/out, cycle, coupling, active-entrypoint and complexity-centroid deltas.
 Missing required evidence, including capped import discovery, makes deltas
 unavailable and exits 3; invalid resources or refs exit 2.
 
-Comparison top controls the centroid population: `max(top,1)*4`, twenty at the
-default five and four at zero. Identical-tree proof has null unmeasured centroid
-base/head values and proved zero change. Omit ordinary-only no_imports/all/verbose
-controls, even explicitly false values. URI refs percent-decode once and preserve
+Comparison `--limit` controls the centroid population: four times the limit,
+twenty at the default five, and the whole population at `--limit 0`. Identical-tree
+proof has null unmeasured centroid base/head values and proved zero change. Omit
+ordinary-only imports/all/verbose controls, even explicitly false values. URI refs percent-decode once and preserve
 plus; encode literal percent as `%25`. See the
 [overview guide](adapters/OVERVIEW_ADAPTER_GUIDE.md) for controls and limits.
 

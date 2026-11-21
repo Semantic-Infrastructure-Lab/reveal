@@ -43,7 +43,8 @@ def test_expansion_is_a_declared_control(tmp_path, flag):
 
 def test_top_zero_and_scope_only_are_bound(tmp_path):
     params = bound_request(tmp_path, '--top', '0', '--no-imports')['params']
-    assert params == {'top': 0, 'no_imports': True}
+    assert params == {'top': 0, 'imports': False}  # the legacy words bind: top stays its own, no_imports is imports off
+    assert bound_request(tmp_path, '--limit', '0', '--imports', 'off')['params'] == {'limit': 0, 'imports': False}
 
 
 def test_no_gitignore_and_exclude_keep_existing_walk_scope(tmp_path):

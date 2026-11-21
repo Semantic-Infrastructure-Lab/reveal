@@ -50,7 +50,8 @@ class TestCreateArchitectureParser(unittest.TestCase):
         args = parser.parse_args([])
         self.assertEqual(args.path, '.')
         self.assertNotIn('top', vars(args))
-        self.assertEqual(ArchitectureAdapter.PARAM_SPECS[0].read({}), 5)
+        from reveal.adapters.overview import _section_rows
+        self.assertEqual(_section_rows({}), (5, 20))  # five rows per map section, a compared population of 20
         self.assertNotIn('no_imports', vars(args))
 
     def test_path_argument(self):

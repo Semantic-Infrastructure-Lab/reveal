@@ -647,7 +647,7 @@ TUTORIAL_PREFIXES = ('mything://', 'help://mything')
 DOC_SOURCE_COHORT = {
     ('../../README.md', 'reveal overview .'),
     ('../../README.md', 'reveal markdown docs/ --match retry'),
-    ('adapters/OVERVIEW_ADAPTER_GUIDE.md', 'reveal overview . --top 0'),
+    ('adapters/OVERVIEW_ADAPTER_GUIDE.md', 'reveal overview . --limit 0'),
     ('adapters/IMPORTS_ADAPTER_GUIDE.md', 'reveal imports://src'),
 }
 

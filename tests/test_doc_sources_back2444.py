@@ -71,9 +71,9 @@ def _assert_navigation_answer(query, answer):
         assert answer['scope']['total_code_files'] == 3
         assert {row['language']: row['files'] for row in answer['scope']['languages']} == {'Go': 2, 'Python': 1}
         assert answer['map']['fan_in']['total'] == 1
-        if '--top 0' in query:
-            assert answer['map']['fan_in']['rows'] == []
-            assert answer['map']['fan_in']['omitted'] == 1
+        if '--limit 0' in query:  # uncapped (BACK-2622): every observed row, none omitted
+            assert answer['map']['fan_in']['rows'] == [{'file': 'src/helper', 'fan_in': 1, 'fan_out': 0}]
+            assert not answer['map']['fan_in'].get('omitted')
         else:
             assert answer['map']['fan_in']['rows'] == [{'file': 'src/helper', 'fan_in': 1, 'fan_out': 0}]
     elif '--external' in query:

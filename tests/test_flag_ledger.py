@@ -319,10 +319,12 @@ def test_declared_native_cap_accepts_limit(db, noun, mode):
                for flag in ('--top', '--limit')]
     assert [result.returncode for result in results] == [0, 0], [r.stderr for r in results]
     legacy, canonical = (json.loads(result.stdout) for result in results)
-    if noun in ('calls', 'imports'):
+    replacement = {'calls': '--limit N; 0 is uncapped', 'imports': '--limit N; 0 is uncapped',
+                   'overview': '--limit N, which caps each map section; 0 is uncapped'}  # BACK-2622
+    if noun in replacement:
         notes = [w for w in legacy['meta']['warnings'] if w.get('field') == f'param:{noun}.top']
         assert len(notes) == 1
-        assert notes[0]['replacement'] == '--limit N; 0 is uncapped'
+        assert notes[0]['replacement'] == replacement[noun]
         legacy['meta']['warnings'].remove(notes[0])
         if 'metadata' in legacy:  # imports' metadata is meta's alias (BACK-2601): the note is in it too
             legacy['metadata']['warnings'].remove(notes[0])

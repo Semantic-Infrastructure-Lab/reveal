@@ -291,6 +291,8 @@ PRODUCTION_CASES = {
     'param:git.verbose': lambda f: [f'git://{f}?view=blame&verbose'],  # detail is blame's (BACK-2656)
     'param:pack.verbose': lambda f: [f'pack://{Path(f).parent}?verbose'],
     'param:overview.verbose': lambda f: [f'overview://{Path(f).parent}?verbose'],
+    'param:overview.top': lambda f: ['overview', str(Path(f).parent), '--top', '1'],
+    'param:overview.no_imports': lambda f: ['overview', str(Path(f).parent), '--no-imports'],
     'param:architecture.verbose': lambda f: [f'architecture://{Path(f).parent}?verbose'],
     'param:hotspots.verbose': lambda f: [f'hotspots://{Path(f).parent}?verbose'],
     'param:testability.verbose': lambda f: [f'testability://{Path(f).parent}?tests={Path(f).parent}&verbose'],

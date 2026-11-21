@@ -352,7 +352,7 @@ def _run_complex_functions(adapter: 'ResourceAdapter', path: Path, limit: int, *
     from reveal.adapters.ast import AstAdapter
     data = adapter.compose(AstAdapter, str(path), default={},
                             query=f'complexity>9&sort=-complexity&limit={limit}',
-                            cut_as=('complex_functions', 'raise ?top=N'))
+                            cut_as=('complex_functions', 'raise --limit N'))
     _capture_ast_observations(data, observations)
     return cast(List[Dict[str, Any]], data.get('results', data.get('elements', [])))
 

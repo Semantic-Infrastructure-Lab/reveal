@@ -15,12 +15,11 @@ cuts. Follow its drill-down commands to investigate a specific question.
 ```bash
 reveal overview
 reveal overview ./src
-reveal overview . --top 10
-reveal overview . --top 0
-reveal overview . --no-imports
+reveal overview . --limit 10
+reveal overview . --limit 0
+reveal overview . --imports off
 reveal overview . --exclude 'dist/*' --exclude '*.min.js'
 reveal overview . --format json
-reveal 'overview://src?top=10'
 ```
 
 ## Controls
@@ -29,11 +28,11 @@ These controls describe the ordinary map; comparison controls are listed below.
 
 | Parameter | Purpose |
 |-----------|---------|
-| `top` | Nonnegative whole-number presentation limit, default 5. Bounds each graph section and each cycle's member and witness lists. Zero shows totals without graph rows. Whole-valued `3.0` and `3e0` normalize; fractions, booleans and negatives reject. |
-| `no_imports` | Explicit scope-only map, with graph analysis marked not requested. Strict boolean spellings are accepted. |
+| `--limit N` | Nonnegative whole-number presentation limit, default 5. Bounds each graph section and each cycle's member and witness lists. `--limit 0` is uncapped. Whole-valued `3.0` and `3e0` normalize; fractions, booleans and negatives reject. The legacy `--top N` is the same cap with a note until 1.0, except that `--top 0` shows totals without graph rows; giving both with different meanings exits 2. |
+| `--imports on\|off` | `off` is an explicit scope-only map, with graph analysis marked not requested. The legacy `--no-imports` is `--imports off`, with a note. |
 | `exclude` | Comma-separated globs narrowing the configured census and graph scope. An excluded file can remain resolvable as an import target. |
 | `respect_gitignore` | True by default. False or `--respect-gitignore off` includes ignored candidates subject to other scope exclusions; tracked files remain eligible. |
-| `--all` (`?all=true`) | Expand map rows, overriding top. It does not request quality or history analysis. The legacy `--verbose` is the same, with a note. |
+| `--all` | Expand map rows, overriding `--limit`. It does not request quality or history analysis. The legacy `--verbose` is the same, with a note. |
 
 `no_git` and `tests` were dashboard controls and now reject with a correction.
 Use Git queries for history and metrics/AST queries for assessment rankings.
@@ -121,7 +120,7 @@ no effect. Use top to expand or reduce the map's graph sections.
 ```bash
 reveal overview . --against HEAD
 reveal overview ./src --against HEAD --format json
-reveal 'overview://.?against=HEAD&top=5'
+reveal overview . --against HEAD --limit 5
 ```
 
 Against selects a separate `overview_diff` operation before ordinary map work.
@@ -131,9 +130,9 @@ architecture comparison engine; it does not compare the former quality dashboard
 The Git extra is required: `pip install "reveal-cli[git]"`.
 
 Comparison preserves fan-in/out, cycle, coupling, active-entrypoint and complexity
-centroid deltas. Its centroid population is `max(top, 1) * 4`: default top five
-means twenty functions, and top zero means four. This is different from ordinary
-map presentation, where top zero shows no graph rows.
+centroid deltas. Its centroid population is four times `--limit`: the default five
+means twenty functions, and `--limit 0` the whole population (the legacy `--top 0`
+still means four).
 
 `analysis` states completeness, basis and per-side imports/complexity evidence.
 An `identical_tree` proof has no measured snapshots: centroid base/head values

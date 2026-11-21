@@ -23,8 +23,9 @@ from ..utils.entry_points import ENTRY_POINT_RULE_BASE, is_active_entry_point
 from ..utils.gitignore import gitignore_scope, respect_gitignore_param
 from ..utils.path_utils import (HiddenTally, as_spelled, failure_of, hidden_entries_warning,
                                traversal_failed_warning)
-from ..utils.query_binding import bind_declared_params, boolean_value, verbose_legacy
-from ..utils.query_parser import (CliBinding, ParamSpec, ParamValueError, QueryParams, ResourceSpec,
+from ..errors import RequestValidationError
+from ..utils.query_binding import bind_declared_params, boolean_value, legacy_switch, switch_value, verbose_legacy
+from ..utils.query_parser import (CliBinding, LegacySpelling, ParamSpec, ParamValueError, QueryParams, ResourceSpec,
                                   exclude_param, nonempty_scalar, nonnegative_display_limit, param_schema,
                                   split_exclude_param)
 from ..utils.query_parser import peek_query_items
@@ -177,9 +178,12 @@ def _run_imports_analysis(adapter: 'OverviewAdapter', path: Path, top: int, *, s
         return None, 'failed'
 
 
+_DEFAULT_ROWS = 5
+
+
 def _overview_top(value: Any) -> int:
     if isinstance(value, bool):
-        raise ValueError('top requires a non-negative whole number')
+        raise ValueError('a row count requires a non-negative whole number')
     return nonnegative_display_limit(value)
 
 
@@ -189,6 +193,53 @@ def _obsolete_git(value: Any) -> bool:
 
 def _obsolete_tests(value: Any) -> str:
     raise ParamValueError('overview no longer ranks complexity or hotspots; omit tests and use metrics:// or ast:// with kind=function')
+
+
+# The map sections are the answer's rows, so --limit caps them (COMMAND_MODEL "Caps", Scott 2026-11-20 BACK-2622 B):
+# 0 is uncapped. No default value, so a request that gave limit is told from one that gave the legacy top.
+_LIMIT = ParamSpec('limit', 'integer', f'Rows per map section (default {_DEFAULT_ROWS}); 0 = no cap. With --against the '
+                   'compared population is 4 x limit, the whole population at 0', None, _overview_top, minimum=0,
+                   role='analysis', examples=('limit=10',), zero_policy='no cap',
+                   cli=CliBinding(('--limit',), metavar='N'))
+# The old word for the cap until the cut: top=0 kept its own meaning (no graph rows), which no limit value spells,
+# so it is a setting of its own with its note, not a legacy entry on limit (the Metrics pattern, BACK-2621).
+_TOP = ParamSpec('top', 'integer', 'Legacy rows per map section, replaced by limit; top=0 shows no graph rows and '
+                 'compares a population of 4', None, _overview_top, minimum=0, role='analysis',
+                 zero_policy='no graph rows; comparison population 4', cli=CliBinding(('--top',), metavar='N'))
+# The map's own controls: the comparison (against=REF, overview_diff) reads neither (BACK-2656).
+_IMPORTS = ParamSpec('imports', 'boolean', 'Import analysis: on (default) or off for the recognized-code census only',
+                     True, switch_value, role='analysis', examples=('imports=off',), answers=('overview',),
+                     cli=CliBinding(('--imports',), metavar='on|off'),
+                     legacy=(LegacySpelling('no_imports', codec=legacy_switch('no_imports', 'off', 'on'),
+                                            flag='--no-imports', flag_value=True),))
+# verbose only lifts the section caps: the legacy word of all (rule 16 parity, BACK-2654 note #17)
+_ALL = ParamSpec('all', 'boolean', 'Expand map evidence; diagnostic details remain capped at 50',
+                 False, boolean_value, role='presentation', legacy=(verbose_legacy(True, 'all=true (--all)'),),
+                 answers=('overview',))
+
+
+def _section_rows(params: Any) -> tuple[int, int]:
+    """(rows per map section, compared population) from limit, else the legacy top, else the default (decision C)."""
+    given = _given_caps(params)
+    if 'limit' in given:
+        limit = _LIMIT.read(params)
+        return (UNLIMITED_TOP, UNLIMITED_TOP) if limit == 0 else (limit, limit * 4)
+    rows = _TOP.read(params) if 'top' in given else _DEFAULT_ROWS
+    return rows, max(rows, 1) * 4
+
+
+def _given_caps(params: Any) -> set:
+    """The caps a request gave a value; a None keyword resets one to its default (api.query(..., top=None))."""
+    return {name for name, value in peek_query_items(params) if name in ('limit', 'top') and value is not None}
+
+
+def _top_conflict(params: Any) -> None:
+    """top and limit name one cap, so an equal pair is one request; top=0 (no rows) and limit=0 (no cap) are not."""
+    if _given_caps(params) == {'top', 'limit'}:
+        top, limit = _TOP.read(params), _LIMIT.read(params)
+        if top != limit or top == 0:
+            raise RequestValidationError(f'top={top} conflicts with limit={limit}: top is the legacy word of limit, '
+                                         'and top=0 shows no rows where limit=0 is uncapped; give --limit N once')
 
 
 _AGAINST = ParamSpec('against', 'string', 'Compare the live working tree against a Git ref',
@@ -433,24 +484,14 @@ class OverviewAdapter(ResourceAdapter):
     FINDINGS_POLICIES = ('none',)
     DEFAULT_FAIL_ON = 'none'
     RESOURCE_SPEC = ResourceSpec(uri_codec='existing-path-first')
-    PARAM_SPECS = (
-        ParamSpec('top', 'integer', 'Rows per map section; comparison centroid population is max(top,1)*4',
-                  5, _overview_top, minimum=0, role='analysis', examples=('top=10',),
-                  zero_policy='Ordinary: no graph rows, retain totals and diagnostics; comparison: population 4',
-                  cli=CliBinding(('--top', '--limit'), metavar='N')),
+    PARAM_SPECS = (_LIMIT, _TOP,
         ParamSpec('no_git', 'boolean', 'Removed: use Git queries for history',
                   False, _obsolete_git, role='analysis', cli=CliBinding(('--no-git',), action='store_true')),
-        # The map's own controls: the comparison (against=REF, overview_diff) reads neither (BACK-2656).
-        ParamSpec('no_imports', 'boolean', 'Request only the recognized-code census; omit import analysis explicitly',
-                  False, boolean_value, role='analysis', examples=('no_imports=true',), answers=('overview',),
-                  cli=CliBinding(('--no-imports',), action='store_true')),
+        _IMPORTS,
         ParamSpec('tests', 'string', 'Removed: use metrics or AST for test-filtered rankings',
                   'exclude', _obsolete_tests, role='analysis',
                   cli=CliBinding(('--tests',), metavar='{include,exclude}')),
-        # verbose only lifts the section caps: the legacy word of all (rule 16 parity, BACK-2654 note #17)
-        ParamSpec('all', 'boolean', 'Expand map evidence; diagnostic details remain capped at 50',
-                  False, boolean_value, role='presentation', legacy=(verbose_legacy(True, 'all=true (--all)'),),
-                  answers=('overview',)),
+        _ALL,
         _AGAINST,
         exclude_param(),
     )
@@ -460,6 +501,7 @@ class OverviewAdapter(ResourceAdapter):
         self.query_params = (params if isinstance(params, QueryParams) else bind_declared_params(
             self.PARAM_SPECS, params if params is not None else query or '',
             transport='typed' if params is not None else 'uri'))
+        _top_conflict(self.query_params)
         self.exclude_patterns = split_exclude_param(self.query_params.get('exclude'))
         self.respect_gitignore = respect_gitignore_param(self.query_params)
 
@@ -481,7 +523,7 @@ class OverviewAdapter(ResourceAdapter):
             _validate_scope_disclosure(result['scope'])
             _validate_path(result.get('reading_note'))
             status = result.get('map_status')
-            no_imports = dict(peek_query_items(self.query_params)).get('no_imports', False)
+            no_imports = not switch_value(dict(peek_query_items(self.query_params)).get('imports', True))
             diagnostic_budget = result.get('diagnostic_budget')
             if not isinstance(diagnostic_budget, dict):
                 raise ValueError('overview must retain its diagnostic budget')
@@ -520,7 +562,7 @@ class OverviewAdapter(ResourceAdapter):
             state = AnalysisCompleteness.COMPLETE
         return result_execution_facts(result, completeness=state)
 
-    def _comparison(self, path: Path, against: str, top: int) -> RevealResult:
+    def _comparison(self, path: Path, against: str, population: int) -> RevealResult:
         from ..diff.architecture_diff import _open_repo, _resolve_commit, run_architecture_diff
         from ..utils.results import FailureCause
         try:
@@ -534,32 +576,32 @@ class OverviewAdapter(ResourceAdapter):
         # Both snapshots walk under the request's exclude, as the map does: a URI key or api.query keyword is the
         # same request as the CLI flag (BACK-2693).
         with _request_exclusions(self, path):
-            report = run_architecture_diff(path, against, head_ref='working tree', top_n=max(top, 1) * 4)
+            report = run_architecture_diff(path, against, head_ref='working tree', top_n=population)
         return cast(RevealResult, {**report, 'type': 'overview_diff'})
 
     @staticmethod
     def get_help() -> Dict[str, Any]:
         return {'name': 'overview', 'description': 'Compact project map: recognized-code scope, components and static import relationships.',
-                'syntax': 'overview://<path>[?top=5&no_imports=true|against=REF]',
+                'syntax': 'overview://<path>[?limit=5&imports=off|against=REF]',
                 'examples': [{'uri': 'overview://src', 'description': 'Compact project map'},
-                             {'uri': 'overview://.?top=10', 'description': 'Expand map evidence'},
-                             {'uri': 'overview://.?no_imports=true', 'description': 'Scope census only'},
+                             {'uri': 'overview://.?limit=10', 'description': 'Expand map evidence'},
+                             {'uri': 'overview://.?imports=off', 'description': 'Scope census only'},
                              {'uri': 'overview://.?against=HEAD', 'description': 'Compare HEAD with the live working tree'}],
                 'features': ['Recognized-code language counts', 'Bounded fan-in, active entrypoint candidates, components and cycles',
                              'Coverage, losses, counting rules and drill-down commands'],
                 'notes': ['Static imports are not runtime execution evidence or risk judgments.',
-                          'top=0 shows no graph rows; diagnostic details retain a minimum of five and maximum of fifty.',
+                          'limit caps each map section (default 5); limit=0 is uncapped. Diagnostic details retain a minimum of five and maximum of fifty.',
                           'Graph totals describe the observed graph; scan accounting and losses qualify its coverage.',
                           'Data, markup and unknown extensions are not counted by the code census.',
                           'no_git and tests are obsolete; use Git, metrics and AST queries for those questions.',
-                          'against selects overview_diff before map collection; the comparison does not read no_imports, all or verbose (exit 2).',
-                          'Comparison centroid population is max(top, 1)*4; identical trees have unmeasured null centroids and proved zero change.'],
+                          'against selects overview_diff before map collection; the comparison does not read imports, all or verbose (exit 2).',
+                          'Comparison centroid population is 4 x limit (the whole population at limit=0); identical trees have unmeasured null centroids and proved zero change.'],
                 'output_formats': ['text', 'json']}
 
     @staticmethod
     def get_schema() -> Dict[str, Any]:
         return {'adapter': 'overview', 'description': 'Compact project map',
-                'uri_syntax': 'overview://<path>?top=5&no_imports=true|against=REF',
+                'uri_syntax': 'overview://<path>?limit=5&imports=off|against=REF',
                 'resource': OverviewAdapter.RESOURCE_SPEC.schema(),
                 'execution_policy': {'default_fail_on': 'none', 'fail_on': ['none']},
                 'query_params': {**param_schema(OverviewAdapter.PARAM_SPECS),
@@ -582,11 +624,11 @@ class OverviewAdapter(ResourceAdapter):
             # Direct API calls do not pass through the CLI's existing resource stat.
             # A missing/inaccessible target must not become a successful empty walk.
             path.stat()
-            top = self.PARAM_SPECS[0].read(self.query_params)
+            top, population = _section_rows(self.query_params)
             if self.result_type_for(self.query_params) == 'overview_diff':
-                return self._comparison(path, _AGAINST.read(self.query_params), top)
-            no_imports = self.PARAM_SPECS[2].read(self.query_params)
-            top = UNLIMITED_TOP if all or self.PARAM_SPECS[4].read(self.query_params) else top
+                return self._comparison(path, _AGAINST.read(self.query_params), population)
+            no_imports = not _IMPORTS.read(self.query_params)
+            top = UNLIMITED_TOP if all or _ALL.read(self.query_params) else top
             scope = _run_scope(self, path)
             facts, status = ((None, 'not_requested') if no_imports else _run_imports_analysis(
                 self, path, top, scope_usable=bool(scope.get('total_code_files'))))
@@ -595,7 +637,7 @@ class OverviewAdapter(ResourceAdapter):
                 status = 'failed'
             note = 'Static import relationships and entrypoint candidates describe the observed graph, not runtime execution or a risk assessment.'
             if no_imports:
-                note += ' Import analysis was not requested (no_imports=true).'
+                note += ' Import analysis was not requested (--imports off).'
             result = ResultBuilder.create('overview', source=as_spelled(path, path),
                 contract_version=CONTRACT_VERSION, scope=scope, meta=cast(Optional[Dict[str, Any]], meta),
                 data={'path': as_spelled(path, path), 'map': facts, 'map_status': status,

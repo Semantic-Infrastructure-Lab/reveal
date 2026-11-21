@@ -29,7 +29,7 @@ def test_comparison_ast_cuts_and_warnings_retain_the_shared_owner(project):
     assert metadata == second.composed_meta()
     cut, = truncations_of({'meta': metadata})
     assert (cut['field'], cut['shown'], cut['total']) == ('complex_functions', 2, 6)
-    assert 'raise ?top=N' in cut['message']
+    assert 'raise --limit N' in cut['message']
 
 
 @pytest.mark.parametrize('kind', ['returned', 'meta_errors', 'confidence', 'raised'])

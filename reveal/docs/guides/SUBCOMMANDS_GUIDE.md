@@ -650,14 +650,15 @@ relationships, entrypoint candidates and cycle evidence. Text and JSON contain
 the same bounded map, with counting rules, coverage and drill-down commands.
 
 ```bash
-reveal overview [PATH] [--top N] [--no-imports] [--all] [--fail-on none]
+reveal overview [PATH] [--limit N] [--imports on|off] [--all] [--fail-on none]
 reveal overview ./src --format json
-reveal overview . --top 0
+reveal overview . --limit 0
 ```
 
-Top defaults to five and bounds graph sections and nested cycle details. Zero
-shows known observed totals without graph rows; all/verbose expand map rows.
-No-imports produces an explicitly labelled scope-only map. Exclude and gitignore
+`--limit` defaults to five and bounds graph sections and nested cycle details;
+`--limit 0` (or `--all`) shows every row. `--imports off` produces an explicitly
+labelled scope-only map. The legacy `--top N` and `--no-imports` still work with
+a note until 1.0; `--top 0` still shows totals without graph rows. Exclude and gitignore
 controls apply to the census and graph; hidden entries are not a measured count
 of every skipped file. No-git and tests were dashboard controls and now reject
 with a correction toward their assessment owners.

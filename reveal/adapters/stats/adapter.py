@@ -26,7 +26,7 @@ from ...utils.query_parser import (
     CliBinding, LegacySpelling, ParamSpec, ParamValueError, QueryParams, ResourceSpec, filter_expression, param_schema,
     exclude_param, peek_query_items, split_exclude_param, where_param, whole_number,
  legacy_slices)
-from ...utils.query_binding import (bind_declared_params, boolean_value, given_controls, switch_value,
+from ...utils.query_binding import (bind_declared_params, boolean_value, given_controls, legacy_switch, switch_value,
                                    unread_by_data_warning)
 from ...utils.gitignore import respect_gitignore_param
 from ...utils.path_utils import (TestLayout, failure_of, failure_records, provenance_for_display_path,
@@ -171,14 +171,6 @@ def _threshold(name: str, field: str, convert, what: str) -> LegacySpelling:
     return LegacySpelling(name, codec=codec, flag='--' + name.replace('_', '-'))
 
 
-def _legacy_switch(name: str, on: str, off: str):
-    """A legacy boolean (no_churn, summary_only) as the canonical value it stands for."""
-    def codec(value: Any) -> str:
-        try:
-            return on if boolean_value(value) else off
-        except ValueError:
-            raise ParamValueError(f'{name} must be a valid boolean, got {value!r}') from None
-    return codec
 
 
 _WHERE = where_param('Keep the files whose field matches: FIELD OP VALUE (lines>50, avg_complexity>=5, '
@@ -207,7 +199,7 @@ _CHURN = ParamSpec('churn', 'boolean', 'Fold commit-touch counts into the hotspo
                    'repository; silently off elsewhere) or off for complexity-only scoring',
                    True, switch_value, ('view=hotspots&churn=off',), role='analysis',
                    cli=CliBinding(('--churn',), metavar='on|off'),
-                   legacy=(LegacySpelling('no_churn', codec=_legacy_switch('no_churn', 'off', 'on'),
+                   legacy=(LegacySpelling('no_churn', codec=legacy_switch('no_churn', 'off', 'on'),
                                           flag='--no-churn', flag_value=True),), answers=_RANKINGS)
 _SINCE = ParamSpec('since', 'string', 'Bound the churn walk to commits on/after this ISO date (default: full history). Only affects churn scoring, not the file list itself.',
                    None, _iso_date('since'), ('view=hotspots&since=2026-01-01',), role='analysis',
@@ -215,7 +207,7 @@ _SINCE = ParamSpec('since', 'string', 'Bound the churn walk to commits on/after 
 _MERGES = ParamSpec('merges', 'boolean', 'Count merge commits in the churn tally: on (default) or off', None,
                     switch_value, ('view=hotspots&merges=off',), role='analysis',
                     cli=CliBinding(('--merges',), metavar='on|off'),
-                    legacy=(LegacySpelling('no_merges', codec=_legacy_switch('no_merges', 'off', 'on'),
+                    legacy=(LegacySpelling('no_merges', codec=legacy_switch('no_merges', 'off', 'on'),
                                            flag='--no-merges', flag_value=True),), answers=_RANKINGS,
                     requires=_CHURN_ON)
 _TESTS = ParamSpec('tests', 'string',
@@ -227,7 +219,7 @@ _DETAIL = ParamSpec('detail', 'string', 'normal: the per-file rows; summary: the
                     'walk still runs; use it on unscoped whole-repo calls, where the rows can reach tens of MB)',
                     'normal', _detail, ('detail=summary',), choices=DETAIL_LEVELS, role='presentation',
                     cli=CliBinding(('--detail',), metavar='LEVEL'),
-                    legacy=(LegacySpelling('summary_only', codec=_legacy_switch('summary_only', 'summary', 'normal'),
+                    legacy=(LegacySpelling('summary_only', codec=legacy_switch('summary_only', 'summary', 'normal'),
                                            flag='--summary-only', flag_value=True),), answers=_PER_FILE_ROWS)
 _SORT = ParamSpec('sort', 'string', 'Sort the files by a field, ascending; a leading - sorts descending', None,
                   _text('sort'), ('sort=-lines',), role='analysis', cli=CliBinding(('--sort',), metavar='FIELD'),

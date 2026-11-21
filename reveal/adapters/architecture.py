@@ -20,7 +20,7 @@ class ArchitectureAdapter(OverviewAdapter):
         help_data = dict(OverviewAdapter.get_help())
         help_data.update(
             name='architecture',
-            syntax='architecture://<path>[?top=5&no_imports=true|against=REF]',
+            syntax='architecture://<path>[?limit=5&imports=off|against=REF]',
             examples=[{**example, 'uri': example['uri'].replace('overview://', 'architecture://', 1)}
                       for example in help_data['examples']],
             notes=['Retired spelling of overview:// (the same answer); use overview for project maps '
@@ -33,7 +33,7 @@ class ArchitectureAdapter(OverviewAdapter):
         schema = dict(OverviewAdapter.get_schema())
         schema.update(
             adapter='architecture',
-            uri_syntax='architecture://<path>?top=5&no_imports=true|against=REF',
+            uri_syntax='architecture://<path>?limit=5&imports=off|against=REF',
             example_queries=[{**example, 'uri': example['uri'].replace('overview://', 'architecture://', 1)}
                              for example in schema['example_queries']],
             notes=['Retired spelling of overview:// (the same canonical overview or overview_diff answer).',

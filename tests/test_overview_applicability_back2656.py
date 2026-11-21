@@ -2,7 +2,7 @@
 "Applicability", BACK-2656).
 
 ``against=REF`` selects the comparison answer (``overview_diff``); without it the answer is the project map
-(``overview``). The map's own controls, ``no_imports`` and ``all`` (legacy word ``verbose``), are not read by the
+(``overview``). The map's own controls, ``imports`` (legacy word ``no_imports``) and ``all`` (legacy word ``verbose``), are not read by the
 comparison: given there, even false, the request is refused before analysis with the shared message on every form,
 as the comparison's own hand check refused them before. ``--all`` is a satisfied no-op on the comparison, which has no
 cap it lifts (Scott 2026-11-18): it answers quietly as without it. ``top`` is read by both answers.
@@ -56,8 +56,9 @@ def _without_volatile(doc):
 
 
 @pytest.mark.parametrize('noun', NOUNS)
-@pytest.mark.parametrize('query,control', [('no_imports=true', 'no_imports'), ('no_imports=false', 'no_imports'),
-                                           ('all=true', 'all'), ('all=false', 'all'), ('verbose=true', 'all')])
+# A legacy word is refused under the control it stands for, as verbose is under all (no_imports -> imports, BACK-2622).
+@pytest.mark.parametrize('query,control', [('no_imports=true', 'imports'), ('no_imports=false', 'imports'),
+                                           ('imports=off', 'imports'), ('all=true', 'all'), ('all=false', 'all'), ('verbose=true', 'all')])
 def test_the_comparison_refuses_a_map_control_on_the_uri(project, noun, query, control):
     response = run(_uri(noun, f'against=HEAD&{query}'), '--format', 'json')
     assert response.returncode == 2, (response.returncode, response.stderr)
@@ -67,7 +68,8 @@ def test_the_comparison_refuses_a_map_control_on_the_uri(project, noun, query, c
 
 
 @pytest.mark.parametrize('noun', NOUNS)
-@pytest.mark.parametrize('argv,control,global_flag', [(('--no-imports',), 'no_imports', False),
+@pytest.mark.parametrize('argv,control,global_flag', [(('--no-imports',), 'imports', False),
+                                                      (('--imports', 'off'), 'imports', False),
                                                       (('--verbose',), 'all', True)])
 def test_the_comparison_refuses_a_map_control_on_the_subcommand_and_the_uri_with_a_flag(project, noun, argv, control,
                                                                                          global_flag):
@@ -81,8 +83,9 @@ def test_the_comparison_refuses_a_map_control_on_the_subcommand_and_the_uri_with
 
 
 @pytest.mark.parametrize('noun', NOUNS)
-@pytest.mark.parametrize('keywords,query,control', [({'no_imports': True}, '', 'no_imports'),
-                                                    ({'no_imports': False}, '', 'no_imports'),
+@pytest.mark.parametrize('keywords,query,control', [({'no_imports': True}, '', 'imports'),
+                                                    ({'no_imports': False}, '', 'imports'),
+                                                    ({'imports': 'off'}, '', 'imports'),
                                                     ({'all': True}, '', 'all'),
                                                     ({}, '&verbose=true', 'all')])
 def test_the_comparison_refuses_a_map_control_on_the_api_before_analysis(project, monkeypatch, noun, keywords, query,
@@ -104,7 +107,7 @@ def test_the_comparison_refuses_a_map_control_on_mcp(project):
     from reveal.mcp_server import reveal_query
     for noun in NOUNS:
         text = reveal_query(_uri(noun, 'against=HEAD&no_imports=true'))
-        assert REFUSAL.format(control='no_imports') in text, text
+        assert REFUSAL.format(control='imports') in text, text
 
 
 @pytest.mark.parametrize('noun', NOUNS)

@@ -408,6 +408,11 @@ RETIREMENTS: Dict[str, Retirement] = {
     'param:pack.verbose': Retirement('pack ?verbose (--verbose)',
                                      '--detail full; JSON keeps "verbose": true'),
     'param:overview.verbose': Retirement('overview ?verbose (--verbose)', '--all, the same uncapped map'),
+    # Overview's map sections are its rows, capped by limit (Scott 2026-11-20, BACK-2622 B): top=0 showed no graph rows,
+    # which no limit value spells, so top stays a setting of its own until the cut; imports is a switch.
+    'param:overview.top': Retirement('overview ?top=N (--top N)', '--limit N, which caps each map section; 0 is uncapped',
+                                     standalone=True),
+    'param:overview.no_imports': Retirement('overview ?no_imports (--no-imports)', '--imports off'),
     'param:architecture.verbose': Retirement('architecture ?verbose (--verbose)',
                                              'reveal overview <path> --all, the same uncapped map'),
     'param:hotspots.verbose': Retirement('hotspots ?verbose (--verbose)', '--limit 0, both rankings uncapped'),

@@ -30,6 +30,17 @@ def switch_value(value: Any) -> bool:
     return boolean_value(value)
 
 
+def legacy_switch(name: str, on: str, off: str) -> Callable[[Any], str]:
+    """A legacy negative boolean (``no_churn``, ``no_imports``, ``summary_only``) as the canonical value it stands for:
+    *on* when it is true, *off* when false (COMMAND_MODEL "Switches")."""
+    def codec(value: Any) -> str:
+        try:
+            return on if boolean_value(value) else off
+        except ValueError:
+            raise ParamValueError(f'{name} must be a valid boolean, got {value!r}') from None
+    return codec
+
+
 def verbose_legacy(value: Any, replacement: str) -> LegacySpelling:
     """The legacy word ``verbose`` on the control it stands for (COMMAND_MODEL "Detail", BACK-2654 note #17):
     ``detail=full`` where it adds detail, the uncapping value of the cap it lifts elsewhere. ``verbose=false`` is the

@@ -177,10 +177,8 @@ EXEMPT = {
 # conform on every noun, and none may be recorded below except OUT_OF_SCOPE cells (the prompt names their package).
 DEFAULT_NOW = ('1a', '1b', '1c', '1d', '2', '5', '6', '10', '12', '14', '16', '17', '18', '21j')
 # Cells of those rules owned by another package, named by the prompt: each must still fail (a fixed one is removed).
-_OVERVIEW_TOP = 'out of scope: Overview/Architecture top is its own package (--limit is hand-listed on top)'
 _SWITCH = 'out of scope: the Switches rule renames this noun\'s no_* flag in its own package'
-OUT_OF_SCOPE = {('architecture', '10'): _OVERVIEW_TOP, ('overview', '10'): _OVERVIEW_TOP,
-                ('contracts', '10'): _SWITCH + ' (--no-implementations)',
+OUT_OF_SCOPE = {('contracts', '10'): _SWITCH + ' (--no-implementations)',
                 ('patches', '10'): _SWITCH + ' (--no-suppress)'}
 # Standalone legacy words kept by a ruling because they answer differently from their replacement (rule 16; Scott
 # 2026-11-16, BACK-2654 notes #9 and #12): (kind, reason). 'operation' selects the answer (role='operation', rule 17);
@@ -189,6 +187,8 @@ OUT_OF_SCOPE = {('architecture', '10'): _OVERVIEW_TOP, ('overview', '10'): _OVER
 # word's answer loses its only spelling at the cut, with a recorded decision; this table is empty then.
 STANDALONE_WORDS = {
     ('metrics', 'top'): ('modifier', 'caps the legacy hotspots ranking; limit caps the files beside it'),
+    ('overview', 'top'): ('modifier', 'caps each map section as limit does, but top=0 shows no graph rows where limit=0 '
+                                      'is uncapped (Scott 2026-11-20, BACK-2622 decision B)'),
     ('claude', 'full'): ('modifier', 'not identical to detail=full: /messages text stays unexpanded, ignored on the '
                                      'overview where detail=full exits 2'),
     ('claude', 'raw'): ('modifier', 'not identical to detail=raw: alone it keeps the 600-character truncation'),

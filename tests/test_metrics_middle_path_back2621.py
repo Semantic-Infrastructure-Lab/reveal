@@ -705,7 +705,7 @@ class TestProposedChanges:
 
     def test_no_merges_names_merges_and_conflicts_reject(self, git_project):
         answer = query(uri(git_project, 'hotspots=true&no_merges=true'))
-        assert [m for m in request_notes(answer) if 'merges=False' in m], request_notes(answer)  # BACK-2716
+        assert [m for m in request_notes(answer) if "merges='off'" in m], request_notes(answer)  # BACK-2716, a switch is on|off
         result, answer = cli_json(uri(git_project, 'hotspots=true&merges=on&no_merges=true'))
         assert_usage(result, answer, 'merges')
 

@@ -36,6 +36,10 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 - `reveal.api.query` typed keywords on `deps://`, `hotspots://`, `pack://`, `patches://` and `testability://` now bind as their URI keys do and meet the same checks: deps and patches dropped them (`api.query('patches://src', group='file')` answered the default grouping), and hotspots, pack and testability raised Python's unexpected-keyword `TypeError` (BACK-2656).
 
+- `reveal overview PATH --limit N` caps each map section as `--top N` did, but `--limit 0` is now uncapped (it showed no graph rows); with `--against REF` the compared population is four times the limit, the whole population at 0. `--top N` and `?top=N` keep their meaning, `--top 0` included, with a note naming `--limit` until 1.0; `--top` and `--limit` with different meanings exit 2. `--imports off` replaces `--no-imports` (`?no_imports=true`), which notes it (BACK-2622).
+
+- `reveal.api.query(NOUN, PATH, verbose=True)` now answers as `--verbose` does on every noun that takes it (`overview` raised "unsupported control 'verbose'"), and a request note spells a switch as `on`/`off` (`--churn off`, `--imports off`), not `false` (BACK-2622).
+
 - `reveal git FILE --view history --bucket day` (and `git://FILE?view=history&bucket=day`) now exits 2 naming the values `bucket` takes (`week`, `month`) before reading history; it exited 3 as a failed analysis, the URI form with a note recommending the same failing command. `reveal.api.query` raises `RequestValidationError` and MCP answers a tool error (BACK-2724).
 
 - `git://` legacy numeric `merges=0` (and `merges=false`) now drops merge commits on every view, as `merges=off` does; outside `view=ownership` it changed nothing and printed a note on stderr (BACK-2656).
