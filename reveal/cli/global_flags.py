@@ -23,7 +23,9 @@ from .invocation import SWITCHES, retirement_note
 
 # Flags in effect for every command once parsed: applied by apply_global_flags below, or, for
 # --copy, around the whole run. The flag ledger (BACK-1514) never reports them as unused.
-PROCESS_GLOBAL_FLAGS = frozenset({'provenance', 'respect_gitignore', 'copy'})
+# --respect-gitignore is applied here too but is not one of them: it is a walk policy, judged
+# like --exclude by whether the answer read it (BACK-2721).
+PROCESS_GLOBAL_FLAGS = frozenset({'provenance', 'copy'})
 
 
 def add_gitignore_arguments(parser: Any) -> None:

@@ -58,6 +58,7 @@ _FLAG_TO_CLI = {
     'until': '--until',
     'respect_gitignore': '--no-gitignore',  # value=False means "pass --no-gitignore"
 }
+_CANONICAL_SPELLING = {'respect_gitignore': ('--respect-gitignore',)}
 
 # (shape, flag) -> (extra argv after {tree}, value). Proves the cell is genuinely honored.
 PROBES = {
@@ -201,7 +202,9 @@ def test_not_applicable_cell_is_named_on_stderr(shape, flag, probe_tree):
     argv += [_FLAG_TO_CLI[flag]] if flag not in ('since', 'until') else \
         [_FLAG_TO_CLI[flag], '2099-01-01']
     _, err = _run_bare_streams(argv)
-    assert f'{_FLAG_TO_CLI[flag]} has no effect on' in err, (
+    # Outside main no typed spelling is recorded, so a switch is named by its canonical flag (BACK-2721).
+    named = (_FLAG_TO_CLI[flag], *_CANONICAL_SPELLING.get(flag, ()))
+    assert any(f'{spelling} has no effect on' in err for spelling in named), (
         f'bare-path {shape} ignores --{flag} without saying so (BACK-1634)')
 
 

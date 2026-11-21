@@ -73,6 +73,7 @@ A cell that starts to conform fails until it is removed from NOT_YET and NOT_YET
 ratchet pattern of scripts/check_boundaries.py. To print the measured matrix, run this file with
 REVEAL_CONFORMANCE_REPORT=<path>: each cell appends one JSON line (state, case count, failing evidence).
 """
+import argparse
 import json
 import os
 import re
@@ -219,13 +220,11 @@ RULED_EXEMPT_NOUNS = {'stats': 'rule 9: the retired stats:// scheme is deleted a
 NOT_YET: dict = {
     ('git', '24'): "?no_merges=true and ?raw=true have no flag on git's parser and no RETIREMENTS row: the request says "
                    "no note and keeps working at the cut (BACK-2616 gives git its D20 spelling)",
-    ('metrics', '24'): '?respect_gitignore=off on a file answers with an unused_input warning; its replacement '
-                       '--respect-gitignore off answers without it (the walk policy on a file read differs by transport)',
 }
 
 NOT_YET_BASELINE = {'1a': 0, '1b': 0, '1c': 0, '1d': 0, '2': 0, '3': 0, '3b': 0, '4': 0, '5': 0, '6': 0,
                     '8a': 0, '8b': 0, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 0, '14': 0, '21j': 0, '22': 0,
-                    '23': 0, '24': 2}
+                    '23': 0, '24': 1}
 
 
 # --- the fixture -------------------------------------------------------------------------------------------
@@ -359,6 +358,12 @@ def _spellings(noun):
         if fragment is not None:
             key = fragment.partition('=')[0]
             names[flag.option] = names.get(key, key)
+    # The gitignore walk policy reaches every walking noun through its own switch, not a declared control (BACK-2721).
+    from reveal.cli.global_flags import add_gitignore_arguments
+    switch = argparse.ArgumentParser(add_help=False)
+    add_gitignore_arguments(switch)
+    for action in switch._actions:
+        names.update(dict.fromkeys(action.option_strings, action.dest))
     return names
 
 

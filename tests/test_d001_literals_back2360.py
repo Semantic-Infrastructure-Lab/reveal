@@ -33,7 +33,7 @@ def _cli_environment(monkeypatch):
 def _check(tmp_path, source, suffix='.py', *, fresh_process=False):
     path = tmp_path / ('sample' + suffix)
     path.write_text(source, encoding='utf-8')
-    args = ['check', str(path), '--select', 'D001', '--fail-on', 'medium', '--respect-gitignore=off', '--format', 'json']
+    args = ['check', str(path), '--select', 'D001', '--fail-on', 'medium', '--format', 'json']
     if fresh_process:
         response = subprocess.run(
             [sys.executable, '-m', 'reveal', *args],

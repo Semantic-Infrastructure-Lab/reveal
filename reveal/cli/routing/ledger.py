@@ -20,6 +20,9 @@ A flag the user set (its value differs from the parser default) counts as used w
   ``ast://f.py?type=function``). The query key is then judged instead; or
 - for ``--exclude`` published as the walk scope, a walk actually checked a path against it
   (``utils.exclusions.exclusions_consulted``). An adapter that never walks applied nothing.
+- for the gitignore walk policy (``--respect-gitignore``, or a URI's ``?respect_gitignore=``, which
+  routing splits off before the adapter sees it), the answer read the policy during the dispatch
+  (``utils.gitignore.gitignore_policy_reads``; BACK-2721). Both spellings are judged alike.
 
 A query key counts as used when the adapter read it (``utils.query_parser``): a filter parser
 uses every key it parses, while ``parse_query_params`` and ``parse_result_control`` return
@@ -42,12 +45,15 @@ from typing import Any, Dict, Iterator, List, Optional, Set, TextIO
 from urllib.parse import unquote_plus
 
 from ...utils.exclusions import exclusions_consulted
+from ...utils.gitignore import gitignore_policy_reads
 from ...utils.results import outcome_of
 from ...utils.query_parser import QueryKeyLog, collect_query_keys, query_key
 from ..invocation import typed_spellings
 
 _LEDGER_ATTR = '_reveal_flag_ledger'
 _NOT_FLAGS = frozenset({'path', 'element'})
+# The gitignore walk policy: one dest for the flag and the URI key (BACK-2721).
+_WALK_POLICY = 'respect_gitignore'
 # Flags that work on a bare path scan but have no URI meaning: the note says where they work.
 _BARE_PATH_FLAGS = ('depth', 'ext', 'type', 'fast')
 # The adapter parsed the key and no code on this query's path read it (git://FILE --limit).
@@ -100,6 +106,7 @@ class FlagLedger:
         self.json_primary = getattr(args, 'format', 'text') == 'json'
         self._query_log: Optional[QueryKeyLog] = None
         self.query_warnings: List[dict] = []
+        self._policy_reads = gitignore_policy_reads()
 
     def track(self, args: Namespace) -> TrackedArgs:
         tracked = TrackedArgs(**vars(args))
@@ -130,16 +137,26 @@ class FlagLedger:
                 yield
             finally:
                 self.seen_keys, self.used_keys = set(log.seen), set(log.used)
-                if exclusions_consulted():  # a walk applied the --exclude scope
-                    self.used.add('exclude')
+                self.used.update(self._walk_scopes_applied())
+
+    def _walk_scopes_applied(self) -> set[str]:
+        """The walk controls a walk applied during this dispatch: ``--exclude`` when a walk checked a path against
+        the scope, the gitignore policy (either spelling) when the answer read it."""
+        applied = set()
+        if exclusions_consulted():
+            applied.add('exclude')
+        if gitignore_policy_reads() != self._policy_reads:
+            applied.add(_WALK_POLICY)
+        return applied
 
     def unused_flags(self) -> List[str]:
+        applied = self._walk_scopes_applied()
         return [dest for dest in self.set_flags
-                if dest not in self.used
+                if dest not in self.used and dest not in applied
                 and (dest not in self.delegated or self.delegated[dest] not in self.used_keys)]
 
     def unused_query_keys(self) -> List[str]:
-        carried = set(self.delegated.values())
+        carried = set(self.delegated.values()) | (self._walk_scopes_applied() & {_WALK_POLICY})
         seen: List[str] = []
         for key in self.query_keys:
             if key not in self.used_keys and key not in carried and key not in seen:
@@ -179,8 +196,6 @@ class FlagLedger:
 
     def _flag_warnings(self, names: Dict[str, str], scheme: str) -> List[dict]:
         flags = self.unused_flags()
-        if exclusions_consulted():
-            flags = [flag for flag in flags if flag != 'exclude']
         if not flags:
             return []
         fields = [names.get(dest, f'--{dest}') for dest in flags]

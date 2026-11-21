@@ -63,8 +63,10 @@ def test_set_flags_are_the_ones_that_differ_from_the_parser_default():
 
 
 def test_process_global_flags_are_never_reported():
+    """--respect-gitignore is applied process-wide too but is judged, like --exclude, by whether the answer read the
+    walk policy (BACK-2721)."""
     ledger = _ledger(respect_gitignore=False, provenance=True, copy=True)
-    assert ledger.set_flags == {}
+    assert ledger.set_flags == {'respect_gitignore': False}
 
 
 def test_a_read_through_tracked_args_counts_as_used_and_peek_does_not():

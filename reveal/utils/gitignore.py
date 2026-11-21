@@ -537,6 +537,22 @@ class GitIgnoreFilter:
 # from the parsed args; a URI's ?respect_gitignore= is applied around its
 # dispatch with gitignore_scope().
 _ENABLED = True
+# How many times an answer has read the walk policy (BACK-2721). The flag ledger counts
+# --respect-gitignore / ?respect_gitignore= as used only when this moved during its dispatch,
+# as it counts --exclude only when a walk consulted the scope (exclusions_consulted): a policy
+# no walk read applied nothing. A counter, not a flag, so nested dispatches need no reset.
+_READS = 0
+
+
+def _read_policy() -> bool:
+    global _READS
+    _READS += 1
+    return _ENABLED
+
+
+def gitignore_policy_reads() -> int:
+    """A monotonic count of walk-policy reads; compare two readings to learn whether one happened."""
+    return _READS
 
 
 def set_gitignore_enabled(enabled: bool) -> None:
@@ -545,7 +561,7 @@ def set_gitignore_enabled(enabled: bool) -> None:
 
 
 def gitignore_enabled() -> bool:
-    return _ENABLED
+    return _read_policy()
 
 
 @contextmanager
@@ -595,7 +611,8 @@ def split_respect_gitignore(resource: str) -> Tuple[str, Optional[bool]]:
 def respect_gitignore_param(query_params) -> bool:
     """An adapter's ?respect_gitignore= if given, else the process switch."""
     explicit = parse_respect_gitignore(query_params.get('respect_gitignore'))
-    return _ENABLED if explicit is None else explicit
+    enabled = _read_policy()
+    return enabled if explicit is None else explicit
 
 
 def gitignore_filter(scan_root: PathLike, respect_gitignore: Optional[bool] = None) -> Optional[GitIgnoreFilter]:
@@ -605,8 +622,9 @@ def gitignore_filter(scan_root: PathLike, respect_gitignore: Optional[bool] = No
     Callers write ``if gi is not None and gi.ignored(p): continue`` so
     ``--no-gitignore`` costs nothing.
     """
+    enabled = _read_policy()  # an explicit value is the policy too: a walk is applying it
     if respect_gitignore is None:
-        respect_gitignore = _ENABLED
+        respect_gitignore = enabled
     return GitIgnoreFilter(scan_root) if respect_gitignore else None
 
 
