@@ -59,6 +59,12 @@ DIFFERENT = [
     (CODEX_SPECS, 'matches=abc&matches=3', 'matches is given twice with different values (abc and 3)'),
     (CODEX_SPECS, 'key=a&key=b', 'key is given twice with different values (a and b)'),
     (IMPORTS_SPECS, 'circular=true&circular=false', 'circular is given twice with different values (true and false)'),
+    # A lossy codec reads two stated values as one; they still conflict (conformance cell 1c): a legacy presence flag
+    # reads every value as on, Claude's snippet clamps 3 and 7 to its floor of 60.
+    (CODEX_SPECS, 'last=true&last=false', 'last is given twice with different values (true and false)'),
+    (CODEX_SPECS, 'goal&goal=0', 'goal is given twice with different values (True and 0)'),
+    (CLAUDE_SPECS, 'summary=true&summary=false', 'summary is given twice with different values (true and false)'),
+    (CLAUDE_SPECS, 'snippet=3&snippet=7', 'snippet is given twice with different values (3 and 7)'),
 ]
 
 
