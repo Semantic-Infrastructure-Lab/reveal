@@ -99,17 +99,27 @@ def test_a_resource_uri_without_options_is_no_example_to_rewrite(tmp_path):
 
 
 def test_a_request_with_no_canonical_form_is_reported_not_rewritten(tmp_path):
-    """Calls ?format=dot has no --format value; Claude's standalone ?search has no flag: each is left with the
-    renderer's reason, and the binder's refusal (?tools without a value) is reported as such."""
-    dot, search, tools = ("reveal 'calls://src?callers=main&format=dot'", "reveal 'claude://sessions?search=foo'",
-                          "reveal 'claude://session/abc?tools'")
-    planned, docs = _planned(tmp_path, _fenced(dot, search, tools))
-    assert planned[dot].reason == f"{migrate.UNRENDERABLE}: --format does not offer 'dot'"
+    """Claude's standalone ?search has no flag: it is left with the renderer's reason, and the binder's refusal (?tools
+    without a value) is reported as such."""
+    search, tools = "reveal 'claude://sessions?search=foo'", "reveal 'claude://session/abc?tools'"
+    planned, docs = _planned(tmp_path, _fenced(search, tools))
     assert planned[search].reason == f'{migrate.UNRENDERABLE}: search has no flag on this noun'
     assert planned[tools].reason.startswith(f'{migrate.BINDER_REJECTS}: ')
     assert all(e.kind == 'left' for e in planned.values())
     body = (docs / 'guides' / 'G.md').read_text(encoding='utf-8')
     assert migrate.rewrite_text(body, planned.values()) == (body, 0)
+
+
+def test_a_dot_graph_request_teaches_its_format_flag(tmp_path):
+    """Calls and imports ?format=dot have the flag form --format dot (BACK-2722): no longer left as having no canonical
+    form."""
+    calls, imports = "reveal 'calls://src?callers=main&format=dot' | dot -Tsvg > g.svg", \
+        "reveal 'imports://src?importers&scope=path&format=dot'"
+    planned, _ = _planned(tmp_path, _fenced(calls, imports))
+    assert (planned[calls].kind, planned[calls].new_line) == (
+        'rewrite', 'reveal calls src --callers main --format dot | dot -Tsvg > g.svg')
+    assert (planned[imports].kind, planned[imports].new_line) == (
+        'rewrite', 'reveal imports src --importers --scope path --format dot')
 
 
 def test_twin_and_undeclared_schemes_and_other_nouns_are_left_with_their_reason(tmp_path):
