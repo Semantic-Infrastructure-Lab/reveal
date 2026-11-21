@@ -13,6 +13,7 @@ project map, controls, counting rules and comparison evidence.
 |---------|-------------|
 | `reveal architecture src/` | `reveal overview src/` |
 | `reveal 'architecture://src?top=10'` | `reveal overview src --limit 10` |
+| `reveal 'architecture://src?no_imports=true'` (`?imports=off`) | `reveal overview src --imports off` |
 | `reveal architecture src/ --against HEAD` | `reveal overview src/ --against HEAD` |
 
 Until the cut, each retired spelling emits a replaced-by note and returns the

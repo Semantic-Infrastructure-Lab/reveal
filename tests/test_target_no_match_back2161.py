@@ -39,8 +39,9 @@ def project(tmp_path, monkeypatch):
 
 
 def test_every_target_naming_parameter_declares_what_it_names():
+    # A boolean switch names nothing (Overview's imports on|off, BACK-2622), whatever its name.
     undeclared = [f'{noun}:{spec.name}' for noun, spec in target_specs()
-                  if spec.name in TARGET_PARAM_NAMES and spec.names is None]
+                  if spec.name in TARGET_PARAM_NAMES and spec.names is None and spec.type != 'boolean']
     assert not undeclared, f'declare ParamSpec(names=...) on {undeclared}'
 
 

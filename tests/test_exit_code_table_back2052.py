@@ -33,6 +33,7 @@ def test_retirement_inventory_matches_the_shipped_migrations():
     BACK-2621 adds the ten Metrics legacy spellings. BACK-2654 adds the different words AST type and Markdown
     body-contains and fields, AST's bare depth (rule 8) the four presentation switches' --no-NAME and --no-gitignore (rule 15).
     BACK-2673 adds Hotspots' and Testability's top and the main-parser flags declared nouns keep (LEGACY_CLI_MODIFIERS).
+    BACK-2622 adds Overview's top (a standalone legacy cap) and no_imports (--imports off).
     """
     generated = [f'flag:{noun}.{flag}' for noun, flags in LEGACY_CLI_MODIFIERS.items() for flag in flags]  # BACK-2673
     assert sorted(RETIREMENTS) == sorted(generated + ['flag:--also-json', 'flag:--calls', 'flag:--catchmap', 'flag:--check', 'flag:--deps',
@@ -49,7 +50,7 @@ def test_retirement_inventory_matches_the_shipped_migrations():
                                    'param:metrics.hotspots', 'param:metrics.max_complexity', 'param:metrics.max_lines',
                                    'param:metrics.min_complexity', 'param:metrics.min_functions', 'param:metrics.min_lines',
                                    'param:metrics.no_churn', 'param:metrics.no_merges', 'param:metrics.summary_only',
-                                   'param:metrics.top', 'param:overview.verbose', 'param:pack.verbose',
+                                   'param:metrics.top', 'param:overview.no_imports', 'param:overview.top', 'param:overview.verbose', 'param:pack.verbose',
                                    'param:testability.verbose', 'scheme:architecture', 'scheme:classify', 'scheme:depends', 'scheme:deps', 'scheme:hotspots', 'scheme:python', 'scheme:stats', 'scheme:testability', 'scheme:trace', 'subcommand:architecture', 'subcommand:deps', 'subcommand:hotspots', 'subcommand:review', 'subcommand:scaffold', 'subcommand:testability',
                                    'subcommand:trace', 'target:health.code', 'target:nav.outline', 'value:ast.show=calls',
                                    'param:hotspots.top', 'param:testability.top'])
