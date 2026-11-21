@@ -342,7 +342,7 @@ lists only.
 
 ```bash
 reveal calls src/ --callees handle_request --depth 3
-reveal calls src/ --callees handle_request --detail --format=json | jq '.definitions[0].effects'
+reveal calls src/ --callees handle_request --detail --format=json   # each definition's effects: .definitions[].effects
 ```
 
 > `?builtins` applies to both `?callees` (forward lookup) and `?sort=-callers`. The `?callers` (reverse lookup) is unaffected — callers of builtins are always shown.
@@ -654,7 +654,7 @@ reveal 'calls://src/?callers=main&depth=3&format=dot' | \
   dot -Tsvg -Grankdir=TB > architecture.svg
 
 # JSON for custom visualisation
-reveal calls src/ --callers main --depth 5 --format=json > call_tree.json
+reveal calls src/ --callers main --depth 5 --format=json   # save it (> call_tree.json) for your own tool
 ```
 
 ### Workflow 5: Verify Refactoring
