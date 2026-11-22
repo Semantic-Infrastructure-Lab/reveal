@@ -563,9 +563,9 @@ RETIREMENTS: Dict[str, Retirement] = {
     'param:markdown.fields': Retirement('markdown ?fields=A,B', '--columns A,B, the same frontmatter columns'),
     'param:markdown.link-graph': Retirement('markdown ?link-graph (--link-graph)', '--view links, the same link graph'),
     'param:markdown.lint': Retirement('markdown ?lint (--lint)', '--view lint, the same front-matter queue'),
-    # aggregate stands for two controls (--view aggregate --field FIELD): a standalone legacy word (ruling Q2-C).
+    # aggregate=F is two controls, --field F and --view aggregate (LegacySpelling.sets, ruling Q2-A).
     'param:markdown.aggregate': Retirement('markdown ?aggregate=FIELD (--aggregate FIELD)',
-                                           '--view aggregate --field FIELD, the same frequency table', standalone=True),
+                                           '--view aggregate --field FIELD, the same frequency table'),
     'param:ast.callee_of': Retirement('ast://?callee_of=', 'reveal calls <path> --callees NAME', standalone=True),
     # The within-file call graph view retired to the calls noun: a retired value of view that answers until the cut, with
     # no canonical form (standalone; the request says no request note).

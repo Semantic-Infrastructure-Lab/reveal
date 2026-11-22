@@ -48,16 +48,14 @@ VIEW = ParamSpec('view', 'string', 'Answer view: list, links, aggregate or lint'
                  legacy=(LegacySpelling('link-graph', codec=_selector('link-graph', 'links'), flag='--link-graph',
                                         flag_value=True),
                          LegacySpelling('lint', codec=_selector('lint', 'lint'), flag='--lint', flag_value=True)))
+# aggregate=F is --view aggregate --field F: a legacy word of field that sets the view (ruling Q2-A).
 FIELD = ParamSpec('field', 'string', 'Frontmatter field counted by the aggregate view', None, str,
+                  legacy=(LegacySpelling('aggregate', codec=lambda raw: raw or None, flag='--aggregate',
+                                         sets=(('view', 'aggregate'),)),),  # an empty value states nothing
                   cli=CliBinding(('--field',)), answers=(_AGGREGATE,))
 # A backlinks target selects its own answer (COMMAND_MODEL "One answer per request"): beside a view it is two answers.
 BACKLINKS = ParamSpec('backlinks', 'string', 'Reverse link target, relative to the scanned directory',
                       None, str, role='operation', cli=CliBinding(('--backlinks',)), uri_codec='percent')
-# The legacy aggregate word stands for two controls, --view aggregate --field FIELD, so it stays a standalone legacy word
-# with its own row until the cut (ruling Q2-C). It selects an answer, so beside a view or a backlinks target it is two
-# answers; `_aggregate_conflict` keeps its field one setting with --field.
-AGGREGATE = ParamSpec('aggregate', 'string', 'Legacy aggregate field; use --view aggregate --field FIELD',
-                      None, str, role='operation', cli=CliBinding(('--aggregate',)))
 LINT_FIELDS = ParamSpec('lint-fields', 'array', 'Required frontmatter fields for the lint view', None, fields,
                         aliases=('lint_fields',), cli=CliBinding(('--lint-fields',)), answers=(_LINT,))
 FIELDS = ParamSpec('columns', 'array', 'Additional frontmatter fields displayed as listing columns', None, fields,
@@ -70,8 +68,8 @@ LIMIT = ParamSpec('limit', 'integer', 'Answer rows; 0 = no cap', None, int, mini
                   zero_policy='no cap', cli=CliBinding(('--limit',)), answers=(_LIST,))
 OFFSET = ParamSpec('offset', 'integer', 'Answer rows skipped after sorting', 0, int, minimum=0,
                    cli=CliBinding(('--offset',)), answers=(_LIST,))
-PARAM_SPECS: Tuple[ParamSpec, ...] = (WHERE, MATCH, VIEW, FIELD, BACKLINKS, AGGREGATE, LINT_FIELDS, FIELDS, EXPLAIN,
-                                      SORT, LIMIT, OFFSET)
+PARAM_SPECS: Tuple[ParamSpec, ...] = (WHERE, MATCH, VIEW, FIELD, BACKLINKS, LINT_FIELDS, FIELDS, EXPLAIN, SORT, LIMIT,
+                                      OFFSET)
 # --head/--tail/--range slice this noun's rows today: flag-only legacy modifiers until the cut, read by the answers named
 # (BACK-2673; their notes are the flag:<noun>.<flag> RETIREMENTS rows).
 _SLICED = ('markdown_query',)  # the list view; links, lint and aggregate have no rows to slice
@@ -80,13 +78,11 @@ PARAM_SPECS = (*PARAM_SPECS, *legacy_slices(head=_SLICED, tail=_SLICED, range=_S
 
 def selected_view(params: Any, *, apply: bool = False) -> str:
     """The answer a bound request selects: its view (the legacy selectors are its spellings), else a backlinks target,
-    else the legacy aggregate word, else the listing."""
+    else the listing."""
     values = params if apply else dict(peek_query_items(params))
     if values.get('view'):
         return str(values['view'])
-    if values.get('backlinks'):
-        return 'backlinks'
-    return 'aggregate' if values.get('aggregate') else 'list'
+    return 'backlinks' if values.get('backlinks') else 'list'
 
 
 def result_type(params: Any) -> str:
@@ -113,21 +109,9 @@ def describe_request(params: QueryParams) -> str:
     return '&'.join(parts)
 
 
-def _aggregate_conflict(values: dict) -> None:
-    """The standalone legacy aggregate word names the field the aggregate counts (ruling Q2-C): beside an equal --field it
-    is one setting, beside a different one an invalid request naming both. A hand check kept only to protect this legacy
-    word until the cut (COMMAND_MODEL "Applicability", the recorded exception for a legacy spelling's conflict, as
-    Overview's ``top``)."""
-    word, field = values.get('aggregate'), values.get('field')
-    if word and field is not None and field != word:
-        raise ValueError(f'aggregate={word} conflicts with field={field}: aggregate is the legacy word of '
-                         '--view aggregate --field FIELD; give the field once')
-
-
 def validate_request(params: QueryParams, args=None) -> None:
     values = dict(peek_query_items(params))
-    _aggregate_conflict(values)
     # Which answers read where, match, field and the rest is their declaration's (BACK-2656).
-    if selected_view(params) == 'aggregate' and not (values.get('field') or values.get('aggregate')):
+    if selected_view(params) == 'aggregate' and not values.get('field'):
         raise ValueError('aggregate view requires field')
     filter_state(params)

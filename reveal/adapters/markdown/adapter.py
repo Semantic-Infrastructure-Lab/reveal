@@ -20,7 +20,7 @@ from . import filtering
 from .results import BodySearchAnalysis, valid_source_analysis
 from ...utils.query_parser import QueryParams, ResourceSpec, param_schema
 from ...utils.query_binding import bind_declared_params, prepare_declared_params
-from .params import (PARAM_SPECS, MATCH, BACKLINKS, AGGREGATE, FIELD, LINT_FIELDS, FIELDS, EXPLAIN,
+from .params import (PARAM_SPECS, MATCH, BACKLINKS, FIELD, LINT_FIELDS, FIELDS, EXPLAIN,
                      selected_view, result_type, result_control, filter_state, describe_request, validate_request)
 from ...errors import RequestValidationError
 from ...utils.results import AnalysisCompleteness, result_execution_facts
@@ -243,7 +243,7 @@ class MarkdownQueryAdapter(ResourceAdapter):
         self.link_graph = view == 'links'
         self.lint = view == 'lint'
         self.backlinks_target = BACKLINKS.read(params) if view == 'backlinks' else None
-        self.aggregate_field = (FIELD.read(params) or AGGREGATE.read(params)) if view == 'aggregate' else None
+        self.aggregate_field = FIELD.read(params) if view == 'aggregate' else None
         self.body_contains = MATCH.read(params)
         self.lint_fields = LINT_FIELDS.read(params)
         self.extra_fields = FIELDS.read(params)
