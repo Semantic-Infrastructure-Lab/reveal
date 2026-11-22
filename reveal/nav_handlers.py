@@ -554,7 +554,7 @@ NAV_BOOLEAN_FLAG_NAMES: frozenset = frozenset(
 ) | {'scope'}
 
 
-def _single_line_ref(element: str, flag: str) -> int:
+def _single_line_ref(element: Optional[str], flag: str) -> int:
     """The line number a --scope/--around element names; exits when it names none.
 
     A range exits 2: both flags answer for one line, and `:100-110 --around 2` used to
