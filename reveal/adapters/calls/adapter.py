@@ -34,8 +34,8 @@ from ...core.definition_names import name_matches
 from .renderer import render_calls_structure
 from ...utils.query_binding import bind_declared_params, boolean_value
 from ...utils.query_parser import (CliBinding, LegacySpelling, ParamSpec, ParamValueError, QueryParams, ResourceSpec,
-                                   clamped_whole, nonempty_scalar, nonnegative_display_limit, param_schema,
-                                   peek_query_items, legacy_slices)
+                                   clamped_whole, exclude_param, nonempty_scalar, nonnegative_display_limit,
+                                   param_schema, peek_query_items, legacy_slices)
 from ...utils.path_utils import to_posix, named_path_candidates, to_relative_display
 from ...errors import RequestValidationError
 from ...utils.results import LOST_EVIDENCE, ResultBuilder, note_truncation
@@ -156,8 +156,9 @@ _FORMAT = ParamSpec('format', 'string', 'Output format: text, json or dot (Graph
                     role='presentation', answers=(_Q, _C, _R, _U, _M))
 
 _RESOURCE = ResourceSpec(uri_codec='existing-path-first')
+# exclude: the shared walk control every walking noun declares (BACK-2730); the walk's scope applies it.
 _PARAM_SPECS: Tuple[ParamSpec, ...] = (_CALLERS, _CALLEES, _ROOT, _DEPTH, _DETAIL, _RANK, _TOP, _UNCALLED, _TYPE, _MODULES,
-                _EXTERNAL, _BUILTINS, _TEST_FRAMEWORK, _FORMAT)
+                _EXTERNAL, _BUILTINS, _TEST_FRAMEWORK, _FORMAT, exclude_param())
 # --head/--tail/--range slice this noun's rows today: flag-only legacy modifiers until the cut, read by the answers named
 # (BACK-2673; their notes are the flag:<noun>.<flag> RETIREMENTS rows).
 _SLICED = ('calls_query', 'calls_callees', 'calls_callees_recursive', 'calls_ranking', 'calls_uncalled')

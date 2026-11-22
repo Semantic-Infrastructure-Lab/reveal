@@ -2315,12 +2315,13 @@ def _api_outcome(call):
     except Exception as exc:  # the raised class and its message are the measured outcome
         return f'raised {type(exc).__name__}: {str(exc)[:160]}'
     doc = json.loads(json.dumps(doc, default=str))
-    meta = doc.get('meta') if isinstance(doc, dict) else None
-    if isinstance(meta, dict) and isinstance(meta.get('warnings'), list):
-        meta['warnings'] = [w for w in meta['warnings'] if w.get('code') not in ('retired_spelling', 'unused_flag',
-                                                                                  'unused_query_param')]
-        if not meta['warnings'] and set(meta) == {'warnings'}:
-            del doc['meta']
+    for key in ('meta', 'metadata'):  # metadata: meta's additive-stage alias on an imports answer
+        meta = doc.get(key) if isinstance(doc, dict) else None
+        if isinstance(meta, dict) and isinstance(meta.get('warnings'), list):
+            meta['warnings'] = [w for w in meta['warnings'] if w.get('code') not in ('retired_spelling', 'unused_flag',
+                                                                                      'unused_query_param')]
+            if not meta['warnings'] and set(meta) == {'warnings'}:
+                del doc[key]
     return doc
 
 
@@ -2361,9 +2362,21 @@ def _empty_pattern_cases(noun, declared):
     return cases
 
 
+def _unused_input(run):
+    """Whether an answer reports an input unused: the ledger's warning in its JSON, or its note on stderr."""
+    try:
+        doc = json.loads(run.out)
+    except ValueError:
+        doc = {}
+    doc = doc if isinstance(doc, dict) else {}
+    warnings = [w for key in ('meta', 'metadata') for w in ((doc.get(key) or {}).get('warnings') or [])]
+    return any(w.get('code') in ('unused_flag', 'unused_query_param') for w in warnings) or 'has no effect' in run.err
+
+
 def _file_target_cases(noun, declared):
-    """A file target has nothing to prune: ``--exclude`` (and the declared URI key) answers as without it, with no
-    unused note and no refusal (D-2730-2 (a)), where the noun answers the file at all."""
+    """A file target satisfies ``--exclude`` (and the declared URI key) quietly: the exit of the request without it, no
+    unused note and no refusal (D-2730-2 (a)), where the noun answers the file at all. (The answer may still differ: a
+    noun that resolves a file against its directory, imports or calls, walks that directory under the scope.)"""
     cases = []
     base_sub = [noun, _FILE_TARGET, *BASE[noun][0]]
     base_uri = f'{noun}://{_FILE_TARGET}{BASE[noun][1]}'
@@ -2376,8 +2389,8 @@ def _file_target_cases(noun, declared):
         if plain.rc != 0:
             continue  # the noun does not answer a file target
         run = _run(*excluded, '--format', 'json')
-        cases.append(Case(f'file target {form} --exclude is satisfied quietly', _answer(run, noun) == _answer(plain, noun),
-                          f'{run.brief()} answers differently from {plain.brief()} (wants the same answer, no note)'))
+        cases.append(Case(f'file target {form} --exclude is satisfied quietly', run.rc == 0 and not _unused_input(run),
+                          f'{run.brief()} (wants exit 0 with no unused note, as {plain.brief()})'))
     return cases
 
 
@@ -2418,8 +2431,13 @@ def probe_walk_exclusion(noun):
         cases.append(Case('?exclude=A&exclude=B combines as --exclude A --exclude B',
                           _answer(both, noun) == _answer(_run(*two_flags, '--format', 'json'), noun),
                           f'{both.brief()} answers differently from two --exclude flags'))
-        cases.append(Case('api.query(URI ?exclude=P) answers as the keyword', _api_outcome(lambda: api.query(uri)) == keyword,
-                          f'api.query({uri!r}) differs from api.query({noun!r}, {target!r}, exclude={_WALK_A!r})'))
+        # a file pattern here: the URI route raises a not-applicable answer the noun route returns (Patches with its
+        # tests excluded), a transport difference that is not this rule's
+        file_uri = _uri(noun, f'exclude={_WALK_B}')
+        file_keyword = _api_outcome(lambda: api.query(noun, target, exclude=_WALK_B, **_base_keywords(noun)))
+        cases.append(Case('api.query(URI ?exclude=P) answers as the keyword', _api_outcome(lambda: api.query(file_uri))
+                          == file_keyword, f'api.query({file_uri!r}) differs from api.query({noun!r}, {target!r}, '
+                                           f'exclude={_WALK_B!r})'))
         cases.append(Case('MCP ?exclude=P answers as the URI', _mcp_answer([uri], noun) == _answer(uri_run, noun)[1],
                           f'reveal_run([{uri!r}]) differs from the CLI URI'))
     return cases + _empty_pattern_cases(noun, declared is not None and not _open_where(noun)) + \

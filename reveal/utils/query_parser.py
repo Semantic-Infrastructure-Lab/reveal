@@ -431,8 +431,10 @@ class LegacySpelling:
 
 # The shared control names (COMMAND_MODEL "Shared control names", BACK-2654 rule 7): one name per idea on every noun.
 # A noun declares the ones it supports; a bare URI key spelling one is that control, never a field filter (rule 8).
+# exclude is the walk control of every walking noun (BACK-2730): until the cut AST and Markdown keep a bare ?exclude=V as
+# their field filter, the generated note-stage legacy spelling (shared_name_is_legacy_field).
 SHARED_CONTROL_NAMES = ('limit', 'offset', 'sort', 'where', 'match', 'detail', 'kind', 'depth', 'tests', 'since',
-                        'until', 'against', 'view')
+                        'until', 'against', 'view', 'exclude')
 
 
 # The zero policies under which a cap's 0 means every row (Caps row): 'no cap' for a row cap, 'all' for a ranking or

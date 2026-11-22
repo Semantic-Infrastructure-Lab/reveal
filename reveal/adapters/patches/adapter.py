@@ -15,8 +15,8 @@ from reveal.testability.patches import (group_patches, language_not_scanned_warn
 from reveal.utils.path_utils import TestLayout, to_posix
 from reveal.utils.query_binding import bind_declared_params, boolean_value, legacy_switch, switch_value
 from reveal.utils.query_parser import (CliBinding, LegacySpelling, ParamSpec, ParamValueError, QueryParams, ResourceSpec,
-                                       expression_list, legacy_slices, param_schema, peek_query_items, whole_number,
-                                       where_param)
+                                       exclude_param, expression_list, legacy_slices, param_schema, peek_query_items,
+                                       whole_number, where_param)
 from reveal.utils.results import AnalysisCompleteness, lost_evidence, ResultBuilder, note_truncation, result_execution_facts
 from reveal.utils.validation import require_path_exists
 
@@ -126,7 +126,8 @@ _PRESSURE_SPECS = tuple(replace(spec, answers=_PRESSURE) for spec in PRESSURE_SP
                         if spec.name in ('tests', 'include_unresolved'))
 # --head/--tail/--range slice this noun's rows today: flag-only legacy modifiers until the cut, read by every answer
 # (BACK-2673; their notes are the flag:<noun>.<flag> RETIREMENTS rows).
-PARAM_SPECS = (_VIEW, _LIMIT, _MIN, _TARGET, _PRIVATE, _SUPPRESS, _WHERE, *_PRESSURE_SPECS,
+# exclude: the shared walk control every walking noun declares (BACK-2730); the walk's scope applies it.
+PARAM_SPECS = (_VIEW, _LIMIT, _MIN, _TARGET, _PRIVATE, _SUPPRESS, _WHERE, *_PRESSURE_SPECS, exclude_param(),
                *legacy_slices(head=(), tail=(), range=()))
 
 

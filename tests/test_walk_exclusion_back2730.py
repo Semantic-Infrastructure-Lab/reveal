@@ -31,7 +31,7 @@ def tree(tmp_path, monkeypatch):
     (tmp_path / 'README.md').write_text('# Readme\n\nTop words.\n', encoding='utf-8')
     sub = tmp_path / 'sub'
     sub.mkdir()
-    (sub / 'c.py').write_text('def delta():\n    return 1\n', encoding='utf-8')
+    (sub / 'c.py').write_text('import json\n\n\ndef delta():\n    return json.dumps(1)\n', encoding='utf-8')
     (sub / 'notes.md').write_text('---\nexclude: yes\n---\n# Notes\n\nSub words.\n', encoding='utf-8')
     monkeypatch.chdir(tmp_path)
     return tmp_path
@@ -53,9 +53,12 @@ def _warnings(doc):
 def _plain(doc):
     """The answer with its notes left out: a retirement note names the spelling used, which is the point of a URI."""
     doc = json.loads(json.dumps(doc))
-    meta = doc.get('meta')
-    if isinstance(meta, dict):
-        meta['warnings'] = [w for w in meta.get('warnings') or [] if w.get('code') != 'retired_spelling']
+    for key in ('meta', 'metadata'):  # metadata: meta's additive-stage alias on an imports answer
+        meta = doc.get(key)
+        if isinstance(meta, dict):
+            meta['warnings'] = [w for w in meta.get('warnings') or [] if w.get('code') != 'retired_spelling']
+            if not meta['warnings'] and set(meta) == {'warnings'}:  # it gained a meta only to carry the note
+                del doc[key]
     doc.pop('next_steps', None)
     return doc
 

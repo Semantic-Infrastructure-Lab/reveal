@@ -29,7 +29,7 @@ from ..utils.path_utils import (
 )
 from ..utils.query_binding import bind_declared_params, boolean_value, legacy_switch, switch_value
 from ..utils.query_parser import (CliBinding, LegacySpelling, ParamSpec, QueryParams, ResourceSpec,
-                                  nonnegative_display_limit, param_schema)
+                                  exclude_param, nonnegative_display_limit, param_schema)
 from ..utils.results import PARSE_RECOVERED, ResultBuilder
 from ..rendering.adapters.contracts import ContractsRenderer
 from ..reveal_types import PathFailure
@@ -973,7 +973,8 @@ class ContractsAdapter(ResourceAdapter):
     DEFAULT_FAIL_ON = 'none'
     RESOURCE_SPEC = ResourceSpec(uri_codec='existing-path-first')
     BOUND_QUERY_CALL = True
-    PARAM_SPECS = (_ABSTRACT_ONLY, _IMPLEMENTATIONS, _IMPLS)
+    # exclude: the shared walk control every walking noun declares (BACK-2730); the walk's scope applies it.
+    PARAM_SPECS = (_ABSTRACT_ONLY, _IMPLEMENTATIONS, _IMPLS, exclude_param())
 
     def __init__(self, resource: str, query: Optional[str] = None, *,
                  params: Optional[Dict[str, Any]] = None):

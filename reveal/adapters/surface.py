@@ -41,7 +41,8 @@ from ..utils.path_utils import (
     failure_of,
 )
 from ..utils.query_parser import (
-    CliBinding, LegacySpelling, ParamSpec, QueryParams, ResourceSpec, nonnegative_display_limit, param_schema,
+    CliBinding, LegacySpelling, ParamSpec, QueryParams, ResourceSpec, exclude_param, nonnegative_display_limit,
+    param_schema,
 )
 from ..utils.query_binding import bind_declared_params, legacy_switch
 from .ast.surface_matrix import CATEGORIES, RECOVERED_KEY, UNPARSED_KEY, coverage_matrix
@@ -496,7 +497,8 @@ class SurfaceAdapter(ResourceAdapter):
     RESOURCE_SPEC = ResourceSpec(uri_codec='existing-path-first')
     BOUND_QUERY_CALL = True
 
-    PARAM_SPECS = (_KIND, _TESTS, _VIEW, _DIR_DEPTH, _LIMIT, _TOP)
+    # exclude: the shared walk control every walking noun declares (BACK-2730); the walk's scope applies it.
+    PARAM_SPECS = (_KIND, _TESTS, _VIEW, _DIR_DEPTH, _LIMIT, _TOP, exclude_param())
 
     def __init__(self, resource: str, query: Optional[str] = None, *,
                  params: Optional[Dict[str, Any]] = None):

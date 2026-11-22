@@ -32,7 +32,7 @@ from ..analyzers.imports.unused import describe_unused
 from ..conventions import family_for_path
 from ..analyzers.imports.layers import load_layer_config
 from ..utils.query_parser import (CliBinding, LegacySpelling, ParamSpec, ParamValueError, QueryParams, ResourceSpec,
-                                  param_schema, peek_query_items, whole_number, legacy_slices)
+                                  exclude_param, param_schema, peek_query_items, whole_number, legacy_slices)
 from ..errors import RequestValidationError
 from ..utils.query_binding import bind_declared_params, boolean_value, verbose_legacy
 from ..analyzers.imports.views import ImportView, _unused_not_checked  # noqa: F401 -- checks.py imports _unused_not_checked from here (BACK-2255)
@@ -332,9 +332,10 @@ _LIMIT = ParamSpec('limit', 'integer', 'Ranking rows to show (default: all; 0 = 
 # The declaration the `reveal imports` subcommand and the declared URI route bind (BACK-1054, D6):
 # every parameter imports:// reads. A view flag selects its view when its value is on (_selects):
 # a bare ``?unused`` or ``--unused`` does, ``?unused=false`` does not.
+# exclude: the shared walk control every walking noun declares (BACK-2730); the walk's scope applies it.
 PARAM_SPECS: Tuple[ParamSpec, ...] = (
     _UNUSED, _CIRCULAR, _VIOLATIONS, _SORT, _LIMIT, _ENTRYPOINTS, _COMPONENTS, _EXTERNAL, _DETAIL,
-    _LAZY, _SCOPE, _TESTS, _ROOT, _SCAN_LIMIT, _IMPORTERS, _FORMAT,
+    _LAZY, _SCOPE, _TESTS, _ROOT, _SCAN_LIMIT, _IMPORTERS, _FORMAT, exclude_param(),
 )
 # --head/--tail/--range slice this noun's rows today: flag-only legacy modifiers until the cut, read by the answers named
 # (BACK-2673; their notes are the flag:<noun>.<flag> RETIREMENTS rows).
