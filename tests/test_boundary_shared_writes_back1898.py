@@ -96,5 +96,6 @@ def helper(key):
     assert any(f['kind'] == 'log' and f['hop'] == 1 for f in data['findings'])
     assert any('assignments only in the entry function' in w for w in data['warnings'])
     rendered = _run_reveal_direct(str(path), 'root', '--boundary', '--transitive').stdout
-    assert 'assignments only in the entry function' in rendered
+    # Text points at the JSON field that keeps the standing coverage note (BACK-2627, BACK-2599).
+    assert 'Rules: --format json (meta.warnings)' in rendered
     assert 'state[key]()' not in rendered

@@ -139,6 +139,22 @@ def _varflow_trust_warning(analyzer) -> Optional[str]:
     )
 
 
+def _print_rules(result: Dict[str, Any], *, fields: tuple = (), standing_types: frozenset = frozenset()) -> None:
+    """A view's standing caveats as the one Rules pointer line; their full text stays in the JSON fields it names
+    (COMMAND_MODEL rule 7, BACK-2599, BACK-2627)."""
+    from .utils.warning_render import rule_text_lines
+    for line in rule_text_lines(result, fields=fields, standing_types=standing_types):
+        print(line)
+
+
+def _print_standing_warning(message: Optional[str]) -> None:
+    """A standing caveat the JSON carries as a ``navigation_warning`` in meta.warnings (the varflow trust note), as the
+    Rules pointer to that field."""
+    if message:
+        _print_rules({'meta': {'warnings': [{'type': 'navigation_warning', 'message': message}]}},
+                     standing_types=frozenset({'navigation_warning'}))
+
+
 @dataclass
 class _NavCtx:
     func_node: Any
@@ -177,10 +193,10 @@ def _emit_depth_navigation(ctx: _NavCtx, flag: str, from_line: int, to_line: int
         _nav_json(flag, ctx.analyzer.path, ctx.element, from_line, to_line,
                   findings, extra_meta=result['meta'])
     else:
-        print(f'Navigation depth {ctx.depth}\n'
-              f'Skeleton scope: {structure_scope["rule"]} {structure_scope["exit_sites"]}')
+        print(f'Navigation depth {ctx.depth}')
         print(render())
         render_meta_warnings(result)
+        _print_rules(result, fields=('meta.structure_scope.rule', 'meta.structure_scope.exit_sites'))
 
 
 def _nav_flow(ctx: _NavCtx) -> None:
@@ -223,9 +239,8 @@ def _nav_varflow(ctx: _NavCtx) -> None:
                       extra_meta={'var': var_name},
                       warnings=[trust_warning] if trust_warning else None)
         else:
-            if trust_warning:
-                print(f"⚠️  {trust_warning}", file=sys.stderr)
             print(render_cross_var_flow(var_name, frames, split_lines(ctx.analyzer.content)))
+            _print_standing_warning(trust_warning)
         return
     events = var_flow(ctx.func_node, var_name, from_line, to_line, ctx.get_text)
     _require_variable(ctx, var_name, from_line, to_line, '--varflow', events)
@@ -235,9 +250,8 @@ def _nav_varflow(ctx: _NavCtx) -> None:
                   extra_meta={'var': var_name},
                   warnings=[trust_warning] if trust_warning else None)
     else:
-        if trust_warning:
-            print(f"⚠️  {trust_warning}", file=sys.stderr)
         print(render_var_flow(var_name, events, split_lines(ctx.analyzer.content)))
+        _print_standing_warning(trust_warning)
 
 
 def _nav_narrow(ctx: _NavCtx) -> None:
@@ -296,9 +310,10 @@ def _emit_exit_navigation(ctx: _NavCtx, flag: str, from_line: int, to_line: int,
     else:
         label = ('selected callable execution regions' if ownership.mode == 'selected_callable'
                  else 'source inventory; may include multiple callable owners')
-        print(f'Exit scope: {label}\n{ownership.scope_metadata()["implicit_tail_rule"]}')
+        print(f'Exit scope: {label}')
         print(render())
         render_meta_warnings(result)
+        _print_rules(result, fields=('meta.exit_scope.rule', 'meta.exit_scope.implicit_tail_rule'))
 
 
 def _nav_exits(ctx: _NavCtx) -> None:

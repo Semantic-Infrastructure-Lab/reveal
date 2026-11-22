@@ -60,6 +60,14 @@ def test_flow_json_keeps_the_structure_scope(files):
     assert scope['exit_sites'].startswith('Inspect ')
 
 
+def test_loop_effects_text_points_at_the_structure_scope(files):
+    # --view effects --in-loops shares the structural budget and its scope sentence with the flow view.
+    result = _text(files['python'], 'Batch.run', '--view', 'effects', '--in-loops')
+    assert _rules_lines(result.stdout) == [
+        'Rules: --format json (meta.structure_scope.rule, meta.structure_scope.exit_sites)']
+    assert 'Skeleton scope' not in result.stdout
+
+
 def test_exits_text_points_at_the_exit_scope(files):
     result = _text(files['python'], 'process_order', '--view', 'exits')
     assert _rules_lines(result.stdout) == [

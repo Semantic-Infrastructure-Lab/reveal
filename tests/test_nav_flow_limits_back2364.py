@@ -39,11 +39,13 @@ def test_literal_region_discloses_resolved_scope_only_implicit_tails():
 
 
 def test_text_discloses_recognition_and_literal_tail_limits():
+    # The standing limits are one Rules pointer to the JSON fields that keep their text (BACK-2627, BACK-2599).
     path = _sample_path('rust')
     skeleton = _run_reveal_direct(path, 'process_order', '--outline')
     region = _run_reveal_direct(path, ':13-20', '--returns')
-    assert 'Skeleton scope: Recognized structural nodes; exit expressions may be omitted.' in skeleton.stdout
-    assert 'Implicit tail returns are inferred only for the resolved scope' in region.stdout
+    assert 'Rules: --format json (meta.structure_scope.rule, meta.structure_scope.exit_sites)' in skeleton.stdout
+    assert 'Rules: --format json (meta.exit_scope.rule, meta.exit_scope.implicit_tail_rule)' in region.stdout
+    assert 'Exit scope: source inventory; may include multiple callable owners' in region.stdout
 
 
 def test_file_outline_keeps_its_structural_domain():

@@ -1,6 +1,7 @@
 from collections import Counter
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
+from ...utils.warning_render import rule_text_lines
 from .nav_exits import collect_deps
 from .nav_statewrites import collect_statewrites
 from .nav_effects import (
@@ -223,6 +224,10 @@ def render_boundary_transitive(
     if ambiguous:
         sections.append(f'Warning: {ambiguous}')
     if result.get('assignment_coverage_note'):
-        sections.append(result['assignment_coverage_note'])
+        # A standing caveat of every transitive boundary: one Rules pointer to meta.warnings, which keeps its text
+        # (COMMAND_MODEL rule 7, BACK-2599, BACK-2627).
+        coverage = {'meta': {'warnings': [{'type': 'navigation_warning',
+                                           'message': result['assignment_coverage_note']}]}}
+        sections.extend(rule_text_lines(coverage, fields=(), standing_types=frozenset({'navigation_warning'})))
 
     return '\n\n'.join(sections)
