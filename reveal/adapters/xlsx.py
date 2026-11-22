@@ -28,7 +28,7 @@ from ..utils.results import (
     AnalysisCompleteness, ExecutionFacts, FailureCause, ResultBuilder, note_truncation, outcome_of, result_execution_facts,
 )
 from ..utils.warning_render import render_meta_warnings
-from reveal.reveal_types import CONTRACT_VERSION
+from reveal.reveal_types import CONTRACT_VERSION, WarningEntry
 from reveal.utils.lines import split_lines
 from reveal.utils.match_terms import term_label
 
@@ -1222,12 +1222,12 @@ class XlsxAdapter(ResourceAdapter):
         return [m for m in self.analyzer.search_all_sheets(terms[0])
                 if all(any(term in str(cell).lower() for cell in m['cells']) for term in rest)]
 
-    def _unsearched_warnings(self) -> Optional[List[Dict[str, Any]]]:
+    def _unsearched_warnings(self) -> Optional[List[WarningEntry]]:
         """The ``sheets_unsearched`` warning when a sheet could not be read for the search, else None."""
         unsearched = list(getattr(self.analyzer, 'unsearched_sheets', []))
         if not unsearched:
             return None
-        return [{
+        warning: WarningEntry = {
             'type': 'sheets_unsearched', 'count': len(unsearched),
             'files': [name for name, _ in unsearched[:5]],
             'failures': failure_records(unsearched),
@@ -1235,7 +1235,8 @@ class XlsxAdapter(ResourceAdapter):
                         "matches may be missing: "
                         + ', '.join(f"{name} ({why})" for name, why in unsearched[:5])
                         + (f" and {len(unsearched) - 5} more" if len(unsearched) > 5 else '')),
-        }]
+        }
+        return [warning]
 
     # -------------------------------------------------------------------------
     # Power Pivot helpers
