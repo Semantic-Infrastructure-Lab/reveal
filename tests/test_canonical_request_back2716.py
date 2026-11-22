@@ -234,11 +234,10 @@ def test_the_walk_policy_a_uri_splits_off_is_repeated_as_its_flag(project):  # n
         'api.query("metrics", "proj", respect_gitignore=\'off\')']
 
 
-def test_a_request_giving_a_control_no_flag_spells_has_no_canonical_form():
-    """calls ?format=dot has no flag (BACK-2722): recommending the request without it recommended a different answer.
-    git ?raw was this example until it became a legacy spelling of --detail raw (BACK-2616), which now renders."""
-    with pytest.raises(canonical.UnrenderableRequest):
-        _render_uri('cli', 'calls', 'proj', 'format=dot')
+def test_a_control_that_gained_a_flag_renders_it():
+    """git ?raw had no flag and so no canonical form (recommending the request without it recommended a different
+    answer) until it became a legacy spelling of --detail raw (BACK-2616); calls ?format=dot until --format dot
+    (BACK-2722). The rule for a control no flag spells stays pinned by the next test (Claude's ?tail)."""
     assert _render_uri('cli', 'git', 'proj/app.py', 'raw=true') == 'reveal git://proj/app.py --detail raw'
 
 
