@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional
 from ..base import BaseRenderer
 from ...utils import print_json_result
 from ...utils.results import outcome_of
-from ...utils.warning_render import meta_warning_lines
+from ...utils.warning_render import meta_warning_lines, rule_text_lines
 
 _SURFACE_LABELS = {
     'cli': 'CLI commands / arguments',
@@ -25,7 +25,9 @@ _LANGUAGE_NAMES = {
     'rust': 'Rust', 'cpp': 'C++',
 }
 
-_TAXONOMY_NOTE = "ℹ Taxonomy-based — project-specific clients outside known libraries not detected."
+# The standing caveats (taxonomy coverage, dynamic registrations, the test-origin note) are one Rules pointer to the
+# JSON field that holds their full text (COMMAND_MODEL rule 7, BACK-2599, BACK-2623).
+_RULE_FIELDS = ('_meta.known_limits',)
 
 
 def _recovered_note(recovered_files: List[str], error_region_entries: int) -> str:
@@ -71,7 +73,6 @@ def _empty_report(report: Dict[str, Any], warning: str) -> List[str]:
         else:
             lines.append("  No external surfaces detected.")
         lines.append('')
-    lines.extend([_TAXONOMY_NOTE, ''])
     return lines
 
 
@@ -86,7 +87,7 @@ def _by_dir(rows: List[Dict[str, Any]], top: Optional[int], cut: Optional[int]) 
         lines.append(f"  {row['dir']:<{width}}  {row['total']:>4}  {cells}")
     if len(rows) > len(shown):
         lines.append(f"  … {len(rows) - len(shown)} more directories (omit --top to see all)")
-    lines.extend(['', _TAXONOMY_NOTE, ''])
+    lines.append('')
     return lines
 
 
@@ -184,11 +185,13 @@ def surface_text(report: Dict[str, Any], top: Optional[int] = None) -> str:
         lines.extend(_by_dir(report['by_dir'], top, cuts.get('by_dir')))
     else:
         lines.extend(_category_lines(surfaces, top, cuts))
+    pointer = rule_text_lines(report, fields=_RULE_FIELDS, standing_types=frozenset())
+    lines.extend([*pointer, ''] if pointer else [])
     return '\n'.join(lines) + '\n'
 
 
 def _category_lines(surfaces: Dict[str, List[Dict[str, Any]]], top: Optional[int], cuts: Dict[str, int]) -> List[str]:
-    """Each category's heading (its uncut count) and the entries shown, then the taxonomy note."""
+    """Each category's heading (its uncut count) and the entries shown."""
     lines: List[str] = []
     for key, label in _SURFACE_LABELS.items():
         entries = surfaces.get(key, [])
@@ -200,7 +203,7 @@ def _category_lines(surfaces: Dict[str, List[Dict[str, Any]]], top: Optional[int
         if len(entries) > len(shown):  # the legacy --top: a text-only cut the answer does not record
             lines.append(f"  … {len(entries) - len(shown)} more (omit --top to see all)")
         lines.append('')
-    return [*lines, _TAXONOMY_NOTE, '']
+    return lines
 
 
 class SurfaceRenderer(BaseRenderer):
