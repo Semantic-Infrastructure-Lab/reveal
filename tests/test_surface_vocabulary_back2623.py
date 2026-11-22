@@ -254,3 +254,14 @@ def test_no_replacement_names_a_retiring_spelling():
         assert row.replacement == replacement and row.stage == 'note'
         assert not any(old in row.replacement for old in retiring), (word, row.replacement)
     assert RETIREMENTS['param:surface.top'].standalone
+
+
+# --- the answer layout (BACK-2599 rule pointer) --------------------------------------------------------------------
+
+@pytest.mark.parametrize('argv', [[], ['--view', 'dir'], ['--kind', 'mcp']])
+def test_the_standing_caveats_are_one_rules_pointer_and_json_keeps_their_text(proj, argv):
+    code, out, _ = _text('surface', '.', *argv)
+    assert code == 0 and out.count('Rules: --format json (_meta.known_limits)') == 1
+    assert 'Taxonomy-based' not in out  # the caveat's full text lives in JSON only
+    _, doc, _ = _cli('surface', '.', *argv)
+    assert doc['_meta']['known_limits'][0].startswith('taxonomy covers common libraries only')
