@@ -76,6 +76,11 @@ control whatever its value type; 1b, 1d and 6 read every spelling (aliases and n
       such option still parses (rules 2, 1b, 1c and 23 hold its note and answer); every canonical control's flag is still
       listed. Measured on the usage line and the help's argument lines: prose (a description or epilog that explains a
       legacy spelling) is no listing. help://schemas keeps listing legacy spellings (machine data, not help).
+  25  time window (Scott 2026-11-22, BACK-2728): every declared ``since``/``until`` takes the one grammar of the shared
+      codec (``utils/time_window.py``): a malformed bound (``bogus``, ``2026-13-45``, ``2026-02-30``) exits 2 naming the
+      control and the accepted forms on the subcommand, the URI, ``api.query`` (RequestValidationError) and MCP; each
+      form (``2026``, ``2026-02``, ``2026-02-01``, ``today``, a zoned time) binds as written and answers. Pack's ``since``
+      is a git ref, not a time (NOT_A_TIME_WINDOW), so Pack declares no time window.
 
 A cell is ``conforms`` (asserted), ``not_yet`` (recorded below with the behaviour observed; the count may only
 fall and must reach zero before the cut) or ``exempt`` (a written reason; the probe must find nothing to run).
@@ -114,7 +119,7 @@ def _declared_nouns():
 NOUNS = _declared_nouns()
 ELEMENT = 'element'  # the element views' pseudo-noun: its own cells at the end of this file (BACK-2627 S3b-5)
 RULES = ('1a', '1b', '1c', '1d', '2', '3', '3b', '4', '5', '6', '8a', '8b', '10', '12', '16', '17', '18', '20',
-         '14', '21j', '22', '23', '24', '28')
+         '14', '21j', '22', '23', '24', '28', '25')
 
 # The request each noun answers by default: the parity gate's table (CLI argv after the noun, URI suffix), plus
 # the declared noun it has no row for. None: no subcommand (stats is metrics' retired scheme).
@@ -143,7 +148,8 @@ CONTROL_BASES = {('calls', 'kind'): (['--uncalled'], '?uncalled'), ('calls', 'ex
                  # xlsx: the sheet view reads the cells, formulas and limit (BACK-2626)
                  **{('xlsx', control): (['--sheet', 'Sales'], '?sheet=Sales') for control in ('cells', 'formulas', 'limit')},
                  **{('codex', bound): (['--where', 'session~=auth'], '?where=session~=auth')
-                    for bound in ('since', 'until')}}
+                    for bound in ('since', 'until')},
+                 ('metrics', 'since'): (['--view', 'hotspots'], '?view=hotspots')}  # since bounds the ranking's churn
 
 # The shared controls (rule 7: the one declared list, query_parser.SHARED_CONTROL_NAMES), each probed with a value a
 # supporting noun would accept. Left out: view (the deferred row, D18). Not shared controls: format/output (global
@@ -204,6 +210,11 @@ EXEMPT = {
         ('17', 'no control selects the answer: the resource does (the listing, or the variable it names)'),
         ('20', 'declares no control an answer could leave unread (the inert --check is read by every answer)'),
         ('24', 'declares no query key: a resource URI with no query string says no request note'))},
+    **{(noun, '25'): 'declares no since/until: no time window to check' for noun in (
+        'architecture', 'ast', 'calls', 'contracts', 'deps', 'env', 'hotspots', 'imports', 'json', 'markdown',
+        'overview', 'patches', 'sqlite', 'surface', 'testability', 'trace', 'xlsx')},
+    ('pack', '25'): "its since is a git ref, not a time (NOT_A_TIME_WINDOW): it becomes --against REF in Pack's own "
+                    'package',
 }
 
 # Rules 1, 2, 5, 6, 10 and 12 are the shared seams' defaults (Scott 2026-11-16; BACK-2654 Step 3): their cells must
@@ -259,7 +270,7 @@ NOT_YET: dict = {}
 
 NOT_YET_BASELINE = {'1a': 0, '1b': 0, '1c': 0, '1d': 0, '2': 0, '3': 0, '3b': 0, '4': 0, '5': 0, '6': 0,
                     '8a': 0, '8b': 0, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 0, '14': 0, '21j': 0, '22': 0,
-                    '23': 0, '24': 0, '28': 0}
+                    '23': 0, '24': 0, '28': 0, '25': 0}
 
 
 # --- the fixture -------------------------------------------------------------------------------------------
@@ -2071,6 +2082,79 @@ def probe_help_one_spelling(noun):
     return cases
 
 
+# --- rule 25: one time window (Scott 2026-11-22, BACK-2728) ------------------------------------------------------------
+
+# A declared control named since or until that bounds no time, with its written reason: the probe leaves it out.
+NOT_A_TIME_WINDOW = {('pack', 'since'): "a git ref, not a time: it becomes --against REF in Pack's own package"}
+# Malformed bounds (not a form; not on the calendar) and one value of each form of the grammar.
+TIME_WINDOW_MALFORMED = ('bogus', '2026-13-45', '2026-02-30')
+TIME_WINDOW_FORMS = ('2026', '2026-02', '2026-02-01', 'today', '2026-02-01T12:00:00Z')
+
+
+def _time_windows(noun):
+    return [spec for spec in _specs(noun)
+            if spec.name in ('since', 'until') and (noun, spec.name) not in NOT_A_TIME_WINDOW]
+
+
+def _names_the_forms(text, control):
+    """The one refusal: it names the control and the accepted forms."""
+    return control in text and all(form in text for form in ('today', 'YYYY-MM-DD', 'HH:MM'))
+
+
+def _time_window_refusals(noun, control, value):
+    """A malformed bound on the subcommand, the URI, api.query and MCP (through the real reveal_run)."""
+    from reveal import api
+    from reveal.errors import RequestValidationError
+    from reveal.mcp_server import reveal_run
+    wants = f'exit 2 naming {control} and the forms'
+    cases = []
+    sub = _sub(noun, f'--{control}', value, control=control)
+    requests = {'URI': [_uri(noun, f'{control}={value}', control=control)]}
+    if sub is not None:
+        requests['subcommand'] = sub
+    for form, request in requests.items():
+        run = _run(*request, '--format', 'json')
+        cases.append(Case(f'{control}={value} {form}', run.rc == 2 and _names_the_forms(_error_message(run), control),
+                          f'{run.brief()} (wants {wants})'))
+    try:
+        api.query(_uri(noun, control=control), **{control: value})
+        typed, outcome = False, 'answered'
+    except Exception as exc:  # the raised class and its message are the measured outcome
+        typed = isinstance(exc, RequestValidationError) and _names_the_forms(str(exc), control)
+        outcome = f'raised {type(exc).__name__}: {str(exc)[:160]}'
+    cases.append(Case(f'{control}={value} api.query', typed, f'api.query({control}={value!r}) {outcome} (wants '
+                                                             f'RequestValidationError naming {control} and the forms)'))
+    request = [*(sub or requests['URI']), '--format', 'json']
+    try:
+        shown = reveal_run(request)
+    except Exception as exc:  # a tool error is the refusal on MCP
+        shown = f'error: {exc}'
+    cases.append(Case(f'{control}={value} MCP', 'rror' in shown and _names_the_forms(shown, control),
+                      f'reveal_run({request}) -> {shown[:160]!r} (wants a refusal naming {control} and the forms)'))
+    return cases
+
+
+def probe_time_window(noun):
+    """Rule 25: none for a noun that declares no time window."""
+    cases = []
+    for spec in _time_windows(noun):
+        control = spec.name
+        for value in TIME_WINDOW_MALFORMED:
+            cases += _time_window_refusals(noun, control, value)
+        for value in TIME_WINDOW_FORMS:
+            try:
+                bound = spec.validate(value)
+            except ValueError as exc:
+                bound = f'{type(exc).__name__}: {exc}'
+            cases.append(Case(f'{control}={value} binds as written', bound == value,
+                              f'{noun} {control}.validate({value!r}) -> {bound!r}'))
+            request = _sub(noun, f'--{control}', value, control=control) or \
+                [_uri(noun, f'{control}={value}', control=control)]
+            run = _run(*request, '--format', 'json')
+            cases.append(Case(f'--{control} {value} answers', run.rc == 0, f'{run.brief()} (wants exit 0)'))
+    return cases
+
+
 PROBES = {'1a': probe_uri_and_flag, '1b': probe_alias_and_name, '1c': probe_repeated_spelling,
           '1d': probe_repeatable_aliases, '3': probe_unsupported_controls, '3b': probe_unknown_keys,
           '4': probe_verbose_is_detail_full, '8a': probe_bare_shared_keys,
@@ -2078,9 +2162,9 @@ PROBES = {'1a': probe_uri_and_flag, '1b': probe_alias_and_name, '1c': probe_repe
           '16': probe_legacy_operations, '17': probe_one_answer, '18': probe_repeated_global_flags,
           '20': probe_applicability, '14': probe_defaults, '21j': probe_invalid_requests_answer_json,
           '22': probe_config_failures, '23': probe_flags_after_uri, '24': probe_request_note,
-          '28': probe_help_one_spelling}
+          '28': probe_help_one_spelling, '25': probe_time_window}
 # These call the MCP tools (the optional mcp extra) besides the CLI.
-MCP_PROBES = ('2', '5', '6', '24')
+MCP_PROBES = ('2', '5', '6', '24', '25')
 # These also run the retirement cases' sample file.
 SAMPLE_PROBES = {'2': probe_retirement_notes, '5': probe_legacy_declarations, '6': probe_alias_notes}
 
@@ -2890,6 +2974,7 @@ ELEMENT_EXEMPT = {
     '24': _NO_URI + 'no query key or analysis-only scheme to say the request note',
     '28': 'no parser of its own: element views are the main parser\'s path read, whose --help digest already names no '
           'old flag (BACK-2627); the main parser\'s help is outside "every declared noun" (BACK-2755)',
+    '25': 'element views declare no since/until: no time window to check',
 }
 ELEMENT_NOT_YET = {
     '3': 'a shared control the main parser has no flag for (--offset, --where, --match, --detail, --tests, --against) '
