@@ -187,7 +187,9 @@ def test_actual_sdk_nav_names_alias_notes_and_request_isolation(source, tmp_path
             'path': source, 'element': ':2-2', 'flag': 'outputs'})).is_error
         literal = await session.call_tool('reveal_nav', {
             'path': source, 'element': 'extract', 'flag': 'varflow', 'flag_value': '--writes'})
-        assert not literal.is_error and 'deprecated' not in _text(literal)
+        # A value is never a spelling: no retirement note. It names a variable the element lacks, which is a
+        # target that matches nothing (plan rule 9, BACK-2627 E1), so the request is an error naming it.
+        assert literal.is_error and 'deprecated' not in _text(literal) and "'--writes'" in _text(literal)
 
     _run(tmp_path, scenario)
 

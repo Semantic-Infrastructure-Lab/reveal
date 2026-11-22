@@ -107,12 +107,24 @@ integer; zero and negative values are rejected instead of becoming a default or 
 empty answer. This does not change file, directory or Markdown depth controls.
 
 Code-analysis navigation flags reject languages explicitly classified as structure-only
-(for example, SQL), rather than reporting no findings as though analysis completed.
-Use `reveal FILE` for their supported structure view. Line navigation with `--scope`
-or `--around` remains available where the analyzer supports it. These unsupported-analysis
-and structural-depth requests exit 2 with a diagnostic on stderr, including under
-`--format json`; they do not print an empty findings answer. Registered MCP navigation
-reports the rejection as an error. A supported analysis with no findings still succeeds.
+(for example, SQL), data and document formats that hold no functions (Markdown, JSON, YAML,
+TOML, GraphQL, Protobuf, INI, CSV, XML, office files), and files tree-sitter cannot parse,
+rather than reporting no findings as though analysis completed. Use `reveal FILE` for their
+supported structure view. Line navigation with `--scope` or `--around` remains available where
+the analyzer supports it. A code language without conformance fixtures (Elixir) or read with a
+fallback grammar answers every view with one warning naming that tier.
+
+A target that matches nothing is an invalid request, not an empty answer: a variable that
+`--varflow`, `--keys`, `--narrow` or `--cross-calls` finds no read or write of in the selected
+lines, a line range or `--range`/`--callsites` range past the end of the file, a reversed line
+range, `--callsites` with a value that is not a range, an empty variable name and a negative
+`--around`. A variable that occurs with no events of the view's kind (no key access) is a
+genuine zero; `--narrow` on an unannotated variable answers with its decline as a JSON warning.
+Element views render `text` and `json`; `--format grep` or `typed` is rejected.
+
+These requests exit 2 with a diagnostic on stderr, including under `--format json`; they do not
+print an empty findings answer. Registered MCP navigation reports the rejection as an error. A
+supported analysis with no findings still succeeds.
 
 ---
 

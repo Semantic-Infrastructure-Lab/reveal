@@ -196,7 +196,7 @@ class TestRevealNavTool(unittest.TestCase):
         self.assertIn('flag_value', result)
 
     def test_varflow_with_value(self):
-        result = self.reveal_nav('reveal/adapters/ast/nav_effects.py', 'collect_effects', 'varflow', 'calls')
+        result = self.reveal_nav('reveal/adapters/ast/nav_effects.py', 'collect_effects', 'varflow', 'results')
         self.assertIsInstance(result, str)
         self.assertNotIn('[reveal error', result)
 
@@ -221,7 +221,7 @@ class TestRevealNavTool(unittest.TestCase):
         self.assertIn('flag_value', result)
 
     def test_narrow_with_value(self):
-        result = self.reveal_nav('reveal/adapters/ast/nav_effects.py', 'collect_effects', 'narrow', 'calls')
+        result = self.reveal_nav('reveal/adapters/ast/nav_effects.py', 'collect_effects', 'narrow', 'results')
         self.assertIsInstance(result, str)
         self.assertNotIn('[reveal error', result)
 

@@ -655,7 +655,9 @@ def render_deps(
             if d['first_write_line'] is not None
             else '  (never written in range)'
         )
-        label = 'BUILTIN' if d.get('classification') == 'builtin' else 'PARAM'
+        # A candidate undefined read (JSON kind 'dep'), not necessarily a parameter: a module or a function is one
+        # too, so the label says INPUT as boundary's INPUTS section does (BACK-2627 E16).
+        label = 'BUILTIN' if d.get('classification') == 'builtin' else 'INPUT'
         lines.append(
             f'{label}  {d["var"]:<30}  first read L{d["first_read_line"]}{write_info}'
         )

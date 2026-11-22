@@ -158,7 +158,7 @@ def test_builtin_classification_reaches_text_and_json(tmp_path):
         '  str                             first read L2\n\n'
         'EFFECTS:\n  none in L1–L2')
     deps = collect_deps(scope, 1, end, text, language='python')
-    assert [line.split()[0] for line in render_deps(deps, 1, end).split('\n')] == ['PARAM', 'BUILTIN', 'BUILTIN']
+    assert [line.split()[0] for line in render_deps(deps, 1, end).split('\n')] == ['INPUT', 'BUILTIN', 'BUILTIN']
     path = tmp_path / 'binders.py'
     path.write_text(code, encoding='utf-8')
     for flag, kind in [('--deps', 'dep'), ('--boundary', 'input')]:

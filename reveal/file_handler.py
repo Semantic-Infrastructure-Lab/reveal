@@ -317,20 +317,21 @@ def _dispatch_nav(analyzer, element: str, output_format: str, args) -> None:
         return
 
     handler = next((handler for _, check, handler in _NAV_DISPATCH if check(args)), None)
-    if handler in (_nav_outline, _nav_flow, _nav_branchmap, _nav_loopmap, _nav_exits, _nav_returns):
-        from .cli.routing.formats import DEFAULT_OUTPUT_FORMATS, require_supported_format
-        require_supported_format(args, DEFAULT_OUTPUT_FORMATS, 'flow/exits navigation')
-        output_format = getattr(args, 'format', output_format)
+    # Every element view renders text and JSON only; grep and typed used to print the text answer (BACK-2627 E12).
+    from .cli.routing.formats import DEFAULT_OUTPUT_FORMATS, require_supported_format
+    require_supported_format(args, DEFAULT_OUTPUT_FORMATS, 'element views')
+    output_format = getattr(args, 'format', output_format)
     if not (getattr(args, 'scope', False) or getattr(args, 'around', None) is not None):
         _validate_nav_request(analyzer, handler, args)
 
     if not isinstance(analyzer, TreeSitterAnalyzer) or not analyzer.tree:
-        print(
-            'Error: nav flags require tree-sitter analysis.\n'
-            f'  File type may not be supported: {analyzer.path}',
-            file=sys.stderr,
-        )
-        sys.exit(1)
+        from .errors import NavRequestValidationError
+        from .utils.path_utils import to_posix
+        # An invalid request (D6): exit 2, no longer 1 (BACK-2627 E9).
+        raise NavRequestValidationError(
+            f'element views need a code file tree-sitter can parse; {to_posix(analyzer.path)} is not one. '
+            f'Use `reveal {to_posix(analyzer.path)}` to inspect its structure.')
+    _note_untested_tier(analyzer)
 
     as_json = output_format == 'json'
 
@@ -343,6 +344,7 @@ def _dispatch_nav(analyzer, element: str, output_format: str, args) -> None:
         return
 
     func_node, func_start, func_end = _resolve_func_node(analyzer, element)
+    _require_selected_lines(analyzer, element, args)
     if handler is _nav_outline:
         from .cli.invocation import retirement_note
         retirement_note('target:nav.outline')
@@ -360,6 +362,54 @@ def _dispatch_nav(analyzer, element: str, output_format: str, args) -> None:
 
     if handler is not None:
         _run_nav_handler(handler, ctx)
+
+
+def _note_untested_tier(analyzer) -> None:
+    """D13, X15: an untested code language or a fallback grammar answers every element view with one warning naming
+    its tier (verified and smoke-tested languages keep their own disclosures). It joins the invocation's warnings, so
+    a JSON answer carries it in ``meta.warnings`` and text prints it once on stderr."""
+    from .capabilities import CONFORMANCE_UNTESTED, get_capability
+    from .utils.invocation_log import record_warning
+
+    capability = get_capability(analyzer)
+    if capability is not None and capability.conformance_level != CONFORMANCE_UNTESTED:
+        return
+    if capability is not None:
+        message = (f'Code navigation is untested for {capability.language} (no conformance fixtures): '
+                   'treat this answer as unverified.')
+    else:
+        language = getattr(analyzer, 'language', None) or type(analyzer).__name__
+        message = (f'{language} is read with a fallback grammar and code navigation is untested for it: '
+                   'treat this answer as unverified.')
+    record_warning({'type': 'navigation_warning', 'code': 'navigation_untested', 'message': message})
+
+
+def _require_selected_lines(analyzer, element: str, args) -> None:
+    """Plan rule 9 for lines (X14): a line element, ``--range`` or ``--callsites`` range that selects no line of the
+    file, or a reversed line element, is an invalid request naming what it searched, not an empty answer (E3)."""
+    from .display.element import _parse_element_syntax  # noqa: I006
+    from .errors import NavRequestValidationError
+    from .nav_handlers import callsites_lines
+    from .utils.path_utils import to_posix
+
+    total = len(split_lines(analyzer.content))
+    syntax = _parse_element_syntax(element) if element else None
+    selections = []
+    if syntax is not None and syntax['type'] == 'line':
+        start, end = syntax['start_line'], syntax.get('end_line')
+        if end is not None and end < start:
+            raise NavRequestValidationError(
+                f'line range {element} is reversed: give :START-END with START <= END.')
+        selections.append((element, start))
+    if isinstance(getattr(args, 'range', None), tuple):
+        selections.append((f'--range {args.range[0]}-{args.range[1] or ""}', args.range[0]))
+    lines = callsites_lines(getattr(args, 'calls', None))
+    if lines is not None:
+        selections.append((f'--callsites {lines[0]}-{lines[1] or ""}', lines[0]))
+    for spelling, start in selections:
+        if start > total:
+            raise NavRequestValidationError(
+                f'{spelling} selects no line: {to_posix(analyzer.path)} has {total} lines.')
 
 
 def _fail_nav(code: int, cause: 'FailureCause', diagnostic: str) -> 'NoReturn':
@@ -413,13 +463,20 @@ def _requested_nav_flag(args) -> str:
 
 def _validate_nav_request(analyzer, handler, args) -> None:
     """Reject only declared unsupported analysis and invalid structural depth."""
-    from .capabilities import CONFORMANCE_STRUCTURE_ONLY, get_capability
+    from .capabilities import CONFORMANCE_STRUCTURE_ONLY, VARFLOW_NOT_APPLICABLE, get_capability
     from .errors import NavRequestValidationError
 
     capability = get_capability(analyzer)
     if capability is not None and capability.conformance_level == CONFORMANCE_STRUCTURE_ONLY:
         raise NavRequestValidationError(
             f'Code navigation analysis is unavailable for {capability.language} (structure-only). '
+            f'Use `reveal {analyzer.path}` to inspect file structure.'
+        )
+    if capability is not None and capability.varflow == VARFLOW_NOT_APPLICABLE:
+        # A data or document format has no functions to analyze: decline as structure-only does (BACK-2627 X15),
+        # where Markdown/JSON/YAML/TOML/GraphQL/Protobuf answered an empty or invented view with exit 0.
+        raise NavRequestValidationError(
+            f'Code navigation analysis does not apply to {capability.language} files (not code). '
             f'Use `reveal {analyzer.path}` to inspect file structure.'
         )
     if handler in (_nav_outline, _nav_flow, _nav_branchmap, _nav_loopmap, _nav_fanout):
@@ -549,20 +606,12 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
         return
 
     if args and not element:
-        # --scope requires a line ref; fail fast.
-        if getattr(args, 'scope', False):
-            print(
-                'Error: --scope requires a line reference (e.g., reveal file.py :123 --scope)',
-                file=sys.stderr,
-            )
-            sys.exit(1)
-        # --around requires a line ref; fail fast.
-        if getattr(args, 'around', None) is not None:
-            print(
-                'Error: --around requires a line reference (e.g., reveal file.py :123 --around)',
-                file=sys.stderr,
-            )
-            sys.exit(1)
+        # --scope and --around require a line reference: the one check says so, exit 2 (BACK-2627 E9).
+        from .nav_handlers import _single_line_ref
+        for flag, given in (('--scope', getattr(args, 'scope', False)),
+                            ('--around', getattr(args, 'around', None) is not None)):
+            if given:
+                _single_line_ref(element, flag)
         # Flat-file flags: synthesize a full-file element so _dispatch_nav can
         # fall back to root_node.  Note: --outline is intentionally absent here.
         # `reveal file.py --outline` (no element) is handled downstream by

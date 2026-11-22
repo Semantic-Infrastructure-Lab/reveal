@@ -253,13 +253,13 @@ def test_inputs_differs_from_boundary_inputs_exactly_so(copies, language, mode):
 
 def test_inputs_and_boundary_differ_in_row_order_and_text_sections(copies):
     """Measured on Python's whole file: the same 18 reads in a different order, and text that sections boundary
-    (INPUTS/BUILTINS/EFFECTS) but labels each inputs row."""
+    (INPUTS/BUILTINS/EFFECTS) but labels each inputs row (INPUT/BUILTIN since E16; PARAM before)."""
     path = copies['python']
     inputs, boundary = _inputs_and_boundary(path, [])
     assert [f['var'] for f in inputs['findings']] != [f['var'] for f in boundary['findings'][:18]]
     inputs_text = run(path, 'process_order', '--inputs').stdout
     boundary_text = run(path, 'process_order', '--boundary').stdout
-    assert inputs_text.splitlines()[0].split()[:2] == ['PARAM', 'order']
+    assert inputs_text.splitlines()[0].split()[:2] == ['INPUT', 'order']
     assert [line for line in boundary_text.splitlines() if line and not line.startswith(' ')] == [
         'INPUTS (undefined reads):', 'BUILTINS:', 'EFFECTS:']
 

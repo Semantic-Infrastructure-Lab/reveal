@@ -63,6 +63,42 @@ def _parse_line_range(range_str, default_start: int, default_end: int):
     return default_start, default_end
 
 
+def callsites_lines(value) -> Optional[tuple]:
+    """The lines a ``--callsites`` value selects: None for the whole element (bare ``--callsites``), else the
+    (start, end) of ``START-END``, ``START-`` or ``START`` (end None: to the element's end). Anything else is an
+    invalid request (D6): ``--callsites abc`` used to answer the whole element (BACK-2627 E4)."""
+    from .errors import NavRequestValidationError
+    from .utils.query_parser import line_range
+    if value is None or value == 'FULL':
+        return None
+    if isinstance(value, tuple):
+        return value
+    text = str(value).strip()
+    try:
+        return line_range(text if '-' in text else text + '-')
+    except ValueError as exc:
+        raise NavRequestValidationError(f'--callsites takes a line range START-END (1-indexed); got {value!r}: {exc}') \
+            from None
+
+
+def _require_variable(ctx: '_NavCtx', var_name: str, from_line: int, to_line: int, option: str,
+                      events: Optional[list] = None) -> None:
+    """Plan rule 9: a variable that is read or written nowhere in the searched lines is a target that matches
+    nothing, an invalid request naming what was searched, not an empty answer (BACK-2627 E1). A variable that occurs
+    with no events of the view's kind (no key access, no narrowing) is a genuine zero. *events* is the caller's own
+    var_flow answer when it has one, so the lines are walked once."""
+    from .adapters.ast.nav import var_flow  # noqa: I006
+    from .errors import NavRequestValidationError
+    if events is None:
+        events = var_flow(ctx.func_node, var_name, from_line, to_line, ctx.get_text)
+    if events:
+        return
+    searched = ctx.element or 'the file'
+    raise NavRequestValidationError(
+        f'{option} {var_name}: no read or write of {var_name!r} in {searched} (L{from_line}-L{to_line}) of '
+        f'{to_posix(ctx.analyzer.path)}; check the name, or widen the element or range.')
+
+
 def _nav_json(flag: str, path: str, element: str, from_line: int, to_line: int,
               findings, extra_meta: Optional[dict] = None,
               warnings: Optional[List[str]] = None) -> None:
@@ -94,8 +130,10 @@ def _varflow_trust_warning(analyzer) -> Optional[str]:
     """
     from .capabilities import get_capability, VARFLOW_VERIFIED  # noqa: I006
 
+    from .capabilities import CONFORMANCE_UNTESTED  # noqa: I006
     cap = get_capability(analyzer)
-    if cap is None or cap.varflow == VARFLOW_VERIFIED:
+    # An untested language's answers carry the one tier warning on every view instead (file_handler, BACK-2627 X15).
+    if cap is None or cap.varflow == VARFLOW_VERIFIED or cap.conformance_level == CONFORMANCE_UNTESTED:
         return None
     return (
         f"--varflow is '{cap.varflow}' for {cap.language} (not fully "
@@ -179,6 +217,7 @@ def _nav_varflow(ctx: _NavCtx) -> None:
     from_line, to_line = _resolve_range(ctx.args, ctx.func_start, ctx.func_end)
     trust_warning = _varflow_trust_warning(ctx.analyzer)
     if getattr(ctx.args, 'cross_calls', False):
+        _require_variable(ctx, var_name, from_line, to_line, '--varflow')
         frames = cross_var_flow(ctx.analyzer, ctx.func_node, var_name, from_line, to_line, ctx.get_text)
         if ctx.as_json:
             # Each frame's 'events' carries var_flow's internal tree-sitter
@@ -197,6 +236,7 @@ def _nav_varflow(ctx: _NavCtx) -> None:
             print(render_cross_var_flow(var_name, frames, split_lines(ctx.analyzer.content)))
         return
     events = var_flow(ctx.func_node, var_name, from_line, to_line, ctx.get_text)
+    _require_variable(ctx, var_name, from_line, to_line, '--varflow', events)
     if ctx.as_json:
         findings = [{'kind': e['kind'], 'line': e['line']} for e in events]
         _nav_json('varflow', ctx.analyzer.path, ctx.element, from_line, to_line, findings,
@@ -212,6 +252,7 @@ def _nav_narrow(ctx: _NavCtx) -> None:
     from .adapters.ast.nav import collect_narrowing, render_narrowing  # noqa: I006
     var_name = ctx.args.narrow
     from_line, to_line = _resolve_range(ctx.args, ctx.func_start, ctx.func_end)
+    _require_variable(ctx, var_name, from_line, to_line, '--narrow')
     events = collect_narrowing(ctx.func_node, var_name, ctx.get_text)
     if ctx.as_json:
         findings = [] if events is None else [
@@ -219,8 +260,10 @@ def _nav_narrow(ctx: _NavCtx) -> None:
              'type_set': sorted(e['type_set']), 'depth': e['depth']}
             for e in events
         ]
+        # No annotation is a decline, not a zero: the JSON says the text's sentence (BACK-2627 E2, X14).
+        decline = [render_narrowing(var_name, None, [])] if events is None else None
         _nav_json('narrow', ctx.analyzer.path, ctx.element, from_line, to_line,
-                  findings, extra_meta={'var': var_name})
+                  findings, extra_meta={'var': var_name}, warnings=decline)
     else:
         print(render_narrowing(var_name, events, split_lines(ctx.analyzer.content)))
 
@@ -234,9 +277,8 @@ def _implicit_nodes(ctx: _NavCtx) -> list:
 
 def _nav_calls(ctx: _NavCtx) -> None:
     from .adapters.ast.nav import range_calls, render_range_calls  # noqa: I006
-    # args.calls is 'FULL' (bare --calls), a range string (--calls 89-120), or
-    # None (flag absent).  _parse_line_range handles 'FULL' via its fallback.
-    from_line, to_line = _parse_line_range(ctx.args.calls, ctx.func_start, ctx.func_end)
+    # args.calls is 'FULL' (bare --callsites) or a range string (--callsites 89-120), validated by callsites_lines.
+    from_line, to_line = _parse_line_range(callsites_lines(ctx.args.calls), ctx.func_start, ctx.func_end)
     calls = range_calls(ctx.func_node, from_line, to_line, ctx.get_text,
                         implicit_nodes=_implicit_nodes(ctx), include_jsx=True)
     if ctx.as_json:
@@ -395,6 +437,7 @@ def _nav_keys(ctx: _NavCtx) -> None:
     from .adapters.ast.nav import collect_keys, render_keys  # noqa: I006
     var_name = ctx.args.keys
     from_line, to_line = _resolve_range(ctx.args, ctx.func_start, ctx.func_end)
+    _require_variable(ctx, var_name, from_line, to_line, '--keys')
     events = collect_keys(ctx.func_node, var_name, from_line, to_line, ctx.get_text)
     if ctx.as_json:
         _nav_json('keys', ctx.analyzer.path, ctx.element, from_line, to_line, events,
@@ -439,8 +482,10 @@ def _nav_boundary(ctx: _NavCtx) -> None:
         # --depth is shared with directory-tree/markdown-outline depth; None
         # here means "not explicitly set" so it falls back to a fixed default
         # rather than inheriting _NavCtx.depth's unrelated default of 3.
+        from .adapters.ast.nav_effects import effective_transitive_depth  # noqa: I006
         raw_depth = getattr(ctx.args, 'depth', None)
-        depth = raw_depth if raw_depth else 2
+        # The depth the walk uses, stated as such in text and JSON (BACK-2627 E8): the legacy flag keeps its clamp.
+        depth = effective_transitive_depth(raw_depth if raw_depth else 2)
         boundary = collect_boundary_transitive(
             ctx.analyzer.path, ctx.element, ctx.func_node, from_line, to_line, ctx.get_text,
             language=language, depth=depth,
@@ -465,7 +510,7 @@ def _nav_boundary(ctx: _NavCtx) -> None:
         )
         warnings = _boundary_warnings(boundary, transitive)
         _nav_json('boundary', ctx.analyzer.path, ctx.element, from_line, to_line, findings,
-                  warnings=warnings)
+                  extra_meta={'depth': depth} if transitive else None, warnings=warnings)
     elif transitive:
         print(render_boundary_transitive(boundary, ctx.element, from_line, to_line, depth))
     else:
@@ -516,14 +561,12 @@ def _single_line_ref(element: str, flag: str) -> int:
     print 98-102 and drop the rest of the range without a word (BACK-2272).
     """
     from .display.element import _parse_element_syntax  # noqa: I006
-    syntax = _parse_element_syntax(element)
+    from .errors import NavRequestValidationError
+    syntax = _parse_element_syntax(element) if element else {'type': None}
     if syntax['type'] != 'line':
-        print(
-            f'Error: {flag} requires a line reference (e.g., reveal file.py :123 {flag})\n'
-            f'  Got element: {element!r}',
-            file=sys.stderr,
-        )
-        sys.exit(1)
+        # An invalid request (D6): exit 2, as the range case below (BACK-2627 E9).
+        raise NavRequestValidationError(
+            f'{flag} requires a line reference (e.g., reveal file.py :123 {flag}); got element {element!r}.')
     start: int = syntax['start_line']
     end = syntax['end_line']
     if end is not None and end != start:
@@ -552,6 +595,9 @@ def _nav_scope(analyzer, element: str, as_json: bool) -> None:
 
 def _nav_around(analyzer, element: str, as_json: bool, n: int) -> None:
     """Handle --around N: show N lines of context around a line reference."""
+    from .errors import NavRequestValidationError
+    if n < 0:  # used to print nothing, exit 0, with from_line after to_line (BACK-2627 E10)
+        raise NavRequestValidationError(f'--around takes 0 or more context lines; got {n}.')
     line_no = _single_line_ref(element, '--around')
     content_lines = split_lines(analyzer.content)
     total = len(content_lines)

@@ -362,7 +362,7 @@ class TestRangeWithNavFlags(unittest.TestCase):
         finally:
             sys.stdout = old_stdout
         output = captured.getvalue()
-        self.assertIn('PARAM', output)
+        self.assertIn('INPUT', output)
 
     def test_mutations_with_tuple_range(self):
         """--mutations with a pre-parsed tuple range should not crash.
