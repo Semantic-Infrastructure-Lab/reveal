@@ -453,7 +453,7 @@ def _schema_examples():
     for scheme in sorted(list_supported_schemes()):
         schema = get_adapter_class(scheme).get_schema() or {}
         for example in schema.get('example_queries', []):
-            uri = example['uri']
+            uri = _example_command(example)
             marks = []
             if any(uri.startswith(s) for s in SCHEMA_SKIP_SCHEMES):
                 marks.append(pytest.mark.skip(reason='needs a live host or recorded session'))
@@ -468,6 +468,11 @@ def _schema_examples():
     return params
 
 
+def _example_command(example):
+    """An example query as run: its bare URI, then the flags it takes (git's ``flags``, BACK-2616)."""
+    return ' '.join(filter(None, (example['uri'], example.get('flags'))))
+
+
 def _schema_query(uri):
     """One pass, so a replacement is never itself replaced (data.json -> proj/data.json)."""
     uri = _PLACEHOLDER_RE.sub(lambda m: _PLACEHOLDER_MAP[m.group(0)], uri)
@@ -477,7 +482,7 @@ def _schema_query(uri):
 @pytest.mark.parametrize('example', _schema_examples())
 def test_schema_example_runs_as_written(harness, example):
     from reveal.cli.invocation import RETIREMENTS
-    query = _schema_query(example['uri'])
+    query = _schema_query(_example_command(example))
     retired = RETIREMENTS.get(f"scheme:{query.partition('://')[0]}")
     note = f'note: {retired.text}' if retired is not None and retired.stage == 'note' else None
     _assert_claim(harness, query, _assert_runs_as_written(harness, query, example.get('output_type'), note))
