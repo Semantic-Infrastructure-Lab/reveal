@@ -397,6 +397,15 @@ class LegacySpelling:
     # The binder joins them with the request's own values as one setting (``_normalize_aliases``); an old flag with sets
     # keeps an argument of its own. Empty: the word binds its owner only.
     sets: Tuple[Tuple[str, Any], ...] = ()
+    # The old flag's value was optional (an element view's ``--flow[=SEL]``): given bare it stands for ``flag_value``,
+    # given a value it carries that value. The declared parser generates it with an optional value in an argument of
+    # its own; the codec translates both.
+    flag_optional: bool = False
+
+    def __post_init__(self) -> None:
+        if self.flag_optional and (self.flag is None or self.flag_value is None):
+            raise ValueError(f'{self.name}: an optional-value old flag needs its flag and the flag_value a bare flag '
+                             'stands for')
 
     def translate(self, raw: Any) -> Dict[str, Any]:
         """The canonical controls the legacy value stands for: its owner's value, then the controls it sets. A word that

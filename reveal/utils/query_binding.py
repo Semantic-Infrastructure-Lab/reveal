@@ -1097,11 +1097,19 @@ def flag_spellings(spec: ParamSpec) -> Dict[str, str]:
     return {**({(spec.cli.dest or spec.name): own[0]} if spec.cli is not None and own else {}), **separate}
 
 
+def _legacy_flag_arity(entry: LegacySpelling) -> Dict[str, Any]:
+    """An old flag's argparse arity: an optional value whose bare form is the entry's value (``flag_optional``), no
+    value (it stands for ``flag_value``), or one value."""
+    if entry.flag_optional:
+        return {'nargs': '?', 'const': entry.flag_value}
+    return {'nargs': 0 if entry.flag_value is not None else None}
+
+
 def _add_legacy_flag_arguments(parser, spec) -> None:
     for entry in _separate_legacy_flags(spec):
         parser.add_argument(entry.flag, dest=entry.name, default=argparse.SUPPRESS, action=_LegacyFlagAction,
-                            nargs=0 if entry.flag_value is not None else None, entry=entry,
-                            repeatable=spec.repeatable, help=f'Legacy {entry.flag}: {spec.name}')
+                            entry=entry, repeatable=spec.repeatable, help=f'Legacy {entry.flag}: {spec.name}',
+                            **_legacy_flag_arity(entry))
 
 
 def convert_flag_only(specs: Iterable[ParamSpec], args: Any) -> None:
