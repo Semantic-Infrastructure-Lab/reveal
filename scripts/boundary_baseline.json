@@ -77,7 +77,7 @@
   "reveal/diff/architecture_diff.py": 1,
   "reveal/file_handler.py": 4,
   "reveal/mcp_server.py": 1,
-  "reveal/nav_handlers.py": 21,
+  "reveal/nav_handlers.py": 20,
   "reveal/utils/breadcrumbs.py": 4,
   "reveal/utils/json_utils.py": 1,
   "reveal/utils/query_parser.py": 1,
