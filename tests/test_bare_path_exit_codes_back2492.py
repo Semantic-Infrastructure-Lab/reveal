@@ -21,13 +21,23 @@ def test_missing_path_exits_2(tmp_path):
     assert 'no_such_file.py not found' in result.stderr
 
 
-@pytest.mark.parametrize('scheme', ['codex'])
+# stats stays URI-only (metrics replaces it); codex was the example until it got its subcommand (BACK-2598).
+@pytest.mark.parametrize('scheme', ['stats'])
 def test_uri_only_noun_names_working_spelling(tmp_path, scheme):
     result = _run_reveal_in(tmp_path, scheme, 'src with spaces')
     assert result.returncode == 2
     assert f'{scheme}://src with spaces' in result.stderr
     assert 'URI noun' in result.stderr
     assert 'Running from' not in result.stderr
+
+
+def test_codex_subcommand_judges_its_resource(tmp_path):
+    """``reveal codex X`` is codex's own subcommand now (BACK-2598): an unknown resource exits 2 naming it (BACK-2700),
+    not the URI-noun redirect."""
+    result = _run_reveal_in(tmp_path, 'codex', 'src with spaces')
+    assert result.returncode == 2
+    assert "Unknown codex:// resource: 'src with spaces'" in result.stderr
+    assert 'URI noun' not in result.stderr
 
 
 def test_existing_directory_named_for_a_scheme_stays_a_path(tmp_path):

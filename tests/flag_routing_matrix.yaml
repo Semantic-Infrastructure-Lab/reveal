@@ -209,11 +209,19 @@ adapters:
       review: not-applicable
       via: []
     since:
-      via:
-      - declared
+      reason: 'not silent: reaches codex through its declared subcommand parser, which binds a flag after a codex://
+        URI as the subcommand''s --since (BACK-2673); the CLI_QUERY_FLAGS forwarding this matrix reads as declared is
+        gone (BACK-2598); tests/test_codex_subcommand_back2598.py compares both forms. The matrix has no channel for
+        the declared parser (it would also change claude, git, metrics, pack and stats cells)'
+      review: not-applicable
+      via: []
     until:
-      via:
-      - declared
+      reason: 'not silent: reaches codex through its declared subcommand parser, which binds a flag after a codex://
+        URI as the subcommand''s --until (BACK-2673); the CLI_QUERY_FLAGS forwarding this matrix reads as declared is
+        gone (BACK-2598); tests/test_codex_subcommand_back2598.py compares both forms. The matrix has no channel for
+        the declared parser (it would also change claude, git, metrics, pack and stats cells)'
+      review: not-applicable
+      via: []
     verbose:
       via:
       - declared-binding
