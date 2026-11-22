@@ -27,10 +27,11 @@ def _run(path, element, *flags):
     return _run_reveal_direct(path, *([element] if element else []), *flags)
 
 
-def _same(path, element, old, new, extra=()):
+def _same(path, element, old, new, extra=(), old_extra=None):
+    # old_extra: the legacy request's own modifiers when they differ (--fanout --depth N is --nesting-depth N, D1).
     for fmt in ('json', 'text'):
-        before = _run(path, element, old, *extra, '--format', fmt)
-        after = _run(path, element, '--effects', *new, *extra, '--format', fmt)
+        before = _run(path, element, old, *(extra if old_extra is None else old_extra), '--format', fmt)
+        after = _run(path, element, '--view', 'effects', *new, *extra, '--format', fmt)
         assert before.returncode == after.returncode == 0, (before.stderr, after.stderr)
         if fmt == 'json':
             canonical = json.loads(after.stdout)
@@ -53,7 +54,7 @@ def test_conformance_modes_preserve_complete_answers_and_independent_truth(langu
     element = expected['entry_function'] if old == '--sideeffects' else expected['batch_element']
     path = _sample_path(language)
     _same(path, element, old, new)
-    result = _run(path, element, '--effects', *new, '--format', 'json')
+    result = _run(path, element, '--view', 'effects', *new, '--format', 'json')
     assert result.returncode == 0, result.stderr
     rows = json.loads(result.stdout)['findings']
     if old == '--fanout':
@@ -85,9 +86,10 @@ def test_selection_routes_keep_complete_answer(project, old, new, element, extra
 
 @pytest.mark.parametrize('depth', [None, 1, 8])
 def test_loop_depth_keeps_nested_groups_and_pruning(project, depth):
-    extra = () if depth is None else ('--depth', str(depth))
-    _same(project, 'entry', '--fanout', ('--in-loops',), extra)
-    result = _run(project, 'entry', '--effects', '--in-loops', *extra, '--format', 'json')
+    legacy = () if depth is None else ('--depth', str(depth))
+    extra = () if depth is None else ('--nesting-depth', str(depth))
+    _same(project, 'entry', '--fanout', ('--in-loops',), extra, old_extra=legacy)
+    result = _run(project, 'entry', '--view', 'effects', '--in-loops', *extra, '--format', 'json')
     data = json.loads(result.stdout)
     assert data['meta']['depth'] == (3 if depth is None else depth)
     assert len(data['findings']) == (1 if depth == 1 else 2)
