@@ -219,10 +219,10 @@ def test_an_agreeing_selection_on_the_uri_is_one_setting(root):
 
 
 def test_two_different_aggregate_fields_exit_2_naming_both(root):
-    """RED (B3): --field and the legacy aggregate word set one field; different values exit 2 naming both ("Conflicting
-    values"); today --field wins silently."""
+    """RED (B3): --field and the legacy aggregate word set one field; different values exit 2 naming both spellings
+    (the Conflicting-values error, ruling Q2-A); today --field wins silently."""
     run, _ = _json(root, 'markdown', 'docs', '--field', 'type', '--aggregate', 'tags')
-    assert run.returncode == 2 and 'type' in run.stderr and 'tags' in run.stderr, run.stderr
+    assert run.returncode == 2 and '--field' in run.stderr and '--aggregate' in run.stderr, run.stderr
 
 
 def test_one_aggregate_field_given_twice_alike_is_the_sibling(root):
