@@ -355,8 +355,8 @@ class EnvAdapter(ResourceAdapter):
         variable = self.get_element(name, show_secrets=show_secrets)
         if variable is None:
             raise RequestValidationError(f"Element '{name}' not found")
-        return ResultBuilder.create(result_type=self.ELEMENT_RESULT_TYPE, source=f'env://{name}',
-                                    source_type='runtime', contract_version=CONTRACT_VERSION, data=variable)
+        return dict(ResultBuilder.create(result_type=self.ELEMENT_RESULT_TYPE, source=f'env://{name}',
+                                         source_type='runtime', contract_version=CONTRACT_VERSION, data=variable))
 
     def get_element(self, element_name: str, **kwargs: Any) -> Optional[Dict[str, Any]]:
         """Get details about a specific environment variable.
