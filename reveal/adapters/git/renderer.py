@@ -141,7 +141,8 @@ class GitRenderer:
         """Render ?type=history&bucket=... -- commit and author counts per period.
         It fell through to raw JSON in text mode (BACK-1502)."""
         buckets = result.get('buckets') or []
-        print(f"Timeline: {result['path']} @ {result['ref']} (per {result.get('bucket', 'period')})")
+        where = result['path'] or 'repository'  # a repository's timeline has no path (it printed "None", BACK-2616)
+        print(f"Timeline: {where} @ {result['ref']} (per {result.get('bucket', 'period')})")
         print(f"Commits: {result.get('commit_count', 0)}  Authors: {result.get('distinct_author_count', 0)}")
         print()
         if not buckets:
@@ -326,8 +327,13 @@ class GitRenderer:
         if imports:
             print(f"Imports ({len(imports)}):")
             for imp in imports[:10]:
-                name = imp if isinstance(imp, str) else imp.get('name', str(imp))
-                print(f"  {name}")
+                # An analyzer's import is {'line', 'content'} (it printed the dict, BACK-2616 B14).
+                if isinstance(imp, str):
+                    print(f"  {imp}")
+                elif 'content' in imp:
+                    print(f"  :{imp.get('line', '?'):<6} {imp['content']}")
+                else:
+                    print(f"  {imp.get('name', str(imp))}")
             if len(imports) > 10:
                 print(f"  ... and {len(imports) - 10} more")
             print()

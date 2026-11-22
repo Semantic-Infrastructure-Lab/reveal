@@ -808,7 +808,6 @@ def get_ownership(
         authors=author_list,
         _meta={
             'analysis_kind': 'commit-ownership',
-            'confidence': 'high',
             'known_limits': [
                 'commit-share, not line-ownership — use ?type=blame for surviving-line attribution',
                 'merge commits excluded by default (use ?merges=1 to include)',

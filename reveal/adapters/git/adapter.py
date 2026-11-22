@@ -882,7 +882,7 @@ class GitAdapter(ResourceAdapter):
                 'author': 'Filter commits by author name (case-insensitive, use ~= for regex)',
                 'email': 'Filter commits by author email (case-insensitive, use ~= for regex)',
                 'message': 'Filter commits by message (use ~= for regex matching)',
-                'hash': 'Filter commits by hash prefix',
+                'hash': 'Filter commits by short hash (the 7-character hash, compared whole; a prefix is hash~=^PREFIX)',
                 'date': 'Filter commits by date — supports =, !=, >, <, >=, <= and a range =a..b with an ISO date or timestamp (e.g. date>2026-01-01). A year, month or day bound is the whole period: date=2026-01-31 is any commit that day, date>2026-01 excludes January, date>=P and date<=P include it. A timestamp may use a space or T, and a zone (Z, +02:00) is converted to local time. Use since=YYYY-MM-DD (or YYYY-MM) as an ergonomic alias for date>=. A filter with an operator on a field no commit has (authr~=x) warns unknown_filter_field.',
                 'timestamp': 'Filter commits by commit time in epoch seconds (e.g. timestamp>1767225600)',
                 'content~': 'Pickaxe search: only commits where the diff added or removed the given string. Works on file-scoped history (?type=history) and repo-wide (git://.?content~=X). Independent of commit message wording.',

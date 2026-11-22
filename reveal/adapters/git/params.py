@@ -67,7 +67,7 @@ COMMIT_FILTER_FIELDS = {
     'date': ('string', 'Commit date: =, !=, >, <, >=, <= and a range =a..b with an ISO date or timestamp. A year, '
                        'month or day bound (2026, 2026-01, 2026-01-31) is the whole period; a zone (Z, +02:00) is '
                        'converted to the local time commit dates are written in'),
-    'hash': ('string', 'Commit short hash (7 characters)'),
+    'hash': ('string', 'Commit short hash (7 characters, compared whole; ~=^PREFIX matches a prefix)'),
     'message': ('string', 'Commit message (~= is a regex)'),
     'timestamp': ('integer', 'Commit time in epoch seconds (>, <, >=, <=, =, !=)'),
     'content': ('string', 'Changed-line pickaxe: commits whose diff added or removed a line containing the literal '
@@ -123,9 +123,12 @@ SORT = string('sort', 'Commit field; prefix - for descending', answers=_ROWS)
 LIMIT = ParamSpec('limit', 'integer', 'Returned rows; 0 = no cap (a legacy type= aggregate request binds its limit as scan-limit)', None,
                   lambda v: nonnegative_display_limit(v, name='limit'), minimum=0,
                   zero_policy='no cap', cli_flags=(('all', '1000000'),), cli=CliBinding(('--limit',)), answers=_ROWS)
-SCAN_LIMIT = ParamSpec('scan-limit', 'integer', 'Commit-input budget for ownership or timeline; required loss exits 3',
+# Omitted, the timeline reads at most 20,000 commits and ownership every commit; 0 is no budget (it read every commit
+# while declared 'count no commits', BACK-2616 B16).
+SCAN_LIMIT = ParamSpec('scan-limit', 'integer', 'Commit-input budget for ownership or timeline (omitted: timeline '
+                       '20,000, ownership unbounded; 0 = no budget); required loss exits 3',
                        None, lambda v: nonnegative_display_limit(v, name='scan-limit'), minimum=0,
-                       aliases=('scan_limit',), zero_policy='count no commits',
+                       aliases=('scan_limit',), zero_policy='no cap',
                        cli=CliBinding(('--scan-limit',), dest='scan_limit'), answers=_AGGREGATES)
 OFFSET = ParamSpec('offset', 'integer', 'Rows skipped after sorting', 0,
                    lambda v: nonnegative_display_limit(v, name='offset'), minimum=0,

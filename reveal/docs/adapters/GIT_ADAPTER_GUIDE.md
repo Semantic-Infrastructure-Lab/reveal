@@ -753,7 +753,7 @@ The fields a `where` expression (or a bare `FIELD OP VALUE` key) filters commits
 | `author` | string | `=`, `~=` | Filter by author name (case-insensitive) |
 | `email` | string | `=`, `~=` | Filter by author email |
 | `message` | string | `=`, `~=` | Filter by commit message |
-| `hash` | string | `=`, `.=` | Filter by commit hash prefix |
+| `hash` | string | `=`, `~=` | Filter by commit short hash: `=` compares the whole 7-character hash; a prefix is `hash~=^PREFIX` |
 | `date` | ISO date | `=`, `!=`, `>`, `<`, `>=`, `<=`, `=a..b` | Filter by commit date, e.g. `date>=2026-01-01`. A year, month or day is the whole period: `date=2026-02-06` is any commit that day, `date>2026-01` excludes January, `date>=P`/`date<=P` include it. A timestamp may use a space or `T` (`2026-01-31T12:00:00`), and may end in a zone (`Z`, `+02:00`) |
 | `timestamp` | integer | `=`, `!=`, `>`, `<`, `>=`, `<=` | Filter by commit time in epoch seconds, e.g. `timestamp>1767225600` |
 | `since` | ISO date | `=` only | Ergonomic alias for `date>=` (`since=2026-01` includes January) |
@@ -1170,7 +1170,6 @@ With `element=NAME` the JSON also carries an `element` key. The JSON carries the
   ],
   "_meta": {
     "analysis_kind": "commit-ownership",
-    "confidence": "high",
     "known_limits": [
       "commit-share, not line-ownership — use ?type=blame for surviving-line attribution",
       "merge commits excluded by default (use ?merges=1 to include)",

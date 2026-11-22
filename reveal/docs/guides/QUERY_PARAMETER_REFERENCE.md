@@ -161,7 +161,7 @@ reveal 'imports://src?circular&detail=full'   # Cycle paths
     reveal 'git://app.py?type=history&message=Initial commit'
     ```
 
-- **`hash`** - Filter commits by hash prefix
+- **`hash`** - Filter commits by short hash: `=` compares the whole 7-character hash; a prefix is `hash~=^PREFIX`
   - **Example**:
     ```bash
     reveal 'git://app.py?type=history&hash=a1b2c3d'
