@@ -26,13 +26,16 @@ def test_orphans_are_docs_nothing_links_to(tmp_path):
 
 
 def test_text_names_an_orphan_that_links_out(tmp_path):
+    """The Orphans list holds every document the header counts, isolated ones included: one number per word (BACK-2614
+    B8; it listed orphans minus isolated, so the header said 2 and the list 1)."""
     root = _tree(tmp_path)
-    result = _run_reveal_direct(f'markdown://{root.as_posix()}/?link-graph')
+    result = _run_reveal_direct('markdown', root.as_posix(), '--view', 'links')
     assert result.returncode == 0, result.stderr
     assert '2 orphans' in result.stdout and '1 isolated' in result.stdout
     orphans_section = result.stdout.split('Orphans', 1)[1].split('Isolated', 1)[0]
-    assert 'index.md' in orphans_section
-    assert 'alone.md' not in orphans_section  # listed once, under Isolated
+    assert orphans_section.startswith(' (2):') and 'index.md' in orphans_section and 'alone.md' in orphans_section
+    isolated_section = result.stdout.split('Isolated', 1)[1]
+    assert isolated_section.startswith(' (1):') and 'alone.md' in isolated_section and 'index.md' not in isolated_section
 
 
 def test_json_carries_orphans(tmp_path):
