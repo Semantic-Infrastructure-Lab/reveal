@@ -764,12 +764,18 @@ def _judged_controls(declarations: tuple, params: Mapping[str, Any], given: set)
 def _unmet_requirements(declarations: tuple, spec: ParamSpec, params: Mapping[str, Any]) -> list:
     """Each ``requires`` entry of *spec* the request does not meet, as the message naming both. An entry is met when
     one of its ``|`` alternatives is: ``name=value`` by the given or default value, compared after the control's own
-    conversion (``churn=on``); a bare ``name`` by that control being given (``filter|search``)."""
+    conversion (``churn=on``); a bare ``name`` by that control being given (``filter|search``); ``!name`` by that
+    control not being given (two ways to set one thing that never agree, BACK-2623)."""
     problems = []
     given = given_controls(params)
     for requirement in spec.requires:
         alternatives = requirement.split('|')
         if any(_requirement_met(declarations, alternative, params, given) for alternative in alternatives):
+            continue
+        if requirement.startswith('!'):
+            other = next(declaration for declaration in declarations if declaration.name == requirement[1:])
+            problems.append(f"control {_as_typed(params, spec.name)} cannot be combined with '{other.name}'; this "
+                            f"request gives {other.name}={_bound_value(other, params)}: give one or the other")
             continue
         name, valued, wanted = requirement.partition('=')
         if len(alternatives) == 1 and valued:
@@ -783,6 +789,8 @@ def _unmet_requirements(declarations: tuple, spec: ParamSpec, params: Mapping[st
 
 
 def _requirement_met(declarations: tuple, alternative: str, params: Mapping[str, Any], given: set) -> bool:
+    if alternative.startswith('!'):
+        return alternative[1:] not in given
     name, valued, wanted = alternative.partition('=')
     if not valued:
         return name in given

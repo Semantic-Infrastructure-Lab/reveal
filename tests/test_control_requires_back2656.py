@@ -114,7 +114,7 @@ def test_every_declared_requirement_names_a_sibling_control_and_a_value_it_accep
                     for requirement in spec.requires]
     for noun, spec, requirement in requirements:
         for alternative in requirement.split('|'):
-            other, sep, value = alternative.partition('=')
+            other, sep, value = alternative.removeprefix('!').partition('=')  # '!name': name not given (BACK-2623)
             [sibling] = [s for s in _adapter(noun).PARAM_SPECS if s.name == other]
             assert other != spec.name, (noun, spec.name, requirement)
             if sep:
