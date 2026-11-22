@@ -367,9 +367,9 @@ reveal mysql://prod/replication
 reveal sqlite:///tmp/app.db
 reveal json://config.json/services/api
 reveal env://DATABASE_URL
-reveal 'xlsx:///data/report.xlsx?powerpivot=relationships'
-reveal 'xlsx:///data/report.xlsx?powerquery=list'
-reveal 'xlsx:///data/report.xlsx?connections=show'
+reveal xlsx /data/report.xlsx --powerpivot relationships
+reveal xlsx /data/report.xlsx --powerquery list
+reveal xlsx /data/report.xlsx --connections show
 ```
 
 Why it is good for this:
@@ -606,7 +606,7 @@ Start with the workflow that matches your job:
 | Discover Reveal capabilities | `reveal help://` or `reveal help://schemas` |
 | Investigate docs | `reveal 'markdown://docs/?link-graph'` |
 | Check infra health | `reveal health ssl://site domain://site` |
-| Explore workbook internals | `reveal 'xlsx:///file.xlsx?powerpivot=schema'` |
+| Explore workbook internals | `reveal xlsx /file.xlsx --powerpivot schema` |
 | Audit Claude sessions | `reveal claude://sessions/` |
 
 For next steps:

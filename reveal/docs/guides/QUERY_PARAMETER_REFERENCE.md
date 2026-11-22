@@ -25,7 +25,7 @@ Query parameters allow filtering, formatting, and modifying adapter behavior usi
 | **claude://** | `view`, `detail`, `errors`, `tools`, `match`, `where`, `sort`, `offset`, `limit`, `tokens` | `claude://session/NAME?detail=summary` |
 | **codex://** | `where` (`session~=TEXT`), `match`, `matches`, `since`, `until`, `view`, `detail`, `key`, `limit`, `offset` (retired, with a note: `filter`, `search`, `full`, `last`, `tokens`, `goal`) | `codex://sessions/?match=auth-refactor` |
 | **depends://** (retired, with a note: use `imports://?importers`) | `top`, `format` | `depends://src?top=10` |
-| **xlsx://** | `sheet`, `range`, `search`, `format`, `limit`, `formulas`, `powerpivot`, `powerquery`, `names`, `connections` | `xlsx://model.xlsx?sheet=Sales` |
+| **xlsx://** | `--sheet`, `--cells`, `--match`, `--limit`, `--formulas`, `--powerpivot`, `--powerquery`, `--names`, `--connections` (`?range`, `?search` legacy) | `reveal xlsx model.xlsx --sheet Sales` |
 | **help://** | `search`, `top` (only on `help://search`; `top` caps hits, default 20, `0` = all) | `help://search?search=find callers&top=50` |
 | **cpanel://** | `domain_type`, `dns-verified`, `check-live` | `cpanel://USER/ssl?domain_type=addon` |
 | **ssl://** | `expiring-within` (implies `--check`), `summary` (batch and nginx views) | `ssl://host?expiring-within=30` |
@@ -580,60 +580,61 @@ reveal 'imports://src?importers=utils.py'   # one file's importers, each with it
 
 **Purpose**: Extract data, structure, and embedded models from Excel files
 
-**Query Parameters** (a value a parameter cannot apply, such as an unknown mode, a limit that is not a
-whole number or a bare `search`, exits 2 and names what the parameter accepts):
+**Options** (flags on `reveal xlsx FILE`, which `xlsx://FILE` takes too; the query-string keys still answer until
+1.0 with a note, `?range` as `--cells` and `?search` as `--match`. A value an option cannot apply, such as an unknown
+mode, a limit that is not a whole number or an empty `--match`, exits 2 and names what it accepts):
 
-- **`sheet=<name|index>`** (string|integer) - Sheet to extract (name or 0-based index)
+- **`--sheet NAME|INDEX`** (string|integer) - Sheet to extract (name or 0-based index)
   ```bash
-  reveal 'xlsx://model.xlsx?sheet=Sales'
-  reveal 'xlsx://model.xlsx?sheet=0'
+  reveal xlsx model.xlsx --sheet Sales
+  reveal xlsx model.xlsx --sheet 0
   ```
 
-- **`range=<A1:C10>`** (string) - Cell range in A1 notation
+- **`--cells A1:C10`** (string) - Sheet view: cells in A1 notation, whole columns `B:D`, rows `5:7` or one cell
   ```bash
-  reveal 'xlsx://model.xlsx?sheet=Sales&range=A1:C10'
+  reveal xlsx model.xlsx --sheet Sales --cells A1:C10
   ```
 
-- **`search=<text>`** (string) - Search for text across all sheets
+- **`--match TEXT`** (string, repeatable) - Search every sheet for rows holding the text; repeat it to require every term in a row
   ```bash
-  reveal 'xlsx://model.xlsx?search=revenue'
+  reveal xlsx model.xlsx --match revenue
   ```
 
-- **`format=<format>`** (string) - Output override: `csv` (the sheet view as CSV, every row) or `json`; `text` follows `--format`
+- **`--format csv`** - The global flag; `csv` renders the sheet view as CSV (every row) and exits 2 on the other views
   ```bash
-  reveal 'xlsx://model.xlsx?sheet=Sales&format=csv'
+  reveal xlsx model.xlsx --sheet Sales --format csv
   ```
 
-- **`limit=N`** (integer, 0 or more) - Rows (sheet view) or matches (search) to return; 0 or absent: the sheet view shows 100 and says so
+- **`--limit N`** (integer, 0 or more) - Rows (sheet view) or matches (search) to return; `0` or `--all` is every row; absent: the sheet view shows 100 and says so
   ```bash
-  reveal 'xlsx://model.xlsx?sheet=Sales&limit=100'
+  reveal xlsx model.xlsx --sheet Sales --limit 100
   ```
 
-- **`formulas=true`** (boolean: `true`/`false`) - Show formulas instead of computed values
+- **`--formulas on|off`** - Sheet view: show formulas instead of computed values
   ```bash
-  reveal 'xlsx://model.xlsx?sheet=Budget&formulas=true'
+  reveal xlsx model.xlsx --sheet Budget --formulas on
   ```
 
-- **`powerpivot=<mode>`** (string) - Extract Power Pivot data model (`tables`, `schema` (bare), `measures`, `dax`, `relationships`)
+- **`--powerpivot MODE`** (string) - Extract Power Pivot data model (`tables`, `schema` (bare), `measures`, `dax`, `relationships`)
   ```bash
-  reveal 'xlsx://model.xlsx?powerpivot=schema'
-  reveal 'xlsx://model.xlsx?powerpivot=dax'
+  reveal xlsx model.xlsx --powerpivot schema
+  reveal xlsx model.xlsx --powerpivot dax
   ```
 
-- **`powerquery=<mode>`** (string) - Extract Power Query M code (`list` (bare), `show`, or one query by name; a name that matches nothing exits 2 and lists the queries)
+- **`--powerquery MODE`** (string) - Extract Power Query M code (`list` (bare), `show`, or one query by name; a name that matches nothing exits 2 and lists the queries)
   ```bash
-  reveal 'xlsx://model.xlsx?powerquery=list'
-  reveal 'xlsx://model.xlsx?powerquery=SalesData'
+  reveal xlsx model.xlsx --powerquery list
+  reveal xlsx model.xlsx --powerquery SalesData
   ```
 
-- **`names`** (`list`, or bare) - List named ranges defined in the workbook
+- **`--names`** (`list`, or bare) - List named ranges defined in the workbook
   ```bash
-  reveal 'xlsx://model.xlsx?names'
+  reveal xlsx model.xlsx --names list
   ```
 
-- **`connections`** (`list` (bare) or `show`) - List external data connections
+- **`--connections`** (`list` (bare) or `show`) - List external data connections
   ```bash
-  reveal 'xlsx://model.xlsx?connections=list'
+  reveal xlsx model.xlsx --connections list
   ```
 
 ---

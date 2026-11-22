@@ -17,16 +17,16 @@ category: guide
 reveal file.xlsx
 
 # Extract specific sheet (by name)
-reveal 'xlsx://file.xlsx?sheet=Sales'
+reveal xlsx file.xlsx --sheet Sales
 
 # Extract cell range (A1 notation)
-reveal 'xlsx://file.xlsx?sheet=Sales&range=A1:C10'
+reveal xlsx file.xlsx --sheet Sales --cells A1:C10
 
 # Export sheet as CSV
-reveal 'xlsx://file.xlsx?sheet=Sales&format=csv'
+reveal xlsx file.xlsx --sheet Sales --format csv
 
 # Search across all sheets
-reveal 'xlsx://file.xlsx?search=revenue'
+reveal xlsx file.xlsx --match revenue
 ```
 
 ---
@@ -44,13 +44,13 @@ reveal 'xlsx://sales_report.xlsx'
 ```
 File: sales_report.xlsx
 
-Sheets (3) -- open one with ?sheet=<name> or ?sheet=<index>:
+Sheets (3) -- open one with --sheet NAME or --sheet INDEX:
   [0]  Sheet1 (A1:L500) - 500 rows, 12 cols
   [1]  Sales (A1:H1234) - 1234 rows, 8 cols, 12 formulas
   [2]  Summary (A1:E25) - 25 rows, 5 cols
 ```
 
-Sheets are numbered as `?sheet=` counts them, from 0. Workbook properties (author,
+Sheets are numbered as `--sheet` counts them, from 0. Workbook properties (author,
 created/modified dates) are not shown. A detected Power Pivot model, Power Query,
 external connections or named ranges add a line each with the query that opens them.
 `reveal sales_report.xlsx` (the file view) lists the same sheets numbered from 1, as
@@ -60,14 +60,14 @@ element lines.
 
 **By name (case-insensitive):**
 ```bash
-reveal 'xlsx://file.xlsx?sheet=Sales'
-reveal 'xlsx://file.xlsx?sheet=sales'     # Case-insensitive
+reveal xlsx file.xlsx --sheet Sales
+reveal xlsx file.xlsx --sheet sales     # Case-insensitive
 ```
 
 **By index (0-based):**
 ```bash
-reveal 'xlsx://file.xlsx?sheet=0'         # First sheet
-reveal 'xlsx://file.xlsx?sheet=1'         # Second sheet
+reveal xlsx file.xlsx --sheet 0         # First sheet
+reveal xlsx file.xlsx --sheet 1         # Second sheet
 ```
 
 **Output shows:**
@@ -75,48 +75,48 @@ reveal 'xlsx://file.xlsx?sheet=1'         # Second sheet
 - The sheet's rows, numbered from 1 as in Excel (the first row is whatever the sheet
   holds there; reveal does not detect a header row or column types)
 - The first 100 rows by default, with a `Truncated rows: showing 100 of N` line when
-  the sheet is longer; `?limit=N` changes the cap and `?format=csv` returns every row
+  the sheet is longer; `--limit N` changes the cap and `--format csv` returns every row
 
 ### Cell Range Extraction
 
 **A1 notation support:**
 ```bash
 # Simple range
-reveal 'xlsx://file.xlsx?sheet=Sales&range=A1:C10'
+reveal xlsx file.xlsx --sheet Sales --cells A1:C10
 
 # Whole columns
-reveal 'xlsx://file.xlsx?sheet=Sales&range=B:B'
+reveal xlsx file.xlsx --sheet Sales --cells B:B
 
 # Whole rows
-reveal 'xlsx://file.xlsx?sheet=Sales&range=5:5'
+reveal xlsx file.xlsx --sheet Sales --cells 5:5
 
 # One cell
-reveal 'xlsx://file.xlsx?sheet=Sales&range=B2'
+reveal xlsx file.xlsx --sheet Sales --cells B2
 
 # Large ranges (any Excel column, up to XFD)
-reveal 'xlsx://file.xlsx?sheet=Data&range=A1:ZZ1000'
+reveal xlsx file.xlsx --sheet Data --cells A1:ZZ1000
 ```
 
 **What you get:**
 - The cell values in the range, by Excel's own row and column numbers (a blank row
   in the sheet is an empty row in the result, so later rows keep their numbers;
-  `?range=A3:C5` prints rows 3-5, and JSON gives the first one as `first_row`)
+  `--cells A3:C5` prints rows 3-5, and JSON gives the first one as `first_row`)
 - Empty cells as `""` in JSON and blank in text
 - Any other range form is an error naming the forms above, not the whole sheet
 
 ### CSV Export
 
 **Export any sheet to CSV format.** A CSV export has every row of the sheet (or of the
-range); a `?limit=N` cut is reported on stderr, so the CSV on stdout stays clean.
+range); a `--limit N` cut is reported on stderr, so the CSV on stdout stays clean.
 ```bash
 # Full sheet
-reveal 'xlsx://file.xlsx?sheet=Sales&format=csv'
+reveal xlsx file.xlsx --sheet Sales --format csv
 
 # Specific range
-reveal 'xlsx://file.xlsx?sheet=Sales&range=A1:E100&format=csv'
+reveal xlsx file.xlsx --sheet Sales --cells A1:E100 --format csv
 
 # Pipe to file
-reveal 'xlsx://file.xlsx?sheet=Sales&format=csv' > sales.csv
+reveal xlsx file.xlsx --sheet Sales --format csv > sales.csv
 ```
 
 **CSV output characteristics:**
@@ -130,7 +130,7 @@ reveal 'xlsx://file.xlsx?sheet=Sales&format=csv' > sales.csv
 **Find data across entire workbook:**
 ```bash
 # Simple search (case-insensitive)
-reveal 'xlsx://file.xlsx?search=revenue'
+reveal xlsx file.xlsx --match revenue
 
 # Multiple matches show sheet + cell location
 ```
@@ -149,42 +149,49 @@ reveal 'xlsx://file.xlsx?search=revenue'
 
 ---
 
-## Query Parameters
+## Options
 
-| Parameter | Type | Description | Example |
-|-----------|------|-------------|---------|
-| `sheet` | string\|int | Sheet name (case-insensitive; an exact name wins, then a unique part of one) or 0-based index | `?sheet=Sales` or `?sheet=0` |
-| `range` | string | `A1:C10`, whole columns `B:D`, whole rows `5:7`, or one cell `B2` | `?range=A1:C10` |
-| `format` | string | Output override: `csv` or `json`; `text` follows `--format` | `?format=csv` |
-| `search` | string | Search term (case-insensitive) | `?search=revenue` |
-| `limit` | int, 0 or more | Max rows (sheet view) or matches (search); 0 or absent: 100 in the sheet view, every row in a CSV export, every match in a search | `?limit=500` |
-| `powerpivot` | string | Power Pivot data model mode (see below; bare means `schema`) | `?powerpivot=schema` |
-| `powerquery` | string | Power Query M code mode: `list` (bare), `show`, or one query by name | `?powerquery=list` |
-| `names` | string | Show named ranges / defined names: `list` (bare) | `?names=list` |
-| `connections` | string | External connections mode: `list` (bare) or `show` | `?connections=list` |
-| `formulas` | boolean | Show formulas instead of computed values (`true`/`false`) | `?formulas=true` |
+Options are flags on `reveal xlsx FILE`; the resource URI `xlsx://FILE` takes the same flags. The query-string
+spellings (`?sheet=Sales`, `?range=`, `?search=`, ...) still answer until 1.0, each with a note naming the flag
+(`?range` is `--cells`, `?search` is `--match`).
 
-A value a parameter cannot apply exits 2 and names what it accepts: an unknown mode, a `limit` that is
-not a whole number or is negative, a `formulas` that is not true or false, a bare or empty `search`,
-`sheet` or `range`, and a `?powerquery=NAME` that matches no query (the message lists the queries).
+| Flag | Type | Description | Example |
+|------|------|-------------|---------|
+| `--sheet` | string\|int | The sheet view: sheet name (case-insensitive; an exact name wins, then a unique part of one) or 0-based index | `--sheet Sales` or `--sheet 0` |
+| `--cells` | string | Sheet view: `A1:C10`, whole columns `B:D`, whole rows `5:7`, or one cell `B2` | `--cells A1:C10` |
+| `--format` | string | `csv` renders the sheet view as CSV (every row); `json` and `text` render every answer | `--format csv` |
+| `--match` | string, repeatable | The search: rows of every sheet holding the text (case-insensitive); repeat it to require every term in a row | `--match revenue` |
+| `--limit` | int, 0 or more | Rows (sheet view) or matches (search); `0` or `--all` is every row; absent: 100 in the sheet view (it says so), every row with `--format csv`, every match in a search | `--limit 500` |
+| `--powerpivot` | string | Power Pivot data model mode (see below; bare means `schema`) | `--powerpivot schema` |
+| `--powerquery` | string | Power Query M code mode: `list` (bare), `show`, or one query by name | `--powerquery list` |
+| `--names` | string | Show named ranges / defined names: `list` (bare) | `--names list` |
+| `--connections` | string | External connections mode: `list` (bare) or `show` | `--connections list` |
+| `--formulas` | on\|off | Sheet view: show formulas instead of computed values | `--formulas on` |
+
+The six views (`--sheet`, `--match`, `--powerpivot`, `--powerquery`, `--names`, `--connections`) are one answer
+each: two in one request exit 2. An option the selected view does not read (`--cells` on the overview), an unknown
+option, or a setting given twice with different values exits 2 naming what the view takes.
+A value an option cannot apply exits 2 and names what it accepts: an unknown mode, a `--limit` that is
+not a whole number or is negative, a `--formulas` that is not on or off, an empty `--match`, `--sheet` or
+`--cells`, and a `--powerquery NAME` that matches no query (the message lists the queries).
 Each was read as its default before (BACK-2525).
 
 **Parameter combinations:**
 ```bash
 # Sheet + range
-xlsx://file.xlsx?sheet=Sales&range=A1:E50
+reveal xlsx file.xlsx --sheet Sales --cells A1:E50
 
 # Sheet + format
-xlsx://file.xlsx?sheet=Sales&format=csv
+reveal xlsx file.xlsx --sheet Sales --format csv
 
 # Sheet + range + format
-xlsx://file.xlsx?sheet=Sales&range=A1:E50&format=csv
+reveal xlsx file.xlsx --sheet Sales --cells A1:E50 --format csv
 
 # Sheet + limit
-xlsx://file.xlsx?sheet=Sales&limit=10
+reveal xlsx file.xlsx --sheet Sales --limit 10
 
 # Search only (no sheet needed)
-xlsx://file.xlsx?search=revenue
+reveal xlsx file.xlsx --match revenue
 ```
 
 ---
@@ -195,7 +202,7 @@ xlsx://file.xlsx?search=revenue
 
 **Human-readable table output:**
 ```bash
-reveal 'xlsx://file.xlsx?sheet=Sales'
+reveal xlsx file.xlsx --sheet Sales
 ```
 
 Output includes:
@@ -207,7 +214,7 @@ Output includes:
 
 **Machine-readable structured output:**
 ```bash
-reveal 'xlsx://file.xlsx?sheet=Sales' --format json
+reveal xlsx file.xlsx --sheet Sales --format json
 ```
 
 **JSON structure:**
@@ -228,7 +235,7 @@ reveal 'xlsx://file.xlsx?sheet=Sales' --format json
   "meta": {
     "warnings": [
       {"type": "truncated", "field": "rows", "shown": 100, "total": 1234,
-       "message": "rows: showing 100 of 1234 — set ?limit=N, or ?format=csv for every row"}
+       "message": "rows: showing 100 of 1234 — set --limit N (0 or --all = every row), or --format csv for every row"}
     ]
   }
 }
@@ -237,8 +244,8 @@ reveal 'xlsx://file.xlsx?sheet=Sales' --format json
 Cell values are strings as stored in the workbook (numbers unformatted, dates as
 Excel serial numbers); no column types are inferred.
 
-`rows_count` is the number of rows the view covers before `?limit=`: every row from 1 to the
-sheet's last row (or every row of a `?range=`), blank rows included, so it is the total the
+`rows_count` is the number of rows the view covers before `--limit`: every row from 1 to the
+sheet's last row (or every row of a `--cells`), blank rows included, so it is the total the
 `truncated` warning states and the `Rows:` line of the text view. A blank row is listed as an
 empty row so row numbers line up with Excel's. The workbook overview's per-sheet `rows` counts
 the rows Excel stores, which leaves blank rows out.
@@ -247,7 +254,7 @@ the rows Excel stores, which leaves blank rows out.
 
 **Excel-compatible CSV:**
 ```bash
-reveal 'xlsx://file.xlsx?sheet=Sales&format=csv'
+reveal xlsx file.xlsx --sheet Sales --format csv
 ```
 
 Output characteristics:
@@ -261,7 +268,7 @@ Output characteristics:
 ## Power Pivot Workbooks
 
 Reveal detects Excel workbooks with an embedded Power Pivot / SSAS data model and
-surfaces the model's structure via `?powerpivot=` query modes.
+surfaces the model's structure via `--powerpivot` modes.
 
 ### Detection
 
@@ -277,7 +284,7 @@ Sheets (2): ...
 
 ⚡ Power Pivot model detected (xl/model/item.data)
    Tables: Sales, Product, Date, Customer
-   Run with ?powerpivot=schema to explore the full model
+   Run with --powerpivot schema to explore the full model
 ```
 
 ### What Gets Extracted: Capability Matrix
@@ -308,36 +315,36 @@ reveal scans `xl/pivotCache/pivotCacheDefinition*.xml` for `cacheHierarchy`
 elements to infer table names. Columns, DAX, and relationships are unavailable.
 
 **Power Query (DataMashup)** — files whose `customXml/` contains a `DataMashup`
-blob (M formula/query engine) are not Power Pivot workbooks. Use `?powerquery=list`
+blob (M formula/query engine) are not Power Pivot workbooks. Use `--powerquery list`
 to extract M code (see Power Query section below).
 
 ### Query Modes
 
 | Mode | Description |
 |------|-------------|
-| `?powerpivot=tables` | Table names + column counts |
-| `?powerpivot=schema` | Full table + column listing + measure names |
-| `?powerpivot=measures` | Measure names + owning table |
-| `?powerpivot=dax` | Measure names + full DAX expressions |
-| `?powerpivot=relationships` | Full relationship graph (from-table → to-table, join columns, cardinality) |
+| `--powerpivot tables` | Table names + column counts |
+| `--powerpivot schema` | Full table + column listing + measure names |
+| `--powerpivot measures` | Measure names + owning table |
+| `--powerpivot dax` | Measure names + full DAX expressions |
+| `--powerpivot relationships` | Full relationship graph (from-table → to-table, join columns, cardinality) |
 
 ### Examples
 
 ```bash
 # List all tables in the model
-reveal 'xlsx://model.xlsx?powerpivot=tables'
+reveal xlsx model.xlsx --powerpivot tables
 
 # Full schema: tables, columns, measures
-reveal 'xlsx://model.xlsx?powerpivot=schema'
+reveal xlsx model.xlsx --powerpivot schema
 
 # DAX expressions for all measures
-reveal 'xlsx://model.xlsx?powerpivot=dax'
+reveal xlsx model.xlsx --powerpivot dax
 
 # Relationship graph
-reveal 'xlsx://model.xlsx?powerpivot=relationships'
+reveal xlsx model.xlsx --powerpivot relationships
 ```
 
-**`?powerpivot=schema` output (XMLA tier — full detail):**
+**`--powerpivot schema` output (XMLA tier — full detail):**
 ```
 Power Pivot Model: ContosoPnL.xlsx
 
@@ -357,7 +364,7 @@ Measures (81):
   ...
 ```
 
-**`?powerpivot=schema` output (pivot cache fallback — table names only):**
+**`--powerpivot schema` output (pivot cache fallback — table names only):**
 ```
 Power Pivot Model: report.xlsx
 
@@ -370,7 +377,7 @@ Tables (6):
 (Schema limited — install reveal-cli[powerpivot] for full columns and DAX)
 ```
 
-**`?powerpivot=relationships` output:**
+**`--powerpivot relationships` output:**
 ```
 Relationships (3):
   Finance Data
@@ -398,8 +405,8 @@ for x86_64 Linux on PyPI. ARM/other platforms may need to build from source.
 ### Use with MCP
 
 ```
-reveal_query("xlsx://model.xlsx?powerpivot=tables")
-reveal_query("xlsx://model.xlsx?powerpivot=relationships")
+reveal_run(['xlsx', 'model.xlsx', '--powerpivot', 'tables'])
+reveal_run(['xlsx', 'model.xlsx', '--powerpivot', 'relationships'])
 ```
 
 ---
@@ -416,24 +423,24 @@ Power Query M code is stored in a `customXml/itemN.xml` file that contains a bas
 
 | Mode | Description |
 |------|-------------|
-| `?powerquery=list` | Query names and line counts (default) |
-| `?powerquery=show` | Full M code for all queries |
-| `?powerquery=<name>` | M code for a specific named query |
+| `--powerquery list` | Query names and line counts (default) |
+| `--powerquery show` | Full M code for all queries |
+| `--powerquery NAME` | M code for a specific named query |
 
 ### Examples
 
 ```bash
 # List all Power Query queries in the workbook
-reveal 'xlsx://file.xlsx?powerquery=list'
+reveal xlsx file.xlsx --powerquery list
 
 # Show full M code for all queries
-reveal 'xlsx://file.xlsx?powerquery=show'
+reveal xlsx file.xlsx --powerquery show
 
 # Show M code for a specific query
-reveal 'xlsx://file.xlsx?powerquery=SalesData'
+reveal xlsx file.xlsx --powerquery SalesData
 
 # Quoted names with spaces still work (case-insensitive match)
-reveal 'xlsx://file.xlsx?powerquery=Sales Data'
+reveal xlsx file.xlsx --powerquery 'Sales Data'
 ```
 
 ### Sample Output
@@ -448,8 +455,8 @@ Queries (5):
   DateDim   (5 lines)
   Calendar  (3 lines)
 
-Run with ?powerquery=show to see all M code
-Run with ?powerquery=<name> to see a specific query
+Run with --powerquery show to see all M code
+Run with --powerquery NAME to see a specific query
 ```
 
 ---
@@ -464,7 +471,7 @@ Extracted from `xl/workbook.xml` `<definedNames>` using stdlib XML parsing (no o
 
 ```bash
 # List all named ranges
-reveal 'xlsx://file.xlsx?names=list'
+reveal xlsx file.xlsx --names list
 ```
 
 ### Sample Output
@@ -492,17 +499,17 @@ Connections reveal where the workbook pulls data from: ODBC databases, OLE DB, w
 
 | Mode | Description |
 |------|-------------|
-| `?connections=list` | Connection names, types, and source summary (default) |
-| `?connections=show` | Full connection strings, SQL commands, and refresh settings |
+| `--connections list` | Connection names, types, and source summary (default) |
+| `--connections show` | Full connection strings, SQL commands, and refresh settings |
 
 ### Examples
 
 ```bash
 # List all connections
-reveal 'xlsx://file.xlsx?connections=list'
+reveal xlsx file.xlsx --connections list
 
 # Full connection details (connection strings and SQL)
-reveal 'xlsx://file.xlsx?connections=show'
+reveal xlsx file.xlsx --connections show
 ```
 
 ### Sample Output — list
@@ -515,7 +522,7 @@ Connections (3):
   WebQuery [Web]   https://api.example.com/data
   Products [Power Query]
 
-Run with ?connections=show for full connection strings and SQL
+Run with --connections show for full connection strings and SQL
 ```
 
 ### Connection Types
@@ -544,9 +551,9 @@ reveal file.xlsx sales
 ```
 
 This shows the sheet's first 20 rows and says how many it left out. For every row, or
-`?range=`/`?limit=`, use the URI form:
+`--cells`/`--limit`, use the subcommand:
 ```bash
-reveal 'xlsx://file.xlsx?sheet=Sheet1'
+reveal xlsx file.xlsx --sheet Sheet1
 ```
 
 ---
@@ -570,7 +577,7 @@ reveal report.xlsx
 reveal report.xlsx Sales
 
 # Step 3: Look at specific range
-reveal 'xlsx://report.xlsx?sheet=Sales&range=A1:E25'
+reveal xlsx report.xlsx --sheet Sales --cells A1:E25
 ```
 
 ### Workflow 2: CSV Export for Analysis
@@ -579,10 +586,10 @@ reveal 'xlsx://report.xlsx?sheet=Sales&range=A1:E25'
 
 ```bash
 # Export full sheet
-reveal 'xlsx://data.xlsx?sheet=Transactions&format=csv' > transactions.csv
+reveal xlsx data.xlsx --sheet Transactions --format csv > transactions.csv
 
 # Export specific range only
-reveal 'xlsx://data.xlsx?sheet=Summary&range=A1:D100&format=csv' > summary.csv
+reveal xlsx data.xlsx --sheet Summary --cells A1:D100 --format csv > summary.csv
 
 # Verify export
 wc -l transactions.csv
@@ -597,7 +604,7 @@ head -5 transactions.csv
 # Search each file
 find reports/ -name "*.xlsx" | while read f; do
   echo "=== $f ==="
-  reveal "xlsx://$f?search=Q4 Revenue"
+  reveal xlsx "$f" --match "Q4 Revenue"
 done
 
 ```
@@ -609,7 +616,7 @@ done
 ```bash
 # Extract Sales sheet from all monthly reports
 for month in jan feb mar apr; do
-  reveal "xlsx://reports/${month}_report.xlsx?sheet=Sales&format=csv" > ${month}_sales.csv
+  reveal xlsx "reports/${month}_report.xlsx" --sheet Sales --format csv > ${month}_sales.csv
 done
 
 # Combine into single file, with the month as the first column
@@ -626,7 +633,7 @@ done
 
 ```bash
 # Get sheet overview
-reveal 'xlsx://report.xlsx?sheet=Data' --format json | jq '{
+reveal xlsx report.xlsx --sheet Data --format json | jq '{
   file: .source,
   sheet: .sheet_name,
   dimension,
@@ -637,7 +644,7 @@ reveal 'xlsx://report.xlsx?sheet=Data' --format json | jq '{
 }'
 
 # Check for expected columns (the first row is the header, if the sheet has one)
-reveal 'xlsx://report.xlsx?sheet=Data' --format json | jq '.rows[0] | contains(["Date", "Amount", "Status"])'
+reveal xlsx report.xlsx --sheet Data --format json | jq '.rows[0] | contains(["Date", "Amount", "Status"])'
 ```
 
 ---
@@ -659,7 +666,7 @@ rather than silently showing `0 rows, 0 cols`. Other sheets in the same workbook
 parse normally. To access a large sheet's data, extract a specific range:
 
 ```bash
-reveal 'xlsx://huge_file.xlsx?sheet=FactSales&range=A1:Z1000'
+reveal xlsx huge_file.xlsx --sheet FactSales --cells A1:Z1000
 ```
 
 ### Large File Strategies
@@ -667,22 +674,22 @@ reveal 'xlsx://huge_file.xlsx?sheet=FactSales&range=A1:Z1000'
 **For files > 50 MB:**
 ```bash
 # Don't: Load entire sheet
-reveal 'xlsx://huge_file.xlsx?sheet=Data'  # Slow, memory-intensive
+reveal xlsx huge_file.xlsx --sheet Data  # Slow, memory-intensive
 
 # Do: Extract specific range
-reveal 'xlsx://huge_file.xlsx?sheet=Data&range=A1:Z1000'  # Fast
+reveal xlsx huge_file.xlsx --sheet Data --cells A1:Z1000  # Fast
 
 # Do: Export to CSV for external processing
-reveal 'xlsx://huge_file.xlsx?sheet=Data&format=csv' | split -l 10000 - chunk_
+reveal xlsx huge_file.xlsx --sheet Data --format csv | split -l 10000 - chunk_
 ```
 
 **Row limits:**
 ```bash
 # Preview first 10 rows
-reveal 'xlsx://file.xlsx?sheet=Sales&limit=10'
+reveal xlsx file.xlsx --sheet Sales --limit 10
 
 # Preview last 10 rows (not supported - use CSV + tail)
-reveal 'xlsx://file.xlsx?sheet=Sales&format=csv' | tail -11
+reveal xlsx file.xlsx --sheet Sales --format csv | tail -11
 ```
 
 ---
@@ -691,11 +698,11 @@ reveal 'xlsx://file.xlsx?sheet=Sales&format=csv' | tail -11
 
 ### What XLSX Adapter Does NOT Support
 
-1. **Formulas** - Values by default; `?formulas=true` shows formula text. A formula with no cached value (a file never opened in Excel) shows empty.
+1. **Formulas** - Values by default; `--formulas on` shows formula text. A formula with no cached value (a file never opened in Excel) shows empty.
 2. **Formatting** - No colors, fonts, borders, cell styles
 3. **Charts/Images** - Not extracted
 4. **Macros/VBA** - Not executed or extracted (xlsm VBA remains in the binary `vbaProject.bin` blob)
-5. **Standard pivot tables** - Shown as static data only (regular Excel pivot tables, not Power Pivot). Power Pivot / SSAS data models are supported via `?powerpivot=` — see Power Pivot section above.
+5. **Standard pivot tables** - Shown as static data only (regular Excel pivot tables, not Power Pivot). Power Pivot / SSAS data models are supported via `--powerpivot` — see Power Pivot section above.
 6. **Multiple sheets simultaneously** - One sheet per query
 7. **Password-protected files** - Not supported
 8. **Binary XLS files** - Only .xlsx/.xlsm (XML-based) supported; legacy `.xls` (BIFF format) is not
@@ -728,7 +735,7 @@ Each prints `Error (xlsx://): ...` once. A wrong target (a missing file, a file 
 workbook, a sheet or range that names nothing) exits 2; a workbook that could not be read exits 3.
 An answer missing a part it is built from also exits 3, beside its warning: an overview with a corrupt
 sheet (`sheet_parse_failed`), a search that could not read a sheet (`sheets_unsearched`), and a
-`?powerpivot` or `?powerquery` view with an unreadable part (`part_unreadable`). The overview's Power
+`--powerpivot` or `--powerquery` view with an unreadable part (`part_unreadable`). The overview's Power
 Pivot banner is optional: its unreadable part is a warning and the overview exits 0.
 
 **File not found:**
@@ -738,7 +745,7 @@ Error (xlsx://): Path not found: /path/to/file.xlsx
 
 **Sheet not found:**
 ```
-Error (xlsx://): Sheet not found: Salesss. ?sheet= takes a name or a 0-based index: 0=Sheet1, 1=Sales, 2=Summary
+Error (xlsx://): Sheet not found: Salesss. --sheet takes a name or a 0-based index: 0=Sheet1, 1=Sales, 2=Summary
 ```
 
 **Invalid range:**
@@ -774,16 +781,16 @@ reveal report.xlsx
 reveal report.xlsx Sales
 
 # 3. Extract specific data
-reveal 'xlsx://report.xlsx?sheet=Sales&range=A1:E100&format=csv'
+reveal xlsx report.xlsx --sheet Sales --cells A1:E100 --format csv
 ```
 
 ### Case-Insensitive Sheet Names
 
 Sheet names are matched case-insensitively:
 ```bash
-reveal 'xlsx://file.xlsx?sheet=SALES'    # Matches "Sales"
-reveal 'xlsx://file.xlsx?sheet=sales'    # Matches "Sales"
-reveal 'xlsx://file.xlsx?sheet=Sales'    # Matches "Sales"
+reveal xlsx file.xlsx --sheet SALES    # Matches "Sales"
+reveal xlsx file.xlsx --sheet sales    # Matches "Sales"
+reveal xlsx file.xlsx --sheet Sales    # Matches "Sales"
 ```
 
 ### CSV Export Compatibility
@@ -799,16 +806,16 @@ Exported CSVs work with:
 
 ```bash
 # Single column (all rows)
-?range=A:A
+--cells A:A
 
 # Single row (all columns)
-?range=5:5
+--cells 5:5
 
 # From start to column
-?range=A1:C1048576
+--cells A1:C1048576
 
 # Wide ranges (any column up to XFD)
-?range=A1:ZZ100
+--cells A1:ZZ100
 ```
 
 ---
@@ -824,7 +831,7 @@ import pandas as pd
 
 # Export to CSV, load with pandas
 csv_data = subprocess.check_output([
-    'reveal', 'xlsx://report.xlsx?sheet=Sales&format=csv'
+    'reveal', 'xlsx', 'report.xlsx', '--sheet', 'Sales', '--format', 'csv'
 ], text=True)
 
 df = pd.read_csv(io.StringIO(csv_data))
@@ -834,11 +841,11 @@ df = pd.read_csv(io.StringIO(csv_data))
 
 ```bash
 # Extract specific columns
-reveal 'xlsx://file.xlsx?sheet=Sales' --format json | \
+reveal xlsx file.xlsx --sheet Sales --format json | \
   jq '.rows[] | [.[0], .[2], .[4]]'
 
 # Filter rows (cells are strings: convert before comparing numbers)
-reveal 'xlsx://file.xlsx?sheet=Sales' --format json | \
+reveal xlsx file.xlsx --sheet Sales --format json | \
   jq '.rows[] | select((.[3] | tonumber? // 0) > 100)'
 ```
 
@@ -846,7 +853,7 @@ reveal 'xlsx://file.xlsx?sheet=Sales' --format json | \
 
 ```bash
 # Export to CSV, import to SQLite
-reveal 'xlsx://data.xlsx?sheet=Transactions&format=csv' > transactions.csv
+reveal xlsx data.xlsx --sheet Transactions --format csv > transactions.csv
 sqlite3 data.db ".import --csv transactions.csv transactions"
 ```
 
@@ -863,13 +870,13 @@ sqlite3 data.db ".import --csv transactions.csv transactions"
 - ✅ 117 tests total (4 new real-world fixture tests)
 
 ### v0.64.0+ (2026-03-17, sessions timeless-launch-0317, zifaxo-0317)
-- ✅ `?powerpivot=relationships` — full relationship graph from SSAS ASSL model
+- ✅ `--powerpivot relationships` — full relationship graph from SSAS ASSL model
 - ✅ DAX regex fix: handles tableless `CREATE MEASURE` format (real-world files)
 - ✅ External SSAS/OLAP workbook detection via `xl/pivotCache/` sentinel
 - ✅ 113 tests total
 
 ### v0.64.0 (2026-03-17, session timeless-launch-0317)
-- ✅ Power Pivot model extraction: `?powerpivot=tables/schema/measures/dax`
+- ✅ Power Pivot model extraction: `--powerpivot tables/schema/measures/dax`
 - ✅ Detects Excel 2010, 2013+, and Power BI export formats
 - ✅ Pure stdlib — no new dependencies
 - ✅ 44 new tests
@@ -879,7 +886,7 @@ sqlite3 data.db ".import --csv transactions.csv transactions"
 - ✅ Workbook overview and sheet listing
 - ✅ Sheet extraction by name or index (case-insensitive)
 - ✅ Cell range extraction with A1 notation
-- ✅ CSV export with `?format=csv`
+- ✅ CSV export with `--format csv`
 - ✅ Search across sheets
 - ✅ JSON output format
 - ✅ 40+ comprehensive tests

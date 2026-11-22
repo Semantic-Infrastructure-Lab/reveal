@@ -114,9 +114,9 @@ state as queryable data.
 ### BI workbook reverse engineering
 
 ```bash
-reveal 'xlsx:///data/report.xlsx?powerpivot=relationships'
-reveal 'xlsx:///data/report.xlsx?powerquery=list'
-reveal 'xlsx:///data/report.xlsx?connections=show'
+reveal xlsx /data/report.xlsx --powerpivot relationships
+reveal xlsx /data/report.xlsx --powerquery list
+reveal xlsx /data/report.xlsx --connections show
 ```
 
 **Why this matters:** Reveal can inspect Power Pivot models, Power Query M code,
@@ -931,29 +931,29 @@ MySQL recipe is offered here.
 reveal xlsx:///data/report.xlsx
 
 # Inspect a sheet or range
-reveal 'xlsx:///data/report.xlsx?sheet=Summary'
-reveal 'xlsx:///data/report.xlsx?sheet=Sales&range=A1:C10'
+reveal xlsx /data/report.xlsx --sheet Summary
+reveal xlsx /data/report.xlsx --sheet Sales --cells A1:C10
 
 # Search across all sheets
-reveal 'xlsx:///data/report.xlsx?search=revenue'
+reveal xlsx /data/report.xlsx --match revenue
 ```
 
 ### Reverse-engineer a Power BI / Power Pivot export
 
 ```bash
 # Tables, columns, measures, DAX, and relationships
-reveal 'xlsx:///data/report.xlsx?powerpivot=tables'
-reveal 'xlsx:///data/report.xlsx?powerpivot=schema'
-reveal 'xlsx:///data/report.xlsx?powerpivot=dax'
-reveal 'xlsx:///data/report.xlsx?powerpivot=relationships'
+reveal xlsx /data/report.xlsx --powerpivot tables
+reveal xlsx /data/report.xlsx --powerpivot schema
+reveal xlsx /data/report.xlsx --powerpivot dax
+reveal xlsx /data/report.xlsx --powerpivot relationships
 
 # Power Query M code
-reveal 'xlsx:///data/report.xlsx?powerquery=list'
-reveal 'xlsx:///data/report.xlsx?powerquery=show'
+reveal xlsx /data/report.xlsx --powerquery list
+reveal xlsx /data/report.xlsx --powerquery show
 
 # Named ranges and external connections
-reveal 'xlsx:///data/report.xlsx?names=list'
-reveal 'xlsx:///data/report.xlsx?connections=show'
+reveal xlsx /data/report.xlsx --names list
+reveal xlsx /data/report.xlsx --connections show
 ```
 
 **Why this matters:** this turns opaque finance and BI workbooks into something

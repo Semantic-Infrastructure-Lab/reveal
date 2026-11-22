@@ -142,7 +142,7 @@ reveal_query("ssl://api.example.com")
 reveal_query("domain://example.com")
 reveal_query("imports://src/?unused")
 reveal_query("diff://git://main/.:git://HEAD/.")
-reveal_query("xlsx://model.xlsx?powerpivot=tables")
+reveal_run(['xlsx', 'model.xlsx', '--powerpivot', 'tables'])
 reveal_query("ast://src/?name=validate_token", provenance=True)
 ```
 
