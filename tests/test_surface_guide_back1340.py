@@ -73,10 +73,11 @@ def _rows(guide):
 
 
 def test_what_it_is_and_is_not_section_exists(guide):
-    text = _section(guide, 'What surface:// is and is not')
+    text = _section(guide, 'What reveal surface is and is not')
     assert 'boundary' in text.lower()
-    for neighbour in ('overview://', 'imports://', 'calls://'):
-        assert neighbour in text, f'should point to {neighbour} for what surface:// does not answer'
+    # the neighbours in the subcommand form they are taught in (D20, BACK-2623)
+    for neighbour in ('reveal overview', 'reveal imports', 'reveal calls'):
+        assert neighbour in text, f'should point to {neighbour} for what reveal surface does not answer'
 
 
 def test_one_row_per_category_in_code_order(guide):

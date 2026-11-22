@@ -5,7 +5,7 @@ category: guide
 
 # Surface Adapter Guide
 
-`surface://` maps known boundary indicators in source: CLI arguments,
+`reveal surface` maps known boundary indicators in source: CLI arguments,
 HTTP routes, MCP tool registrations, environment variable reads, network/db/sdk
 imports, filesystem writes, and subprocess/shell execution. It answers "what
 does this system talk to?" without reading the whole tree by hand.
@@ -15,7 +15,7 @@ syntax patterns per category. Project-specific clients outside that taxonomy
 are not detected, and dynamic registrations (e.g. plugin-loaded routes) are
 not tracked.
 
-## What surface:// is and is not
+## What reveal surface is and is not
 
 **It is** a source map of recognized boundary sites to review.
 One entry is one site (`file` and `line`) where something comes in (a CLI argument, an HTTP
@@ -25,11 +25,11 @@ SDK), or acts on the machine (a file write, a launched process).
 **It is not**:
 
 - *Internal structure.* Modules, classes and functions that never touch a boundary do not appear.
-  Start with `overview://PATH` for project scope and the import map; use `reveal <file>`
-  for structure and `calls://` for who calls whom.
-- *Layers or dependency direction.* Configured import-layer violations are checked by `imports://PATH?violations`, and the
-  full import graph is `imports://`. `surface://` only lists the imports that are boundary clients
-  (the `network`, `db` and `sdk` buckets) and, with `--by dir`, which directory owns them.
+  Start with `reveal overview PATH` for project scope and the import map; use `reveal <file>`
+  for structure and `reveal calls PATH --callers NAME` for who calls whom.
+- *Layers or dependency direction.* Configured import-layer violations are checked by `reveal imports PATH --violations`,
+  and the full import graph is `reveal imports PATH`. `reveal surface` only lists the imports that are boundary clients
+  (the `network`, `db` and `sdk` buckets) and, with `--view dir`, which directory owns them.
 - *Data flow or behavior.* An entry says a boundary exists at that site, not what flows through it
   or whether the path is reachable at run time.
 - *Complete.* It matches a curated list of libraries and call shapes (see Limits), so project-specific
@@ -80,40 +80,38 @@ what is deliberately not detected, see Limits below.
 ```bash
 reveal surface ./src
 reveal surface .
-reveal surface . --top 20
-reveal surface . --type env
-reveal surface . --source-only
-reveal surface . --source-only --type sdk
-reveal surface . --by dir --depth 2
-
-reveal 'surface://src'
-reveal 'surface://.?type=env'
-reveal 'surface://.?source_only=true'
-reveal 'surface://.?by=dir&depth=2'
+reveal surface . --limit 20
+reveal surface . --kind env
+reveal surface . --tests exclude
+reveal surface . --tests exclude --kind sdk
+reveal surface . --view dir --dir-depth 2
 ```
 
 Use JSON when another tool or agent will rank, filter, or store the result:
 
 ```bash
 reveal surface . --format json
-reveal 'surface://.?type=env' --format json
+reveal surface . --kind env --format json
 ```
 
 ## Query Parameters
 
+Each is a flag of `reveal surface` (`--kind env`, `--dir-depth 2`).
+
 | Parameter | Values | Purpose |
 |-----------|--------|---------|
-| `type` | `cli`, `http`, `mcp`, `env`, `network`, `db`, `sdk`, `fs`, `subprocess` | Filter to one surface category. |
-| `source_only` | `true`, `false` (default) | Exclude test/support files using conventional names and project `test_layout.additional_paths` (`test_*.py`, `*_test.py`, `conftest.py`, `tests/`, `__tests__/`, `*.test.ts`, `*.spec.ts`, etc.). |
-| `by` | `dir` | Add a per-directory rollup (see below). |
-| `depth` | integer >= 0 (default `0`) | With `by=dir`: keep only the first N path segments of each directory, so `depth=2` folds `app/api/util` into `app/api`. `0` keeps the full directory. |
-| `top` | nonnegative integer (default: all) | Text entries per category or directories; `0` shows every entry, as when omitted (it used to show none). JSON stays complete. |
+| `kind` | `cli`, `http`, `mcp`, `env`, `network`, `db`, `sdk`, `fs`, `subprocess` | Keep one surface category (omitted: every category). |
+| `tests` | `include` (default), `exclude` | `exclude` drops test/support files using conventional names and project `test_layout.additional_paths` (`test_*.py`, `*_test.py`, `conftest.py`, `tests/`, `__tests__/`, `*.test.ts`, `*.spec.ts`, etc.). |
+| `view` | `dir` | Add the per-directory rollup (see below). |
+| `dir-depth` | integer >= 0 (default `0`) | With `--view dir` only: keep the first N path segments of each directory, so `--dir-depth 2` folds `app/api/util` into `app/api`. `0` keeps the full directory. Any other answer exits 2. |
+| `limit` | integer >= 0 (default: no cap) | Rows per category, and directories in `--view dir`, in JSON and text; `0` is no cap. A cut list is marked (`meta.warnings` `truncated`, and one line after the text); `total` stays the uncut count. `--all` is `--limit 0`. |
+| `top` | integer >= 0 | Retired: replaced by `limit`. Text entries per category until 1.0; JSON stays complete; never with `--limit` or `--all`. |
 
-The subcommand and URI forms share parameter declarations, validation, result identity
-(`surface_scan`) and output handling. `--top N` and `?top=N` both affect text only.
-Unknown categories, invalid booleans, fractional/negative depths and bare numeric
-presence flags are rejected rather than silently becoming empty inventories or
-truncated numbers. Boolean values accept true/false, yes/no and 1/0.
+The subcommand and the retired `surface://` spelling share parameter declarations, validation,
+result identity (`surface_scan`) and output handling. Unknown categories, fractional/negative depths
+and bare numeric values are rejected rather than silently becoming empty inventories or
+truncated numbers. The words this page used to teach (`type`, `source_only`, `by`, `depth`,
+`top`) still answer the same with a replaced-by note until 1.0.
 
 ## Execution and compatibility
 
@@ -126,7 +124,7 @@ predicate, so `--fail-on findings` is rejected.
 Required source collection and independent language-coverage census walks disclose
 actual directory enumeration failures separately. Usable requested rows produce an
 incomplete result; no usable requested rows, or malformed required rows, produce a
-failed analysis. These outcomes are decided before output cuts such as `top=0`.
+failed analysis. These outcomes are decided before output cuts such as `--limit`.
 Surface omits both `meta.confidence` and `_meta.confidence`: its former fixed `0.6`
 and `medium` values were unmeasured estimates. Missing confidence means unavailable,
 so callers should inspect scope, coverage, diagnostics and `_meta.known_limits`
@@ -154,26 +152,23 @@ and requested-output failure details.
 ```python
 from reveal import api
 
-report = api.query("surface://./src?type=env", source_only=True)
+report = api.query("surface", "./src", kind="env", tests="exclude")
 ```
 
-Explicit keywords override valid URI values, including `False`, zero and empty
-strings. `None` selects the declared default; an omitted keyword leaves the URI
-value intact. The URI is validated first, so `depth=-1` still rejects when a typed
-override supplies `depth=0`. Invalid typed values raise `ValueError` before scanning,
-and unsupported API keywords raise `UnsupportedOverrideError` (a `TypeError`). An unknown URI key exits 2
-naming the supported controls. `top` leaves raw API and JSON analysis complete; it limits text entries.
+Explicit keywords override the defaults, including zero and empty strings; `None` selects
+the declared default. Invalid typed values raise `ValueError` before scanning, and
+unsupported API keywords raise `UnsupportedOverrideError` (a `TypeError`). `limit` cuts the
+returned rows as it does on the CLI.
 
 Direct adapter calls bind controls during construction:
 
 ```python
 from reveal.adapters.surface import SurfaceAdapter
 
-report = SurfaceAdapter("./src", params={"type": "env", "source_only": True}).get_structure()
+report = SurfaceAdapter("./src", params={"kind": "env", "tests": "exclude"}).get_structure()
 ```
 
-`get_structure(source_only=True)` now raises `TypeError`; it previously ignored the
-keyword. API resource strings retain their existing literal-path and `?` query
+`get_structure(tests="exclude")` raises `TypeError`: controls bind at construction. API resource strings retain their existing literal-path and `?` query
 splitting behavior; the CLI URI path codec described above is unchanged.
 
 ## Language Coverage
@@ -201,7 +196,7 @@ suspiciously small result on a mixed-language repo.
 
 ### Per-directory rollup
 
-`--by dir` (or `?by=dir`) answers "which layer owns DB access, shells out, or
+`--view dir` answers "which layer owns DB access, shells out, or
 reads env" without inferring layering from paths. Text output replaces the
 per-category listing with one line per directory, busiest first:
 
@@ -214,17 +209,17 @@ By directory (3):
 
 JSON keeps `surfaces` unchanged and adds `by_dir`, a list of
 `{"dir", "total", "counts": {category: n}}` rows in the same order. The key is
-absent unless `by=dir` is requested. It honours `type` and `source_only`, and
-its totals sum to the flat `total`.
+absent unless `--view dir` is requested. It honours `--kind` and `--tests`, and
+its totals sum to the flat `total`; `--limit N` keeps the N busiest directories.
 
 The same project policy labels HTTP entries with `test_origin` and filters
-`--source-only`, including direct-file and child-directory requests. JSON `test_scope`
+`--tests exclude`, including direct-file and child-directory requests. JSON `test_scope`
 and text disclose the selected anchor and policy basis; configured declarations also
 identify their source. Conventional directory names match exactly: `testimonials/`,
 `testdata/` and `testing/` remain included unless explicitly declared. Non-matches are
 not proof of production status or runtime reachability. The full census remains
 unfiltered. Invalid or unreadable selected policy fails role-bearing requests;
-non-HTTP category requests without `source_only` do not adopt the policy.
+non-HTTP category requests without `--tests exclude` do not adopt the policy.
 
 ## Good Review Questions
 
@@ -233,9 +228,9 @@ non-HTTP category requests without `source_only` do not adopt the policy.
 - Are there filesystem writes or subprocess calls outside expected locations?
 - Does the CLI/HTTP/MCP surface match what's documented as the public
   interface?
-- With `--source-only`, which boundary indicators remain outside the selected
+- With `--tests exclude`, which boundary indicators remain outside the selected
   test/support files?
-- With `--by dir`, does each boundary kind sit in the layer that should own it,
+- With `--view dir`, does each boundary kind sit in the layer that should own it,
   or is it scattered across the tree?
 
 ## Limits
@@ -299,5 +294,5 @@ non-HTTP category requests without `source_only` do not adopt the policy.
 ## See Also
 
 - `reveal help://schemas/surface` - JSON schema
-- `reveal 'imports://<dir>'` - full import graph behind the `network`/`db`/`sdk` buckets
-- `reveal 'metrics://<dir>'` - quality metrics for the same tree
+- `reveal imports <dir>` - full import graph behind the `network`/`db`/`sdk` buckets
+- `reveal metrics <dir>` - quality metrics for the same tree

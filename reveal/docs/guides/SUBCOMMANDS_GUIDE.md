@@ -554,18 +554,18 @@ Map every external surface the system touches: CLI arguments, HTTP routes, MCP t
 ### Usage
 
 ```
-reveal surface [PATH] [--type TYPE] [--format FORMAT]
+reveal surface [PATH] [--kind KIND] [--tests include|exclude] [--view dir] [--limit N] [--format FORMAT]
 ```
 
 ### CLI Flags
 
 | Flag | Description |
 |------|-------------|
-| `--type TYPE` | Filter to one surface type (see table below) |
-| `--top N` | Show only the top N entries per surface type (default and `0`: all) |
-| `--source-only` | Exclude test files/dirs (`test_*.py`, `tests/`, `*.spec.ts`, etc.) |
-| `--by dir` | Per-directory counts by category (which layer owns which boundary); `--top N` then caps directories |
-| `--depth N` | With `--by dir`: roll directories up to their first N path segments (default 0: full directory) |
+| `--kind KIND` | Keep one surface category (see table below) |
+| `--limit N` | At most N rows per category, in JSON and text (default and `0`: all); a cut is marked and `total` stays uncut |
+| `--tests exclude` | Exclude test files/dirs (`test_*.py`, `tests/`, `*.spec.ts`, etc.); `include` is the default |
+| `--view dir` | Per-directory counts by category (which layer owns which boundary); `--limit N` then caps directories |
+| `--dir-depth N` | With `--view dir`: roll directories up to their first N path segments (default 0: full directory) |
 | `--format` | `text` (default), `json` |
 
 ### Surface Types
@@ -589,8 +589,8 @@ A category a language does not implement yet is reported as "not implemented", n
 ```bash
 reveal surface ./src                 # All surfaces in src/
 reveal surface .                     # Entire project
-reveal surface . --type env          # Only env var reads
-reveal surface . --type http         # Only HTTP route handlers
+reveal surface . --kind env          # Only env var reads
+reveal surface . --kind http         # Only HTTP route handlers
 reveal surface . --format json       # Machine-readable output
 ```
 

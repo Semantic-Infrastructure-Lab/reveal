@@ -522,18 +522,20 @@ class SurfaceAdapter(ResourceAdapter):
         return {
             'name': 'surface',
             'description': 'Map known boundary indicators: CLI, HTTP routes, env vars, client imports and filesystem writes.',
-            'syntax': 'surface://<path>[?type=cli|http|mcp|env|network|db|sdk|fs|subprocess&source_only=true&by=dir&depth=N]',
+            'syntax': 'reveal surface <path> [--kind cli|http|mcp|env|network|db|sdk|fs|subprocess] '
+                      '[--tests include|exclude] [--view dir [--dir-depth N]] [--limit N]',
             'examples': [
-                {'uri': 'surface://src', 'description': 'All surfaces in src/'},
-                {'uri': 'surface://.?type=env', 'description': 'Only env vars'},
-                {'uri': 'surface://.?source_only=true', 'description': 'Exclude test/support files using the selected project policy'},
-                {'uri': 'surface://.?by=dir&depth=2', 'description': 'Which directories touch which boundary kinds (two levels deep)'},
+                {'uri': 'reveal surface src', 'description': 'All surfaces in src/'},
+                {'uri': 'reveal surface . --kind env', 'description': 'Only env vars'},
+                {'uri': 'reveal surface . --tests exclude', 'description': 'Exclude test/support files using the selected project policy'},
+                {'uri': 'reveal surface . --view dir --dir-depth 2', 'description': 'Which directories touch which boundary kinds (two levels deep)'},
+                {'uri': 'reveal surface . --limit 20', 'description': 'At most 20 rows per category (JSON too; total stays the uncut count)'},
             ],
             'features': [
                 'Detects CLI arguments/subcommands, HTTP routes, MCP tool registrations',
                 'Detects environment variable reads, network/db/sdk imports',
                 'Detects filesystem writes and subprocess/shell execution',
-                'by=dir rolls entries up per directory (counts per category) to show which layers own which boundaries',
+                '--view dir rolls entries up per directory (counts per category) to show which layers own which boundaries',
                 'Covers Python, TypeScript/JavaScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, Rust, C++',
             ],
             'notes': [
@@ -552,7 +554,7 @@ class SurfaceAdapter(ResourceAdapter):
         return {
             'adapter': 'surface',
             'description': 'External-boundary surface scanner (CLI, HTTP, env, network, fs, subprocess)',
-            'uri_syntax': 'surface://<path>?type=env&source_only=true',
+            'uri_syntax': 'reveal surface <path> [--kind KIND] [--tests include|exclude] [--view dir [--dir-depth N]] [--limit N]',
             'resource': SurfaceAdapter.RESOURCE_SPEC.schema(),
             'execution_policy': {'default_fail_on': SurfaceAdapter.DEFAULT_FAIL_ON,
                                  'fail_on': list(SurfaceAdapter.FINDINGS_POLICIES)},
@@ -574,7 +576,7 @@ class SurfaceAdapter(ResourceAdapter):
                 },
             ],
             'example_queries': [
-                {'uri': 'surface://src', 'description': 'All surfaces in src/', 'output_type': 'surface_scan', 'task': 'security'},
+                {'uri': 'reveal surface src', 'description': 'All surfaces in src/', 'output_type': 'surface_scan', 'task': 'security'},
             ],
             'notes': [
                 'Taxonomy-based — project-specific clients outside known libraries not detected.',

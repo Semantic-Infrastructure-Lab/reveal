@@ -50,7 +50,7 @@ design when run) — or, on ordinary commands, an automatic PyPI version check:
   [INSTALL.md](INSTALL.md#network-requirements)).
 
 The list above is not just enumerated from memory — it's verified against
-reveal's own source with `reveal surface --type network --source-only`
+reveal's own source with `reveal surface --kind network --tests exclude`
 (taxonomy-based import scan) cross-checked against a full
 `reveal 'imports://.' --format json` dump of every import in the codebase
 (2,748 imports, 72 unique top-level external modules). No network-capable

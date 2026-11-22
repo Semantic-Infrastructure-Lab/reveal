@@ -142,7 +142,7 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
             {'goal': 'Find authentication functions', 'query': 'ast://src?name~=auth&kind=function', 'description': 'Locate authentication-related code', 'output_type': 'ast_query'},
             {'goal': 'Check SSL certificate expiry', 'query': 'ssl://example.com --expiring-within=30', 'description': 'Find certificates expiring soon', 'output_type': 'ssl_check'},
             {'goal': 'Find SQL query construction', 'query': 'ast://src?name~=query&complexity>5', 'description': 'Locate complex database queries (SQL injection risk)', 'output_type': 'ast_query'},
-            {'goal': 'Map the external attack surface', 'query': 'surface://src', 'description': 'Every CLI, HTTP route, env var, network call, and filesystem write the system touches — taxonomy-based, project-specific clients outside known libraries not detected', 'output_type': 'surface_scan'},
+            {'goal': 'Map the external attack surface', 'query': 'reveal surface src', 'description': 'Every CLI, HTTP route, env var, network call, and filesystem write the system touches — taxonomy-based, project-specific clients outside known libraries not detected', 'output_type': 'surface_scan'},
         ]
     },
     'codebase': {
@@ -1546,9 +1546,9 @@ class HelpAdapter(ResourceAdapter):
         {'want': "see a function's inputs, side effects (db/http/file/env) and exits",
          'use': '--boundary / --effects', 'example': "reveal src/app.py my_fn --boundary"},
         {'want': 'map HTTP routes',
-         'use': 'surface://', 'example': "reveal 'surface://src/?type=http'"},
+         'use': 'reveal surface', 'example': "reveal surface src/ --kind http"},
         {'want': 'map recognized boundary sites (env vars, network/db imports, file writes and more)',
-         'use': 'surface://', 'example': "reveal 'surface://src/'"},
+         'use': 'reveal surface', 'example': "reveal surface src/"},
         {'want': 'search text or an identifier across many files (with enclosing-function context)',
          'use': '--grep', 'example': "reveal src/ --grep 'API_TIMEOUT'"},
         {'want': 'check a file or directory for quality issues (lint-style rules)',

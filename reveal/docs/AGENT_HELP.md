@@ -57,8 +57,8 @@ Guides >200 lines show the first section by default (progressive disclosure). Ap
 | Documents linking to FILE | `reveal 'markdown://DIR/?backlinks=FILE'` |
 | Abstract interfaces / contracts | `reveal contracts DIR` |
 | Unused or circular imports | `reveal 'imports://src/?unused'` / `?circular` |
-| HTTP routes | `reveal 'surface://src/?type=http'` |
-| Env vars, network/db/fs access, the whole external boundary | `reveal 'surface://src/'` |
+| HTTP routes | `reveal surface src/ --kind http` |
+| Env vars, network/db/fs access, the whole external boundary | `reveal surface src/` |
 | Text search, grouped by enclosing function | `reveal src/ --grep 'pattern'` (Python regex syntax) |
 | File history / commit search | `reveal git src/app.py --view history`, `reveal git . --view history --where 'message~=fix'` |
 | One section of a markdown doc | `reveal doc.md "Heading"` |
@@ -1617,13 +1617,14 @@ reveal imports . --circular --fail-on findings  # CI gate: exit 1 on a cycle
 **Pattern:**
 ```bash
 reveal surface .                        # CLI commands, HTTP routes, env vars, network calls, FS writes
-reveal surface src/ --type http         # Filter to HTTP routes only
-reveal surface src/ --type env          # Filter to env-var reads only
+reveal surface src/ --kind http         # Filter to HTTP routes only
+reveal surface src/ --kind env          # Filter to env-var reads only
 reveal surface . --format json          # Machine-readable, for diffing across versions
-reveal surface . --source-only          # Production surface only — excludes test files/dirs
-reveal surface src/ --source-only --type sdk  # SDK egress, production code only (security review)
-reveal surface . --by dir --depth 2     # Which layers touch which boundary kinds (per-directory counts)
-reveal surface src/ --type subprocess   # Shell/process execution only (subprocess, exec, system, popen, ...)
+reveal surface . --tests exclude        # Production surface only — excludes test files/dirs
+reveal surface src/ --tests exclude --kind sdk  # SDK egress, production code only (security review)
+reveal surface . --view dir --dir-depth 2  # Which layers touch which boundary kinds (per-directory counts)
+reveal surface src/ --kind subprocess   # Shell/process execution only (subprocess, exec, system, popen, ...)
+reveal surface . --limit 20             # At most 20 rows per category (JSON too; total stays uncut)
 ```
 
 **What it finds:** CLI entry points, HTTP routes, environment variable reads, network egress, filesystem writes, subprocess calls — per language: Python (Click/argparse, Flask/FastAPI/Django, requests/urllib/sockets), TypeScript (Express/NestJS routes, fetch/axios), Java (Spring routes, `System.getenv`), C# (ASP.NET routes, `Environment.GetEnvironmentVariable`), PHP (Laravel/Symfony/WordPress routes — `register_rest_route` paths evaluated through `$this->namespace`/`sprintf`, unresolvable parts kept as `{$expr}`; `getenv`/`$_ENV`), Swift (Vapor routes, `@main`/CLI entry), Kotlin (Ktor/Spring routes, `fun main`), Ruby (Sinatra routes; a Rails `routes.draw` block interpreted as the DSL — `resources`, `namespace`/`scope`, `member`/`collection`, engine mounts across files, env-gated routes tagged with their `condition`; `ENV[...]`/`ENV.fetch`, gem-taxonomy requires), Go (Gin/Echo/Chi/net-http routes, `os.Getenv`/`os.LookupEnv`, `func main`, module-taxonomy imports), Rust (Actix/Rocket `#[get]` + Axum `.route` + Actix `web::resource`/`web::scope` routes, `env::var`, `fs::write`, `fn main`, use-crate taxonomy), C++ (cpp-httplib/Crow routes, `getenv`, `ofstream`/`fopen`, `int main`, `#include` taxonomy; `.h`-declared decls not reached — warns honestly). *(Supported: Python, TypeScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, Rust, C++. On other languages it returns an explicit "not supported" note rather than a silent zero.)* Stdlib socket clients count as `network` rows too (client side only: Go `net.Dial`, Rust `TcpStream::connect`, Ruby `TCPSocket`, C# `TcpClient`, Swift `URLSession`).
@@ -1637,7 +1638,7 @@ Not implemented for scanned languages (a 0 here is not a clean result):
 Files that could not be parsed are named, not counted as clean: `N file(s) could not be parsed and contribute no entries: …` (JSON `unparsed_files`, warning `W-SURFACE-2`).
 Files tree-sitter parsed only by guessing across an ERROR region are named too (`recovered_files`, warning `W-SURFACE-3`); each entry inside such a region carries `in_error_region` (text: `[parse-recovered]`) -- treat it as possibly fabricated.
 
-**`--source-only`:** Prunes test directories (`tests/`, `test/`, `spec/`, `__tests__/`, any dir starting with `test` or `spec`) and test files (`test_*.py`, `*_test.py`, `conftest.py`, `*.test.ts`, `*.spec.ts`, etc.) before scanning. Useful for security/architecture reviews where test scaffolding adds noise. `_meta.known_limits` in JSON output records the exclusion.
+**`--tests exclude`:** Prunes test directories (`tests/`, `test/`, `spec/`, `__tests__/`, any dir starting with `test` or `spec`) and test files (`test_*.py`, `*_test.py`, `conftest.py`, `*.test.ts`, `*.spec.ts`, etc.) before scanning. Useful for security/architecture reviews where test scaffolding adds noise. `_meta.known_limits` in JSON output records the exclusion.
 
 Both surface spellings emit `type: surface_scan` and support human-primary
 `--output json=PATH`. Direct requests follow the
