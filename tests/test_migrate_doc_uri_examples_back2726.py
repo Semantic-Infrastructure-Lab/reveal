@@ -196,6 +196,32 @@ def test_check_writes_nothing(tmp_path, capsys):
     assert {p: p.read_bytes() for p in migrate.documented_sources().values()} == before
 
 
+# The extra pass (manager, step 7, option b): a line already written in the resource form, `reveal SCHEME://PLAIN --flags`
+# (no query string), teaches the subcommand when the same plain-path rule says so; an address keeps the URI.
+RESOURCE_LINE_PROBES = [
+    ('reveal git://app.py --view history --limit 2', 'reveal git app.py --view history --limit 2'),
+    ('reveal git://. --view history --limit 2', 'reveal git . --view history --limit 2'),
+    ('reveal json://config.json --view keys', 'reveal json config.json --view keys'),
+]
+RESOURCE_LINES_KEPT = ['reveal git://app.py@main --view history --limit 2', 'reveal json://config.json/database --view keys',
+                       'reveal claude://sessions --limit 2', 'reveal git://app.py']
+
+
+def test_a_written_resource_line_on_a_plain_path_teaches_the_subcommand(tmp_path):
+    planned, docs = _planned(tmp_path, _fenced(*(o for o, _ in RESOURCE_LINE_PROBES), *RESOURCE_LINES_KEPT))
+    assert {line: (e.kind, e.new_line, e.form, e.origin) for line, e in planned.items()} == {
+        original: ('rewrite', rewritten, 'subcommand', 'resource') for original, rewritten in RESOURCE_LINE_PROBES}
+    text, done = migrate.rewrite_text((docs / 'guides' / 'G.md').read_text(encoding='utf-8'), planned.values())
+    assert done == len(RESOURCE_LINE_PROBES) and all(kept in text for kept in RESOURCE_LINES_KEPT)
+
+
+@pytest.mark.parametrize('original,rewritten', RESOURCE_LINE_PROBES, ids=[o for o, _ in RESOURCE_LINE_PROBES])
+def test_a_resource_line_rewrite_answers_as_its_original_on_the_fixture(named_harness, original, rewritten):  # noqa: F811
+    assert _answer(named_harness, shlex.split(rewritten)) == _as_uri_answers(_answer(named_harness,
+                                                                                      shlex.split(original)))
+    assert _text(named_harness, shlex.split(rewritten)) == _text(named_harness, shlex.split(original))
+
+
 def test_the_plain_path_decision_reads_declarations_not_a_noun_table(tmp_path):
     """A plain path: the noun's positional is declared a path, the resource holds no address mark it declares (git's @)
     and its declared resource_path is the whole resource. Claude's positional names a resource (sessions, a session), so
