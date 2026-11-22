@@ -117,6 +117,12 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 - Git text answers state the ownership caveats (commit-share not line ownership, merges excluded, name+email identity) as one line, `Rules: --format json (_meta.known_limits)`, where they printed the sentence; the JSON is unchanged. The unmeasured `_meta.confidence: "high"` is gone from ownership answers (BACK-2616).
 
+- `reveal markdown DIR` speaks the shared vocabulary: `--view links` replaces `--link-graph`, `--view lint` replaces `--lint`, `--view aggregate --field F` replaces `--aggregate F`, `--match` replaces `--body-contains` and `--columns` replaces `?fields=`. The old words, also as `markdown://` query keys and with underscores (`?link_graph`, `?body_contains`), answer as before with a replaced-by note until 1.0. An old and a new spelling with one meaning are one setting; two different selections (`--view links --backlinks a.md`, `--link-graph --lint`) exit 2 naming both, where the first silently won (BACK-2614).
+
+- `reveal markdown --where` reads every term with the one filter parser the other nouns use, so a term answers the same whatever other terms are given: `--where type --where 'priority>1'` answered nothing. Equality and `*` are now case-insensitive and `*` matches anywhere in the value (`title=*api*`, `title=alpha*` also matches "the alpha guide"); a bare `FIELD` needs a non-empty value; JSON `filters` lists every term (BACK-2614).
+
+- `reveal markdown` exits 2 for `--explain` without `--match` (also `?explain=false`; it was a silent no-op), for `--backlinks DOC` naming no document in the tree (it answered `found: false`), and names `--field` when `--view aggregate` has none. `--view aggregate --field F` for a field no document has warns `unknown_filter_field`, exit 0 (BACK-2614).
+
 ### Added
 
 - `reveal.api.query(NOUN, TARGET, **keywords)` asks a noun as its subcommand does: `api.query('calls', 'src', callers='main')` returns the JSON document `reveal calls src --callers main --format json` prints, each keyword the noun's flag with `-` as `_`. A request the subcommand exits 2 on raises `RequestValidationError` with its message (a missing path and a target that matches nothing included, which the URI form returned as answers), and a failed analysis raises its cause or the new `reveal.errors.AnalysisFailedError`. Resource URIs answer as before; a word that is neither a noun nor a URI still raises `ValueError`, now naming the nouns instead of "missing scheme" (BACK-2717).
@@ -129,10 +135,16 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 - The git guide and the git lines of the shared guides teach the subcommand with flags (`reveal git src/app.py --view history --where 'author~=John'`), keeping the resource URI where it names a ref (`reveal git://src/app.py@abc1234 --view diff`), and the README, AGENT_HELP and `help://quick` first screens teach `reveal git . --view history`. Git's help and schema examples, hints and error messages name flags too (`--view blame --detail full`, `--ignore off`, `--detail raw`) (BACK-2616).
 
+- The markdown guide and the markdown lines of the shared guides teach `reveal markdown DIR --flags` (`reveal markdown docs/ --where type=guide --match nginx`, `--view links`, `--backlinks auth.md`), as do `help://markdown`, `help://schemas/markdown` (examples as `markdown://DIR --flags`, query parameters from the declarations) and the recipe list (BACK-2614).
+
 ### Fixed
 
 - xlsx: `sheets_with_matches` counts the sheets of every match, not of the matches a `--limit` shows, and `reveal.api.query('xlsx', FILE, sheet=..., limit=...)` binds its keywords (they were dropped, so the overview answered) (BACK-2626).
 - `reveal.api.query('env://NAME')` answers that variable, as `reveal env://NAME --format json` does; it returned the whole environment listing. A variable that is not set raises `RequestValidationError`, where the CLI exits 2 (BACK-2626).
+
+- `reveal markdown DIR --sort FIELD` sorts by the documents' front matter as documented: `--sort -priority` warned `unknown_sort_field` and left the rows unsorted unless `--columns priority` was given (BACK-2614).
+
+- `reveal markdown` text: the listing's `Filter:` line names the request as flags (`--where type=guide --limit 1`, it printed `?where=...&explain=True`), the link graph prints one orphan count where the header and the list disagreed, and the graph's definitions and a ranked match's relevance rule are one `Rules: --format json (_meta.known_limits)` line. In JSON mode a tree with an unreadable file no longer prints "Failed to read /abs/path" lines on stderr; the JSON's `unreadable_files` is the disclosure (BACK-2614, BACK-2599).
 
 - The once-a-day "Update available" notice now prints on stderr. It printed two lines on stdout in front of the answer, so `--format json` output did not parse on the day an older install learned of a new release (BACK-2738).
 
