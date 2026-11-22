@@ -562,8 +562,8 @@ def _single_line_ref(element: Optional[str], flag: str) -> int:
     """
     from .display.element import _parse_element_syntax  # noqa: I006
     from .errors import NavRequestValidationError
-    syntax = _parse_element_syntax(element) if element else {'type': None}
-    if syntax['type'] != 'line':
+    syntax = _parse_element_syntax(element) if element else None
+    if element is None or syntax is None or syntax['type'] != 'line':
         # An invalid request (D6): exit 2, as the range case below (BACK-2627 E9).
         raise NavRequestValidationError(
             f'{flag} requires a line reference (e.g., reveal file.py :123 {flag}); got element {element!r}.')
