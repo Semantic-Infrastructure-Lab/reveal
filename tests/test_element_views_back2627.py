@@ -699,3 +699,20 @@ def test_sibling_inputs_text_labels_builtins_and_json_says_dep(copies):
     assert _labels(path, element)['open'] == 'BUILTIN'
     findings = json.loads(run(path, element, '--inputs', '--format', 'json').stdout)['findings']
     assert {f['var']: f['kind'] for f in findings}['validate'] == 'dep'
+
+
+# -- shared owner (cli/parser.py validate_navigation_args): a bad --head/--tail/--range exits 2 on every path read ---
+
+@pytest.mark.parametrize('argv', [['--range', 'abc'], ['--range', '20-10'], ['--head', '-1'], ['--tail', '-1'],
+                                  ['--head', '2', '--tail', '2']], ids=lambda argv: ''.join(argv))
+def test_invalid_path_read_slices_exit_2_like_the_nouns(copies, argv):
+    """D6: an invalid invocation exits 2. The path read exited 1 here while ``reveal ast`` and ``ast://`` exit 2 for the
+    same slice (tests/test_legacy_slice_flags_back2673.py); the code element and the file listing share the check."""
+    for positionals in ([], ['process_order']):
+        response = run(copies['python'], *positionals, *argv)
+        assert response.returncode == 2, (positionals, response.stderr)
+
+
+def test_sibling_valid_path_read_slices_answer(copies):
+    for argv in (['--range', '1-2'], ['--head', '2'], ['--tail', '2']):  # --range counts outline items
+        assert run(copies['python'], *argv).returncode == 0, argv
