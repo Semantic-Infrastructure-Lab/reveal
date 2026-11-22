@@ -79,13 +79,15 @@ def test_sqlite_check_keeps_its_own_exit_convention(dbs):
     assert result.returncode == 0, result.stderr
 
 
-@pytest.mark.parametrize('argv', [('env://NO_SUCH_VAR_BACK2521',), ('env://', 'NO_SUCH_VAR_BACK2521')])
+@pytest.mark.parametrize('argv', [('env://NO_SUCH_VAR_BACK2521',), ('env', 'NO_SUCH_VAR_BACK2521')])
 def test_env_missing_variable_exits_2(tmp_path, argv):
+    """An invalid request on env's declared route (BACK-2626), the resource URI and the subcommand alike; env:// NAME,
+    a positional element, is refused (tests/test_sqlite_env_vocabulary_back2626.py)."""
     result = _run_reveal_in(tmp_path, *argv, '--format', 'json')
     assert result.returncode == 2, result.stderr
     answer = _json(result)
     assert answer['error'] == "Element 'NO_SUCH_VAR_BACK2521' not found"
-    assert [e['code'] for e in answer['meta']['errors']] == ['element_not_found']
+    assert [e['code'] for e in answer['meta']['errors']] == ['invalid_request']
 
 
 def test_env_present_variable_still_exits_0(tmp_path, monkeypatch):

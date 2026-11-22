@@ -205,7 +205,10 @@ def test_a_noun_without_detail_names_it(capped):
 
 
 def test_an_undeclared_scheme_keeps_its_own_verbose(tmp_path, monkeypatch):
-    """Negative control: a scheme with no declarations is not a noun; --verbose stays its own business."""
-    monkeypatch.setenv('REVEAL_VERBOSE_PROBE', 'x')
-    result = _run_reveal_direct('env://REVEAL_VERBOSE_PROBE', '--verbose')
+    """Negative control: a scheme with no declarations is not a noun; --verbose stays its own business. env:// is
+    declared since BACK-2626 and refuses it naming detail, as every noun without one does."""
+    result = _run_reveal_direct('reveal://', '--verbose')
     assert result.returncode == 0 and 'detail' not in result.stderr
+    monkeypatch.setenv('REVEAL_VERBOSE_PROBE', 'x')
+    declared = _run_reveal_direct('env://REVEAL_VERBOSE_PROBE', '--verbose')
+    assert declared.returncode == 2 and "'detail'" in declared.stderr

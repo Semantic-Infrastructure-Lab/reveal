@@ -36,7 +36,7 @@ def test_retirement_inventory_matches_the_shipped_migrations():
     BACK-2622 adds Overview's top (a standalone legacy cap) and no_imports (--imports off).
     BACK-2725 adds JSON's data-only (a standalone legacy setting: the bare lines array).
     BACK-2616 adds Git's type, no_merges and raw (--view, --merges off, --detail raw) and its view=log and
-    detail=summary values (--view history, --detail normal). BACK-2626 adds SQLite's check (--view health). BACK-2614 adds
+    detail=summary values (--view history, --detail normal). BACK-2626 adds SQLite's check (--view health). BACK-2752 adds env's show_secrets, removed outright. BACK-2614 adds
     Markdown's link-graph and lint (--view links, --view lint) and its standalone aggregate (--view aggregate --field FIELD).
     BACK-2627 adds the element view flags --boundary, --effects, --flow and --exits (--view).
     """
@@ -47,7 +47,7 @@ def test_retirement_inventory_matches_the_shipped_migrations():
                                    'flag:--returns', 'flag:--search', 'flag:--sideeffects', 'flag:--statewrites',
                                    'flag:--verbose', 'flag:--writes', 'param:architecture.verbose', 'param:ast.callee_of', 'param:ast.calls', 'param:ast.depth', 'param:ast.show', 'param:ast.type',
                                    'param:calls.external', 'param:calls.modules', 'param:calls.rank', 'param:calls.root', 'param:calls.target', 'param:calls.top', 'param:calls.type', 'param:calls.uncalled',
-                                   'param:contracts.impls', 'param:patches.group', 'param:patches.min_categories', 'param:patches.min_patches', 'param:patches.no_suppress', 'param:patches.top', 'param:contracts.no_implementations', 'param:sqlite.check', 'param:xlsx.range', 'param:xlsx.search', 'param:surface.by', 'param:surface.depth', 'param:surface.source_only', 'param:surface.top', 'param:surface.type', 'param:claude.contains', 'param:claude.filter', 'param:claude.full', 'param:claude.last', 'param:claude.raw', 'param:claude.search', 'param:claude.summary', 'param:claude.tail',
+                                   'param:contracts.impls', 'param:patches.group', 'param:patches.min_categories', 'param:patches.min_patches', 'param:patches.no_suppress', 'param:patches.top', 'param:contracts.no_implementations', 'param:sqlite.check', 'param:xlsx.range', 'param:xlsx.search', 'param:env.show_secrets', 'param:surface.by', 'param:surface.depth', 'param:surface.source_only', 'param:surface.top', 'param:surface.type', 'param:claude.contains', 'param:claude.filter', 'param:claude.full', 'param:claude.last', 'param:claude.raw', 'param:claude.search', 'param:claude.summary', 'param:claude.tail',
                                    'param:codex.filter', 'param:codex.full', 'param:codex.goal', 'param:codex.last', 'param:codex.search', 'param:codex.tokens',
                                    'param:deps.verbose', 'param:git.no_merges', 'param:git.raw', 'param:git.type', 'param:git.verbose',
                                    'param:json.data-only', 'param:json.flatten', 'param:json.gron', 'param:json.keys', 'param:json.length', 'param:json.schema', 'param:json.type',

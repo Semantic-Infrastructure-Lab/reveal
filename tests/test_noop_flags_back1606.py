@@ -183,5 +183,6 @@ def test_help_all_does_not_claim_adapter_options_work_everywhere(tmp_path):
 
 
 def test_an_adapter_that_ignores_only_failures_names_it(tmp_path):
-    assert 'Note: --only-failures has no effect on env://' in _cli(
-        'env://', '--only-failures', cwd=tmp_path).stderr
+    # reveal:// is undeclared; env:// is declared since BACK-2626 and refuses the flag naming its controls
+    assert 'Note: --only-failures has no effect on reveal://' in _cli(
+        'reveal://', '--only-failures', cwd=tmp_path).stderr

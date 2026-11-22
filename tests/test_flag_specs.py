@@ -124,11 +124,11 @@ def test_no_gitignore_injects_the_declared_fragment():
 
 def test_unsupported_flag_gets_a_note_naming_the_supporting_schemes():
     """An undeclared scheme keeps the note; a declared noun exits 2 naming its controls (BACK-2654 rule 3)."""
-    out, err = _inject('.', 'env', since='2026-01-01')
+    out, err = _inject('.', 'reveal', since='2026-01-01')  # an undeclared scheme (env:// is declared, BACK-2626)
     assert out == '.'
     # Not a fixed list -- schemes gain since/until support over time (BACK-1379);
-    # just confirm the note names env:// and includes a real supporting scheme.
-    assert '--since has no effect on env://' in err and 'git://' in err
+    # just confirm the note names reveal:// and includes a real supporting scheme.
+    assert '--since has no effect on reveal://' in err and 'git://' in err
     from reveal.errors import RequestValidationError
     with pytest.raises(RequestValidationError, match=r"'--since'; supported controls: where, "):
         _inject('.', 'ast', since='2026-01-01')
@@ -144,7 +144,7 @@ def test_note_lists_every_declaring_scheme():
 def test_all_and_verbose_stay_silent_on_adapters_without_a_declaration():
     """Many adapters honor --all/--verbose themselves (claude, nginx, overview), so a
     missing declaration is not evidence the flag is ignored: no note."""
-    assert _inject('.', 'env', all=True, verbose=True) == ('.', '')
+    assert _inject('.', 'reveal', all=True, verbose=True) == ('.', '')  # undeclared (env:// is declared, BACK-2626)
 
 
 def test_all_and_verbose_inject_where_declared():
@@ -166,10 +166,11 @@ def test_sort_and_desc_inject_on_schemes_that_honor_result_control():
 
 
 def test_sort_is_not_injected_where_the_adapter_ignores_it():
-    # BACK-1385: env:// reads no sort=; gluing `?sort=name` onto it made it "Element not found".
-    resource, err = _inject('env://', 'env', sort='name', desc=True)
-    assert resource == 'env://'
-    assert 'has no effect on env://' in err
+    # BACK-1385: env:// read no sort=; gluing `?sort=name` onto it made it "Element not found". reveal:// is the
+    # undeclared adapter that opts out now (env:// is declared and refuses --sort, BACK-2626).
+    resource, err = _inject('reveal://', 'reveal', sort='name', desc=True)
+    assert resource == 'reveal://'
+    assert 'has no effect on reveal://' in err
 
 
 def test_sort_already_negated_is_not_double_negated():

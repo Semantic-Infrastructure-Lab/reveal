@@ -296,8 +296,8 @@ def test_json_filters_on_an_object_are_named(jsons, uri, control):
 
 
 def test_check_on_an_adapter_without_check_is_named(db):
-    proc = _cli('env://', '--check', cwd=db)
-    assert 'Note: --check has no effect on env://' in proc.stderr
+    proc = _cli('help://', '--check', cwd=db)  # undeclared (env:// is declared: --check is its noted legacy flag)
+    assert 'Note: --check has no effect on help://' in proc.stderr
 
 
 def test_a_used_flag_gets_no_note(db):

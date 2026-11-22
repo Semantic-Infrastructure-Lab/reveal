@@ -5,7 +5,8 @@ resource ("Element '?limit=2' not found", a path error) or dropped it; reveal://
 silently. For adapters with HONORS_RESULT_CONTROL = False, `--sort`/`--limit` now print a
 "no effect" note, and a typed `?sort=`/`?limit=`/`?offset=` is stripped with the standard
 "Unknown query param ... ignored" warning and the query runs -- the same contract every other
-adapter gives an unsupported param.
+adapter gives an unsupported param. env:// left the set when it was declared (BACK-2626): it takes no
+control, so each of these exits 2 naming it (tests/test_sqlite_env_vocabulary_back2626.py).
 """
 import json
 import os
@@ -17,7 +18,7 @@ import pytest
 import reveal.adapters  # noqa: F401  registers every adapter
 from reveal.adapters.base import get_adapter_class, list_supported_schemes
 
-OPTED_OUT = ['cpanel', 'diff', 'domain', 'env', 'help', 'reveal']
+OPTED_OUT = ['cpanel', 'diff', 'domain', 'help', 'reveal']
 
 
 def run_reveal(*args):
@@ -34,7 +35,6 @@ class TestOptOutSet:
 
 class TestTypedKeysAreStrippedWithAWarning:
     URIS = {
-        'env': 'env://?sort=name',
         'help': 'help://?limit=3',
         'domain': 'domain://example.com?limit=2',
         'cpanel': 'cpanel://user@host?limit=2',
@@ -50,7 +50,7 @@ class TestTypedKeysAreStrippedWithAWarning:
         assert "'?" not in proc.stderr  # the key never reached the resource
         assert 'Element' not in proc.stderr and 'Traceback' not in proc.stderr
 
-    @pytest.mark.parametrize('uri,expected', [('env://?sort=name', 'Environment Variables'),
+    @pytest.mark.parametrize('uri,expected', [('reveal://?sort=name', 'Reveal Internal Structure'),
                                               ('reveal://?limit=1', 'Reveal Internal Structure')])
     def test_query_still_runs(self, uri, expected):
         proc = run_reveal(uri)
@@ -58,11 +58,11 @@ class TestTypedKeysAreStrippedWithAWarning:
         assert expected in proc.stdout
 
     def test_every_key_is_named(self):
-        proc = run_reveal('env://?sort=name&offset=2')
+        proc = run_reveal('reveal://?sort=name&offset=2')
         assert "'sort'" in proc.stderr and "'offset'" in proc.stderr
 
     def test_json_output_is_the_result_not_an_error(self):
-        proc = run_reveal('env://?limit=2', '--format', 'json')
+        proc = run_reveal('reveal://?limit=2', '--format', 'json')
         assert proc.returncode == 0, proc.stderr
         assert not json.loads(proc.stdout).get('meta', {}).get('errors')
 
@@ -78,18 +78,18 @@ class TestStripHelper:
     from reveal.cli.routing.flag_specs import strip_result_control_keys as strip
 
     def test_strips_only_result_control_keys(self):
-        env = get_adapter_class('env')
-        assert type(self).strip('x?a=1&limit=2&b&sort=n', env) == ('x?a=1&b', ['limit', 'sort'])
+        opted_out = get_adapter_class('reveal')
+        assert type(self).strip('x?a=1&limit=2&b&sort=n', opted_out) == ('x?a=1&b', ['limit', 'sort'])
 
     def test_drops_empty_query(self):
-        assert type(self).strip('?limit=2', get_adapter_class('env')) == ('', ['limit'])
+        assert type(self).strip('?limit=2', get_adapter_class('reveal')) == ('', ['limit'])
 
     def test_passes_through_for_adapters_that_receive_them(self):
         assert type(self).strip('.?limit=2', get_adapter_class('ast')) == ('.?limit=2', [])
 
 
 class TestCliFlagsNoLongerBreakTheUri:
-    @pytest.mark.parametrize('scheme,flag', [('env://', '--limit'), ('help://', '--sort')])
+    @pytest.mark.parametrize('scheme,flag', [('reveal://', '--limit'), ('help://', '--sort')])
     def test_note_instead_of_element_not_found(self, scheme, flag):
         value = '2' if flag == '--limit' else 'name'
         proc = run_reveal(scheme, flag, value)
@@ -98,7 +98,7 @@ class TestCliFlagsNoLongerBreakTheUri:
         assert 'Element' not in proc.stderr
 
     def test_flag_without_value_is_silent(self):
-        proc = run_reveal('env://')
+        proc = run_reveal('reveal://')
         assert proc.returncode == 0
         assert 'has no effect' not in proc.stderr
 

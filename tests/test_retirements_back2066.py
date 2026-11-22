@@ -267,6 +267,7 @@ _MODIFIER_REQUESTS = {
     'imports': lambda f: [f'imports://{Path(f).parent}?sort=-fan-in'],
     'json': lambda f: [f'json://{Path(f).parent / "rows.json"}'],
     'xlsx': lambda f: [f'xlsx://{(Path(f).parent / "book.xlsx").as_posix()}'],
+    'env': lambda f: ['env://PATH'],  # a variable every host sets and V042 allows (BACK-2626)
     'testability': lambda f: [f'testability://{Path(f).parent}?tests={Path(f).parent}'],
 }
 _MODIFIER_ARGV = {'--head': ['--head', '1'], '--tail': ['--tail', '1'], '--range': ['--range', '1-1'],
@@ -432,6 +433,9 @@ PRODUCTION_CASES = {
     # BACK-2225: python:// was removed outright and starts at the error stage; tests/test_python_scheme_removed_back2225.py
     # covers its other spellings.
     'scheme:python': lambda f: ['python://'],
+    # BACK-2752: env's show_secrets was removed outright (Scott 2026-11-22) and starts at the error stage; the API forms
+    # are tests/test_sqlite_env_vocabulary_back2626.py's.
+    'param:env.show_secrets': lambda f: ['env://?show_secrets=1'],
     # BACK-2149: hotspots answers as before until the cut; tests/test_hotspots_retirement_back2149.py runs each
     # replacement and proves it gives the same ranking. A retired parameter of the retired noun notes beside it.
     'subcommand:hotspots': lambda f: ['hotspots', str(Path(f).parent)],
@@ -491,9 +495,12 @@ def test_a_removed_row_says_removed_and_is_an_error_from_the_start():
     assert Retirement('old://', 'new://', 'error', removed=True).text == 'old:// was removed; use new://.'
     with pytest.raises(ValueError):
         Retirement('old://', 'new://', removed=True)
-    assert [k for k, row in RETIREMENTS.items() if row.removed] == ['scheme:python']
-    assert RETIREMENTS['scheme:python'].stage == 'error'
+    assert [k for k, row in RETIREMENTS.items() if row.removed] == ['param:env.show_secrets', 'scheme:python']
+    assert RETIREMENTS['scheme:python'].stage == RETIREMENTS['param:env.show_secrets'].stage == 'error'
     assert RETIREMENTS['scheme:python'].text.startswith('python:// was removed; use python -m site')
+    assert RETIREMENTS['param:env.show_secrets'].text == (
+        'env:// show_secrets was removed; use reveal env NAME, which shows a sensitive value as *** (secret values are '
+        'redacted on every output; no control discloses them).')
 
 
 def test_the_moved_notes_keep_their_wording():

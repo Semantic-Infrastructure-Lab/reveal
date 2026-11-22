@@ -25,6 +25,7 @@ CASES = {
     'codex': ([], ''),
     'contracts': ([], ''),
     'deps': ([], ''),
+    'env': ([], ''),
     'hotspots': ([], ''),
     'imports': ([], ''),
     'git': ([], ''),
@@ -41,6 +42,8 @@ CASES = {
     'trace': (['--from', 'serve'], '?from=serve'),
 }
 NOUNS = sorted(CASES)
+# env's resource: a variable the fixture sets, never one the host owns (V042, BACK-2678).
+ENV_VARIABLE = 'REVEAL_PARITY_VARIABLE'
 # A noun whose default answer is not a findings view gates the view that is (imports: BACK-1054 S4;
 # metrics: the hotspots ranking, BACK-2149).
 FINDINGS_VIEWS = {'imports': (['--unused'], '?unused'), 'metrics': (['--hotspots'], '?hotspots=true'),
@@ -160,6 +163,7 @@ def project(tmp_path, monkeypatch):
                                  'INSERT INTO posts VALUES (1, 9);')
     from test_retirements_back2066 import sample_workbook
     sample_workbook(tmp_path)  # xlsx's resource, beside proj (BACK-2626)
+    monkeypatch.setenv(ENV_VARIABLE, 'parity-value')  # env's resource (BACK-2626)
     root = tmp_path / 'proj'
     (root / 'tests').mkdir(parents=True)
     (root / 'app.py').write_text(APP, encoding='utf-8')
@@ -184,6 +188,8 @@ def argv_for(noun, spelling, resource='proj'):
         resource = 'app.db'
     if noun == 'xlsx' and resource == 'proj':
         resource = 'book.xlsx'
+    if noun == 'env' and resource == 'proj':
+        resource = ENV_VARIABLE
     if noun == 'json':
         resource += '/data.json'
     if spelling == 'cli':
@@ -328,7 +334,7 @@ def test_missing_resource_is_rejected_alike(project, noun, fmt):
 def test_fail_on_means_the_same_before_after_and_on_a_uri(project, noun, gate):
     """The project carries an unused import and a branchy function, so a declared gate has something to match."""
     cli, query = FINDINGS_VIEWS.get(noun, CASES[noun])
-    target = {'json': 'proj/data.json', 'claude': 'sessions', 'codex': 'sessions', 'sqlite': 'app.db',
+    target = {'json': 'proj/data.json', 'claude': 'sessions', 'codex': 'sessions', 'sqlite': 'app.db', 'env': ENV_VARIABLE,
               'xlsx': 'book.xlsx'}.get(noun, 'proj')
     walk_flags = ['--respect-gitignore=off'] if declared_adapter_class(noun).RESOURCE_SPEC.walks else []
     spellings = {

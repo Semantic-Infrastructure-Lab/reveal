@@ -62,7 +62,7 @@ _PROSE_END = re.compile(r'\s(?:[-\u2014]|or|and|instead|then)(?:\s|$)|\s\(|\s{2,
 # A sentence that shows a request in order to say it is refused: its exit 2 is the point, not a fault.
 _REFUSED = re.compile(r'\bexits? 2\b')
 
-_ANSWER_TARGETS = {'claude': 'sessions', 'codex': '', 'json': 'proj/data.json', 'sqlite': 'proj/app.db',
+_ANSWER_TARGETS = {'claude': 'sessions', 'codex': '', 'env': '', 'json': 'proj/data.json', 'sqlite': 'proj/app.db',
                    'xlsx': 'proj/sheets.xlsx'}
 _DEFAULT_ARGS = {'calls': ('--callers', 'main'), 'trace': ('--from', 'main')}
 _DEFAULT_QUERY = {'calls': 'callers=main', 'trace': 'from=main'}
@@ -189,7 +189,7 @@ def _answer_surfaces():
         for query in _operation_requests(noun):
             surfaces.append((f'{noun}://{target}?' + '&'.join(filter(None, (base, query))), '--format', 'json'))
         if noun in COMMANDS:
-            argv = (noun, target or '.', *_DEFAULT_ARGS.get(noun, ()))
+            argv = (noun, *_cli_target(noun, target), *_DEFAULT_ARGS.get(noun, ()))
             surfaces += [argv, (*argv, '--format', 'json'), (*argv, '--nosuchflag')]
         # A refused or typo'd request prints the noun's teaching: the supported controls, a "did you mean" hint.
         for typo in ('nosuchkey=1', 'functions'):
@@ -294,6 +294,8 @@ def _target(noun, path):
         return 'proj/data.json'
     if noun == 'xlsx':  # the workbook with the examples' sheet names (sheets_workbook, BACK-2626)
         return 'proj/sheets.xlsx'
+    if noun == 'env':  # the listing, or one variable: PATH, which every host sets (never HOME or USER, V042)
+        return 'PATH' if path else ''
     if noun == 'sqlite':  # DB[/TABLE]: the harness database, and its one table where the example names a table
         table = re.split(r'\.(?:db|sqlite3?)/', path, maxsplit=1)
         return 'proj/app.db/users' if len(table) == 2 and table[1] else 'proj/app.db'
@@ -335,6 +337,12 @@ def _uri_argv(printed):
     return [f'{scheme}://{target}' + (f'?{query}' if query else '')]
 
 
+def _cli_target(noun, target):
+    """The subcommand's positional for a fixture target: '.' when none is printed, except on env, whose empty resource is
+    the listing (a '.' would name a variable that is not set)."""
+    return [target] if target else ([] if noun == 'env' else ['.'])
+
+
 def _command_argv(printed):
     try:
         tokens = shlex.split(printed)[1:]
@@ -345,7 +353,7 @@ def _command_argv(printed):
         return None  # the noun named in a sentence or a usage line, not a request
     path = '' if rest[0].startswith('-') else rest.pop(0)
     path, _, ref = path.partition('@') if noun == 'git' else (path, '', '')
-    argv, flag = [noun, (_target(noun, path) or '.') + ('@v1' if ref else '')], None
+    argv, flag = [noun, *(target + ('@v1' if ref else '') for target in _cli_target(noun, _target(noun, path)))], None
     for token in rest:
         if token.startswith('['):
             break

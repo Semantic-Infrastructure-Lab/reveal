@@ -84,7 +84,7 @@ from functools import partial
 import pytest
 
 from conftest import _run_reveal_direct
-from test_declared_parity_back2053 import APP, CASES
+from test_declared_parity_back2053 import APP, CASES, ENV_VARIABLE
 from test_retirements_back2066 import PRODUCTION_CASES, SOURCE, _renders, commit_sample, sample_database, sample_workbook
 from reveal.adapters.base import get_adapter_class, list_supported_schemes
 from reveal.adapters.factory import uses_bound_query_call
@@ -110,7 +110,8 @@ RULES = ('1a', '1b', '1c', '1d', '2', '3', '3b', '4', '5', '6', '8a', '8b', '10'
 # the declared noun it has no row for. None: no subcommand (stats is metrics' retired scheme).
 BASE = {**CASES, 'stats': (None, '')}
 # Targets that are not the fixture project directory.
-TARGETS = {'claude': 'sessions', 'codex': 'sessions', 'json': 'proj/data.json', 'sqlite': 'app.db', 'xlsx': 'book.xlsx'}
+TARGETS = {'claude': 'sessions', 'codex': 'sessions', 'json': 'proj/data.json', 'sqlite': 'app.db', 'xlsx': 'book.xlsx',
+           'env': ENV_VARIABLE}
 # A control that answers only on another target than its noun's default (Claude's turn slice reads one session):
 # the legacy-word probes (1b, 6, 16) send its spellings there, so they compare answers rather than two rejections.
 CONTROL_TARGETS = {('claude', 'tail'): 'session/my-session', ('git', 'detail'): 'proj/app.py', ('git', 'raw'): 'proj/app.py',
@@ -175,6 +176,24 @@ EXEMPT = {
     **{(noun, '20'): 'no answer reports a declared control unread, on any resource ANSWER_TARGETS lists (a control '
                      'read and not applied is the Step 4 backstop\'s)' for noun in (
         'contracts', 'deps', 'hotspots', 'pack', 'sqlite', 'testability', 'trace')},
+    # env declares no control (BACK-2626): the resource names the variable, and --check/--lint is an inert flag-only
+    # modifier that every answer reads. Each probe below finds nothing to give; rules 3, 3b, 4, 14, 18, 21j, 22 and 23
+    # conform. Its rows are the two flag rows (rule 23's) and show_secrets, removed at the error stage (BACK-2752).
+    **{('env', rule): reason for rule, reason in (
+        ('1a', 'binds no global flag as a URI key (no CLI_QUERY_FLAGS, no walk policy): no key and flag to give together'),
+        ('1b', _NO_ALIAS),
+        ('1c', 'declares no control: no scalar spelling to give twice'),
+        ('2', 'no note-stage param: or value: row: its only note rows are the --check/--lint flag rows (rule 23)'),
+        ('5', 'no note-stage param: row (show_secrets is removed, at the error stage: BACK-2752)'),
+        ('6', 'declares no alias: nothing to note or keep note-free'),
+        ('8a', 'no where expression: a bare key is never read as a field'),
+        ('8b', 'declares no where control: there are no field filters'),
+        ('10', 'declares no control with an alias or a legacy entry (--check is flag-only)'),
+        ('12', 'declares no control: nothing repeatable or scalar to append'),
+        ('16', 'no legacy word and no standalone legacy parameter: nothing to translate or mark'),
+        ('17', 'no control selects the answer: the resource does (the listing, or the variable it names)'),
+        ('20', 'declares no control an answer could leave unread (the inert --check is read by every answer)'),
+        ('24', 'declares no query key: a resource URI with no query string says no request note'))},
 }
 
 # Rules 1, 2, 5, 6, 10 and 12 are the shared seams' defaults (Scott 2026-11-16; BACK-2654 Step 3): their cells must
@@ -281,6 +300,7 @@ def workspace(tmp_path, monkeypatch):
     sample_database(sample.parent)  # sqlite's retirement case (BACK-2626)
     sample_workbook(sample.parent)  # xlsx's retirement cases (BACK-2626)
     sample_workbook(tmp_path)  # xlsx's resource (BACK-2626)
+    monkeypatch.setenv(ENV_VARIABLE, 'parity-value')  # env's resource (BACK-2626)
     commit_sample(sample)
     return sample
 

@@ -265,6 +265,35 @@ subcommands:
         it loudly (unrecognized arguments), not a silent gap
       review: not-applicable
       via: []
+  env:
+    all:
+      reason: 'BACK-2654 item 1c: accepted as on the URI form; env declares no --all and no cap (the listing is
+        every variable), so the flag lifts nothing and both forms answer as without it'
+      review: not-applicable
+      via:
+      - declared-unused
+    respect_gitignore:
+      reason: --respect_gitignore is not declared on `reveal env`'s own parser --
+        argparse rejects it loudly (unrecognized arguments), not a silent gap
+      review: not-applicable
+      via: []
+    since:
+      reason: --since is not declared on `reveal env`'s own parser -- argparse rejects
+        it loudly (unrecognized arguments), not a silent gap
+      review: not-applicable
+      via: []
+    until:
+      reason: --until is not declared on `reveal env`'s own parser -- argparse rejects
+        it loudly (unrecognized arguments), not a silent gap
+      review: not-applicable
+      via: []
+    verbose:
+      reason: 'BACK-2654 rule 4: --verbose is --detail full, bound from the
+        declarations; this noun declares no detail, so it exits 2 naming detail and its
+        controls.'
+      review: honored
+      via:
+      - declared-read
   git:
     all:
       reason: Declared legacy limit value shared with URI forwarding; test_global_all_reaches_the_same_declared_limit_as_the_uri

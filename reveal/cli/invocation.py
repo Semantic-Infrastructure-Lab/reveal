@@ -148,6 +148,8 @@ COMMANDS: Dict[str, CommandSpec] = {
                      'reveal scaffold <kind>',
                      'Retired: use `reveal dev new-*`',
                      help_guide=_SUBCOMMANDS_GUIDE),
+    'env':          _declared('env', 'reveal env [NAME]',
+                     'Inspect environment variables, or one variable, with sensitive values redacted'),
     'sqlite':       _declared('sqlite', 'reveal sqlite DB[/TABLE] [--view health]',
                      'Inspect a SQLite database, a table or view, or its integrity through declared controls'),
     'xlsx':         _declared('xlsx', 'reveal xlsx FILE [--sheet NAME] [--match TEXT] [--powerpivot MODE] ...',
@@ -168,7 +170,7 @@ COMMANDS: Dict[str, CommandSpec] = {
 
 
 # Order of the `--help-all` subcommand listing: task entry points first, tooling last.
-EPILOG_ORDER = ('ast', 'overview', 'imports', 'deps', 'hotspots', 'git', 'claude', 'codex', 'json', 'sqlite', 'xlsx', 'markdown', 'metrics', 'contracts', 'surface',
+EPILOG_ORDER = ('ast', 'overview', 'imports', 'deps', 'hotspots', 'git', 'claude', 'codex', 'json', 'sqlite', 'xlsx', 'env', 'markdown', 'metrics', 'contracts', 'surface',
                 'patches', 'testability', 'calls', 'trace', 'check', 'review', 'health', 'pack', 'dev',
                 'scaffold', 'offline', 'architecture')
 
@@ -325,6 +327,7 @@ LEGACY_CLI_MODIFIERS: Dict[str, Dict[str, str]] = {
     **{noun: _SLICED for noun in ('ast', 'markdown', 'metrics')},
     **{noun: {**_SLICED, **_no_check(noun)} for noun in ('git', 'json')},
     'xlsx': _no_check('xlsx'),  # --head/--tail/--range never sliced an xlsx answer: they exit 2
+    'env': _no_check('env'),  # --head/--tail/--range never sliced an env answer: they exit 2
     'calls': {'--head': '--limit N on a ranking (--sort=-callers --limit N); --depth N on a callers or callees walk',
               '--tail': 'a descending --sort with --limit N on a ranking (the last N rows have no spelling of their own)',
               '--range': '--limit N on a ranking (calls has no offset)'},
@@ -464,6 +467,11 @@ RETIREMENTS: Dict[str, Retirement] = {
     # exactly as ?search did; repeated terms AND per row).
     'param:xlsx.range': Retirement('xlsx ?range=RANGE', '--cells RANGE'),
     'param:xlsx.search': Retirement('xlsx ?search=TEXT', '--match TEXT'),
+    # env's show_secrets returned sensitive values unredacted through api.query; it was removed outright, with no
+    # deprecation period (Scott 2026-11-22, BACK-2752), so its row starts at the error stage.
+    'param:env.show_secrets': Retirement('env:// show_secrets', 'reveal env NAME, which shows a sensitive value as *** '
+                                         '(secret values are redacted on every output; no control discloses them)',
+                                         stage='error', removed=True),
     'param:contracts.impls': Retirement('contracts ?impls=N (--impls N)', '--implementations-limit N'),
     'param:contracts.no_implementations': Retirement('contracts --no-implementations', '--implementations off'),
     # Surface's D20 words (BACK-2623): the category is a kind, the test filter is tests, the rollup is a view and its

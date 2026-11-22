@@ -63,9 +63,9 @@ def test_no_element_answers_as_before(workspace):  # noqa: F811
 
 
 def test_an_undeclared_adapter_still_answers_an_element(monkeypatch):
-    monkeypatch.setenv('REVEAL_ELEMENT_PROBE', 'present')
-    answer = api.query('env://', element_name='REVEAL_ELEMENT_PROBE')
-    assert 'present' in str(answer), answer
+    # help:// is undeclared; env:// is declared since BACK-2626 and refuses an element as every declared noun does
+    answer = api.query('help://', element_name='env')
+    assert answer['topic'] == 'env' and 'Env Adapter Guide' in answer['content'], answer
 
 
 def test_a_plugin_subclass_of_a_declared_noun_still_forwards_its_element(monkeypatch, tmp_path):

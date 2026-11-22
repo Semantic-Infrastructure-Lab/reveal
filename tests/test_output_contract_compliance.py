@@ -173,6 +173,7 @@ SUBCOMMAND_ARGV = {
     'json': ['proj/data.json'],
     'sqlite': ['proj/app.db'],
     'xlsx': ['proj/data.xlsx'],
+    'env': [],  # the listing, as env:// (FIXTURE_URIS): the empty HOME keeps it hermetic
     'markdown': ['proj'],
     'architecture': ['proj'],
     'calls': ['proj', '--target', 'main'],
@@ -196,6 +197,7 @@ SUBCOMMAND_ARGV = {
 # input (the URI half of the invariant likewise checks only ``://proj`` URIs).
 NO_PATH_INPUT = {
     'codex': 'the resource names a Codex session or resource; the source is the configured state DB',
+    'env': 'the resource names an environment variable; values are the process environment (HOME is the harness\'s)',
 }
 
 NOT_A_QUERY = {

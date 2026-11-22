@@ -68,7 +68,7 @@ def test_a_bare_path_element_its_view_never_reads_exits_2(tree, argv, says):
     (('sqlite://x.db/users',), 'users'),
     (('json://f.json/a',), 'b'),
     (('ast://src?name=foo',), 'foo'),
-    (('env://', 'PATH'), 'PATH'),
+    (('env://PATH',), 'PATH'),  # env:// PATH is refused since env is declared (BACK-2626, Q5)
     (('src/a.py', 'foo'), 'return 1'),
     (('src/a.py', '--sort', 'name'), 'bar'),
     (('src/a.py', '--grep', 'return'), 'return 2'),
@@ -82,7 +82,7 @@ def test_the_spellings_that_name_the_element_still_answer(tree, argv, shows):
 
 
 def test_an_element_view_still_reports_a_miss_as_its_own_error(tree):
-    response = _run_reveal_direct('env://', 'NO_SUCH_VARIABLE_BACK2522', '--format', 'json')
+    response = _run_reveal_direct('help://', 'NO_SUCH_TOPIC_BACK2522', '--format', 'json')  # env:// is declared now
     assert response.returncode == 2
     assert [e['code'] for e in json.loads(response.stdout)['meta']['errors']] == ['element_not_found']
 

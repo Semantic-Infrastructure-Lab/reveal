@@ -530,7 +530,7 @@ class TestRenderEnvVariable(unittest.TestCase):
         output = capture_stdout(render_env_variable, data, 'text')
         self.assertIn('Environment Variable: API_KEY', output)
         self.assertIn('Warning: Sensitive', output)
-        self.assertIn('not accessible via CLI', output)
+        self.assertIn('redacted on every output', output)
 
 
 class TestRenderRevealStructure(unittest.TestCase):

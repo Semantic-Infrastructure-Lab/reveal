@@ -254,8 +254,8 @@ def test_the_second_path_refusal_names_a_switch_as_typed(project, typed, hint):
 
 def test_a_flag_spec_note_names_respect_gitignore_as_typed(project):
     from conftest import _run_reveal_direct
-    err = _run_reveal_direct('env://', '--respect-gitignore', 'off').stderr
-    assert '--respect-gitignore has no effect on env://' in err, err
+    err = _run_reveal_direct('reveal://', '--respect-gitignore', 'off').stderr  # an undeclared scheme (env:// is declared)
+    assert '--respect-gitignore has no effect on reveal://' in err, err
 
 
 
@@ -326,7 +326,7 @@ def test_typed_spellings_skip_a_value_and_read_attached_and_clustered_forms():
     (['a.py', 'f', '-i'], 'Note: -i has no effect on the file view'),
     (['a.py', 'f', '-r'], 'Note: -r has no effect on the file view'),
     (['a.py', 'f', '-v'], 'Note: -v has no effect on the file view'),
-    (['env://', '-v'], 'Note: -v has no effect on env:// queries'),
+    (['reveal://', '-v'], 'Note: -v has no effect on reveal:// queries'),  # an undeclared scheme (env:// is declared)
     (['a.py', 'long.py', '--search', 'f'], "Error: --search answers for the whole of a.py"),
     (['a.py', 'f', '--lint'], 'Error: --lint reads no element'),
     (['a.py', 'f', '--ignore-case'], 'Note: --ignore-case has no effect on the file view'),  # control: first spelling

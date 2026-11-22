@@ -60,5 +60,5 @@ def render_env_variable(data: Dict[str, Any], output_format: str) -> None:
     print(f"Value: {data['value']}")
     if data['sensitive']:
         print("Warning: Sensitive - This variable appears to contain sensitive data")
-        print("    Value is redacted — sensitive values are not accessible via CLI")
+        print("    Value is redacted on every output (text, JSON, the Python API, MCP)")
     print(f"Length: {data['length']} characters")

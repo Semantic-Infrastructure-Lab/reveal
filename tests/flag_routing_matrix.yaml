@@ -459,11 +459,11 @@ adapters:
       review: not-applicable
       via: []
     verbose:
-      reason: 'no query-string parsing at all -- anything after ''?'' is treated as
-        a literal var name; confirmed live: ''?verbose=1'' (and even the universal
-        ?sort=) both error ''Element not found'' (env.py:302)'
-      review: not-applicable
-      via: []
+      reason: 'BACK-2654 rule 4 (declared since BACK-2626): --verbose is --detail full, bound from the declarations;
+        env declares no detail, so it exits 2 naming detail and its controls'
+      review: honored
+      via:
+      - declared-binding
   git:
     all:
       via:

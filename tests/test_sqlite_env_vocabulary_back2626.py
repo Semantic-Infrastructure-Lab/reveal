@@ -135,11 +135,9 @@ def test_env_text_answer(variables):
 
 @pytest.mark.parametrize('name', [PLAIN, TOKEN])
 def test_api_env_uri_answers_the_variable_as_the_cli_does(variables, name):
-    """api.query('env://NAME') answered the whole listing (type environment), not the variable the URI names. The API's
-    structure envelope always carries a (here empty) meta, which the CLI's element envelope omits."""
-    answer = api.query(f'env://{name}')
-    assert answer.pop('meta', {'warnings': [], 'errors': []}) == {'warnings': [], 'errors': []}
-    assert answer == _json(f'env://{name}')[1]
+    """api.query('env://NAME') answered the whole listing (type environment), not the variable the URI names. Both now
+    carry the (here empty) meta: the CLI's element envelope omitted it until env was declared."""
+    assert api.query(f'env://{name}') == _json(f'env://{name}')[1]
 
 
 def test_api_env_uri_naming_no_variable_is_an_invalid_request(variables):

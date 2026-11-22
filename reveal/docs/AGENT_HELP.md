@@ -263,6 +263,7 @@ Reveal has both a **path-based interface** (`reveal <path>` + flags) and a set o
 | `reveal json FILE[/KEY] [--where EXPR] [--view VIEW]` | Navigate JSON data, filter array elements or inspect schema, keys and types | `reveal json --help` |
 | `reveal sqlite DB[/TABLE] [--view health]` | Inspect a SQLite database, a table or view, or its integrity through declared controls | `reveal sqlite --help` |
 | `reveal xlsx FILE [--sheet NAME] [--match TEXT] [--powerpivot MODE] ...` | Inspect an Excel workbook: sheets, cells, search, Power Pivot, Power Query, names, connections | `reveal xlsx --help` |
+| `reveal env [NAME]` | Inspect environment variables, or one variable, with sensitive values redacted | `reveal env --help` |
 | `reveal markdown [path] [--where EXPR] [--match TEXT]` | Find documents by frontmatter/body; inspect links and aggregate fields | `reveal markdown --help` |
 | `reveal claude [RESOURCE] [--view VIEW] [--match TEXT]` | Inspect Claude sessions and installation resources through declared controls | `reveal claude --help` |
 | `reveal codex [RESOURCE] [--since DATE] [--limit N]` | Inspect Codex CLI sessions and installation resources through declared controls | `reveal codex --help` |

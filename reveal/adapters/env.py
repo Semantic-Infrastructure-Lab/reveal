@@ -2,10 +2,12 @@
 
 import os
 import re
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple
 from .base import ResourceAdapter, Stability, register_adapter, register_renderer
 from ..errors import RequestValidationError
-from ..utils.results import ResultBuilder
+from ..utils.query_binding import bind_declared_params
+from ..utils.query_parser import ParamSpec, QueryParams, ResourceSpec, legacy_check, param_schema
+from ..utils.results import AnalysisCompleteness, ResultBuilder, result_execution_facts
 from reveal.reveal_types import CONTRACT_VERSION
 
 _SCHEMA_OUTPUT_TYPES = [
@@ -95,7 +97,7 @@ _SCHEMA_EXAMPLE_QUERIES = [
 
 _SCHEMA_NOTES = [
     'Sensitive values are auto-redacted: a name holding PASSWORD, PASSWD, PGPASSWORD, SECRET, TOKEN, KEY, CREDENTIAL, AUTH, PRIVATE, PASSPHRASE, DATABASE_URL, DSN, CONNECTION_STRING or CONNSTR as a whole _-delimited word (plural too, any case) or ending in _PWD, or a value that is a URL with user:password@ or carries a password=/pwd= parameter',
-    'Redacted values shown as *** — sensitive values are not accessible via CLI (by design)',
+    'Redacted values shown as *** on every output (text, JSON, the Python API, MCP): no control discloses them',
     'env:// groups all vars by category: System, Python, Node, Application, Custom',
     'env://VAR_NAME returns the single variable with sensitivity classification',
     '--format=json exposes per-variable sensitive flag for programmatic filtering',
@@ -109,18 +111,26 @@ _SCHEMA_SECURITY_FEATURES = [
 ]
 
 
+# env takes no control: the resource is the variable (BACK-2626), so an undeclared keyword or URI key is an invalid
+# request. --check/--lint never changed an env answer: an inert legacy modifier with its note (BACK-2708).
+PARAM_SPECS: Tuple[ParamSpec, ...] = (legacy_check(),)
+
+
 class EnvRenderer:
     """Renderer for environment variable results."""
 
     @staticmethod
     def render_structure(result: dict, format: str = 'text') -> None:
-        """Render all environment variables.
+        """Render the listing, or the one variable a resource names (``reveal env NAME``).
 
         Args:
             result: Structure dict from EnvAdapter.get_structure()
             format: Output format ('text', 'json', 'grep')
         """
-        from ..rendering import render_env_structure
+        from ..rendering import render_env_structure, render_env_variable
+        if result.get('type') == EnvAdapter.ELEMENT_RESULT_TYPE:
+            render_env_variable(result, format)
+            return
         render_env_structure(result, format)
 
     @staticmethod
@@ -138,15 +148,44 @@ class EnvRenderer:
 @register_adapter('env')
 @register_renderer(EnvRenderer)
 class EnvAdapter(ResourceAdapter):
-    """Adapter for exploring environment variables via env:// URIs."""
+    """Adapter for exploring environment variables via env:// URIs.
+
+    Usage:
+        reveal env              # every variable, grouped by category (or env://)
+        reveal env PATH         # one variable (or env://PATH)
+    """
     HELP_CLUSTER = 'Data & Config'
     ELEMENT_RESULT_TYPE = 'env_variable'  # its schema's element type (BACK-1591)
 
     STABILITY = Stability.STABLE
-    ELEMENT_NAMESPACE_ADAPTER = True
     LEGACY_INIT = False
-    HONORS_RESULT_CONTROL = False  # no sort=/limit=/offset= handling (BACK-1385)
     CANONICAL_EMPTY_RESOURCE = ''
+    # The declaration `reveal env` and env:// are both generated from (D20, BACK-2626): the resource is the variable,
+    # and env takes no control. Secret values are redacted on every output; no control discloses them (BACK-2752).
+    BOUND_QUERY_CALL = True
+    PARAM_SPECS: tuple = PARAM_SPECS
+    RESOURCE_SPEC = ResourceSpec(name='variable', cli_default='', uri_default='', walks=False, filesystem=False)
+    RESULT_TYPE = 'environment'
+    DEFAULT_FAIL_ON = 'none'
+    FINDINGS_POLICIES = ('none',)
+
+    @classmethod
+    def uri_execution_facts(cls, resource):
+        """The listing and the variable share D6: a variable that is not set is an invalid request (exit 2)."""
+        return cls.execution_facts
+
+    @classmethod
+    def uri_result_type(cls, resource):
+        return cls.ELEMENT_RESULT_TYPE if resource.partition('?')[0] else cls.RESULT_TYPE
+
+    @classmethod
+    def result_type_at(cls, params, resource):
+        """The answer the resource picks: the variable it names, else the listing."""
+        return cls.uri_result_type(resource)
+
+    @staticmethod
+    def execution_facts(result):
+        return result_execution_facts(result, completeness=AnalysisCompleteness.COMPLETE)
 
     @staticmethod
     def get_schema() -> Dict[str, Any]:
@@ -157,8 +196,9 @@ class EnvAdapter(ResourceAdapter):
         return {
             'adapter': 'env',
             'description': 'Environment variable inspection with auto-categorization and sensitive value redaction',
-            'uri_syntax': 'env://[variable_name]',
-            'query_params': {},
+            'uri_syntax': 'env://[NAME] (reveal env [NAME])',
+            'query_params': param_schema(PARAM_SPECS),
+            'resource': EnvAdapter.RESOURCE_SPEC.schema(),
             'elements': {},
             'cli_flags': [],
             'supports_batch': False,
@@ -294,28 +334,32 @@ class EnvAdapter(ResourceAdapter):
         'LOCALAPPDATA', 'APPDATA', 'PROGRAMFILES'
     }
 
-    def __init__(self, resource: str = '', query: Optional[str] = None, **kwargs: Any):
+    def __init__(self, resource: str = '', query: Optional[str] = None, *,
+                 params: Optional[Dict[str, Any]] = None):
         """Initialize the environment adapter.
 
         Args:
-            resource: The variable env://NAME names, or '' for the listing. The CLI router reads it as an element
-                (ELEMENT_NAMESPACE_ADAPTER); a structure call answers it the same way (BACK-2626).
-            query: Unused, accepted for canonical signature conformance.
+            resource: The variable env://NAME (``reveal env NAME``) names, or '' for the listing.
+            query: The URI query, bound through the declaration: env takes no control, so any key is an invalid request
+            params: Already-bound or typed controls, in place of *query*
         """
+        if params is not None:
+            self.query_params = params if isinstance(params, QueryParams) else bind_declared_params(
+                PARAM_SPECS, params, transport='typed')
+        else:
+            self.query_params = bind_declared_params(PARAM_SPECS, query or '', transport='uri')
         self.resource = resource
         self.variables = dict(os.environ)
 
-    def get_structure(self, show_secrets: bool = False, **kwargs: Any) -> Dict[str, Any]:
-        """Get all environment variables, grouped by category.
-
-        Args:
-            show_secrets: If True, show actual values of sensitive variables
+    def get_structure(self) -> Dict[str, Any]:
+        """Every environment variable grouped by category, or the one variable the resource names; sensitive values
+        are redacted.
 
         Returns:
             Dict containing categorized environment variables, or the variable the resource names
         """
         if self.resource:
-            return self._variable_answer(self.resource, show_secrets)
+            return self._variable_answer(self.resource)
         categorized: Dict[str, list] = {
             'System': [],
             'Python': [],
@@ -328,7 +372,7 @@ class EnvAdapter(ResourceAdapter):
             category = self._categorize(name)
             var_info = {
                 'name': name,
-                'value': self._maybe_redact(name, value, show_secrets),
+                'value': self._redacted(name, value),
                 'sensitive': self._is_sensitive(name, value),
                 'length': len(value)
             }
@@ -348,40 +392,35 @@ class EnvAdapter(ResourceAdapter):
             }
         )
 
-    def _variable_answer(self, name: str, show_secrets: bool) -> Dict[str, Any]:
-        """The answer env://NAME gives on every transport: the variable in the element envelope the CLI router writes
-        (``_element_envelope``). ``api.query('env://NAME')`` answered the whole listing, and a name that is not set
-        answered it too where the CLI exits 2 (BACK-2626); not set is an invalid request, as on the CLI."""
-        variable = self.get_element(name, show_secrets=show_secrets)
+    def _variable_answer(self, name: str) -> Dict[str, Any]:
+        """The answer env://NAME (``reveal env NAME``) gives on every transport: the one variable. A name that is not set
+        is an invalid request (rule 9, BACK-2626)."""
+        variable = self.get_element(name)
         if variable is None:
             raise RequestValidationError(f"Element '{name}' not found")
         return dict(ResultBuilder.create(result_type=self.ELEMENT_RESULT_TYPE, source=f'env://{name}',
                                          source_type='runtime', contract_version=CONTRACT_VERSION, data=variable))
 
     def get_element(self, element_name: str, **kwargs: Any) -> Optional[Dict[str, Any]]:
-        """Get details about a specific environment variable.
+        """Get details about a specific environment variable; a sensitive value is redacted.
 
         Args:
             element_name: Name of the environment variable
-            **kwargs: Optional keyword arguments:
-                - show_secrets: If True, show actual value even if sensitive (default: False)
 
         Returns:
             Dict with variable details, or None if not found
         """
-        show_secrets = kwargs.get('show_secrets', False)
-
         if element_name not in self.variables:
             return None
 
         value = self.variables[element_name]
         return {
             'name': element_name,
-            'value': self._maybe_redact(element_name, value, show_secrets),
+            'value': self._redacted(element_name, value),
             'category': self._categorize(element_name),
             'sensitive': self._is_sensitive(element_name, value),
             'length': len(value),
-            'raw_value': value if show_secrets else None
+            'raw_value': None,  # always null: no output discloses a value (ENV_ADAPTER_GUIDE, BACK-2752)
         }
 
     def get_metadata(self) -> Dict[str, Any]:
@@ -414,18 +453,17 @@ class EnvAdapter(ResourceAdapter):
         return bool(value and (self._URL_CREDENTIALS_RE.match(value)
                                or self._CREDENTIAL_PARAM_RE.search(value)))
 
-    def _maybe_redact(self, name: str, value: str, show_secrets: bool) -> str:
-        """Redact sensitive values unless show_secrets=True.
+    def _redacted(self, name: str, value: str) -> str:
+        """The value as every output shows it: ``***`` for a sensitive variable, else the value.
 
         Args:
             name: Variable name
             value: Variable value
-            show_secrets: Whether to show actual value
 
         Returns:
             Original value or redacted string
         """
-        if not show_secrets and self._is_sensitive(name, value):
+        if self._is_sensitive(name, value):
             return '***'
         return value
 
