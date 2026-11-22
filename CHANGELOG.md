@@ -78,9 +78,17 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 - `--all` and `--limit 0` are one setting on `ast`, `git`, `calls`, `metrics`, `patches` and `hotspots`: given together they answer once, while `--all` with a different stated cap exits 2 as two values (`reveal 'ast://src?limit=1000000' --all`). `patches` JSON echoes `"limit": 0` under `--all` (BACK-2729).
 
-- `imports`, `metrics` and `overview` text answers state their counting rules as one line naming the JSON fields that hold them, as `calls` does: `Rules: --format json (edge_rule.text)`, where they printed the full rule paragraph (`Rule: importers are files whose static imports resolve here, ...`, `Issue count (local_check_issues): file-local rules only -- ...`). The JSON is unchanged, `imports` `--detail full` prints the full sentences, and what a scan left uncertain or uncounted (edges of unknown import scope, edges outside the scan root, ungated languages) still prints (BACK-2685).
+- `imports`, `metrics` and `overview` text answers state their counting rules as one line naming the JSON fields that hold them, as `calls` does: `Rules: --format json (edge_rule.text)`, where they printed the full rule paragraph (`Rule: importers are files whose static imports resolve here, ...`, `Issue count (local_check_issues): file-local rules only -- ...`). The JSON is unchanged, `imports` `--detail full` prints the full sentences, and what a scan left uncertain or uncounted (edges of unknown import scope, edges outside the scan root, ungated languages, a test-path basis with no project boundary) still prints (BACK-2685).
 
 - An option repeated with an equal stated value is one setting (`imports://src?circular&circular=true`, `?full=1&full=true`); two different stated values exit 2 even where they used to read alike (Claude `?snippet=3&snippet=7`, Codex `?last=true&last=false`). Whole-number options refuse true/false: `git://repo?limit` with no value exits 2 ("limit must be a whole number") instead of answering one commit (BACK-2727).
+
+- `imports` `root` with `scope=path` now exits 2 naming both (`control 'root' requires scope=root; this request gives scope=path: give one or the other`), on the subcommand, the URI, a flag after the URI and `reveal.api.query`; it answered exit 0 with the warning `?root=. is ignored under scope=path` (BACK-2697).
+
+- The retired `stats://` refuses a positional element as `metrics://` and `reveal.api.query` do: `reveal stats://src app.py` exits 2 with `stats:// takes no positional element ('app.py'); name it in the URI: ...`. It answered a per-file `stats_element` document (exit 0) for an existing file and "Element 'x' not found" otherwise; `reveal metrics src/app.py` answers one file (BACK-2694).
+
+- `reveal.api.query(NOUN, TARGET, ...)` raises `UnreadControlError` for an option the selected answer does not read or one another option's value leaves unread (`api.query('metrics', 'src', top=1)`), as the URI form does; it raised the base `RequestValidationError` with the same message (BACK-2720).
+
+- JSON `?gron&data-only` (and `?flatten&data-only`) now notes itself, `json ?data-only (with ?gron or ?flatten) is deprecated and works until 1.0; use --view flatten --detail raw, the same lines inside the JSON envelope.`, instead of a request note recommending `reveal json://F --view flatten` (in Python `where=['data-only']`), which answers differently; the bare array is unchanged. `data-only` with another view exits 2 as an option that view does not read (BACK-2725).
 
 ### Added
 
