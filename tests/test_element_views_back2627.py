@@ -33,23 +33,24 @@ GOLDEN_DIR = Path(__file__).parent / 'fixtures' / 'element_views_back2627'
 UPDATE = {'1': 'replace', 'variant': 'variant'}.get(os.environ.get('REVEAL_UPDATE_GOLDEN', ''))  # see _write_golden
 LANGUAGES = [*sorted(EXPECTED), 'tsx']
 
-# Every current element view, in its current canonical spelling. ``{var}`` is the language's probe variable.
+# Every current element view, in its canonical spelling (--view since S3b-4; file 2 proves each old flag answers
+# alike). ``{var}`` is the language's probe variable.
 VIEWS = {
-    'boundary': ['--boundary'],
-    'boundary-transitive': ['--boundary', '--transitive'],
+    'boundary': ['--view', 'boundary'],
+    'boundary-transitive': ['--view', 'boundary', '--transitive'],
     'inputs': ['--inputs'],
     'outputs': ['--outputs'],
     'callsites': ['--callsites'],
-    'effects': ['--effects'],
-    'effects-transitive': ['--effects', '--transitive'],
-    'effects-loops': ['--effects', '--in-loops'],
-    'effects-state': ['--effects', '--state'],
-    'flow': ['--flow'],
-    'flow-if': ['--flow=if'],
-    'flow-loop': ['--flow=loop'],
-    'flow-try': ['--flow=try'],
-    'flow-if-try': ['--flow=if,try'],
-    'exits': ['--exits'],
+    'effects': ['--view', 'effects'],
+    'effects-transitive': ['--view', 'effects', '--transitive'],
+    'effects-loops': ['--view', 'effects', '--in-loops'],
+    'effects-state': ['--view', 'effects', '--state'],
+    'flow': ['--view', 'flow'],
+    'flow-if': ['--view', 'flow', '--kind', 'if'],
+    'flow-loop': ['--view', 'flow', '--kind', 'loop'],
+    'flow-try': ['--view', 'flow', '--kind', 'try'],
+    'flow-if-try': ['--view', 'flow', '--kind', 'if', '--kind', 'try'],
+    'exits': ['--view', 'exits'],
     'varflow': ['--varflow', '{var}'],
     'cross-calls': ['--varflow', '{var}', '--cross-calls'],
     'keys': ['--keys', '{var}'],

@@ -321,7 +321,7 @@ def test_sideeffects_classifies_file_write(lang):
     """--sideeffects must classify the fixture's file-open call as `file`, for
     every language (BACK-401/416 precedent: taxonomy was PHP/Python-only)."""
     entry_fn = EXPECTED[lang]["entry_function"]
-    out = _run(str(_sample_path(lang)), entry_fn, "--sideeffects", "--format", "json")
+    out = _run(str(_sample_path(lang)), entry_fn, "--view", "effects", "--format", "json")
     data = json.loads(out)
     findings = [{"line": f["line"], "kind": f["kind"]} for f in data["findings"]]
     assert findings == EXPECTED[lang]["sideeffects"], f"{lang}: sideeffects mismatch\n{out}"
@@ -337,7 +337,7 @@ def test_exits_finds_all_returns(lang):
     `?`/tail-expression returns (BACK-428) are deliberately absent from the
     expected list, not silently passed over."""
     entry_fn = EXPECTED[lang]["entry_function"]
-    out = _run(str(_sample_path(lang)), entry_fn, "--exits", "--format", "json")
+    out = _run(str(_sample_path(lang)), entry_fn, "--view", "exits", "--format", "json")
     data = json.loads(out)
     findings = [{"kind": f["kind"], "line": f["line"]} for f in data["findings"]]
     assert findings == EXPECTED[lang]["exits"], f"{lang}: exits mismatch\n{out}"
@@ -350,7 +350,7 @@ def test_returns_finds_gate_chains(lang):
     chain, for every language — Tier 2 (BACK-422). Handler returns carry an
     exception-context gate; the try body and trailing returns do not inherit it."""
     entry_fn = EXPECTED[lang]["entry_function"]
-    out = _run(str(_sample_path(lang)), entry_fn, "--returns", "--format", "json")
+    out = _run(str(_sample_path(lang)), entry_fn, "--view", "exits", "--format", "json")
     data = json.loads(out)
     findings = [
         {"line": f["line"], "gate_lines": [g["line"] for g in f["gates"]]}
@@ -370,7 +370,7 @@ def test_deps_finds_parameter_flowing_in(lang):
     motivates `varflow_var` — see BACK-477 progress log)."""
     entry_fn = EXPECTED[lang]["entry_function"]
     order_var = EXPECTED[lang].get("deps_var", "order")
-    out = _run(str(_sample_path(lang)), entry_fn, "--deps", "--format", "json")
+    out = _run(str(_sample_path(lang)), entry_fn, "--inputs", "--format", "json")
     data = json.loads(out)
     dep_vars = {f["var"] for f in data["findings"]}
     assert order_var in dep_vars, f"{lang}: '{order_var}' param not found as a dep\n{out}"
@@ -388,7 +388,7 @@ def test_flowto_reachability_verdict(lang):
     entry_fn = EXPECTED[lang]["entry_function"]
     first_exit_line = EXPECTED[lang]["exits"][0]["line"]
     out = _run(
-        str(_sample_path(lang)), entry_fn, "--flowto",
+        str(_sample_path(lang)), entry_fn, "--view", "exits",
         "--range", f"1-{first_exit_line}", "--format", "json",
     )
     data = json.loads(out)
@@ -427,7 +427,7 @@ def test_ifmap_finds_if_branches(lang):
     try/catch instead), assert the documented not-supported shape rather than
     silently passing on an empty list (BACK-398 precedent)."""
     entry_fn = EXPECTED[lang]["entry_function"]
-    out = _run(str(_sample_path(lang)), entry_fn, "--ifmap", "--format", "json")
+    out = _run(str(_sample_path(lang)), entry_fn, "--view", "flow", "--kind", "if", "--format", "json")
     data = json.loads(out)
     expected = EXPECTED[lang]["ifmap"]
     if isinstance(expected, dict) and expected.get("not_supported"):
@@ -447,7 +447,7 @@ def test_catchmap_finds_try_catch(lang):
     rust use return-code or Result-based error handling), assert the
     documented not-supported shape."""
     entry_fn = EXPECTED[lang]["entry_function"]
-    out = _run(str(_sample_path(lang)), entry_fn, "--catchmap", "--format", "json")
+    out = _run(str(_sample_path(lang)), entry_fn, "--view", "flow", "--kind", "try", "--format", "json")
     data = json.loads(out)
     expected = EXPECTED[lang]["catchmap"]
     if isinstance(expected, dict) and expected.get("not_supported"):
@@ -468,7 +468,7 @@ def test_mutations_finds_read_after_write(lang):
     the function) — so this probes a single-line range at the fixture's
     `result = validate(...)` write and checks the flagged next-read line."""
     probe = EXPECTED[lang]["mutations_probe"]
-    out = _run(str(_sample_path(lang)), f":{probe['range']}", "--mutations", "--format", "json")
+    out = _run(str(_sample_path(lang)), f":{probe['range']}", "--outputs", "--format", "json")
     data = json.loads(out)
     match = next((m for m in data["findings"] if m["var"] == probe["var"]), None)
     assert match is not None, f"{lang}: no mutation found for {probe['var']}\n{out}"
@@ -489,7 +489,7 @@ def test_loopmap_finds_loop(lang):
     Class.method extraction still fails for cpp (BACK-451, Go RESOLVED
     jiwasobi-0712); its batch_element is a :LINE-RANGE workaround instead."""
     element = EXPECTED[lang]["batch_element"]
-    out = _run(str(_sample_path(lang)), element, "--loopmap", "--format", "json")
+    out = _run(str(_sample_path(lang)), element, "--view", "flow", "--kind", "loop", "--format", "json")
     data = json.loads(out)
     findings = [{"keyword": f["keyword"], "line_start": f["line_start"]} for f in data["findings"]]
     assert findings == EXPECTED[lang]["loopmap"], f"{lang}: loopmap mismatch\n{out}"
@@ -501,7 +501,7 @@ def test_fanout_classifies_effect_inside_loop(lang):
     """--fanout must pair the Batch loop with its classified `cache.set(...)`
     call effect, for every language."""
     element = EXPECTED[lang]["batch_element"]
-    out = _run(str(_sample_path(lang)), element, "--fanout", "--format", "json")
+    out = _run(str(_sample_path(lang)), element, "--view", "effects", "--in-loops", "--format", "json")
     data = json.loads(out)
     assert len(data["findings"]) == 1, f"{lang}: expected exactly one loop\n{out}"
     effects = [{"line": e["line"], "kind": e["kind"]} for e in data["findings"][0]["effects"]]
@@ -515,7 +515,7 @@ def test_statewrites_classifies_field_and_call(lang):
     a distinct tree-sitter node kind per language — BACK-439c) plus the merged
     call-based cache write, for every language."""
     element = EXPECTED[lang]["batch_element"]
-    out = _run(str(_sample_path(lang)), element, "--statewrites", "--format", "json")
+    out = _run(str(_sample_path(lang)), element, "--view", "effects", "--state", "--format", "json")
     data = json.loads(out)
     findings = [{"kind": f["kind"], "line": f["line"]} for f in data["findings"]]
     assert findings == EXPECTED[lang]["statewrites"], f"{lang}: statewrites mismatch\n{out}"
@@ -556,7 +556,7 @@ def test_kotlin_throw_is_detected_by_exits():
     dogfooding; the entry_function processOrder has no throw, so this pins
     `validate` (throw at L6) directly. Confirmed to report only the L8 return
     pre-fix."""
-    out = _run(str(_sample_path("kotlin")), "validate", "--exits", "--format", "json")
+    out = _run(str(_sample_path("kotlin")), "validate", "--view", "exits", "--format", "json")
     data = json.loads(out)
     findings = [{"kind": f["kind"], "line": f["line"]} for f in data["findings"]]
     assert findings == [
@@ -577,7 +577,7 @@ def test_swift_throw_is_detected_by_exits():
     ios-oss deep-conformance dogfooding; entry_function processOrder has no
     throw, so this pins `validate` (guard-else throw at L6). Confirmed to report
     only the L8 return pre-fix."""
-    out = _run(str(_sample_path("swift")), "validate", "--exits", "--format", "json")
+    out = _run(str(_sample_path("swift")), "validate", "--view", "exits", "--format", "json")
     data = json.loads(out)
     findings = [{"kind": f["kind"], "line": f["line"]} for f in data["findings"]]
     assert findings == [
@@ -594,7 +594,7 @@ def test_kotlin_throw_text_is_full_expression():
     "throw" — kind/line/gate were already correct (BACK-497), only the display
     text was truncated. Cosmetic follow-on found alongside BACK-497, fixed by
     rendering the parent jump_expression's text for this one bare kind."""
-    out = _run(str(_sample_path("kotlin")), "validate", "--exits", "--format", "json")
+    out = _run(str(_sample_path("kotlin")), "validate", "--view", "exits", "--format", "json")
     data = json.loads(out)
     throw = next(f for f in data["findings"] if f["kind"] == "THROW")
     assert throw["text"] == 'throw IllegalArgumentException("empty order")', out
@@ -603,7 +603,7 @@ def test_kotlin_throw_text_is_full_expression():
 def test_swift_throw_text_is_full_expression():
     """Same cosmetic follow-on as the Kotlin case, for Swift's bare
     throw_keyword (child of control_transfer_statement)."""
-    out = _run(str(_sample_path("swift")), "validate", "--exits", "--format", "json")
+    out = _run(str(_sample_path("swift")), "validate", "--view", "exits", "--format", "json")
     data = json.loads(out)
     throw = next(f for f in data["findings"] if f["kind"] == "THROW")
     assert throw["text"] == "throw ValidationError.empty", out
@@ -617,7 +617,7 @@ def test_ruby_case_when_is_mapped_by_ifmap():
     trailing `else` showed). Safe bare-kind add: the outline collector skips
     anonymous nodes, and Ruby's case/when expressions are named while the
     keyword tokens are not. Found via discourse deep-conformance dogfooding."""
-    out = _run(str(_sample_path("ruby")), "classify", "--ifmap", "--format", "json")
+    out = _run(str(_sample_path("ruby")), "classify", "--view", "flow", "--kind", "if", "--format", "json")
     data = json.loads(out)
     findings = [{"keyword": f["keyword"], "line_start": f["line_start"]} for f in data["findings"]]
     assert findings == [
@@ -634,7 +634,7 @@ def test_ruby_modifier_gate_is_captured():
     if_modifier/unless_modifier were absent from IF_NODES/GATE_NODES, so the
     gate condition was lost (a correctness bug: a conditional raise read as
     always-raised, BACK-500). The fixture's validate uses exactly this shape."""
-    out = _run(str(_sample_path("ruby")), "validate", "--returns", "--format", "json")
+    out = _run(str(_sample_path("ruby")), "validate", "--view", "exits", "--format", "json")
     data = json.loads(out)
     exit_finding = data["findings"][0]
     gates = [g["text"] for g in exit_finding.get("gates", [])]
@@ -648,7 +648,7 @@ def test_ruby_raise_is_an_exit():
     node — `raise ArgumentError` is a plain method call — so it must be caught
     via _EXIT_CALL_NAMES the way die/exit are. Was invisible pre-fix (validate
     reported no exits). Found via discourse deep-conformance dogfooding."""
-    out = _run(str(_sample_path("ruby")), "validate", "--exits", "--format", "json")
+    out = _run(str(_sample_path("ruby")), "validate", "--view", "exits", "--format", "json")
     data = json.loads(out)
     findings = [{"kind": f["kind"], "line": f["line"]} for f in data["findings"]]
     # BACK-1482: the method's last expression (`order`, line 6) is its implicit RETURN.
@@ -663,7 +663,7 @@ def test_ruby_compound_ivar_is_a_statewrite():
     _ASSIGNMENT_NODES (it carried `augmented_assignment` but not Ruby's kind), so
     simple `@sum = 0` worked but compound writes were invisible. Found via
     discourse deep-conformance dogfooding."""
-    out = _run(str(_sample_path("ruby")), "add", "--statewrites", "--format", "json")
+    out = _run(str(_sample_path("ruby")), "add", "--view", "effects", "--state", "--format", "json")
     data = json.loads(out)
     findings = [{"kind": f["kind"], "line": f["line"]} for f in data["findings"]]
     assert findings == [
@@ -768,7 +768,7 @@ def test_conformance_xfail_metadata_rejects_unreached_names(monkeypatch, name):
 def _assert_statewrite_controls(language, cases):
     for element, expected in cases:
         result = _run_reveal_direct(
-            str(_sample_path(language)), element, '--statewrites', '--format', 'json')
+            str(_sample_path(language)), element, '--view', 'effects', '--state', '--format', 'json')
         assert result.returncode == 0, result.stderr
         findings = json.loads(result.stdout)['findings']
         assert [{'kind': f['kind'], 'line': f['line']} for f in findings] == expected
@@ -786,7 +786,7 @@ def test_dart_statewrite_call_and_local_assignment_controls():
 
 def test_dart_trailing_return_remains_unguarded():
     """The missing handler gate must not conceal a spurious post-try gate."""
-    result = _run_reveal_direct(str(_sample_path('dart')), 'processOrder', '--returns', '--format', 'json')
+    result = _run_reveal_direct(str(_sample_path('dart')), 'processOrder', '--view', 'exits', '--format', 'json')
     assert result.returncode == 0, result.stderr
     findings = json.loads(result.stdout)['findings']
     assert next(f for f in findings if f['line'] == 21)['gates'] == []
@@ -825,7 +825,7 @@ def test_gdscript_unannotated_function_and_unbased_class_controls():
 
 def test_gdscript_assignment_mutation_has_later_read():
     result = _run_reveal_direct(
-        str(_sample_path('gdscript')), ':18-18', '--mutations', '--format', 'json')
+        str(_sample_path('gdscript')), ':18-18', '--outputs', '--format', 'json')
     assert result.returncode == 0, result.stderr
     findings = json.loads(result.stdout)['findings']
     assert [{'var': f['var'], 'line': f['line'], 'next_read_line': f['next_read_line']}
@@ -873,19 +873,20 @@ def test_zig_statewrite_call_and_local_assignment_controls():
 
 def test_zig_trailing_return_and_catch_free_controls():
     path = str(_sample_path('zig'))
-    result = _run_reveal_direct(path, 'processOrder', '--returns', '--format', 'json')
+    result = _run_reveal_direct(path, 'processOrder', '--view', 'exits', '--format', 'json')
     assert result.returncode == 0, result.stderr
     findings = json.loads(result.stdout)['findings']
     assert next(f for f in findings if f['line'] == 24)['gates'] == []
-    for flag in ['--catchmap', '--loopmap', '--fanout']:
-        result = _run_reveal_direct(path, 'run', flag, '--format', 'json')
+    for flags in [('--view', 'flow', '--kind', 'try'), ('--view', 'flow', '--kind', 'loop'),
+                  ('--view', 'effects', '--in-loops')]:
+        result = _run_reveal_direct(path, 'run', *flags, '--format', 'json')
         assert result.returncode == 0, result.stderr
         assert json.loads(result.stdout)['findings'] == []
 
 
 def test_zig_if_return_keeps_branch_gate():
     result = _run_reveal_direct(
-        str(_sample_path('zig')), 'validate', '--returns', '--format', 'json')
+        str(_sample_path('zig')), 'validate', '--view', 'exits', '--format', 'json')
     assert result.returncode == 0, result.stderr
     findings = json.loads(result.stdout)['findings']
     assert [{'line': f['line'], 'gate_lines': [g['line'] for g in f['gates']]}
