@@ -177,7 +177,7 @@ def _emit_depth_navigation(ctx: _NavCtx, flag: str, from_line: int, to_line: int
     limited = evidence.overlaps(from_line, to_line)
     structure_scope = {
         'rule': 'Recognized structural nodes; exit expressions may be omitted.',
-        'exit_sites': 'Inspect --exits for candidate exit sites.',
+        'exit_sites': 'Inspect --view exits for candidate exit sites.',
     }
     result = {'meta': {'depth': ctx.depth, 'depth_limited': limited,
                        'structure_scope': structure_scope}}
@@ -187,7 +187,7 @@ def _emit_depth_navigation(ctx: _NavCtx, flag: str, from_line: int, to_line: int
         note_warning(result, {
             'type': 'depth_limited', 'field': 'findings', 'cause': 'max_depth',
             'message': f'Control-structure expansion limited by depth {ctx.depth}; deeper structural '
-                       'regions overlapping this selection were not expanded. Increase --depth to expand them.',
+                       'regions overlapping this selection were not expanded. Increase --nesting-depth to expand them.',
         })
     if ctx.as_json:
         _nav_json(flag, ctx.analyzer.path, ctx.element, from_line, to_line,

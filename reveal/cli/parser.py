@@ -408,8 +408,9 @@ def _add_display_options(parser: argparse.ArgumentParser) -> None:
     add_switch_argument(parser, 'fallback')
     parser.add_argument('--depth', type=int, default=None,
                         help='Directory tree depth (default: 3); also overrides the markdown '
-                             'heading outline collapse level when set; code-element structural '
-                             'navigation requires positive logical nesting depth (default: 3)')
+                             'heading outline collapse level when set; on an element view with '
+                             '--transitive, the call hops to follow (1..5, default 2); an element '
+                             "view's structural depth is --nesting-depth")
     parser.add_argument('--max-entries', type=int, default=200,
                         help='Maximum entries to show in directory tree (default: 200, 0=unlimited)')
     parser.add_argument('--dir-limit', type=int, default=50,

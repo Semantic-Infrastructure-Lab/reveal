@@ -716,7 +716,7 @@ _SMOKE: Dict[str, LanguageCapability] = {
         ),
         known_limitations=[
             "val/var_definition WRITE-as-READ mislabeling and "
-            "throw_expression invisibility to --exits/--returns were "
+            "throw_expression invisibility to the exits view were "
             "found+fixed via smoke + real-corpus (gitbucket) dogfooding.",
             "Named call arguments (f(x = value)) parse as "
             "assignment_expression, structurally identical to a real "
@@ -1126,7 +1126,7 @@ _UNTESTED: Dict[str, LanguageCapability] = {
             "Structure extraction (functions, modules), element extraction "
             "(`reveal file.ex <name>`), and complexity now work (BACK-480, "
             "extragalactic-journey-0706). Still `[untested]` tier: the "
-            "nav-flag surface (--varflow/--sideeffects/--catchmap/…) has no "
+            "element-view surface (--varflow, --view effects, --view flow, …) has no "
             "ground-truth fixtures yet.",
             "`calls`/complexity walk the whole `def` call (signature + body), "
             "so the def's own name and control-flow macros (case/if/cond/with) "

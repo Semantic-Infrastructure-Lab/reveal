@@ -19,7 +19,7 @@ def test_recognized_skeleton_discloses_nonexhaustive_exit_forms(language):
     assert answer['meta']['depth_limited'] is False
     assert answer['meta']['structure_scope'] == {
         'rule': 'Recognized structural nodes; exit expressions may be omitted.',
-        'exit_sites': 'Inspect --exits for candidate exit sites.',
+        'exit_sites': 'Inspect --view exits for candidate exit sites.',
     }
 
 

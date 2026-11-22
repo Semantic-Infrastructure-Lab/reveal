@@ -226,8 +226,8 @@ class TestabilityAdapter(ResourceAdapter):
             'features': [
                 'Production patch hotspots: functions/modules most mocked by tests',
                 'Boundary fan-out hotspots: high-complexity boundary code with no patch coverage. '
-                'Categories come from each function\'s own calls, classified exactly as --sideeffects does, '
-                'in every language --sideeffects covers',
+                'Categories come from each function\'s own calls, classified exactly as --view effects does, '
+                'in every language --view effects covers',
                 'Patch pressure scans Python unittest.mock/monkeypatch and JS/TS jest/vitest tests',
             ],
             'notes': [
