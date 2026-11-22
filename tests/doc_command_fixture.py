@@ -528,7 +528,8 @@ FILES = {
     'src/api/__init__.py': '',
     'src/api/client.py': 'import json\n\n\ndef ping():\n    return 1\n',
     'src/utils.py': 'import os\nimport sys\n\n\ndef cwd():\n    return os.getcwd()\n',
-    'src/file.py': 'from .validators import validate_item\n\n\ndef fn(x):\n    return validate_item(x)\n',
+    # QUERY_PARAMETER_REFERENCE's `--reveal-type result` (BACK-2613: an absent variable exits 2).
+    'src/file.py': 'from .validators import validate_item\n\n\ndef fn(x):\n    result = validate_item(x)\n    return result\n',
     'src/models/__init__.py': '',
     'src/models/user.py': 'from ..validators import validate_item\n\n\nclass User:\n'
                           '    def check(self):\n        return validate_item(self)\n',
@@ -544,7 +545,9 @@ FILES = {
                           'def parse_config(path):\n    return old_parse_config(path)\n\n\n'
                           # README's adapter table (BACK-1365).
                           'def my_fn(x):\n    return x\n\n\n'
-                          'def use_my_fn():\n    return my_fn(1)\n',
+                          'def use_my_fn():\n    return my_fn(1)\n\n\n'
+                          # The AST guide's `--reveal-type elem` (BACK-2613: an absent variable exits 2).
+                          'def render(structure):\n    for elem in structure:\n        print(elem)\n    return structure\n',
     'src/auth/checks.py': 'from ..validators import validate_item\n\n\n'
                           'def validate_token(token):\n    return validate_item(token)\n\n\n'
                           'def guard(token):\n    return validate_token(token)\n',
