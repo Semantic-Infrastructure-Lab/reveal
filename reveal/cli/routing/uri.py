@@ -57,6 +57,9 @@ class Answer:
     execution_facts: Optional[ExecutionFacts] = None
     exception: Optional[Exception] = field(default=None, repr=False)
     public_diagnostic: Optional[str] = None
+    # The request's own validation error behind an invalid-request answer (UnreadControlError...), kept apart from
+    # ``exception``, which MCP reads as an internal failure: the noun form of api.query raises it (BACK-2720).
+    request_error: Optional[RequestValidationError] = field(default=None, repr=False)
     private_diagnostic: Optional[str] = field(default=None, repr=False)
 
     def emit(self, **options: Any) -> None:
@@ -75,13 +78,14 @@ class _Answered(Exception):
 
     def __init__(self, result: RevealResult, detail: Optional[Callable[[], None]] = None,
                  exception: Optional[Exception] = None, execution_facts: Optional[ExecutionFacts] = None,
-                 test_layout_failure: bool = False):
+                 test_layout_failure: bool = False, request_error: Optional[RequestValidationError] = None):
         super().__init__(result.get('error') or result.get('reason'))
         self.result = result
         self.detail = detail
         self.exception = exception
         self.execution_facts = execution_facts
         self.test_layout_failure = test_layout_failure
+        self.request_error = request_error
 
 
 class UriUsageError(Exception):
@@ -129,6 +133,7 @@ def _call_adapter(call: Callable[[], Any], scheme: str, resource: str,
         _fail(scheme, resource, _exception_message(e), adapter_class=adapter_class,
               test_layout_failure=isinstance(e, (TestLayoutValidationError, ConfigValidationError, ConfigLoadError)),
               exception=None if code == 'invalid_request' else e, code=code,
+              request_error=e if invalid and isinstance(e, RequestValidationError) else None,
               failure_cause=(FailureCause.INVALID_REQUEST if invalid else
                              FailureCause.ANALYSIS if isinstance(e, ConfigLoadError) else None))
 
@@ -174,7 +179,8 @@ def _fail(scheme: str, resource: str, message: str, *,
           adapter_class: Any = None, code: str = 'adapter_error',
           detail: Optional[Callable[[], None]] = None,
           exception: Optional[Exception] = None, failure_cause: Optional[FailureCause] = None,
-          test_layout_failure: bool = False, **fields: Any) -> NoReturn:
+          test_layout_failure: bool = False, request_error: Optional[RequestValidationError] = None,
+          **fields: Any) -> NoReturn:
     """End the query with an error result; its selected policy decides the exit.
 
     ``meta.errors`` carries the error once more with a code (``adapter_error`` for a raise,
@@ -184,7 +190,7 @@ def _fail(scheme: str, resource: str, message: str, *,
     result = _router_result(scheme, resource, adapter_class,
                             errors=[{'code': code, 'message': message}], error=message, **fields)
     facts = failure_execution_facts(failure_cause) if failure_cause is not None else None
-    raise _Answered(result, detail, exception, facts, test_layout_failure=test_layout_failure)
+    raise _Answered(result, detail, exception, facts, test_layout_failure=test_layout_failure, request_error=request_error)
 
 
 def _decline(scheme: str, resource: str, reason: str, adapter_class: Any = None, adapter: Any = None) -> NoReturn:
@@ -215,6 +221,7 @@ def _answer(resolve: Callable[[], Answer], scheme: str, args: 'Namespace', *,
         return resolve()
     except _Answered as e:
         result, detail, exception = e.result, e.detail, e.exception  # `e` is unbound once the handler ends
+        request_error = e.request_error
         facts = e.execution_facts
         test_layout_failure = e.test_layout_failure
     if result_type is not None:
@@ -232,7 +239,7 @@ def _answer(resolve: Callable[[], Answer], scheme: str, args: 'Namespace', *,
                         result, args, scheme, _render_router_result, execution_facts=facts,
                         execution_answer=answer, announce_error=announce_error, detail=detail,
                         default_fail_on=default_fail_on),
-                    execution_facts=facts, exception=exception,
+                    execution_facts=facts, exception=exception, request_error=request_error,
                     public_diagnostic=(result.get('error') if facts is not None and
                                        any(e.get('code') in _PUBLIC_REJECTION_CODES
                                            for e in result['meta']['errors']) else None))
@@ -401,7 +408,7 @@ def _preparation_answer(uri, element, args, exception) -> Optional[Answer]:
     return cast(Answer, _invalid_answer(
         adapter_class, scheme, path, _exception_message(exception), args, cause,
         default_fail_on=getattr(adapter_class, 'DEFAULT_FAIL_ON'),
-        result_type=_uri_result_type(adapter_class, resource)))
+        result_type=_uri_result_type(adapter_class, resource), error=exception))
 
 
 def resolve_uri(uri: str, args: 'Namespace', consumed: Iterable[str] = ()) -> Answer:

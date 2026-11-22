@@ -62,3 +62,19 @@ def test_the_cli_and_mcp_answers_are_unchanged(proj):
     result = reveal_run(['metrics', 'pkg', '--top', '1'])
     assert isinstance(result, _ToolFailure) and result.public, str(result)
     assert message in str(result) and 'Internal error' not in str(result)
+
+
+# --- the shared owner (unit): an invalid-request answer keeps the request's validation error apart from exception ---
+
+def test_an_invalid_answer_keeps_a_validation_error_beside_exception():
+    from argparse import Namespace
+    from reveal.cli.routing.declared import _invalid_answer, declared_adapter_class
+    adapter = declared_adapter_class('metrics')
+    unread = UnreadControlError("control 'top' is not read by this answer")
+    kept = _invalid_answer(adapter, 'metrics', '.', str(unread), Namespace(format='json'), error=unread)
+    assert kept.request_error is unread and kept.exception is None   # MCP's internal-failure slot stays empty
+    assert kept.public_diagnostic == str(unread)
+    other = _invalid_answer(adapter, 'metrics', '.', 'Path not found: x', Namespace(format='json'),
+                            error=FileNotFoundError('x'))
+    assert other.request_error is None and other.exception is None
+    assert _invalid_answer(adapter, 'metrics', '.', 'm', Namespace(format='json')).request_error is None

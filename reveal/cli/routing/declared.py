@@ -788,7 +788,7 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
                 _note_uri_request(name, adapter, path, source, transport, spelled_query, early=True,
                                   walk_policy=note_walk)
             except ValueError as exc:
-                consume(_invalid_prepared_answer(adapter, name, path, query_resource, str(exc), args))
+                consume(_invalid_prepared_answer(adapter, name, path, query_resource, str(exc), args, error=exc))
                 return
             expected_type = predicted_result_type(adapter, source)
             try:
@@ -796,10 +796,11 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
                                           resolve=getattr(adapter, 'resource_path', None))
             except (ValueError, FileNotFoundError, NotADirectoryError) as exc:
                 consume(_invalid_answer(adapter, name, path, _resource_error_message(exc, path), args,
-                                        result_type=expected_type))
+                                        result_type=expected_type, error=exc))
                 return
             except OSError as exc:
-                consume(_invalid_answer(adapter, name, path, str(exc), args, _resource_failure_cause(exc), result_type=expected_type))
+                consume(_invalid_answer(adapter, name, path, str(exc), args, _resource_failure_cause(exc),
+                                        result_type=expected_type, error=exc))
                 return
             scope_path = scope_path_of(adapter, path)
             expected_type = predicted_result_type(adapter, source, scope_path)
@@ -807,7 +808,7 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
                 root, excludes = _walk_scope(adapter, scope_path, args)
             except (OSError, ValueError, ConfigLoadError) as exc:  # the walk's settings included (BACK-2677)
                 consume(_invalid_answer(adapter, name, path, str(exc), args, _resource_failure_cause(exc),
-                                        result_type=expected_type))
+                                        result_type=expected_type, error=exc))
                 return
             with exclusion_scope(root, excludes), gitignore_scope(respect):
                 answer = _declared_answer(adapter, name, path, source, transport, args, expected_type,
@@ -867,19 +868,19 @@ def _flagged_query(adapter, name, path, source, transport: str, args, consume, s
             _bind_global_verbose(name, adapter, args, source, spelled)
             _bind_global_all(name, adapter, args, source, spelled, path, selection)
         except ValueError as exc:
-            consume(_invalid_prepared_answer(adapter, name, path, query_resource, str(exc), args))
+            consume(_invalid_prepared_answer(adapter, name, path, query_resource, str(exc), args, error=exc))
             return None
         return query_resource
     from .flag_specs import inject_query_flags
     try:
         flagged: str = inject_query_flags(query_resource, name, args, path)
     except ValueError as exc:
-        consume(_invalid_prepared_answer(adapter, name, path, query_resource, str(exc), args))
+        consume(_invalid_prepared_answer(adapter, name, path, query_resource, str(exc), args, error=exc))
         return None
     return flagged
 
 
-def _invalid_prepared_answer(adapter, name, path, resource, message, args, *, default_fail_on=None):
+def _invalid_prepared_answer(adapter, name, path, resource, message, args, *, default_fail_on=None, error=None):
     """Keep an unbound request's mode identity when decoding/alias validation fails."""
     selector = getattr(adapter, 'uri_result_type', None)
     try:
@@ -887,7 +888,7 @@ def _invalid_prepared_answer(adapter, name, path, resource, message, args, *, de
     except ValueError:  # the selector reads the same rejected query (BACK-2655): no mode beyond the default
         expected_type = adapter.RESULT_TYPE
     return _invalid_answer(adapter, name, path, message, args, result_type=expected_type,
-                           default_fail_on=default_fail_on)
+                           default_fail_on=default_fail_on, error=error)
 
 
 def _typed_spellings(adapter) -> set:
@@ -929,9 +930,10 @@ def _declared_answer(adapter_class, name: str, path: str, source: Any, transport
     except (FileNotFoundError, NotADirectoryError):
         return _invalid_answer(adapter_class, name, scope, f'Path not found: {to_posix(path)}', args, result_type=expected_type)
     except ValueError as exc:
-        return _invalid_answer(adapter_class, name, scope, str(exc), args, result_type=expected_type)
+        return _invalid_answer(adapter_class, name, scope, str(exc), args, result_type=expected_type, error=exc)
     except OSError as exc:
-        return _invalid_answer(adapter_class, name, scope, str(exc), args, _resource_failure_cause(exc), result_type=expected_type)
+        return _invalid_answer(adapter_class, name, scope, str(exc), args, _resource_failure_cause(exc),
+                               result_type=expected_type, error=exc)
 
     def resolve():
         adapter = _call_adapter(lambda: _canonical_init(adapter_class, path, params=params),
@@ -944,7 +946,12 @@ def _declared_answer(adapter_class, name: str, path: str, source: Any, transport
                    source_path=scope, facts_of=adapter_class.execution_facts)
 
 
-def _invalid_answer(adapter, name, path, message, args, cause=None, *, result_type=None, default_fail_on=None):
+def _invalid_answer(adapter, name, path, message, args, cause=None, *, result_type=None, default_fail_on=None,
+                    error: Optional[BaseException] = None):
+    """An invalid-request answer saying *message*. *error*, the exception the message came from, is kept on the answer
+    when it is the request's own validation error (``Answer.request_error``: the noun form of api.query raises it, an
+    ``UnreadControlError`` as the URI form does, BACK-2720)."""
+    from ...errors import RequestValidationError
     from ...reveal_types import CONTRACT_VERSION
     from ...utils.results import FailureCause, ResultBuilder, failure_execution_facts
     from .uri import Answer, _emit_result, _render_router_result
@@ -956,7 +963,8 @@ def _invalid_answer(adapter, name, path, message, args, cause=None, *, result_ty
     return Answer(result, 'router', lambda answer, *, announce_error=True: _emit_result(
         result, args, name, _render_router_result, execution_facts=facts, execution_answer=answer,
         announce_error=announce_error, default_fail_on=default_fail_on),
-        execution_facts=facts, public_diagnostic=message)
+        execution_facts=facts, public_diagnostic=message,
+        request_error=error if isinstance(error, RequestValidationError) else None)
 
 
 def is_closed_reader(exc: BaseException) -> bool:
