@@ -12,7 +12,9 @@ Now each word is a legacy spelling of a shared control with a note-stage ``param
 as its replacement, JSON and text. A path's view is ``--view NAME`` too; a path view and a different ``--view`` are two
 answers (exit 2 naming both), an equal one is one selection. A false or malformed presence value exits 2 naming the
 view. ``search`` answers as ``--match`` except that its JSON ``query`` stays a string where match echoes a list of
-terms, so it is a standalone legacy operation with its own note naming ``--match``.
+terms, so it is a standalone legacy operation with its own note naming ``--match``, and no request note. The old
+words are URI spellings only: ``reveal codex`` never shipped them as flags (``--filter``, ``--search``, ``--full``,
+``--last``, ``--tokens`` and ``--goal`` exit 2 as unknown options).
 """
 import json
 
@@ -87,32 +89,43 @@ def test_a_legacy_word_answers_as_its_replacement_json_and_text(codex, legacy, c
     assert (old_text.returncode, without_request_note_lines(old_text.stdout)) == (new_text.returncode, new_text.stdout)
 
 
-# The old flag spells each word that selects (a flag takes no false value: ?full=false has none).
-_FLAGGED = [(row, ident) for row, ident in zip(TRANSLATED, _IDS) if not row[0].endswith('=false')]
+# `reveal codex` never shipped, so the old words are not flags of the subcommand: a flag born deprecated would only
+# retire again, and a --search flag would make ?search='s request note recommend a retiring spelling (manager ruling 2
+# after Step 6; COMMAND_MODEL "Retirement notes"). The URI words keep their rows; the flags are unknown options.
+_OLD_FLAGS = [('--filter', 'auth', 'sessions'), ('--search', 'auth', 'sessions'), ('--full', None, f'{S}/exchanges'),
+              ('--last', None, S), ('--tokens', None, S), ('--goal', None, S)]
 
 
-@pytest.mark.parametrize('legacy,canonical,row', [row for row, _ in _FLAGGED], ids=[ident for _, ident in _FLAGGED])
-def test_the_old_flag_of_a_legacy_word_is_the_same_spelling_with_its_row(codex, legacy, canonical, row):
-    word = row.rpartition('.')[2]
-    query = legacy.partition('?')[2]
-    value = next(part.partition('=')[2] for part in query.split('&') if part.partition('=')[0] == word)
-    flag = [f'--{word}'] + ([value] if word == 'filter' else [])
-    rest = [arg for part in query.split('&') if part.partition('=')[0] in ('since', 'until')
-            for arg in (f"--{part.partition('=')[0]}", part.partition('=')[2])]
-    old, old_doc = _json('codex', canonical[0], *flag, *rest)
-    new, new_doc = _json('codex', *canonical)
-    assert old.returncode == new.returncode == 0, old.stderr
-    assert _answer(old_doc) == _answer(new_doc)
-    assert _notes(old_doc) == [row]
-    assert RETIREMENTS[row].replacement.split(' ', 2)[:1] == [canonical[1]]
+@pytest.mark.parametrize('flag,value,resource', _OLD_FLAGS, ids=[row[0] for row in _OLD_FLAGS])
+@pytest.mark.parametrize('form', ['subcommand', 'uri'])
+def test_the_old_words_are_not_codex_flags(codex, form, flag, value, resource):
+    argv = ['codex', resource] if form == 'subcommand' else [f'codex://{resource}']
+    run, doc = _json(*argv, flag, *([value] if value else []))
+    assert run.returncode == 2, (run.stdout[:300], run.stderr)
+    assert flag in run.stderr, run.stderr
+    assert 'param:codex' not in json.dumps(doc)  # refused, not answered with a note
 
 
-def test_the_rows_are_note_stage_and_only_search_is_standalone():
+def test_the_rows_are_note_stage_name_no_flag_and_only_search_is_standalone():
     words = ('filter', 'search', 'full', 'last', 'tokens', 'goal')
     rows = {word: RETIREMENTS.get(f'param:codex.{word}') for word in words}
     assert all(row is not None and row.stage == 'note' for row in rows.values()), rows
     assert [word for word, row in rows.items() if row.standalone] == ['search']
     assert '--match TEXT' in rows['search'].replacement
+    assert [word for word, row in rows.items() if '--' in row.old] == []  # the old spelling is the URI word only
+    assert not any(spelling.flag for spec in PARAM_SPECS for spelling in spec.legacy)
+    assert next(spec for spec in PARAM_SPECS if spec.name == 'search').cli is None
+
+
+def test_a_standalone_search_says_only_its_own_note(codex):
+    """``?search=`` has no canonical form (its JSON query stays a string), so it says its row's note naming --match and
+    no request note: with no --search flag the request has no command to recommend (the Claude precedent)."""
+    for request in ('codex://sessions/?search=auth', 'codex://sessions/?search=auth&matches=1'):
+        run, doc = _json(request)
+        assert run.returncode == 0, run.stderr
+        assert _notes(doc) == ['param:codex.search'], _notes(doc)
+    text = _run_reveal_direct('codex://sessions/?search=auth')
+    assert '--search' not in text.stderr + text.stdout
 
 
 def test_the_typed_api_takes_the_canonical_keywords_and_the_legacy_ones(codex):

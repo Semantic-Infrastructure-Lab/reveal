@@ -176,9 +176,12 @@ def test_check_is_noted_and_changes_nothing(codex):
 def test_the_subcommand_help_lists_its_controls():
     run = _run_reveal_direct('codex', '--help')
     assert run.returncode == 0
-    for flag in ('--search', '--filter', '--since', '--until', '--key', '--last', '--tokens', '--goal', '--matches',
-                 '--full', '--limit', '--offset'):
+    for flag in ('--where', '--match', '--since', '--until', '--key', '--view', '--detail', '--matches', '--limit',
+                 '--offset'):
         assert flag in run.stdout
+    # the legacy words are URI spellings only, never flags of the subcommand (BACK-2618 ruling 2)
+    for flag in ('--search', '--filter', '--last', '--tokens', '--goal', '--full'):
+        assert flag not in run.stdout.split(), flag
 
 
 # ---- negative controls: the URI answers are unchanged ----
