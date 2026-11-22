@@ -92,7 +92,7 @@ def test_a_name_missing_inside_a_repository_exits_2(repo_with_deleted_file, rel,
 
 def test_a_missing_file_points_at_its_history(repo_with_deleted_file):
     result = _run_reveal_direct(f"git://{repo_with_deleted_file.as_posix()}/gone.txt")
-    assert 'add ?type=history to the URI' in result.stderr
+    assert 'A file deleted earlier still has its history: --view history' in result.stderr  # the flag, BACK-2616
 
 
 @pytest.mark.parametrize('rel,expected', [

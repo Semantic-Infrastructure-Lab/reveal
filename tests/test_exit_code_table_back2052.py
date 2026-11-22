@@ -35,6 +35,8 @@ def test_retirement_inventory_matches_the_shipped_migrations():
     BACK-2673 adds Hotspots' and Testability's top and the main-parser flags declared nouns keep (LEGACY_CLI_MODIFIERS).
     BACK-2622 adds Overview's top (a standalone legacy cap) and no_imports (--imports off).
     BACK-2725 adds JSON's data-only (a standalone legacy setting: the bare lines array).
+    BACK-2616 adds Git's type, no_merges and raw (--view, --merges off, --detail raw) and its view=log and
+    detail=summary values (--view history, --detail normal).
     """
     generated = [f'flag:{noun}.{flag}' for noun, flags in LEGACY_CLI_MODIFIERS.items() for flag in flags]  # BACK-2673
     assert sorted(RETIREMENTS) == sorted(generated + ['flag:--also-json', 'flag:--calls', 'flag:--catchmap', 'flag:--check', 'flag:--deps',
@@ -45,7 +47,7 @@ def test_retirement_inventory_matches_the_shipped_migrations():
                                    'param:calls.external', 'param:calls.modules', 'param:calls.rank', 'param:calls.root', 'param:calls.target', 'param:calls.top', 'param:calls.type', 'param:calls.uncalled',
                                    'param:contracts.impls', 'param:patches.group', 'param:patches.min_categories', 'param:patches.min_patches', 'param:patches.no_suppress', 'param:patches.top', 'param:contracts.no_implementations', 'param:claude.contains', 'param:claude.filter', 'param:claude.full', 'param:claude.last', 'param:claude.raw', 'param:claude.search', 'param:claude.summary', 'param:claude.tail',
                                    'param:codex.filter', 'param:codex.full', 'param:codex.goal', 'param:codex.last', 'param:codex.search', 'param:codex.tokens',
-                                   'param:deps.verbose', 'param:git.verbose',
+                                   'param:deps.verbose', 'param:git.no_merges', 'param:git.raw', 'param:git.type', 'param:git.verbose',
                                    'param:json.data-only', 'param:json.flatten', 'param:json.gron', 'param:json.keys', 'param:json.length', 'param:json.schema', 'param:json.type',
                                    'param:hotspots.files_only', 'param:hotspots.functions_only', 'param:hotspots.verbose',
                                    'param:imports.max_files', 'param:imports.rank', 'param:imports.top', 'param:imports.verbose',
@@ -56,6 +58,7 @@ def test_retirement_inventory_matches_the_shipped_migrations():
                                    'param:metrics.top', 'param:overview.no_imports', 'param:overview.top', 'param:overview.verbose', 'param:pack.verbose',
                                    'param:testability.verbose', 'scheme:architecture', 'scheme:classify', 'scheme:depends', 'scheme:deps', 'scheme:hotspots', 'scheme:python', 'scheme:stats', 'scheme:testability', 'scheme:trace', 'subcommand:architecture', 'subcommand:deps', 'subcommand:hotspots', 'subcommand:review', 'subcommand:scaffold', 'subcommand:testability',
                                    'subcommand:trace', 'target:health.code', 'target:nav.outline', 'value:ast.show=calls', 'value:ast.view=calls',
+                                    'value:git.detail=summary', 'value:git.view=log',
                                    'param:hotspots.top', 'param:testability.top'])
 
 
