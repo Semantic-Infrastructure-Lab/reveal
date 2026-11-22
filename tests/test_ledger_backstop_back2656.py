@@ -79,6 +79,8 @@ def backstop_cases(noun):
 
 @pytest.mark.parametrize('noun', sorted(NOUNS))
 def test_a_declared_read_is_never_reported_unread(workspace, noun):  # noqa: F811
+    if not [spec for spec in _specs(noun) if spec.role != 'operation' and spec.name not in _NOT_PROBED]:
+        pytest.skip(f'{noun} declares no control besides its answer selector: no declared read for the ledger to back')
     cases = backstop_cases(noun)
     assert any(ok for _key, ok, _detail in cases), f'{noun}: no answer took a declared control'  # it measured something
     failing = {key: detail for key, ok, detail in cases if not ok}

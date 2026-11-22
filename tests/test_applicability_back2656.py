@@ -333,10 +333,15 @@ REFUSED_CONTROL = {'architecture': ('top', '2'), 'ast': ('limit', '2'), 'calls':
                    'json': ('limit', '2'), 'markdown': ('limit', '2'), 'metrics': ('limit', '2'),
                    'overview': ('top', '2'), 'pack': ('budget', '2000'), 'patches': ('limit', '2'),
                    'surface': ('top', '2'), 'testability': ('limit', '2'), 'trace': ('depth', '2')}
+# Nouns whose only controls select the answer (role='operation'): an answer selector is never "not read by this answer",
+# so they have no control to refuse (sqlite's view, BACK-2626).
+SELECTORS_ONLY = {noun for noun in NOUNS if noun != 'stats'
+                  and all(spec.role == 'operation' for spec in _adapter(noun).PARAM_SPECS)}
 
 
 def test_every_declared_noun_with_a_refusal_case():
-    assert set(REFUSED_CONTROL) == set(NOUNS) - {'stats'}  # stats:// is metrics' retired scheme (rule 9)
+    assert set(REFUSED_CONTROL) == set(NOUNS) - {'stats'} - SELECTORS_ONLY  # stats:// is metrics' retired scheme (rule 9)
+    assert SELECTORS_ONLY == {'sqlite'}
 
 
 @pytest.mark.parametrize('noun', sorted(REFUSED_CONTROL))

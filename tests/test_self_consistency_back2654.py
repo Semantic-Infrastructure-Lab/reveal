@@ -62,7 +62,7 @@ _PROSE_END = re.compile(r'\s(?:[-\u2014]|or|and|instead|then)(?:\s|$)|\s\(|\s{2,
 # A sentence that shows a request in order to say it is refused: its exit 2 is the point, not a fault.
 _REFUSED = re.compile(r'\bexits? 2\b')
 
-_ANSWER_TARGETS = {'claude': 'sessions', 'codex': '', 'json': 'proj/data.json'}
+_ANSWER_TARGETS = {'claude': 'sessions', 'codex': '', 'json': 'proj/data.json', 'sqlite': 'proj/app.db'}
 _DEFAULT_ARGS = {'calls': ('--callers', 'main'), 'trace': ('--from', 'main')}
 _DEFAULT_QUERY = {'calls': 'callers=main', 'trace': 'from=main'}
 # Requests that make a noun print its cut hints ("... 45 more chars, use ... for the full text"): a low snippet budget,
@@ -274,6 +274,9 @@ def _target(noun, path):
         return re.sub(r'^(?:<[^>]*>|SESSION-ID)', '019e5cc5', path)
     if noun == 'json':
         return 'proj/data.json'
+    if noun == 'sqlite':  # DB[/TABLE]: the harness database, and its one table where the example names a table
+        table = re.split(r'\.(?:db|sqlite3?)/', path, maxsplit=1)
+        return 'proj/app.db/users' if len(table) == 2 and table[1] else 'proj/app.db'
     name, colon, element = path.partition(':')
     if re.search(r'\.md$', name):
         resource = 'proj/README.md'
