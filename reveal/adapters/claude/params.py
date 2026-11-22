@@ -5,6 +5,7 @@ from typing import Any, Callable, cast
 from ...utils.query_binding import (bind_declared_params, legacy_presence_value as presence, runtime_controls,
                                     string_value as text)
 from ...utils.query_parser import CliBinding, LegacySpelling, ParamSpec, ParamValueError, where_param, nonnegative_display_limit, nonempty_scalar, legacy_check, legacy_slices
+from ...utils.time_window import time_window_param
 from .schema import _SCHEMA_QUERY_PARAMS
 from .resources import SESSION_VIEW_NAMES
 from .pagination import PAGE_SPECS
@@ -89,6 +90,9 @@ PAGE_ANSWERS = (*(kind for kind in PAGE_SPECS if kind != 'claude_messages'), *_M
 
 
 def _spec(name, schema):
+    if name in ('since', 'until'):  # Claude's time bounds (COMMAND_MODEL "Time window", BACK-2728)
+        return time_window_param(name, schema['description'], examples=tuple(schema.get('examples', ())),
+                                 answers=ANSWERS[name])
     convert: Callable[[Any], Any] = text
     if name in PRESENCE_FLAGS:
         convert = presence

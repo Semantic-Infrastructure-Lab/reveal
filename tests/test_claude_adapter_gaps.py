@@ -26,7 +26,7 @@ import pytest
 
 from reveal.adapters.claude.adapter import ClaudeAdapter
 from reveal.adapters.claude.params import bind_query
-from reveal.adapters.claude.handlers.post_process import _normalize_date
+from reveal.utils.time_window import resolve_today
 
 # BACK-1149: exercises internal functions/modules directly, not CLI/MCP/network surface
 pytestmark = pytest.mark.component
@@ -720,22 +720,22 @@ class TestPostProcessWorkflow:
         assert result['workflow'] is None
 
 
-# ─── _normalize_date ─────────────────────────────────────────────────────────
+# ─── resolve_today (Claude's own _normalize_date until the shared codec, BACK-2728) ─
 
-class TestNormalizeDate:
+class TestResolveToday:
 
     def test_today_returns_todays_iso_date(self):
         from datetime import date
-        assert _normalize_date('today') == date.today().isoformat()
+        assert resolve_today('today') == date.today().isoformat()
 
     def test_iso_date_passthrough(self):
-        assert _normalize_date('2026-01-15') == '2026-01-15'
+        assert resolve_today('2026-01-15') == '2026-01-15'
 
     def test_arbitrary_string_passthrough(self):
-        assert _normalize_date('2025-12-31') == '2025-12-31'
+        assert resolve_today('2025-12-31') == '2025-12-31'
 
     def test_empty_string_passthrough(self):
-        assert _normalize_date('') == ''
+        assert resolve_today('') == ''
 
 
 # ─── _post_process_session_list ──────────────────────────────────────────────

@@ -12,12 +12,12 @@ _SCHEMA_QUERY_PARAMS = {
     },
     'since': {
         'type': 'string',
-        'description': 'Filter by date — ISO 8601 date string or "today". On sessions/: narrows corpus before scanning. On history: filters by prompt timestamp.',
+        'description': 'Lower date bound. On sessions/: narrows corpus before scanning. On history: filters by prompt timestamp',
         'examples': ['?since=2026-03-01', '?since=today']
     },
     'until': {
         'type': 'string',
-        'description': 'Upper bound date filter — ISO 8601 date string. Pairs with ?since= for date range queries. Applies to session listings and cross-session search.',
+        'description': 'Upper date bound, the whole day included. Pairs with ?since= for date range queries. Applies to session listings and cross-session search',
         'examples': ['?since=2026-06-10&until=2026-06-12', '?until=2026-06-01']
     },
     'word': {

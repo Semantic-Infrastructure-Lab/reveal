@@ -1,13 +1,13 @@
 """Post-processing helpers for claude:// adapter result types."""
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import date
 from pathlib import Path
 from typing import Dict, Any
 
 from .sessions import _read_session_title, _read_session_stats
 from ....utils.threadsafe import main_thread_gc
 from ....utils.results import note_truncation
+from ....utils.time_window import resolve_today
 
 
 def _slice_list(items: list, args: Any) -> list:
@@ -83,7 +83,7 @@ def _post_process_history(result: Dict[str, Any], args: Any, query_params: Dict[
 
     since = result.get('since') or query_params.get('since')
     if since:
-        since = _normalize_date(str(since))
+        since = resolve_today(str(since))
         entries = [e for e in entries if e.get('timestamp', '') >= since]
 
     # The count the header reports is of the filtered set; it was taken before
@@ -98,10 +98,6 @@ def _post_process_history(result: Dict[str, Any], args: Any, query_params: Dict[
     result['displayed_count'] = len(entries)
 
 
-def _normalize_date(val: str) -> str:
-    return date.today().isoformat() if val == 'today' else val
-
-
 def _select_session_dates(result, query_params):
     """Select metadata rows once, before canonical where/page or legacy display cuts."""
     requested = {key: str(value) if value else None for key in ('since', 'until')
@@ -111,8 +107,7 @@ def _select_session_dates(result, query_params):
     scope = result.setdefault('scope', {})
     if scope.get('date_window', {}).get('requested') == requested:
         return
-    today = _normalize_date('today') if 'today' in requested.values() else None
-    bounds = {key: today if value == 'today' else value for key, value in requested.items()}
+    bounds = {key: resolve_today(value) for key, value in requested.items()}
     rows = result['recent_sessions']
     selected = _rows_in_date_window(rows, bounds)
     result.update(recent_sessions=selected, session_count=len(selected))

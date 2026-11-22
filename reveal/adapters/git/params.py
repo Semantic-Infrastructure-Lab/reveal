@@ -2,7 +2,8 @@
 from typing import Any
 
 from ...utils.query_binding import boolean_value, legacy_switch, switch_value, verbose_legacy
-from ...utils.query_parser import CliBinding, LegacySpelling, ParamSpec, ParamValueError, nonempty_scalar, nonnegative_display_limit, legacy_check, legacy_slices, one_value
+from ...utils.query_parser import CliBinding, LegacySpelling, ParamSpec, ParamValueError, nonempty_scalar, nonnegative_display_limit, legacy_check, legacy_slices
+from ...utils.time_window import time_window_param
 
 
 def expressions(value: Any) -> list[str]:
@@ -129,8 +130,9 @@ PARAM_SPECS = (VIEW, WHERE, DETAIL, MERGES, SORT, LIMIT, SCAN_LIMIT, OFFSET, CON
                string('element', 'Semantic element name', answers=('git_file_history', _BLAME, _DIFF, 'git_timeline')),
                string('bucket', 'Timeline period: week or month', choices=('week', 'month'), answers=('git_timeline',)),
                string('ignore', 'Blame commit hash prefixes to suppress', answers=(_BLAME,)),
-               # since/until are settings (one bound each, COMMAND_MODEL "Conflicting values")
-               *(ParamSpec(name, 'string', description, None, one_value, cli=CliBinding(('--' + name,)), answers=_COMMITS)
+               # since/until are settings (one bound each, COMMAND_MODEL "Conflicting values") in the one time-window
+               # grammar (COMMAND_MODEL "Time window", BACK-2728), compared at the bound's precision as date>=/date<=
+               *(time_window_param(name, description, answers=_COMMITS)
                  for name, description in (('since', 'Inclusive starting date'), ('until', 'Inclusive ending date'))))
 # --head/--tail/--range slice this noun's rows today: flag-only legacy modifiers until the cut, read by the answers named
 # (BACK-2673; their notes are the flag:<noun>.<flag> RETIREMENTS rows).

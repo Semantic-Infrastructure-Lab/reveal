@@ -20,6 +20,7 @@ from ...utils.query_eval import find_unknown_filter_fields
 from ...utils.query_binding import bind_declared_params
 from ...utils.query_parser import ResourceSpec, param_cli_flags, param_schema, QueryParams, filter_expression, mark_query_keys, peek_query_items, query_key
 from ...utils.results import note_warning
+from ...utils.time_window import resolve_today
 
 # Import modular components
 from ...utils.path_utils import to_posix
@@ -341,7 +342,7 @@ class GitAdapter(ResourceAdapter):
             # symmetric with ?since= above — the CLI --until flag needs a target
             # to alias into; only date>= existed before this)
             elif k in ('since', 'until'):
-                filter_parts.append(f"date{'>' if k == 'since' else '<'}={v}")
+                filter_parts.append(f"date{'>' if k == 'since' else '<'}={resolve_today(v)}")
                 self._filter_keys.append(k)
                 mark_query_keys(self.query, k)  # the filter parser records 'date'
             # Filter parameters (a key may already end with its operator: author~, date>). A part

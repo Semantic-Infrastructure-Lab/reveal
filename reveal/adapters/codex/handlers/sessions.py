@@ -2,23 +2,19 @@
 from reveal.utils.path_utils import to_posix
 
 import sqlite3
-from datetime import date as _date, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Union
 from reveal.reveal_types import CONTRACT_VERSION
 
 from ....utils.match_terms import match_terms, term_echo
 from ....utils.results import ResultBuilder, note_truncation
+from ....utils.time_window import resolve_today
 from ..analysis.normalize import normalize_record
 
 from ..lookup import USER_FILTER as _USER_FILTER, connect_readonly
 from ..catalog import CatalogRead
 from ..content import scan_rollout, attach_content_evidence
-
-
-def _resolve_date_bound(value: str) -> str:
-    """Resolve 'today' to an ISO date; pass through anything else unchanged."""
-    return _date.today().isoformat() if value == 'today' else value
 
 
 def _apply_date_range(sessions: List[Dict[str, Any]], since: str, until: str) -> List[Dict[str, Any]]:
@@ -97,8 +93,8 @@ def filter_sessions(db_path: Path, where: Sequence[str], since: str = '', until:
     if 'error' in base_result:
         return base_result
 
-    since = _resolve_date_bound(since)
-    until = _resolve_date_bound(until)
+    since = resolve_today(since)
+    until = resolve_today(until)
 
     needles = [term.partition('~=')[2].lower() for term in where]
     filtered = [
@@ -149,8 +145,8 @@ def search_sessions(db_path: Path, query: Union[str, Sequence[str]], max_matches
     of them is a snippet. Returns matched sessions with up to max_matches_per_session snippets each
     (0 keeps every snippet); a cut is disclosed through note_truncation (BACK-1384).
     """
-    since = _resolve_date_bound(since)
-    until = _resolve_date_bound(until)
+    since = resolve_today(since)
+    until = resolve_today(until)
 
     base: Dict[str, Any] = ResultBuilder.create(
         result_type='codex_content_search',

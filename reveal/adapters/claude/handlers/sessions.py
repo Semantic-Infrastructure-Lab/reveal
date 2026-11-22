@@ -5,13 +5,14 @@ import re
 import stat as stat_module
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-from datetime import datetime, date as _date
+from datetime import datetime
 from reveal.reveal_types import CONTRACT_VERSION
 from reveal.utils.lines import split_lines
 from reveal.utils.path_utils import to_posix
 
 from ..analysis import search_sessions_for_term, get_files_touched
 from ....utils.match_terms import holds_all, match_terms, term_echo
+from ....utils.time_window import resolve_today
 from ....utils.results import ResultBuilder, note_warning
 from .workspace import skipped_entries_warning
 from ..catalog import SessionEntries, collect_session_entries, attach_catalog_evidence
@@ -302,13 +303,8 @@ def search_sessions(conversation_base: Path, query_params: Dict[str, Any]) -> Di
         Dict of type ``claude_cross_session_search`` with ``matches`` list.
     """
     term = query_params.get('search', '')
-    since = query_params.get('since', '')
-    until = query_params.get('until', '')
-
-    if since == 'today':
-        since = _date.today().isoformat()
-    if until == 'today':
-        until = _date.today().isoformat()
+    since = resolve_today(query_params.get('since', ''))
+    until = resolve_today(query_params.get('until', ''))
 
     catalog = collect_session_entries(conversation_base, _collect_sessions_from_dir)
     all_sessions = list(catalog)
@@ -384,10 +380,7 @@ def track_file_sessions(conversation_base: Path, resource: str, query_params: Di
         Dict of type ``claude_file_sessions`` with ``sessions`` list.
     """
     file_path = resource[len('files/'):].strip('/')
-    since = query_params.get('since', '')
-
-    if since == 'today':
-        since = _date.today().isoformat()
+    since = resolve_today(query_params.get('since', ''))
 
     if not file_path:
         raise RequestValidationError('No file path provided. Usage: claude://files/path/to/file.py')

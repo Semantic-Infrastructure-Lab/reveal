@@ -5,6 +5,7 @@ from ...utils.query_binding import (bind_declared_params, boolean_value, legacy_
                                     string_value)
 from ...utils.query_parser import (CliBinding, LegacySpelling, ParamSpec, ParamValueError, legacy_check,
                                    legacy_slices, nonnegative_display_limit, where_param, whole_number)
+from ...utils.time_window import time_window_param
 
 # The answers each control is read by (COMMAND_MODEL "Applicability", BACK-2656): the path or --view selects most
 # answers (qualification.selected_type); search and match select the content search. The selectors search and view
@@ -87,12 +88,11 @@ WHERE = replace(where_param('Session predicates, ANDed: session~=TEXT, a case-in
                             legacy=(LegacySpelling('filter', codec=_session_substring),),
                             convert=_session_terms, default=None, fields=('session',)), answers=(_LIST,))
 _BOUNDS, _BOUNDED_BY = (_LIST, _SEARCH), ('where|search|match',)
-SINCE, UNTIL = (
-    ParamSpec(name, 'string', description, None, string_value, answers=_BOUNDS, requires=_BOUNDED_BY,
-              cli=CliBinding((f'--{name}',)))
+SINCE, UNTIL = (  # Codex's time bounds (COMMAND_MODEL "Time window", BACK-2728)
+    time_window_param(name, description, answers=_BOUNDS, requires=_BOUNDED_BY)
     for name, description in (
-        ('since', 'Lower-bound date on session updated_at (ISO 8601 or today); filtered/search views only'),
-        ('until', 'Upper-bound date on session updated_at (ISO 8601); filtered/search views only')))
+        ('since', 'Lower-bound date on session updated_at; filtered/search views only'),
+        ('until', 'Upper-bound date on session updated_at, the whole day included; filtered/search views only')))
 KEY = ParamSpec('key', 'string', 'Dot-path config key lookup, applied after secret masking', None, string_value,
                 answers=('codex_config',), cli=CliBinding(('--key',)))
 VIEW = ParamSpec('view', 'string', 'A session answer: ' + ', '.join(SESSION_VIEWS) + '; a path view (/tools) is '

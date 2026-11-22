@@ -1,6 +1,6 @@
 """Prompt-history decisions from the shared JSONL reader, before display scope."""
 from reveal.utils.path_utils import to_posix
-from datetime import date, datetime
+from datetime import datetime
 from typing import Any, Dict
 
 from ...reveal_types import CONTRACT_VERSION
@@ -8,14 +8,14 @@ from ...utils.results import (AnalysisCompleteness, ExecutionFacts, FailureCause
                               note_warning, result_execution_facts)
 from .analysis.records import TranscriptRecords, valid_record_proof
 from ...utils.match_terms import holds_all, match_terms, term_echo
+from ...utils.time_window import resolve_today
 
 
 def read_history(home, params, *, opener) -> Dict[str, Any]:
     path = home / 'history.jsonl'
     search = [term.lower() for term in match_terms(params.get('search', '')) if term]  # ANDed per entry
     project = params.get('project', '').lower()
-    since = params.get('since', '')
-    since = date.today().isoformat() if since == 'today' else since
+    since = resolve_today(params.get('since', ''))
     reader = TranscriptRecords(path, replace_decode=True, opener=opener)
     entries, interpreted, error = _read_entries(reader, since, search, project)
     proof = {**reader.receipt(), 'analyzed_entries': interpreted,
