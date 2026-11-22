@@ -72,6 +72,15 @@ def test_a_separated_legacy_flag_is_marked_an_old_flag():
     assert not is_legacy_flag_action(parser._option_string_actions['--kind'])
 
 
+def test_the_old_flag_predicate_names_a_generated_legacy_flag_argument():
+    """``is_legacy_flag_action`` is the one predicate a help digest reads: a generated old flag with an argument of its
+    own (markdown's --link-graph, a ``_LegacyFlagAction``) is one, the control's own argument is not."""
+    from reveal.utils.query_binding import is_legacy_flag_action
+    parser = create_declared_parser('markdown')
+    assert is_legacy_flag_action(parser._option_string_actions['--link-graph'])
+    assert not is_legacy_flag_action(parser._option_string_actions['--view'])
+
+
 def test_the_main_help_digest_names_no_old_flag_with_an_argument_of_its_own():
     """The element views' --deps, --mutations, --writes and --calls rode --inputs, --outputs and --callsites: separated,
     they are old flags the main digest skips, as it skips --boundary (BACK-2627); --help-all still lists them."""

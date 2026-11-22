@@ -1064,6 +1064,8 @@ class _LegacyFlagAction(ScalarOnceAction):
     translates it, so its value errors and conflicts read alike on both spellings. A flag that took no value stands
     for its entry's value; a repeatable control's legacy flag appends."""
 
+    legacy_flag = True  # an old flag: is_legacy_flag_action
+
     def __init__(self, *args, entry=None, repeatable=False, **kwargs):
         super().__init__(*args, **kwargs)
         self.entry, self.repeatable = entry, repeatable
@@ -1074,6 +1076,12 @@ class _LegacyFlagAction(ScalarOnceAction):
             setattr(namespace, self.dest, [*(getattr(namespace, self.dest, None) or []), value])
             return
         self._store(namespace, value, option_string)
+
+
+def is_legacy_flag_action(action: argparse.Action) -> bool:
+    """Whether *action* is an old flag a declaration generates (``_LegacyFlagAction``): a help digest names only the
+    flags it teaches (BACK-2627)."""
+    return bool(getattr(action, 'legacy_flag', False))
 
 
 def _separate_legacy_flags(spec: ParamSpec) -> list:
