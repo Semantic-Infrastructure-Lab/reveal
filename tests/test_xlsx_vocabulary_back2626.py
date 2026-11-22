@@ -122,3 +122,104 @@ def test_api_and_mcp(book):
     with pytest.raises(RequestValidationError, match='Sheet not found'):
         api.query(f'xlsx://{book}?sheet=Nope')
     assert len(json.loads(reveal_run([f'xlsx://{book}?sheet=Sales&limit=3', '--format', 'json']))['rows']) == 3
+
+
+# --- xlsx under its declarations (ruled: Q1 --limit 0/--all every row, Q2 csv a --format value, Q3 the six selectors
+# each an operation; B4, B5, B6, B8). Red until the declarations land: reveal xlsx is generated from them.
+
+def _answer(doc):
+    from conftest import without_request_notes
+    doc = without_request_notes(doc)
+    doc.get('execution', {}).pop('command', None)
+    return doc
+
+
+@pytest.mark.parametrize('flags, query', [
+    ((), ''),
+    (('--sheet', 'Sales', '--limit', '3'), '?sheet=Sales&limit=3'),
+    (('--sheet', 'Sales', '--cells', 'A2:B3'), '?sheet=Sales&range=A2:B3'),
+    (('--sheet', 'Sales', '--cells', 'D2', '--formulas', 'on'), '?sheet=Sales&range=D2&formulas=true'),
+    (('--match', 'revenue'), '?search=revenue'),
+    (('--names', 'list'), '?names=list'),
+])
+def test_subcommand_answers_as_the_resource_uri_with_flags(book, flags, query):
+    sub_run, sub_doc = _json('xlsx', book, *flags)
+    uri_run, uri_doc = _json(f'xlsx://{book}', *flags)
+    query_run, query_doc = _json(f'xlsx://{book}{query}')
+    assert (sub_run.returncode, uri_run.returncode, query_run.returncode) == (0, 0, 0)
+    assert _answer(sub_doc) == _answer(uri_doc) == _answer(query_doc)
+    assert _run_reveal_direct('xlsx', book, *flags).stdout == _run_reveal_direct(f'xlsx://{book}', *flags).stdout
+
+
+@pytest.mark.parametrize('argv', [
+    ('xlsx', 'book.xlsx', '--sheet', 'Sales', '--limit', '0'),
+    ('xlsx', 'book.xlsx', '--sheet', 'Sales', '--all'),
+    ('xlsx://book.xlsx', '--sheet', 'Sales', '--all'),  # B4: --all had no effect, 100 rows
+    ('xlsx://book.xlsx?sheet=Sales&limit=0',),  # Q1: 0 meant the default 100
+])
+def test_limit_zero_and_all_give_every_row(book, argv):
+    run, doc = _json(*argv)
+    assert run.returncode == 0
+    assert (len(doc['rows']), doc['rows_count']) == (151, 151)
+    assert not [w for w in doc['meta']['warnings'] if w.get('type') in ('truncated', 'unused_flag')]
+
+
+def test_search_counts_sheets_from_every_match_not_the_cut(book):
+    run, doc = _json('xlsx', book, '--match', 'revenue', '--limit', '2')  # B5: sheets_with_matches was 1
+    assert run.returncode == 0
+    assert (doc['total_matches'], doc['sheets_with_matches'], _rows(doc)) == (4, 2, [11, 51])
+
+
+def test_repeated_match_terms_and_per_row(book):
+    run, doc = _json('xlsx', book, '--match', 'revenue', '--match', 'r50')
+    assert run.returncode == 0
+    assert (doc['total_matches'], _rows(doc), doc['pattern']) == (1, [51], ['revenue', 'r50'])
+
+
+@pytest.mark.parametrize('argv, names', [
+    (('xlsx://book.xlsx', 'Sales'), '--sheet'),  # B6 / Q5: the positional sheet is refused as json's and sqlite's
+    (('xlsx://book.xlsx', 'Nope'), '--sheet'),  # B6: a missing positional sheet exited 1
+])
+def test_positional_element_is_refused(book, argv, names):
+    run = _run_reveal_direct(*argv)
+    assert run.returncode == 2 and names in run.stderr
+
+
+def test_typed_api_binds_every_keyword(book):
+    from reveal.errors import UnsupportedOverrideError
+    doc = api.query('xlsx', book, sheet='Sales', limit=2)  # B8: every keyword was dropped
+    assert (doc['type'], len(doc['rows'])) == ('xlsx_sheet', 2)
+    assert len(api.query(f'xlsx://{book}?sheet=Sales', limit=2)['rows']) == 2
+    assert api.query('xlsx', book, match='revenue')['total_matches'] == 4
+    with pytest.raises(UnsupportedOverrideError):
+        api.query(f'xlsx://{book}', bogus_kw=1)
+
+
+@pytest.mark.parametrize('argv, named', [
+    (('xlsx://book.xlsx?sheet=Sales&powerpivot=schema',), 'powerpivot'),  # rule 17: two answers
+    (('xlsx://book.xlsx?names&connections',), 'connections'),  # the first view key won
+    (('xlsx://book.xlsx?bogus=1',), 'bogus'),  # unknown key: warned, exit 0
+    (('xlsx://book.xlsx?range=A1:B2',), 'range'),  # applicability: the overview reads no cells
+    (('xlsx://book.xlsx?search=revenue&formulas=true',), 'formulas'),  # warned, exit 0
+    (('xlsx://book.xlsx?sheet=Sales&limit=1&limit=2',), 'limit'),  # rule 1: was last-wins
+    (('xlsx://book.xlsx?format=csv',), 'csv'),  # csv renders the sheet view only: the overview printed text
+])
+def test_invalid_requests_exit_2(book, argv, named):
+    run = _run_reveal_direct(*argv)
+    assert run.returncode == 2 and named in run.stderr
+
+
+@pytest.mark.parametrize('query, flag', [('?sheet=Sales&range=A2:B3', '--cells'), ('?search=revenue', '--match')])
+def test_different_words_answer_with_a_note_naming_the_flag(book, query, flag):
+    run, doc = _json(f'xlsx://{book}{query}')
+    assert run.returncode == 0
+    notes = [w['message'] for w in doc['meta']['warnings'] if w.get('type') == 'deprecated_spelling'
+             or 'deprecated' in w.get('message', '')]
+    assert any(flag in note for note in notes), notes
+
+
+def test_csv_is_a_format_of_the_sheet_view(book):
+    sub = _run_reveal_direct('xlsx', book, '--sheet', 'Sales', '--format', 'csv')
+    uri = _run_reveal_direct(f'xlsx://{book}?sheet=Sales&format=csv')
+    assert (sub.returncode, uri.returncode) == (0, 0)
+    assert sub.stdout == uri.stdout and len(sub.stdout.replace('\r\n', '\n').splitlines()) == 151
