@@ -379,6 +379,11 @@ RETIREMENTS: Dict[str, Retirement] = {
     'flag:--statewrites': Retirement('--statewrites', '--view effects --state'),
     'flag:--flowto': Retirement('--flowto', '--view exits for static exit sites; the former reachability verdict is '
                                             'retired'),
+    'flag:--boundary': Retirement('--boundary', '--view boundary'),
+    'flag:--effects': Retirement('--effects', '--view effects (with --in-loops its --depth is --nesting-depth)'),
+    'flag:--flow': Retirement('--flow', '--view flow; selectors are --kind if|loop|try, repeated to combine; its '
+                                        '--depth is --nesting-depth'),
+    'flag:--exits': Retirement('--exits', '--view exits'),
     'flag:--search': Retirement('--search', '--name PATTERN (regex)'),
     # One row for the file route's --check and its --lint alias.
     'flag:--check': Retirement('file --check/--lint', 'reveal check <path>'),
