@@ -702,7 +702,7 @@ class GitAdapter(ResourceAdapter):
                     is_dir=subpath_is_dir,
                 )
                 files.require_history_target(repo, self.ref, git_subpath, element_name, result,
-                                             filtered=bool(self.query_filters or content_pattern))
+                                             filters=(self.query_filters, content_pattern))
                 if element_name:
                     result['element'] = element_name
                 return result

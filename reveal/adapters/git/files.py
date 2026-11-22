@@ -859,12 +859,12 @@ def _element_source_at_commit(repo, commit, filepath):
 
 
 def require_history_target(repo, ref: str, subpath: str, element: Optional[str], result: Dict[str, Any],
-                           filtered: bool) -> None:
+                           filters: tuple) -> None:
     """Plan rule 9 for a path's history (BACK-2616 Q8): an unfiltered history with no commit is an invalid request
     naming what was searched when its target is not at the ref either (a path never in history, an element the file
     never had). A deleted file or element keeps its history (the commits that added and removed it, BACK-2545), and a
-    filter that matches no commit is an empty answer, not an unknown target."""
-    if result.get('count') or result.get('total_matches') or filtered:
+    filter that matches no commit is an empty answer, not an unknown target (*filters*: any filter the walk applied)."""
+    if result.get('count') or result.get('total_matches') or any(filters):
         return
     commit = resolve_commit(repo, ref)
     if element:
