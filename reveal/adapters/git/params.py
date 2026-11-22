@@ -2,7 +2,7 @@
 from typing import Any
 
 from ...utils.query_binding import boolean_value, legacy_switch, switch_value, verbose_legacy
-from ...utils.query_parser import CliBinding, LegacySpelling, ParamSpec, ParamValueError, nonempty_scalar, nonnegative_display_limit, legacy_check, legacy_slices
+from ...utils.query_parser import CliBinding, LegacySpelling, ParamSpec, ParamValueError, nonempty_scalar, nonnegative_display_limit, legacy_check, legacy_slices, one_value
 
 
 def expressions(value: Any) -> list[str]:
@@ -45,17 +45,6 @@ def raw_detail(value: Any) -> Any:
         return 'raw' if boolean_value(value) else None
     except ValueError:
         raise ParamValueError(f'raw must be a valid boolean, got {value!r}: use detail=raw (--detail raw)') from None
-
-
-def one_value(value: Any) -> str:
-    """A setting's one value (COMMAND_MODEL "Conflicting values"): a typed list of equal values is that value, two
-    different values are an invalid request naming both."""
-    if isinstance(value, (list, tuple)):
-        distinct = list(dict.fromkeys(value))
-        if len(distinct) > 1:
-            raise ParamValueError(f'a setting takes one value, got {distinct[0]!r} and {distinct[1]!r}; give it once')
-        value = distinct[0] if distinct else value
-    return nonempty_scalar(value)
 
 
 # The commit fields where filters and bare URI keys read (COMMAND_MODEL "Bare URI keys": a closed field set), each

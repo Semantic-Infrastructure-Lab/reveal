@@ -301,6 +301,17 @@ def nonempty_scalar(value: Any) -> str:
     return value
 
 
+def one_value(value: Any) -> str:
+    """A setting's one value (COMMAND_MODEL "Conflicting values"): a typed list of equal values is that value, two
+    different values are an invalid request naming both."""
+    if isinstance(value, (list, tuple)):
+        distinct = list(dict.fromkeys(value))
+        if len(distinct) > 1:
+            raise ParamValueError(f'a setting takes one value, got {distinct[0]!r} and {distinct[1]!r}; give it once')
+        value = distinct[0] if distinct else value
+    return nonempty_scalar(value)
+
+
 def clamped_whole(value: Any, low: int, high: int) -> int:
     """A signed whole integer (``4``, ``'+3'``, ``'-2'``) clamped to ``low..high``.
     Booleans, fractions (``'1.5'``, ``'2.0'``), exponents and other text raise ValueError."""

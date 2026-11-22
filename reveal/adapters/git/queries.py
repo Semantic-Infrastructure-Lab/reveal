@@ -6,15 +6,7 @@ from typing import Any, Optional, Union, Dict
 
 from ...utils.query import compare_values
 from ...utils.query_eval import presence_matches
-
-# A bound written as a year, a month or a day, no time: `date>2026`, `date>2026-02`,
-# `date>2026-02-01`.
-_PERIOD = re.compile(r'\d{4}(-\d{2}(-\d{2})?)?')
-# A timestamp written with 'T' between the day and the time: `2026-02-01T12:00:00`.
-_T_SEPARATED = re.compile(r'(\d{4}-\d{2}-\d{2})T(\d)')
-# A timestamp with a zone: `2026-02-01T12:00:00Z`, `2026-02-01 12:00+02:00`, `...12:00:00-1200`.
-_ZONED = re.compile(r'(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?) ?(Z|[+-]\d{2}:?\d{2})',
-                    re.IGNORECASE)
+from ...utils.time_window import PERIOD as _PERIOD, T_SEPARATED as _T_SEPARATED, ZONED as _ZONED
 
 
 def _at_bound_precision(commit_date: str, bound: str) -> str:
