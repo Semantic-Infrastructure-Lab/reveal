@@ -4,6 +4,7 @@ import os
 import re
 from typing import Dict, Any, Optional
 from .base import ResourceAdapter, Stability, register_adapter, register_renderer
+from ..errors import RequestValidationError
 from ..utils.results import ResultBuilder
 from reveal.reveal_types import CONTRACT_VERSION
 
@@ -297,10 +298,11 @@ class EnvAdapter(ResourceAdapter):
         """Initialize the environment adapter.
 
         Args:
-            resource: Unused — env:// resolves the variable name via
-                get_element(), not construction (ELEMENT_NAMESPACE_ADAPTER).
+            resource: The variable env://NAME names, or '' for the listing. The CLI router reads it as an element
+                (ELEMENT_NAMESPACE_ADAPTER); a structure call answers it the same way (BACK-2626).
             query: Unused, accepted for canonical signature conformance.
         """
+        self.resource = resource
         self.variables = dict(os.environ)
 
     def get_structure(self, show_secrets: bool = False, **kwargs: Any) -> Dict[str, Any]:
@@ -310,8 +312,10 @@ class EnvAdapter(ResourceAdapter):
             show_secrets: If True, show actual values of sensitive variables
 
         Returns:
-            Dict containing categorized environment variables
+            Dict containing categorized environment variables, or the variable the resource names
         """
+        if self.resource:
+            return self._variable_answer(self.resource, show_secrets)
         categorized: Dict[str, list] = {
             'System': [],
             'Python': [],
@@ -343,6 +347,16 @@ class EnvAdapter(ResourceAdapter):
                 'categories': categorized,
             }
         )
+
+    def _variable_answer(self, name: str, show_secrets: bool) -> Dict[str, Any]:
+        """The answer env://NAME gives on every transport: the variable in the element envelope the CLI router writes
+        (``_element_envelope``). ``api.query('env://NAME')`` answered the whole listing, and a name that is not set
+        answered it too where the CLI exits 2 (BACK-2626); not set is an invalid request, as on the CLI."""
+        variable = self.get_element(name, show_secrets=show_secrets)
+        if variable is None:
+            raise RequestValidationError(f"Element '{name}' not found")
+        return ResultBuilder.create(result_type=self.ELEMENT_RESULT_TYPE, source=f'env://{name}',
+                                    source_type='runtime', contract_version=CONTRACT_VERSION, data=variable)
 
     def get_element(self, element_name: str, **kwargs: Any) -> Optional[Dict[str, Any]]:
         """Get details about a specific environment variable.
