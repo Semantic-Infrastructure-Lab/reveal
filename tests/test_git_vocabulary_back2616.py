@@ -432,3 +432,15 @@ def test_scan_limit_zero_is_declared_and_ownership_claims_no_confidence(repo):
     run, doc = _json(repo, 'git', '.', '--view', 'ownership', '--scan-limit', '0')
     assert run.returncode == 0 and doc['total_commits'] == 7
     assert 'confidence' not in doc['_meta'], doc['_meta']
+
+
+# The request note of a retired value names the canonical value, never a spelling that itself retires.
+@pytest.mark.parametrize('uri,replacement', [
+    ('git://code.py?type=log', '--view history'),
+    ('git://code.py?view=log', '--view history'),
+    ('git://code.py?view=blame&detail=summary', '--detail normal'),
+])
+def test_a_retired_value_request_note_renders_its_canonical_value(repo, uri, replacement):
+    run, doc, rendered, canonical, canonical_doc = _round_trip(repo, uri)
+    assert replacement in rendered and '--view log' not in rendered and 'summary' not in rendered, rendered
+    _assert_same_answer(run, doc, canonical, canonical_doc, rendered)
