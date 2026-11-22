@@ -120,8 +120,11 @@ def _scan_one(args: tuple) -> Path | PathFailure | None:
                       else data.decode('utf-8').lower().encode('utf-8'))
         return path if all(n in data_lower for n in needles) else None
     except (OSError, UnicodeDecodeError) as e:
-        logger.warning("grep_file_worker failed for %s: %s", path, e)
-        return PathFailure(to_posix(path), failure_of(e).cause)
+        failure = PathFailure(to_posix(path), failure_of(e).cause)
+        # Returned, and disclosed by the caller (markdown's unreadable_files): a warning line would print it again on
+        # stderr, with the absolute path (BACK-2614 B10).
+        logger.debug("grep_file_worker failed for %s: %s", failure.path, failure.cause)
+        return failure
 
 
 class GrepResult(list):
