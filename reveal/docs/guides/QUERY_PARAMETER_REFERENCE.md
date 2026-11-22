@@ -679,7 +679,8 @@ The following adapters use **element paths** for navigation — query params are
 
 The following adapters use CLI flags that switch routing mode (not URI filters) — they are documented in `--discover` under `cli_only_flags` but do not support query params:
 
-- **nginx://**, **domain://**, **mysql://**, **sqlite://** — `--check`, `--only-failures` are check-mode switches; migrating to query params would require routing-layer changes
+- **nginx://**, **domain://**, **mysql://** — `--check`, `--only-failures` are check-mode switches; migrating to query params would require routing-layer changes
+- **sqlite://** — the integrity check is the declared `--view health` (`reveal sqlite DB --view health`, or `?view=health` on the URI); `--check` is its deprecated spelling
 
 The following adapters still have adapter-specific options expressed as CLI flags rather than query params. These are known migration targets — the direction is to move them to URI query params so options travel with the resource:
 

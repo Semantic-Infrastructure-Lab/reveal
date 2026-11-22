@@ -57,7 +57,8 @@ reveal sqlite:///app.db --format=json
 reveal sqlite:///app.db/users --format=json
 
 # 6. Health check: PRAGMA integrity_check + foreign_key_check; exit code reflects findings
-reveal sqlite:///app.db --check
+#    (--view health; --check is its deprecated spelling, and `reveal sqlite /app.db --view health` the same request)
+reveal sqlite:///app.db --view health
 ```
 
 ---
@@ -135,7 +136,7 @@ Next Steps:
   ...
 ```
 
-The `Next Steps:` lines suggest opening a table and running `--check`.
+The `Next Steps:` lines suggest opening a table and running `--view health`.
 
 ### 2. **Table Structure Inspection**
 
@@ -376,7 +377,7 @@ reveal sqlite:///app.db --format=json
   ],
   "next_steps": [
     "reveal sqlite://./app.db/<table>     # Inspect specific table",
-    "reveal sqlite://./app.db --check     # Run integrity check"
+    "reveal sqlite://./app.db --view health     # Run integrity check"
   ]
 }
 ```
@@ -525,7 +526,7 @@ reveal sqlite:///app.db/users --format=json
 
 - `sqlite_database` - Database overview
 - `sqlite_table` - Table structure
-- `sqlite_health` - Health check results (`--check`: `integrity`, `foreign_key_violations`, `corruption`, `detections`, `status`, `exit_code`)
+- `sqlite_health` - Health check results (`--view health`: `integrity`, `foreign_key_violations`, `corruption`, `detections`, `status`, `exit_code`)
 
 ---
 
@@ -614,7 +615,7 @@ diff old_users.txt new_users.txt
 
 ```bash
 # PRAGMA integrity_check + foreign_key_check; the exit code reflects findings
-reveal sqlite:///app.db --check
+reveal sqlite:///app.db --view health
 # ./app.db: integrity ok
 # ✅ No issues found
 
@@ -772,7 +773,7 @@ Shows WAL mode, but not WAL file details:
 
 **Row count performance**: `COUNT(*)` queries can be slow on large tables (millions of rows). Consider skipping row counts for very large databases.
 
-**Foreign key runtime**: Foreign-key enforcement is a per-connection setting (`PRAGMA foreign_keys`) that the database file does not store, so reveal cannot tell whether your application enables it. `--check` runs `foreign_key_check` to find existing violations.
+**Foreign key runtime**: Foreign-key enforcement is a per-connection setting (`PRAGMA foreign_keys`) that the database file does not store, so reveal cannot tell whether your application enables it. `--view health` runs `foreign_key_check` to find existing violations.
 
 **Virtual tables**: Limited support for virtual table details (FTS, R-Tree).
 
@@ -784,8 +785,8 @@ Shows WAL mode, but not WAL file details:
 
 Each error prints `Error (sqlite://): ...` once. A wrong target (a missing file, a file that is not
 a database, a table that does not exist) exits 2; a database that could not be read (locked,
-unreadable, corrupt) exits 3. `--check` keeps its own codes (0 clean, 1 foreign-key violations,
-2 integrity failure).
+unreadable, corrupt) exits 3, `--view health` included. `--view health` keeps the codes `--check` had (0 clean,
+1 foreign-key violations, 2 integrity failure); `--fail-on none` reports the violations with exit 0.
 
 **1. Database file not found**
 
@@ -917,7 +918,7 @@ diff schema_backup_20261201.json schema_backup_20261215.json
 reveal sqlite:///app.db --format=json | jq '.statistics.foreign_keys'
 
 # Rows that violate them (and the integrity check)
-reveal sqlite:///app.db --check
+reveal sqlite:///app.db --view health
 ```
 
 Whether the application enforces foreign keys is a setting of its own connection

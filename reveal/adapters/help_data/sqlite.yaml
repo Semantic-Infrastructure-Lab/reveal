@@ -14,6 +14,8 @@ examples:
     description: 'Use relative paths with ./ prefix'
   - uri: 'sqlite:///data/production.db --format=json'
     description: 'JSON output for scripting and automation'
+  - uri: 'sqlite:///path/to/app.db --view health'
+    description: 'Integrity check and foreign-key violations (reveal sqlite /path/to/app.db --view health; --check is deprecated)'
 
 elements:
   '<table>': 'Table or view structure (columns, indexes, foreign keys)'
