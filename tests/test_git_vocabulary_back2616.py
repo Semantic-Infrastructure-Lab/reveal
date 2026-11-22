@@ -381,3 +381,54 @@ def test_a_different_ref_given_twice_exits_2_naming_both(repo, argv):
     """RED: --ref / ?ref= silently wins over @REF (exit 0 at HEAD~2)."""
     run, _ = _json(repo, *argv)
     assert run.returncode == 2 and 'HEAD~1' in run.stderr and 'HEAD~2' in run.stderr, (run.returncode, run.stderr)
+
+
+# B11: hash compares the whole 7-character short hash; a prefix is a regex anchor, and the schema says so.
+def test_hash_compares_the_whole_short_hash(repo):
+    from reveal.adapters.git.params import COMMIT_FILTER_FIELDS
+    head = str(pygit2.Repository(str(repo)).head.target)
+    counts = []
+    for term in (f'hash={head[:7]}', f'hash={head[:4]}', f'hash~=^{head[:4]}'):
+        run, doc = _json(repo, 'git', '.', '--view', 'history', '--limit', '0', '--where', term)
+        assert run.returncode == 0, run.stderr
+        counts.append(len(_rows(doc, 'history')))
+    assert counts == [1, 0, 1], counts
+    assert '~=^PREFIX' in COMMIT_FILTER_FIELDS['hash'][1]
+
+
+# B13: a repository's timeline names the repository, not "None".
+def test_a_repository_timeline_header_names_the_repository(repo):
+    run = _run_reveal_in(repo, 'git', '.', '--view', 'history', '--bucket', 'month')
+    assert run.returncode == 0, run.stderr
+    assert run.stdout.splitlines()[0].startswith('Timeline: repository @ HEAD'), run.stdout.splitlines()[:1]
+
+
+# B14: a file structure's imports print as source lines, not Python dict reprs.
+def test_file_structure_text_prints_imports_as_source_lines(capsys):
+    from reveal.adapters.git.renderer import GitRenderer
+    GitRenderer.render_structure({
+        'type': 'git_file_structure', 'path': 'm.py', 'ref': 'HEAD', 'commit': 'abc1234', 'size': 10, 'lines': 1,
+        'commit_info': {}, 'structure': {'imports': [{'line': 2, 'content': 'import os'}]}}, format='text')
+    out = capsys.readouterr().out
+    assert '  :2      import os' in out and "{'line'" not in out, out
+
+
+# B15: the API docstrings' git examples answer (a file's structure reads no limit: the history view does).
+def test_api_docstring_git_examples_answer(repo, monkeypatch):
+    import re
+    import reveal.api as api
+    monkeypatch.chdir(repo)
+    examples = re.findall(r'query\("git://[^"]+"([^)]*)\)', (api.__doc__ or '') + (api.query.__doc__ or ''))
+    assert len(examples) == 3, examples
+    for keywords in examples:
+        controls = dict(re.findall(r'(\w+)=("[^"]*"|\d+)', keywords))
+        api.query('git://code.py', **{k: (v.strip('"') if v.startswith('"') else int(v)) for k, v in controls.items()})
+
+
+# B16: scan-limit declares the zero it reads (every commit), and ownership claims no unmeasured confidence.
+def test_scan_limit_zero_is_declared_and_ownership_claims_no_confidence(repo):
+    from reveal.adapters.git.params import SCAN_LIMIT
+    assert SCAN_LIMIT.zero_uncaps and '20,000' in SCAN_LIMIT.description
+    run, doc = _json(repo, 'git', '.', '--view', 'ownership', '--scan-limit', '0')
+    assert run.returncode == 0 and doc['total_commits'] == 7
+    assert 'confidence' not in doc['_meta'], doc['_meta']
