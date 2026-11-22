@@ -50,7 +50,8 @@ Sorting and pagination apply to arrays; `limit=0` is no cap (every row; it used 
 filter is `--where 'type=book'` (`?where=type%3Dbook`): `type` there is a data field. The legacy first bare
 inspection words (`?schema`, `?keys`, ...) are deprecated spellings of `--view` and answer with a note. The legacy
 `?gron&data-only` is deprecated too: its JSON document remains a bare array of lines, where canonical
-`--view flatten --detail raw` removes text headers while retaining the JSON envelope.
+`--view flatten --detail raw` removes text headers while retaining the JSON envelope. Since the two answers differ,
+it is not translated: it notes itself (`json ?data-only ... is deprecated`), not a command that answers differently.
 The Python API accepts the same typed controls through `query(uri, view=..., limit=...)`.
 
 Every direct view records execution evidence: invalid requests exit 2 and required

@@ -50,8 +50,14 @@ LIMIT = ParamSpec('limit', 'integer', 'Array rows; 0 = no cap', None, lambda v: 
                   zero_policy='no cap', cli=CliBinding(('--limit',)), answers=_VALUE)
 OFFSET = ParamSpec('offset', 'integer', 'Array rows skipped after sorting', 0, lambda v: nonnegative('offset', v), minimum=0,
                    cli=CliBinding(('--offset',)), answers=_VALUE)
+# ?gron&data-only answers the flatten lines as a bare JSON array, which no canonical request answers (--view flatten
+# --detail raw keeps the envelope): a standalone legacy control with no flag until the cut, so a request giving it has
+# no canonical form and says only its own param:json.data-only note (COMMAND_MODEL "Legacy operations", BACK-2725).
+DATA_ONLY = ParamSpec('data-only', 'boolean', 'Deprecated compatibility control: with the flatten view, the lines as a '
+                      'bare JSON array and no text header (--view flatten --detail raw answers them in the envelope)',
+                      False, boolean_value, answers=_FLATTEN)
 ARRAY_CONTROLS = (WHERE, SORT, LIMIT, OFFSET)
-PARAM_SPECS: Tuple[ParamSpec, ...] = (VIEW, WHERE, DETAIL, SORT, LIMIT, OFFSET)
+PARAM_SPECS: Tuple[ParamSpec, ...] = (VIEW, WHERE, DETAIL, SORT, LIMIT, OFFSET, DATA_ONLY)
 # --head/--tail/--range slice this noun's rows today: flag-only legacy modifiers until the cut, read by the answers named
 # (BACK-2673; their notes are the flag:<noun>.<flag> RETIREMENTS rows).
 LEGACY_SLICES = legacy_slices(head=('json_value',), tail=('json_value',), range=('json_value',))
@@ -78,20 +84,6 @@ def validate_request(params: QueryParams, args=None) -> None:
             parse_query_filters('&'.join(WHERE.read(params)), record=False)
         except ValueError as exc:
             raise RequestValidationError(str(exc)) from exc
-
-
-def legacy_raw(params: QueryParams) -> bool:
-    if params._selectors.get('view') not in ('flatten', 'gron'):
-        return False
-    terms = dict(peek_query_items(params)).get('where', [])
-    raw = [term for term in terms if term.strip().lower() == 'data-only']
-    if not raw:
-        return False
-    params.mark('data-only')
-    params._folded = tuple(key for key in params._folded if key != 'data-only')  # the flatten answer's word, not where's
-    if len(raw) == len(terms):  # any other term is where's, which flatten does not read
-        params._given.discard('where')
-    return True
 
 
 def array_controls_unread_by_data(params: Dict[str, Any], value: Any, path: str) -> Optional[dict]:

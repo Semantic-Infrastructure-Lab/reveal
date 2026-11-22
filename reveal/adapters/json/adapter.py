@@ -11,7 +11,7 @@ from ...utils.path_utils import to_posix
 from ...utils.query_parser import note_query_parsed, QueryParams, ResourceSpec, param_schema
 from ...utils.query_binding import bind_prepared_params, prepare_declared_params, apply_declared_overrides
 from .params import (PARAM_SPECS, VIEW, WHERE, DETAIL, result_type, uri_result_type,
-                     result_control, validate_request, legacy_raw, array_controls_unread_by_data)
+                     result_control, validate_request, DATA_ONLY, array_controls_unread_by_data)
 from ...utils.query import (
     parse_query_filters
 )
@@ -159,7 +159,7 @@ class JsonAdapter(ResourceAdapter):
         self.query_params = params
         self.view: str = VIEW.read(params)
         self.detail: str = DETAIL.read(params)
-        self.data_only = legacy_raw(params)
+        self.data_only = bool(DATA_ONLY.read(params))  # given only to the flatten answer, which reads it
         self.query_filters = []
         self._filter_query = ''
         self.result_control = result_control(params)

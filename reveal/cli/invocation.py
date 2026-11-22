@@ -427,6 +427,10 @@ RETIREMENTS: Dict[str, Retirement] = {
     'param:json.type': Retirement('json ?type (first bare selector)', '--view type'),
     'param:json.keys': Retirement('json ?keys (first bare selector)', '--view keys'),
     'param:json.length': Retirement('json ?length (first bare selector)', '--view length'),
+    # data-only answers a bare lines array, not the envelope: a standalone legacy setting until the cut (BACK-2725).
+    'param:json.data-only': Retirement('json ?data-only (with ?gron or ?flatten)',
+                                       '--view flatten --detail raw, the same lines inside the JSON envelope',
+                                       standalone=True),
     'param:contracts.impls': Retirement('contracts ?impls=N (--impls N)', '--implementations-limit N'),
     'param:contracts.no_implementations': Retirement('contracts --no-implementations', '--implementations off'),
     'param:architecture.verbose': Retirement('architecture ?verbose (--verbose)',

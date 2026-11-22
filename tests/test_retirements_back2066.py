@@ -306,6 +306,7 @@ PRODUCTION_CASES = {
     'param:json.type': lambda f: [f'json://{Path(f).parent / "rows.json"}?type'],
     'param:json.keys': lambda f: [f'json://{Path(f).parent / "rows.json"}?keys'],
     'param:json.length': lambda f: [f'json://{Path(f).parent / "rows.json"}?length'],
+    'param:json.data-only': lambda f: [f'json://{Path(f).parent / "rows.json"}?view=flatten&data-only'],
     'param:contracts.impls': lambda f: ['contracts', str(Path(f).parent), '--impls', '1'],
     'param:contracts.no_implementations': lambda f: ['contracts', str(Path(f).parent), '--no-implementations'],
     'param:architecture.verbose': lambda f: [f'architecture://{Path(f).parent}?verbose'],
@@ -416,6 +417,9 @@ def test_every_production_row_is_exercised_and_prints_once(source):
             continue  # no answer to note on: the error-stage test below runs it
         result = _run_reveal_direct(*argv(str(source)), '--format', 'json')
         text = RETIREMENTS[key].text
+        if result.stdout.lstrip().startswith('['):  # a bare legacy array (JSON ?data-only) has no meta: said on stderr
+            assert _notes(result.stderr, text) == 1, (key, result.stderr)
+            continue
         assert _notes(result.stderr, text) == 0, (key, result.stderr)  # the JSON carries it (BACK-2659)
         expected = [ALSO_NOTED[key], key] if key in ALSO_NOTED else [key]
         request = _request_field(argv(str(source)))

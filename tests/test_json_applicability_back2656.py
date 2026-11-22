@@ -128,7 +128,12 @@ def test_the_flatten_answer_still_reads_its_own_controls(proj, uri):
     run = _run_reveal_direct(uri, '--format', 'json')
     assert run.returncode == 0, run.stderr
     # the bare legacy array has no meta to carry the URI request's note, so it is said on stderr (BACK-2716)
-    assert without_request_note_lines(run.stderr) == '', run.stderr
+    if 'data-only' in uri:  # no canonical form: its own standalone row and gron's, no request note (BACK-2725)
+        from reveal.cli.invocation import RETIREMENTS
+        assert sorted(run.stderr.splitlines()) == sorted(
+            f'note: {RETIREMENTS[key].text}' for key in ('param:json.data-only', 'param:json.gron')), run.stderr
+    else:
+        assert without_request_note_lines(run.stderr) == '', run.stderr
 
 
 def test_a_sibling_noun_refuses_through_its_own_declaration(tmp_path, monkeypatch):

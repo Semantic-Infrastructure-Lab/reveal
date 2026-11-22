@@ -52,7 +52,9 @@ def test_the_api_notes_the_row_and_never_teaches_a_where_term(data):
     result = api.query('json://d.json?gron&data-only')
     assert result['lines'] == LINES and result.get('data_only') is True
     warnings = result['meta']['warnings']
-    assert [w['field'] for w in warnings if w.get('code') == 'retired_spelling'] == ['param:json.data-only']
+    # No canonical form, so no request note: each spelling says its own row, gron's included (BACK-2716).
+    fields = [w['field'] for w in warnings if w.get('code') == 'retired_spelling']
+    assert sorted(fields) == ['param:json.data-only', 'param:json.gron'], fields
     assert 'data-only' not in json.dumps([w for w in warnings if w['field'] != 'param:json.data-only'])
 
 

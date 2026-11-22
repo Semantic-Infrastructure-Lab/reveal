@@ -157,7 +157,7 @@ EXEMPT = {
     **{(noun, '8b'): 'declares no where control: there are no field filters' for noun in (
         'architecture', 'calls', 'codex', 'contracts', 'deps', 'hotspots', 'imports', 'overview', 'pack', 'surface', 'testability', 'trace')},
     **{(noun, '16'): 'no legacy word and no standalone legacy parameter: nothing to translate or mark' for noun in (
-        'codex', 'json', 'surface', 'trace')},
+        'codex', 'surface', 'trace')},
     **{(noun, '17'): 'one control at most selects the answer: no two selections to give' for noun in (
         'architecture', 'codex', 'contracts', 'deps', 'hotspots', 'overview', 'pack', 'surface', 'testability',
         'trace')},
@@ -196,6 +196,8 @@ STANDALONE_WORDS = {
                                          'overview analytics in place of the path\'s view, where detail=summary exits 2'),
     ('claude', 'contains'): ('modifier', 'not identical to match: a filter modifier that is silently ignored on about '
                                          'twenty resources where match answers a search or exits 2 (rule 20, BACK-2656)'),
+    ('json', 'data-only'): ('modifier', 'not identical to --view flatten --detail raw: the same lines as a bare JSON array '
+                                        'with no envelope; it shapes the flatten answer, selects none (BACK-2725)'),
 }
 # Hand-written checks a rule would otherwise generate, each kept by a ruling and owned by the named package.
 # CUT_READINESS: zero recorded exceptions at the cut.
@@ -802,8 +804,12 @@ def probe_retirement_notes(noun, sample):
         cases.append(Case(f'{key} CLI text', len(lines) == 1, f'{text.brief()} (wants one note line)'))
         as_json = _run(*argv, '--format', 'json')
         doc = json.loads(as_json.out) if as_json.out.strip().startswith('{') else None
-        cases.append(Case(f'{key} CLI JSON', field in _retired_fields(doc),
-                          f'{as_json.brief()}: retired_spelling fields {_retired_fields(doc)}'))
+        if as_json.out.lstrip().startswith('['):  # a bare legacy array (JSON ?data-only) has no meta: said on stderr
+            cases.append(Case(f'{key} CLI JSON', as_json.err.count(f'note: {entry.text}') == 1,
+                              f'{as_json.brief()}: a bare array, so one note on stderr'))
+        else:
+            cases.append(Case(f'{key} CLI JSON', field in _retired_fields(doc),
+                              f'{as_json.brief()}: retired_spelling fields {_retired_fields(doc)}'))
         if key.startswith('subcommand:'):
             continue  # api.query and MCP take a URI; the scheme row is their spelling of the noun
         uri = _uri_of(argv)
@@ -1791,11 +1797,13 @@ def _at_stage(stage, call):
         invocation.REQUEST_STAGE = before
 
 
-def _standalone_notes(doc, noun, uri):
+def _standalone_notes(doc, noun, uri, stderr=''):
     """The standalone legacy words the URI gives that said their own note: such a word has no flag of its noun, so the
-    request has no canonical form to recommend (no request note), and its own row names what replaces it."""
+    request has no canonical form to recommend (no request note), and its own row names what replaces it. A bare legacy
+    array (JSON ?data-only) has no meta to carry the note, so it is said on *stderr*."""
     keys = {query_key(part) for part in uri.partition('?')[2].split('&') if part}
-    return [field for field in _retired_fields(doc) if field in {f'param:{noun}.{key}' for key in keys}
+    fields = _retired_fields(doc) or [field for field in RETIREMENTS if f'note: {RETIREMENTS[field].text}' in stderr]
+    return [field for field in fields if field in {f'param:{noun}.{key}' for key in keys}
             and RETIREMENTS[field].standalone]
 
 
@@ -1813,8 +1821,9 @@ def _cli_note_cases(where, noun, uri):
     lines = [line for line in text.err.splitlines() if line.startswith('note: ') and _REQUEST_NOTE.search(line)]
     doc = json.loads(as_json.out) if as_json.out.strip().startswith('{') else None
     replacements = _request_replacements(doc, noun)
-    if not replacements and not lines and _standalone_notes(doc, noun, uri):
-        return [Case(f'{where} standalone word, its own note', True, str(_standalone_notes(doc, noun, uri)))], False
+    standalone = _standalone_notes(doc, noun, uri, '' if doc is not None else as_json.err)
+    if not replacements and not lines and standalone:
+        return [Case(f'{where} standalone word, its own note', True, str(standalone))], False
     cases = [Case(f'{where} CLI text', len(lines) == 1, f'{text.brief()} (wants one request note line)'),
              Case(f'{where} CLI JSON', len(replacements) == 1, f'{as_json.brief()}: request notes {replacements}')]
     if len(replacements) != 1 or not str(replacements[0]).startswith(f'reveal {noun}'):
