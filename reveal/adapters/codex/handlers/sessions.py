@@ -188,5 +188,5 @@ def search_sessions(db_path: Path, query: Union[str, Sequence[str]], max_matches
     result = acquisition.attach({**base, 'sessions': matched, 'total': len(matched)})
     attach_content_evidence(result, sources)
     note_truncation(result, 'matches', sum(len(m['matches']) for m in matched), found_total,
-                    'matches_per_session', hint='raise ?matches=N (0 keeps every match)')
+                    'matches_per_session', hint='raise --matches N (0 keeps every match)')
     return result
