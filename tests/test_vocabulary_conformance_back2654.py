@@ -81,6 +81,13 @@ control whatever its value type; 1b, 1d and 6 read every spelling (aliases and n
       control and the accepted forms on the subcommand, the URI, ``api.query`` (RequestValidationError) and MCP; each
       form (``2026``, ``2026-02``, ``2026-02-01``, ``today``, a zoned time) binds as written and answers. Pack's ``since``
       is a git ref, not a time (NOT_A_TIME_WINDOW), so Pack declares no time window.
+  27  empty match term (Scott 2026-11-22, BACK-2736): an empty or whitespace-only term is an invalid request, refused by
+      one rule in the binder before the answer is selected: every spelling of a match or a where (its name and legacy
+      words, ``?search=``, ``?filter=``, ``?body-contains=``) and every standalone word or flag-only modifier whose
+      RETIREMENTS row replaces it with ``--match``/``--where`` (Claude ``?search=``, ``?contains=``, ``--name``/
+      ``--search``; Codex ``?search=``) exits 2 with the one message ``SPELLING needs a term: EXAMPLE``, naming the
+      spelling as typed, on the subcommand, the URI, ``api.query`` (RequestValidationError) and MCP; a nonblank
+      ``--match`` still answers.
 
 A cell is ``conforms`` (asserted), ``not_yet`` (recorded below with the behaviour observed; the count may only
 fall and must reach zero before the cut) or ``exempt`` (a written reason; the probe must find nothing to run).
@@ -119,7 +126,7 @@ def _declared_nouns():
 NOUNS = _declared_nouns()
 ELEMENT = 'element'  # the element views' pseudo-noun: its own cells at the end of this file (BACK-2627 S3b-5)
 RULES = ('1a', '1b', '1c', '1d', '2', '3', '3b', '4', '5', '6', '8a', '8b', '10', '12', '16', '17', '18', '20',
-         '14', '21j', '22', '23', '24', '28', '25')
+         '14', '21j', '22', '23', '24', '28', '25', '27')
 
 # The request each noun answers by default: the parity gate's table (CLI argv after the noun, URI suffix), plus
 # the declared noun it has no row for. None: no subcommand (stats is metrics' retired scheme).
@@ -215,6 +222,10 @@ EXEMPT = {
         'overview', 'patches', 'sqlite', 'surface', 'testability', 'trace', 'xlsx')},
     ('pack', '25'): "its since is a git ref, not a time (NOT_A_TIME_WINDOW): it becomes --against REF in Pack's own "
                     'package',
+    **{(noun, '27'): 'declares no match or where, and no text-valued standalone word whose replacement is one: no term '
+                     'to be empty (hotspots ?functions_only is a switch)'
+       for noun in ('architecture', 'calls', 'contracts', 'deps', 'env', 'hotspots', 'imports', 'overview', 'pack',
+                    'sqlite', 'surface', 'testability', 'trace')},
 }
 
 # Rules 1, 2, 5, 6, 10 and 12 are the shared seams' defaults (Scott 2026-11-16; BACK-2654 Step 3): their cells must
@@ -270,7 +281,7 @@ NOT_YET: dict = {}
 
 NOT_YET_BASELINE = {'1a': 0, '1b': 0, '1c': 0, '1d': 0, '2': 0, '3': 0, '3b': 0, '4': 0, '5': 0, '6': 0,
                     '8a': 0, '8b': 0, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 0, '14': 0, '21j': 0, '22': 0,
-                    '23': 0, '24': 0, '28': 0, '25': 0}
+                    '23': 0, '24': 0, '28': 0, '25': 0, '27': 0}
 
 
 # --- the fixture -------------------------------------------------------------------------------------------
@@ -2155,6 +2166,100 @@ def probe_time_window(noun):
     return cases
 
 
+# --- rule 27: an empty match term (Scott 2026-11-22, BACK-2736) ---------------------------------------------------------
+
+# An empty and a whitespace-only term: xlsx refused both before the shared rule, so whitespace is no term either.
+EMPTY_TERMS = ('', ' ')
+TERM_CONTROLS = ('match', 'where')
+
+
+def _replaced_by_a_term(key):
+    """Whether *key*'s RETIREMENTS row replaces its spelling with --match or --where: a standalone word of a term."""
+    row = RETIREMENTS.get(key)
+    return row is not None and any(flag in row.replacement for flag in ('--match', '--where'))
+
+
+def _term_spellings(noun):
+    """(URI key or None, flag or None) for every spelling of a term on the noun: a match's or a where's name and each
+    name-keyed legacy word, with its flag; each text-valued standalone word whose ``param:`` row replaces it with --match
+    or --where; and each flag of a text-valued flag-only modifier whose ``flag:`` row does (Claude --name, --search and
+    --type). The RETIREMENTS rows find a standalone word, so a new one whose empty term answers fails here; a switch
+    (hotspots ?functions_only) states no term."""
+    spellings = []
+    for spec in _adapter(noun).PARAM_SPECS:
+        flags = spec.cli.flags if spec.cli is not None else ()
+        if spec.name in TERM_CONTROLS:
+            spellings.append((spec.name, flags[0] if flags else None))
+            spellings += [(entry.name, entry.flag) for entry in _named_entries(spec)]
+        elif spec.type != 'string':
+            continue
+        elif spec.flag_only:
+            spellings += [(None, flag) for flag in flags if _replaced_by_a_term(f'flag:{noun}.{flag}')]
+        elif _replaced_by_a_term(f'param:{noun}.{spec.name}'):
+            spellings.append((spec.name, flags[0] if flags else None))
+    return spellings
+
+
+def _refuses_the_term(text, spelling):
+    """The one refusal names the spelling as typed and says a term is required."""
+    return f'{spelling} needs a term' in text
+
+
+def _empty_term_cases(noun, key, flag):
+    """An empty term in one spelling: the URI key empty, the flag given an empty and a blank value (on the subcommand,
+    or after the URI where the noun has none), the typed API (the URI with the key empty; the keyword for a term control
+    itself) and MCP (the real reveal_run)."""
+    from reveal import api
+    from reveal.errors import RequestValidationError
+    from reveal.mcp_server import reveal_run
+    cases, requests = [], []
+    if key is not None:
+        uri = _uri(noun, f'{key}=')
+        requests.append([uri])
+        run = _run(uri, '--format', 'json')
+        cases.append(Case(f'?{key}= URI', run.rc == 2 and _refuses_the_term(_error_message(run), key),
+                          f'{run.brief()} (wants exit 2: {key} needs a term)'))
+        calls = [(f'api.query({uri!r})', key, lambda: api.query(uri))]
+        if key in TERM_CONTROLS:
+            calls.append((f'api.query({_uri(noun)!r}, {key}=\'\')', key, lambda: api.query(_uri(noun), **{key: ''})))
+        for label, named, call in calls:
+            try:
+                call()
+                typed, outcome = False, 'answered'
+            except Exception as exc:  # the raised class and its message are the measured outcome
+                typed = isinstance(exc, RequestValidationError) and _refuses_the_term(str(exc), named)
+                outcome = f'raised {type(exc).__name__}: {str(exc)[:160]}'
+            cases.append(Case(label, typed, f'{label} {outcome} (wants RequestValidationError: {named} needs a term)'))
+    if flag is not None:
+        for value in EMPTY_TERMS:
+            request = _sub(noun, flag, value) or [_uri(noun), flag, value]
+            requests.append(request)
+            run = _run(*request, '--format', 'json')
+            cases.append(Case(f'{flag} {value!r}', run.rc == 2 and _refuses_the_term(_error_message(run), flag),
+                              f'{run.brief()} (wants exit 2: {flag} needs a term)'))
+    request = [*requests[0], '--format', 'json']
+    named = key if key is not None else flag
+    try:
+        shown = reveal_run(request)
+    except Exception as exc:  # a tool error is the refusal on MCP
+        shown = f'error: {exc}'
+    cases.append(Case(f'{named} MCP', 'rror' in shown and _refuses_the_term(shown, named),
+                      f'reveal_run({request}) -> {shown[:160]!r} (wants a refusal: {named} needs a term)'))
+    return cases
+
+
+def probe_empty_match_term(noun):
+    """Rule 27: none for a noun with no term to be empty."""
+    cases = []
+    for key, flag in _term_spellings(noun):
+        cases += _empty_term_cases(noun, key, flag)
+    if any(spec.name == 'match' and spec.cli is not None for spec in _specs(noun)):
+        request = _sub(noun, '--match', 'x') or [_uri(noun), '--match', 'x']
+        run = _run(*request, '--format', 'json')
+        cases.append(Case('--match x answers', run.rc == 0, f'{run.brief()} (wants exit 0: a nonblank term answers)'))
+    return cases
+
+
 PROBES = {'1a': probe_uri_and_flag, '1b': probe_alias_and_name, '1c': probe_repeated_spelling,
           '1d': probe_repeatable_aliases, '3': probe_unsupported_controls, '3b': probe_unknown_keys,
           '4': probe_verbose_is_detail_full, '8a': probe_bare_shared_keys,
@@ -2162,9 +2267,9 @@ PROBES = {'1a': probe_uri_and_flag, '1b': probe_alias_and_name, '1c': probe_repe
           '16': probe_legacy_operations, '17': probe_one_answer, '18': probe_repeated_global_flags,
           '20': probe_applicability, '14': probe_defaults, '21j': probe_invalid_requests_answer_json,
           '22': probe_config_failures, '23': probe_flags_after_uri, '24': probe_request_note,
-          '28': probe_help_one_spelling, '25': probe_time_window}
+          '28': probe_help_one_spelling, '25': probe_time_window, '27': probe_empty_match_term}
 # These call the MCP tools (the optional mcp extra) besides the CLI.
-MCP_PROBES = ('2', '5', '6', '24', '25')
+MCP_PROBES = ('2', '5', '6', '24', '25', '27')
 # These also run the retirement cases' sample file.
 SAMPLE_PROBES = {'2': probe_retirement_notes, '5': probe_legacy_declarations, '6': probe_alias_notes}
 
@@ -2975,6 +3080,8 @@ ELEMENT_EXEMPT = {
     '28': 'no parser of its own: element views are the main parser\'s path read, whose --help digest already names no '
           'old flag (BACK-2627); the main parser\'s help is outside "every declared noun" (BACK-2755)',
     '25': 'element views declare no since/until: no time window to check',
+    '27': 'element views declare no match or where: the path read\'s --grep and --name are the main parser\'s own '
+          'operations (BACK-2627), not a declared noun\'s term',
 }
 ELEMENT_NOT_YET = {
     '3': 'a shared control the main parser has no flag for (--offset, --where, --match, --detail, --tests, --against) '
