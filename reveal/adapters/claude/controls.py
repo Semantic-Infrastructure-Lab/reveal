@@ -119,7 +119,7 @@ COMPOSITE_QUERY_RULE = 'Canonical JSON receipt of applied bound filters; indepen
 
 def composite_query_receipt(params):
     """Describe the filters actually applied, including literal API overlays."""
-    from .match_terms import match_terms, term_echo
+    from ...utils.match_terms import match_terms, term_echo
     values = {name: params[name] for name in ('tools', 'errors', 'contains') if name in params}
     if 'contains' in values:  # the terms as every claude echo shows them (rule 19)
         values['contains'] = term_echo(match_terms(values['contains']))
@@ -152,7 +152,7 @@ def date_requirement_error(adapter, result):
 
 
 def apply_match(params, resource):
-    from .match_terms import match_terms
+    from ...utils.match_terms import match_terms
     value = params.get('match')
     params.pop('match', None)
     if value is None:

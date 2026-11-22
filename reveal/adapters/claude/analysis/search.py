@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Tuple
 
 from .messages import _content_to_blocks, _collect_block_matches, _find_excerpt, _matches_term
 from .records import TranscriptRecords
-from ..match_terms import match_terms
+from ....utils.match_terms import match_terms
 
 
 def _snippet_timestamp(record: Dict[str, Any]) -> str:

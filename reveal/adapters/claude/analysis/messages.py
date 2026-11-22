@@ -3,7 +3,7 @@
 import re
 from typing import Dict, List, Any, Optional
 
-from ..match_terms import holds_all, match_terms, term_echo
+from ....utils.match_terms import holds_all, match_terms, term_echo
 from .overview import get_overview
 from .prompts import _content_to_blocks, _is_real_prompt  # noqa: F401 (re-exported: search.py, tests)
 

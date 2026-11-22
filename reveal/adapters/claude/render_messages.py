@@ -1,7 +1,7 @@
 """Message-level renderers for the Claude adapter."""
 from typing import Optional
 
-from .match_terms import term_label
+from ...utils.match_terms import term_label
 
 
 def _full_output(result):

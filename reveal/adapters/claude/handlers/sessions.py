@@ -11,7 +11,7 @@ from reveal.utils.lines import split_lines
 from reveal.utils.path_utils import to_posix
 
 from ..analysis import search_sessions_for_term, get_files_touched
-from ..match_terms import holds_all, match_terms, term_echo
+from ....utils.match_terms import holds_all, match_terms, term_echo
 from ....utils.results import ResultBuilder, note_warning
 from .workspace import skipped_entries_warning
 from ..catalog import SessionEntries, collect_session_entries, attach_catalog_evidence

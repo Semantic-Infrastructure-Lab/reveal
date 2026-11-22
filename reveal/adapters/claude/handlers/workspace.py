@@ -12,7 +12,7 @@ from ....utils.results import ResultBuilder, note_warning
 from reveal.utils.lines import split_lines
 from ..workspace_scan import WorkspaceScan
 from ..markdown_lookup import MarkdownLookup
-from ..match_terms import holds_all, match_terms, term_echo
+from ....utils.match_terms import holds_all, match_terms, term_echo
 
 logger = logging.getLogger(__name__)
 

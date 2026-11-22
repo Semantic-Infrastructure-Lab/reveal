@@ -2170,7 +2170,7 @@ def test_claude_match_echo_is_always_a_list_of_terms(claude_home, uri, echo, ter
 
 
 def test_claude_match_text_prints_one_term_as_itself_and_several_joined_by_and():
-    from reveal.adapters.claude.match_terms import term_echo, term_label
+    from reveal.utils.match_terms import term_echo, term_label
     assert term_echo(['a']) == ['a'] and term_echo(['a', 'b']) == ['a', 'b']
     assert term_label(term_echo(['a'])) == 'a' and term_label(term_echo(['a', 'b'])) == 'a AND b'
 

@@ -1,5 +1,5 @@
 """Session-level renderers for the Claude adapter."""
-from .match_terms import term_label
+from ...utils.match_terms import term_label
 
 
 

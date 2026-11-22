@@ -1,5 +1,5 @@
-"""Claude's match terms (COMMAND_MODEL "Conflicting values", rule 19, BACK-2654): a repeated match ANDs its terms per
-row of the answer, and every answer echoes its terms through one seam."""
+"""Match terms of the session nouns, Claude and Codex (COMMAND_MODEL "Conflicting values", rule 19, BACK-2654): a
+repeated match ANDs its terms per row of the answer, and every answer echoes its terms through one seam."""
 from typing import Any, List, Sequence, Union
 
 

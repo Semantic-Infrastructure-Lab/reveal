@@ -7,7 +7,7 @@ from ...reveal_types import CONTRACT_VERSION
 from ...utils.results import (AnalysisCompleteness, ExecutionFacts, FailureCause, ResultBuilder,
                               note_warning, result_execution_facts)
 from .analysis.records import TranscriptRecords, valid_record_proof
-from .match_terms import holds_all, match_terms, term_echo
+from ...utils.match_terms import holds_all, match_terms, term_echo
 
 
 def read_history(home, params, *, opener) -> Dict[str, Any]:

@@ -4,7 +4,7 @@ from typing import Any, Dict, Mapping
 
 from .controls import WORKFLOW_WHERE_RULE
 from .handlers.post_process import select_workflow_rows
-from .match_terms import match_terms, term_echo
+from ...utils.match_terms import match_terms, term_echo
 
 MATCH_RULE = 'Case-insensitive literal substring of workflow tool name or operation detail; not tool-result text'
 
