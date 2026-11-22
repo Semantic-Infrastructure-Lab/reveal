@@ -74,11 +74,11 @@ A family of flags for inspecting one function or line range without reading the 
 
 ```bash
 # Boundary contract for an unfamiliar code range — single highest-value flag
-reveal app.py process_order --boundary
+reveal app.py process_order --view boundary
 # → INPUTS (undefined reads) + ENVIRONMENT (superglobals on PHP) + EFFECTS (db/http/fs/log/...)
 
 # Classified side-effect calls, in line order
-reveal flat_legacy.php :120-340 --effects
+reveal flat_legacy.php :120-340 --view effects
 # → L130  db   mysql_query("..."), L142  http  curl_exec(...), L150  log  error_log("...")
 
 # Refactor pre-flight: what would become parameters / return values?
@@ -86,7 +86,7 @@ reveal app.py process_batch --inputs        # → parameters
 reveal app.py process_batch --outputs   # → return values
 
 # Each return path + the condition chain that leads to it
-reveal app.py process_order --exits
+reveal app.py process_order --view exits
 
 # Verbatim context around a stack-trace line number
 reveal app.py :123 --around 10

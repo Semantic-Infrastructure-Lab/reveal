@@ -20,7 +20,7 @@ recall gate, corpus fetcher and rule-precision runner are published under `scrip
 Three signals have been through this treatment so far, each as its own
 independent-oracle program on real corpora: **import/dependency recall**
 (`depends://` / `imports://` fan-in), **side-effect / boundary classification
-recall** (`--sideeffects` / `--boundary`), and **cross-file call-graph
+recall** (`--view effects` / `--view boundary`), and **cross-file call-graph
 recall** (`calls://`). All three are documented below, with the exact
 per-language status first.
 
@@ -1215,7 +1215,7 @@ node's start up to the `.` immediately preceding this call), mirroring
 Java/Ruby's receiver-qualified convention without a receiver *node* to
 read from directly. This surfaced a second, narrower regression once
 `attribute_call` became a `CALL_NODE_TYPES` member: `nav_calls.py`'s
-`range_calls` (the `ast://`/`--calls`/`--sideeffects`/`--boundary` path,
+`range_calls` (the `ast://`/`--callsites`/`--view effects`/`--view boundary` path,
 separate from the `calls://` cross-file adapter) already had its own
 GDScript-specific flat-chain reconstruction (`_extract_gdscript_
 attribute_calls`, added earlier under BACK-431) that never depended on
@@ -2035,7 +2035,7 @@ what each language does support today.
 
 ## Side-Effect / Boundary Classification Recall
 
-`--sideeffects`/`--boundary` report syntactic indicators of database, HTTP,
+`--view effects`/`--view boundary` report syntactic indicators of database, HTTP,
 filesystem, environment, logging and sleep behavior. They classify known call
 shapes and selected property accesses; they do not observe execution or infer
 every receiver's runtime type. No classified effect does not establish purity:
@@ -2775,8 +2775,8 @@ give a different figure under a different grammar.
 This artifact covers recall of three DD signals: **import/dependency-graph
 recall** (`depends://` and `imports://` fan-in — the property whose failure in
 BACK-542, an 18-importer module reported as having zero, motivated the whole
-program), **side-effect/boundary classification recall** (`--sideeffects` /
-`--boundary`), and **cross-file call-graph recall** (`calls://` — BACK-730,
+program), **side-effect/boundary classification recall** (`--view effects` /
+`--view boundary`), and **cross-file call-graph recall** (`calls://` — BACK-730,
 the same silent-wrong-answer risk as BACK-542: a whole-project graph query
 where a false negative reads as a confident, checked answer). `calls://` is now
 measured for all 18 languages (Python across three query directions,

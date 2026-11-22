@@ -8,7 +8,7 @@ def test_shipped_readme_first_screen_has_qualified_fixture_plan():
     assert readme_commands(Path(__file__).resolve().parents[1] / 'README.md') == [
         ('src/',), ('src/app.py',), ('src/app.py', 'main'),
         ('calls', 'src/', '--callers', 'main'),
-        ('src/app.py', 'main', '--boundary'), ('check', 'src/'),
+        ('src/app.py', 'main', '--view', 'boundary'), ('check', 'src/'),
     ]
 
 

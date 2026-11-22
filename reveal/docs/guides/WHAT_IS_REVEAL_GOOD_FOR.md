@@ -202,35 +202,35 @@ If the question is "can I turn this into a repeatable gate?" Reveal is often a g
 Reveal is good for code that is too big, too nested, or too awkward to understand by reading top to bottom.
 
 ```bash
-reveal app.py process_batch --flow
+reveal app.py process_batch --view flow
 reveal app.py :123 --around
-reveal app.py process_batch --flow=if
-reveal app.py process_batch --flow=try
-reveal app.py process_batch --exits
+reveal app.py process_batch --view flow --kind if
+reveal app.py process_batch --view flow --kind try
+reveal app.py process_batch --view exits
 reveal app.py process_batch --varflow result
 reveal app.py process_batch --outputs --range 20-80
 reveal app.py :123 --scope
-reveal app.py process_batch --boundary       # inputs read + outputs/effects in one view
-reveal app.py process_batch --effects    # DB / HTTP / FS / logging calls, classified
+reveal app.py process_batch --view boundary       # inputs read + outputs/effects in one view
+reveal app.py process_batch --view effects    # DB / HTTP / FS / logging calls, classified
 reveal app.py process_batch --inputs           # what this range depends on
 ```
 
 The same flags work on flat procedural PHP — useful for legacy WordPress/CodeIgniter triage:
 
 ```bash
-reveal legacy_handler.php :120-340 --boundary       # what does this slice consume and emit?
-reveal legacy_handler.php :120-340 --effects    # which DB / curl / session calls fire?
-reveal legacy_handler.php :120-340 --effects --state  # which session/cache/global state changes?
+reveal legacy_handler.php :120-340 --view boundary       # what does this slice consume and emit?
+reveal legacy_handler.php :120-340 --view effects    # which DB / curl / session calls fire?
+reveal legacy_handler.php :120-340 --view effects --state  # which session/cache/global state changes?
 ```
 
 Why it is good for this:
 
 - `--around` gives exact nearby context from a line number or stack trace
 - `--scope` shows enclosing function / class / block ancestry
-- `--flow=if` and `--flow=try` turn control flow into a readable skeleton
-- `--exits` reports static exit sites and recorded syntactic gates, without a reachability verdict
-- `--boundary` summarises inputs and effects in one view — handy before refactor or extraction
-- `--effects` classifies DB / HTTP / FS / logging calls so you can audit risk without reading every line
+- `--view flow --kind if` and `--view flow --kind try` turn control flow into a readable skeleton
+- `--view exits` reports static exit sites and recorded syntactic gates, without a reachability verdict
+- `--view boundary` summarises inputs and effects in one view — handy before refactor or extraction
+- `--view effects` classifies DB / HTTP / FS / logging calls so you can audit risk without reading every line
 - `--varflow`, `--inputs`, and `--outputs` help with extraction and debugging
 
 Use Reveal for this when:

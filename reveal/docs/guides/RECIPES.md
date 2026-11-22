@@ -332,18 +332,18 @@ control flow, context, and data flow first.
 
 ```bash
 # Control-flow skeleton
-reveal src/processor.py process_batch --flow
+reveal src/processor.py process_batch --view flow
 
 # Exact context around a line from a stack trace
 reveal src/processor.py :123 --around
 reveal src/processor.py :123 --around 10
 
 # Branching and exception skeletons
-reveal src/processor.py process_batch --flow=if
-reveal src/processor.py process_batch --flow=try
+reveal src/processor.py process_batch --view flow --kind if
+reveal src/processor.py process_batch --view flow --kind try
 
 # Static exit sites and recorded gates
-reveal src/processor.py process_batch --exits
+reveal src/processor.py process_batch --view exits
 
 # Variable and dependency analysis for a sub-range
 reveal src/processor.py process_batch --varflow result
@@ -401,8 +401,8 @@ overlaps with production functions touching several runtime boundaries.
 Follow up on a reported function:
 
 ```bash
-reveal src/module.py function_name --boundary
-reveal src/module.py function_name --effects
+reveal src/module.py function_name --view boundary
+reveal src/module.py function_name --view effects
 reveal 'calls://src?callees=function_name'
 ```
 
@@ -487,7 +487,7 @@ understand it without reading every line.
 
 ```bash
 # Control-flow skeleton — what branches and loops exist?
-reveal src/processor.py process_batch --flow
+reveal src/processor.py process_batch --view flow
 # DEF process_batch  L1→L13
 #   FOR  item in items  L3→L12
 #     IF  item.active  L4→L12
@@ -508,7 +508,7 @@ reveal src/processor.py process_batch --callsites 7-12
 Workflow for a complex function:
 ```bash
 # 1. Skeleton — find the suspicious branch
-reveal src/processor.py process_batch --flow
+reveal src/processor.py process_batch --view flow
 
 # 2. Zoom in — what calls happen in lines 7-12?
 reveal src/processor.py process_batch --callsites 7-12
@@ -520,7 +520,7 @@ reveal src/processor.py process_batch --varflow result
 reveal src/processor.py process_batch --range 7-12
 
 # Class.method syntax works everywhere
-reveal src/processor.py MyClass.process_batch --flow
+reveal src/processor.py MyClass.process_batch --view flow
 ```
 
 ### Semantic diff — what actually changed
@@ -1710,7 +1710,7 @@ reveal markdown docs/ --view aggregate --field type # Frontmatter field frequenc
 reveal file.py                           # File structure
 reveal file.py --outline                 # Hierarchical view (file-level)
 reveal file.py function_name             # Extract specific code
-reveal file.py function_name --flow   # Control-flow skeleton (function-level)
+reveal file.py function_name --view flow   # Control-flow skeleton (function-level)
 reveal file.py function_name --varflow x # Trace variable x reads/writes
 reveal file.py :42 --scope              # Ancestor scope for line 42
 reveal file.py function_name --callsites 1-50  # Calls in a line range

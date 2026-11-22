@@ -22,7 +22,7 @@ Everything reveal does sits on one ladder, and the docs teach it in this order:
 | 1. Structure | What does this contain? | `reveal FILE` | `reveal DOC.md` |
 | 2. Content | Show me this one thing | `reveal FILE NAME`, `reveal FILE :N-M`, `--grep` | `reveal DOC.md "Heading"` |
 | 3. Relations | What connects to it? | `calls`, `imports`, `git` | `markdown` links and backlinks |
-| 4. Behaviour | What does this function touch? | `--boundary` and the element flags | |
+| 4. Behaviour | What does this function touch? | `--view boundary` and the element flags | |
 | 5. Judgment inputs | Where are risk, debt and boundaries? | `metrics`, `check`, `surface`, `contracts`, `patches`, `diff` | `check` (links, front matter) |
 
 ### The core tier: a promise

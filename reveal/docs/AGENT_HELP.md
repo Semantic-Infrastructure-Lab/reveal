@@ -52,7 +52,7 @@ Guides >200 lines show the first section by default (progressive disclosure). Ap
 | Query functions by complexity/size/type | `reveal ast src/ --where 'complexity>10' --kind function --sort=-complexity --limit 10` |
 | Who calls a function | `reveal 'calls://src/?callers=my_fn'` |
 | What a function calls, level by level | `reveal 'calls://src/?callees=my_fn&depth=2'` |
-| A function's inputs, side effects, exits | `reveal src/app.py my_fn --boundary` (or `--effects`, `--exits`) |
+| A function's inputs, side effects, exits | `reveal src/app.py my_fn --view boundary` (or `--view effects`, `--view exits`) |
 | Files importing FILE | `reveal imports DIR --importers FILE` |
 | Documents linking to FILE | `reveal markdown DIR/ --backlinks FILE` |
 | Abstract interfaces / contracts | `reveal contracts DIR` |
@@ -337,7 +337,7 @@ Functions (8):
 reveal src/main.py --outline
 
 # Control-flow skeleton — function-level (branches, loops, returns)
-reveal src/main.py process_request --flow
+reveal src/main.py process_request --view flow
 
 # Just function names (fast scan)
 reveal src/main.py --format=json | jq '.structure.functions[]?.name'
@@ -348,7 +348,7 @@ reveal src/main.py --format=json | jq '.structure.functions[]? | select(.complex
 
 **File and element views have distinct domains:**
 - `reveal file.py --outline` — file-level class/method hierarchy (structural tree)
-- `reveal file.py myfunc --flow` — function-level control-flow skeleton (if/while/for/return branches)
+- `reveal file.py myfunc --view flow` — function-level control-flow skeleton (if/while/for/return branches)
 
 These answer different questions. The element-level mode is the entry point to all nav flags. See the "Navigate inside a function" task below.
 
@@ -673,14 +673,14 @@ reveal patches src --view pressure --tests tests --limit 20
 reveal patches src --view pressure --tests tests --format json
 ```
 
-**Why this works:** Patch-heavy tests often point at production code that mixes runtime boundaries with decision logic. `reveal patches <tests>` shows what tests patch. `reveal patches <src> --view pressure` joins that pressure with production functions that touch network clients, persistence, filesystem state, logging, sleeps, environment/config, process exit, or mutation -- each function's own calls, classified exactly as `--effects` classifies them, so the two never disagree. *(Supports Python (`unittest.mock`/`pytest`) and TypeScript/JavaScript (Jest/Vitest: `jest.mock`, `vi.mock`, `jest.spyOn`, `vi.spyOn`, `jest.fn`, `vi.fn`, `jest.replaceProperty`). Boundary fan-out half works for all languages. A tree whose only tests are in another language (Go, Java, Rust, ...) is declined as not applicable, exit 0, naming the language, never answered as 0 uses; a mixed tree scans the Python and JS/TS and, once the unread test files outnumber the read ones, discloses them in `test_scope.unscanned` and a `language_not_scanned` warning.)*
+**Why this works:** Patch-heavy tests often point at production code that mixes runtime boundaries with decision logic. `reveal patches <tests>` shows what tests patch. `reveal patches <src> --view pressure` joins that pressure with production functions that touch network clients, persistence, filesystem state, logging, sleeps, environment/config, process exit, or mutation -- each function's own calls, classified exactly as `--view effects` classifies them, so the two never disagree. *(Supports Python (`unittest.mock`/`pytest`) and TypeScript/JavaScript (Jest/Vitest: `jest.mock`, `vi.mock`, `jest.spyOn`, `vi.spyOn`, `jest.fn`, `vi.fn`, `jest.replaceProperty`). Boundary fan-out half works for all languages. A tree whose only tests are in another language (Go, Java, Rust, ...) is declined as not applicable, exit 0, naming the language, never answered as 0 uses; a mixed tree scans the Python and JS/TS and, once the unread test files outnumber the read ones, discloses them in `test_scope.unscanned` and a `language_not_scanned` warning.)*
 
 **How to interpret it:** This is advisory. Mocking an external API, clock, certificate probe, or filesystem boundary can be correct. High signal comes from repeated private/internal patches or patch pressure that overlaps with high boundary fan-out.
 
 **Follow-up commands:**
 ```bash
-reveal src/module.py function_name --boundary
-reveal src/module.py function_name --effects
+reveal src/module.py function_name --view boundary
+reveal src/module.py function_name --view effects
 reveal 'calls://src?callees=function_name'
 reveal surface src
 ```
@@ -782,9 +782,9 @@ reveal models.py --outline
 
 Progressive disclosure flags for navigating inside functions and flat procedural files. Use when a function (or a large flat file like a PHP controller) is too large to read in full.
 
-**`--flow` → recognized control-structure skeleton**
+**`--view flow` → recognized control-structure skeleton**
 ```bash
-reveal app.py process_batch --flow
+reveal app.py process_batch --view flow
 
 # Output:
 # DEF process_batch  L1→L13
@@ -794,7 +794,7 @@ reveal app.py process_batch --flow
 #       TRY  L8→L12
 #   RETURN  results  L13
 ```
-Shows recognized structural nodes. Exit forms may be omitted; inspect `--exits` separately. Bare `--flow` includes the recognized skeleton; `--flow=if,loop` selects a source-ordered union without duplicates. `if` includes switch/case and `try` includes handlers/finally. Put the target before bare flow and use equals-form selectors. Default depth 3; use positive `--depth N` to go deeper. Text/JSON disclose depth cuts and recognition scope. File/Markdown outlines remain `--outline`.
+Shows recognized structural nodes. Exit forms may be omitted; inspect `--view exits` separately. Bare `--view flow` includes the recognized skeleton; `--kind` (`if`, `loop`, `try`; repeat it to combine: `--view flow --kind if --kind loop`) selects a source-ordered union without duplicates. `if` includes switch/case and `try` includes handlers/finally. Default depth 3; use positive `--nesting-depth N` to go deeper. Text/JSON disclose depth cuts and recognition scope. File/Markdown outlines remain `--outline`.
 
 **`--scope :LINE` → ancestor context for a line**
 ```bash
@@ -843,7 +843,7 @@ reveal app.py process_request --narrow response
 ```
 Parses `Optional[X]`, `Union[X,Y,None]`, `X|Y` annotations and classifies `isinstance`, `not isinstance`, `is None`, `is not None` guards. Shows the type at each branch. Useful before editing code that handles nullable types.
 
-> **PHP support**: All nav flags including `--varflow`, `--inputs`, `--outputs`, `--effects`, `--exits`, and `--boundary` work on PHP files. Note: PHP `foreach` loop variables (`$k`, `$v` in `foreach($arr as $k => $v)`) are tracked but show as READ instead of WRITE — a minor limitation with no current workaround. `--boundary` additionally detects PHP superglobals (`$_GET`, `$_POST`, `$_SESSION`, etc.) and surfaces them in a separate ENVIRONMENT section.
+> **PHP support**: All nav flags including `--varflow`, `--inputs`, `--outputs`, `--view effects`, `--view exits`, and `--view boundary` work on PHP files. Note: PHP `foreach` loop variables (`$k`, `$v` in `foreach($arr as $k => $v)`) are tracked but show as READ instead of WRITE — a minor limitation with no current workaround. `--view boundary` additionally detects PHP superglobals (`$_GET`, `$_POST`, `$_SESSION`, etc.) and surfaces them in a separate ENVIRONMENT section.
 
 **`--callsites` → call sites in a line range**
 ```bash
@@ -871,22 +871,22 @@ reveal app.py :123 --around 10  # ±10 lines
 ```
 Eliminates the mental arithmetic of picking a line range when you just know a line number. The `▶` marker points to the target line.
 
-**`--flow=if` → branching skeleton (IF/ELIF/ELSE)**
+**`--view flow --kind if` → branching skeleton (IF/ELIF/ELSE)**
 ```bash
-reveal flat_file.php :878-2130 --flow=if
-reveal app.py process_batch --flow=if
+reveal flat_file.php :878-2130 --view flow --kind if
+reveal app.py process_batch --view flow --kind if
 
 # Output:
 # IF  $status == 1  L878→L2130
 #   IF  !empty($page_id)  L900→L1050
 #   ELSE  L1050→L1200
 ```
-Filtered view of `--flow` showing only conditional branches. Useful before committing to reading a large if/elif/else chain.
+Filtered view of `--view flow` showing only conditional branches. Useful before committing to reading a large if/elif/else chain.
 
-**`--flow=try` → exception skeleton (TRY/CATCH/FINALLY)**
+**`--view flow --kind try` → exception skeleton (TRY/CATCH/FINALLY)**
 ```bash
-reveal flat_file.php :470-525 --flow=try
-reveal app.py process_batch --flow=try
+reveal flat_file.php :470-525 --view flow --kind try
+reveal app.py process_batch --view flow --kind try
 
 # Output:
 # TRY  L400→L592
@@ -920,17 +920,17 @@ Suggests variables the caller may need back — what would become return values 
 
 > `--outputs` reports values written in the selected range and read afterwards. Selecting a whole function can correctly return no hazards; this is not an inventory of every write. The empty-result message includes a `--varflow` hint.
 
-The current modes are `--effects`, `--effects --in-loops`, and
-`--effects --state`. Retired `--sideeffects`, `--fanout`, and `--statewrites`
+The current modes are `--view effects`, `--view effects --in-loops`, and
+`--view effects --state`. Retired `--sideeffects`, `--fanout`, and `--statewrites`
 still run and report replacements. Select one mode; transitive expansion applies
-only to ordinary effects (depth 1–5, default 2). Loop depth is positive structural
-nesting (default 3). Ordinary nontransitive and state modes reject explicit depth.
+only to ordinary effects (`--depth` 1–5 call hops, default 2). Loop depth is positive structural
+nesting, `--nesting-depth` (default 3). Ordinary nontransitive and state modes reject an explicit depth.
 Existing JSON mode names and finding shapes remain unchanged.
 
-**`--effects` → classified side-effect calls (db/http/cache/log/file/sleep/hard_stop)**
+**`--view effects` → classified side-effect calls (db/http/cache/log/file/sleep/hard_stop)**
 ```bash
-reveal flat_file.php :477-531 --effects
-reveal app.py myfunc --effects
+reveal flat_file.php :477-531 --view effects
+reveal app.py myfunc --view effects
 
 # Output (flat, in line order):
 # L3       db         mysql_query("SELECT * FROM orders...")
@@ -949,49 +949,49 @@ The property channel is deliberately narrow: it matches an explicit allowlist of
 
 **`--transitive` → follow calls into project-local helpers**
 ```bash
-reveal app.py handle_request --effects --transitive
-reveal app.py handle_request --boundary --transitive --depth 3
+reveal app.py handle_request --view effects --transitive
+reveal app.py handle_request --view boundary --transitive --depth 3
 ```
-Modifier for `--effects` or `--boundary`: instead of only the entry function's own body, walks calls into project-local helper functions and reports their effects too — a real interprocedural blast-radius/agentic-exposure read, not just what's written inline. `--depth` controls how many call hops to follow (default 2, max 5). Stdlib/third-party calls are not followed (no source to walk); only project-local functions resolvable in the same codebase.
+Modifier for `--view effects` or `--view boundary`: instead of only the entry function's own body, walks calls into project-local helper functions and reports their effects too — a real interprocedural blast-radius/agentic-exposure read, not just what's written inline. `--depth` controls how many call hops to follow (default 2, max 5). Stdlib/third-party calls are not followed (no source to walk); only project-local functions resolvable in the same codebase.
 
-`--boundary --transitive` follows classified call effects into callees, while assignment writes are collected only in the entry function. Text output and JSON warnings disclose this assignment coverage limit. Inputs, builtins, and environment reads also remain entry-function scoped.
+`--view boundary --transitive` follows classified call effects into callees, while assignment writes are collected only in the entry function. JSON `meta.warnings` carries this assignment coverage limit; text points at it with one `Rules: --format json (meta.warnings)` line. Inputs, builtins, and environment reads also remain entry-function scoped.
 
 In JSX/TSX a component the function only renders (`return <Child/>`) is followed too, because rendering a child runs it. That hop is labelled: text prints `[hop 1] via App → <Child/> (JSX render)`, and `--format=json` carries `<Child/>` as the last `chain` entry instead of a bare name.
 
-**`--flow=loop` → loop skeleton (FOR/WHILE/LOOP/DO) with nesting depth**
+**`--view flow --kind loop` → loop skeleton (FOR/WHILE/LOOP/DO) with nesting depth**
 ```bash
-reveal file.py process_batch --flow=loop
-reveal file.php :100-500 --flow=loop
+reveal file.py process_batch --view flow --kind loop
+reveal file.php :100-500 --view flow --kind loop
 
 # Output:
 #   FOR  commit in walker  L75→L85
 #     FOR  file in commit.files  L78→L83
 ```
-Filtered view of `--flow` showing only loop nodes, indented by nesting depth. Answers "which loops exist and what do they iterate" without wading through the full control-flow skeleton. Works on every language with supported structural navigation.
+Filtered view of `--view flow` showing only loop nodes, indented by nesting depth. Answers "which loops exist and what do they iterate" without wading through the full control-flow skeleton. Works on every language with supported structural navigation.
 
-**`--effects --in-loops` → each loop paired with its classified side effects**
+**`--view effects --in-loops` → each loop paired with its classified side effects**
 ```bash
-reveal file.py process_batch --effects --in-loops
-reveal file.php :100-500 --effects --in-loops --format=json
+reveal file.py process_batch --view effects --in-loops
+reveal file.php :100-500 --view effects --in-loops --format=json
 
 # Output:
 #   FOR  item in items  L2→L5
 #     L3       db         cursor.execute(item)
 #     L4       http       requests.get(item)
 ```
-Composes `--flow=loop` + `--effects`: for each loop, runs the same classified-call scan `--effects` uses, scoped to just that loop's line range. Purpose-built for N+1 query checks, per-item HTTP fan-out, and retry-safety review — the busywork it removes is manually matching call line numbers back to loop ranges when loops are nested. A loop with no classified effects renders `(no classified side effects)`, not silence, so absence of a finding is visible as a finding.
+Composes `--view flow --kind loop` + `--view effects`: for each loop, runs the same classified-call scan `--view effects` uses, scoped to just that loop's line range. Purpose-built for N+1 query checks, per-item HTTP fan-out, and retry-safety review — the busywork it removes is manually matching call line numbers back to loop ranges when loops are nested. A loop with no classified effects renders `(no classified side effects)`, not silence, so absence of a finding is visible as a finding.
 
-**`--effects --state` → persistent/shared-state mutation surface (global/nonlocal/field/env/session/cache/db/file)**
+**`--view effects --state` → persistent/shared-state mutation surface (global/nonlocal/field/env/session/cache/db/file)**
 ```bash
-reveal file.py process_order --effects --state
-reveal file.php :1-800 --effects --state
+reveal file.py process_order --view effects --state
+reveal file.php :1-800 --view effects --state
 
 # Output:
 # L190     field    self.path
 # L193     field    self.ref
 # L196     field    self.subpath
 ```
-`--outputs` is local-variable/refactor oriented (read-after-write hazards) and `--effects` is call oriented (plus an env property channel) — neither sees an assignment like `self.x = value`, `$obj->x = value`, or `this.x = value`. `--effects --state` classifies assignment targets that touch shared state: `field` (any member-access assignment target, any receiver), `env`/`session` (subscript writes to known superglobal bases — `os.environ[...]`, `process.env.X`, `$_SESSION[...]`, `$_COOKIE[...]`), plus `cache`/`db`/`file`/`env`/`session` writes already known to `--effects`'s call taxonomy, merged in by kind. `db` inherits `--effects`'s existing imprecision (query calls are included alongside true writes, since CRUD-verb detection isn't attempted) rather than a new classifier. Module-bound container writes such as `STATE[k] = v` and explicit Python/PHP `global` assignments are classified as `global`; explicit Python `nonlocal` mutations and rebindings are `nonlocal`. Python/JS module bindings use lexical declarations, including JS function-hoisted `var` and block-local `let`/`const`; ordinary local containers and parameters stay local. PHP requires an explicit `global` declaration or `$GLOBALS`. Implicit enclosing-container captures without `nonlocal`, PHP reference captures, aliases, imported-object resolution, and dynamic names remain outside this analysis. DB column/table extraction is not provided; an empty result does not establish the absence of shared-state writes. Works on PHP, Python, and JS/TS.
+`--outputs` is local-variable/refactor oriented (read-after-write hazards) and `--view effects` is call oriented (plus an env property channel) — neither sees an assignment like `self.x = value`, `$obj->x = value`, or `this.x = value`. `--view effects --state` classifies assignment targets that touch shared state: `field` (any member-access assignment target, any receiver), `env`/`session` (subscript writes to known superglobal bases — `os.environ[...]`, `process.env.X`, `$_SESSION[...]`, `$_COOKIE[...]`), plus `cache`/`db`/`file`/`env`/`session` writes already known to `--view effects`'s call taxonomy, merged in by kind. `db` inherits `--view effects`'s existing imprecision (query calls are included alongside true writes, since CRUD-verb detection isn't attempted) rather than a new classifier. Module-bound container writes such as `STATE[k] = v` and explicit Python/PHP `global` assignments are classified as `global`; explicit Python `nonlocal` mutations and rebindings are `nonlocal`. Python/JS module bindings use lexical declarations, including JS function-hoisted `var` and block-local `let`/`const`; ordinary local containers and parameters stay local. PHP requires an explicit `global` declaration or `$GLOBALS`. Implicit enclosing-container captures without `nonlocal`, PHP reference captures, aliases, imported-object resolution, and dynamic names remain outside this analysis. DB column/table extraction is not provided; an empty result does not establish the absence of shared-state writes. Works on PHP, Python, and JS/TS.
 
 **`--keys VAR` → dynamic key/property access surface**
 ```bash
@@ -1006,10 +1006,10 @@ reveal file.ts handler --keys payload
 ```
 `--varflow` traces a variable's own reads/writes but collapses everything the variable's keys/properties are used for into generic READ lines on the enclosing statement — `rules.get('enabled', ...)` never shows that the key is `enabled`. `--keys` fills that gap: for the given base variable, it finds subscript access (`config['x']`, `$row['id']`, `payload["id"]`), member/attribute access (`payload.id`, `$obj->x`, optional chaining `payload?.id`), and the dict-get idiom (`config.get('x', default)`, key = first argument, not the method name), then classifies each occurrence as `READ`, `WRITE` (assignment target), or `COND` (used directly in an `if`/`while` condition, including PHP's `isset()`/`empty()` wrapping a subscript). Output groups by key in first-seen order. Works on Python, PHP, and JS/TS.
 
-**`--exits` → static candidate sites with recorded gates**
+**`--view exits` → static candidate sites with recorded gates**
 ```bash
-reveal app.py process_order --exits
-reveal flat_file.php :120-340 --exits
+reveal app.py process_order --view exits
+reveal flat_file.php :120-340 --view exits
 
 # Output:
 # Exit sites (static)
@@ -1023,12 +1023,12 @@ reveal flat_file.php :120-340 --exits
 #
 # RETURN    L340:  return true
 ```
-For exit points (return/raise/throw/die), reports enclosing syntactic conditions. This is static inspection, not a proof of reachability: enclosing branch/handler conditions do not describe every preceding exit, loop iteration or runtime exception. Empty gates remain `gates: []` in JSON without an unconditional-execution label. Empty selections say “No exits recorded in this selection.” Implicit tails are inferred only for the resolved scope, not nested callable scopes; literal source inventories can therefore differ from named-callable selections. Compare with `--flow=if`/`--flow=try` and source before drawing a path conclusion. Navigation capability and grammar coverage vary by language; the selected result reports its scope and limits.
+For exit points (return/raise/throw/die), reports enclosing syntactic conditions. This is static inspection, not a proof of reachability: enclosing branch/handler conditions do not describe every preceding exit, loop iteration or runtime exception. Empty gates remain `gates: []` in JSON without an unconditional-execution label. Empty selections say “No exits recorded in this selection.” Implicit tails are inferred only for the resolved scope, not nested callable scopes; literal source inventories can therefore differ from named-callable selections. Compare with `--view flow --kind if`/`--view flow --kind try` and source before drawing a path conclusion. Navigation capability and grammar coverage vary by language; the selected result reports its scope and limits.
 
-**`--boundary` → boundary contract: INPUTS / BUILTINS / ENVIRONMENT / EFFECTS**
+**`--view boundary` → boundary contract: INPUTS / BUILTINS / ENVIRONMENT / EFFECTS**
 ```bash
-reveal app.py process_order --boundary
-reveal flat_file.php handleRequest --boundary
+reveal app.py process_order --view boundary
+reveal flat_file.php handleRequest --view boundary
 
 # Output (PHP example):
 # INPUTS (undefined reads):
@@ -1042,38 +1042,38 @@ reveal flat_file.php handleRequest --boundary
 #   db   L5       mysql_query("SELECT * FROM items WHERE user=" . $...)
 #   log  L6       error_log("Fetched page " . $page)
 ```
-Composes `--inputs`, `--effects`, and assignment writes from `--effects --state` into a single boundary-contract report: what the code receives (INPUTS), what environment state it reads (ENVIRONMENT — PHP superglobals `$_GET`, `$_POST`, `$_SESSION`, etc.), and what it does to the world (EFFECTS). Unshadowed registered builtins appear separately in BUILTINS, omitted when empty; JSON uses findings with `kind: builtin`. Assignment effects include `via: assignment` and render their target without call parentheses. The ENVIRONMENT section is omitted when empty (Python files rarely have superglobals). The highest-value single-flag summary for understanding an unfamiliar code range.
+Composes `--inputs`, `--view effects`, and assignment writes from `--view effects --state` into a single boundary-contract report: what the code receives (INPUTS), what environment state it reads (ENVIRONMENT — PHP superglobals `$_GET`, `$_POST`, `$_SESSION`, etc.), and what it does to the world (EFFECTS). Unshadowed registered builtins appear separately in BUILTINS, omitted when empty; JSON uses findings with `kind: builtin`. Assignment effects include `via: assignment` and render their target without call parentheses. The ENVIRONMENT section is omitted when empty (Python files rarely have superglobals). The highest-value single-flag summary for understanding an unfamiliar code range.
 
 **Most flags work on flat/procedural files:**
 ```bash
 # Flat PHP file — no named function required
-reveal legacy_controller.php :878-2130 --flow=if
-reveal legacy_controller.php :657-2200 --exits
+reveal legacy_controller.php :878-2130 --view flow --kind if
+reveal legacy_controller.php :657-2200 --view exits
 reveal legacy_controller.php :1136-1463 --inputs
-reveal legacy_controller.php :477-531 --effects
-reveal legacy_controller.php :120-340 --exits
-reveal legacy_controller.php :477-531 --boundary
+reveal legacy_controller.php :477-531 --view effects
+reveal legacy_controller.php :120-340 --view exits
+reveal legacy_controller.php :477-531 --view boundary
 ```
 All flags accept `:LINE-RANGE` or no element (whole-file fallback). Exception: `--scope` and `--around` require a single `:LINE` (a range exits 2). All variable-tracking flags (`--varflow`, `--inputs`, `--outputs`) now work on PHP as well as Python.
 
 **Combining with `--range` to narrow scope:**
 ```bash
-reveal app.py process_batch --flow --range 7-12   # outline of just lines 7-12
+reveal app.py process_batch --view flow --range 7-12   # outline of just lines 7-12
 reveal app.py process_batch --varflow value --range 7-12  # trace 'value' in lines 7-12
 reveal app.py process_batch --inputs --range 7-12      # deps of a sub-range
 ```
 
 **Class.method syntax works with all nav flags:**
 ```bash
-reveal app.py MyClass.process --flow
+reveal app.py MyClass.process --view flow
 reveal app.py MyClass.process --varflow result
-reveal app.py MyClass.process --exits
+reveal app.py MyClass.process --view exits
 ```
 
 **Workflow — large function investigation:**
 ```bash
 # 1. Get the skeleton
-reveal app.py process_batch --flow
+reveal app.py process_batch --view flow
 
 # 2. Identify the suspicious branch (say lines 7-12)
 reveal app.py process_batch --callsites 7-12      # what does it call?
@@ -1089,7 +1089,7 @@ reveal app.py process_batch --range 7-12      # full source of that branch only
 # Planning to extract lines 1136-1463 into a function?
 reveal flat_file.php :1136-1463 --inputs        # → candidate parameters; check bindings
 reveal flat_file.php :1136-1463 --outputs   # → candidate return values
-reveal flat_file.php :1136-1463 --exits       # → check for unexpected early exits
+reveal flat_file.php :1136-1463 --view exits       # → check for unexpected early exits
 ```
 
 ---
@@ -2887,7 +2887,7 @@ reveal file.py --format text         # an explicit --format always wins
 
 `REVEAL_FORMAT` sets the default `--format` for every entry point — files, `uri://` adapters and subcommands (`reveal metrics`, `reveal check`, …). An explicit `--format` on the command line overrides it.
 
-**Where each format works.** `text` and `json` work everywhere. `grep` works for a single file (structure and element), `--grep` on a file or directory (one `path:line:text` row per hit), `ast://`, `env://`, `markdown://` and `reveal check`; `typed` for single-file structure and element extraction (element views such as `--boundary` render text and JSON only). Anywhere else an explicit `--format grep`/`typed` exits 2 with the supported list, instead of printing text (a `REVEAL_FORMAT` default falls back to text with a note).
+**Where each format works.** `text` and `json` work everywhere. `grep` works for a single file (structure and element), `--grep` on a file or directory (one `path:line:text` row per hit), `ast://`, `env://`, `markdown://` and `reveal check`; `typed` for single-file structure and element extraction (element views such as `--view boundary` render text and JSON only). Anywhere else an explicit `--format grep`/`typed` exits 2 with the supported list, instead of printing text (a `REVEAL_FORMAT` default falls back to text with a note).
 
 `--output FORMAT=PATH` writes a file with supported URI requests, `reveal check`, and adapter-backed commands. It repeats for several destinations; FORMAT alone selects stdout. A requested JSON file is written even with JSON stdout. The retired `--also-json PATH` spelling follows the same rule. Unsupported formats and two stdout destinations exit 2 before analysis; a failed file write exits 3 while the primary answer and other successful files survive. Ordinary file/directory views reject file sinks rather than silently ignoring them.
 
@@ -4352,7 +4352,7 @@ reveal app.py --format=json | jq -r '.structure.functions[]? | "\(.name) (\(.lin
 | See directory structure | `reveal src/` |
 | See file structure | `reveal file.py` |
 | Hierarchical view | `reveal file.py --outline` |
-| Function skeleton | `reveal file.py func_name --flow` |
+| Function skeleton | `reveal file.py func_name --view flow` |
 | Scope at a line | `reveal file.py :123 --scope` |
 | Lines around a line | `reveal file.py :123 --around` |
 | Trace a variable | `reveal file.py func_name --varflow result` |
@@ -4361,9 +4361,9 @@ reveal app.py --format=json | jq -r '.structure.functions[]? | "\(.name) (\(.lin
 | Type-narrowing path | `reveal file.py func_name --narrow response` |
 | Calls in a range | `reveal file.py func_name --callsites 89-120` |
 | Calls in flat file range | `reveal file.php :477-531 --callsites` |
-| Branching skeleton | `reveal file.py func_name --flow=if` |
-| Exception skeleton | `reveal file.py func_name --flow=try` |
-| Static exit sites and gates | `reveal file.php :2928-3663 --exits` |
+| Branching skeleton | `reveal file.py func_name --view flow --kind if` |
+| Exception skeleton | `reveal file.py func_name --view flow --kind try` |
+| Static exit sites and gates | `reveal file.php :2928-3663 --view exits` |
 | Refactor deps | `reveal file.php :1136-1463 --inputs` |
 | Refactor mutations | `reveal file.php :1136-1463 --outputs` |
 | Extract by name | `reveal file.py func_name` |

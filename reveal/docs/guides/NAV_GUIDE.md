@@ -1,11 +1,11 @@
 ---
-title: Deep-Dive Code Navigation (Nav Flags)
+title: Deep-Dive Code Navigation (Element Views)
 category: guide
 help_topic: nav
-help_description: "Deep-dive code navigation flags (--flow, --boundary, --varflow, --effects)"
+help_description: "Element views: reveal FILE ELEMENT --view boundary|effects|flow|exits, plus --varflow and --inputs"
 help_category: feature_guides
 ---
-# Deep-Dive Code Navigation (Nav Flags)
+# Deep-Dive Code Navigation (Element Views)
 
 **One-line summary:** Pinpoint inspection inside a function or line range — control flow, data flow, side effects, and refactor pre-flight, all without reading the file top-to-bottom.
 
@@ -17,94 +17,98 @@ For the full reference with output samples, see [`AGENT_HELP.md`](../AGENT_HELP.
 
 ## At a Glance
 
-`--inputs`, `--outputs` and `--callsites` are the current names in both the CLI
-and MCP `reveal_nav` (`inputs`, `outputs`, `callsites`). The retired spellings
-`--deps`, `--mutations`/`--writes` and `--calls` still run and report their
-replacements until the cut. JSON `meta.flag` uses the current name; an old spelling
-adds a `retired_spelling` diagnostic in `meta.warnings`.
+`reveal FILE ELEMENT --view VIEW` asks how one function or line range behaves; VIEW is
+`boundary`, `effects`, `flow` or `exits`. The views take modifiers: `--kind if|loop|try` on
+`flow` (repeat it to combine), `--in-loops` or `--state` on `effects`, `--transitive` (with
+`--depth N` call hops) on `boundary` and `effects`, and `--nesting-depth N` for the structural
+depth of `flow` and `effects --in-loops`. `--inputs`, `--outputs`, `--callsites`, `--varflow`,
+`--keys` and `--narrow` keep their own flags, as do MCP `reveal_nav`'s flag names (`boundary`,
+`effects`, `flow`, `exits`, `inputs`, `outputs`, `callsites`, ...).
 
 | Flag | Question it answers |
 |------|---------------------|
-| `--flow` | What recognized structures are inside this selection? |
+| `--view flow` | What recognized structures are inside this selection? |
 | `--scope :LINE` | What scope is this line inside, and what gates it (JSON `condition` field per ancestor)? |
 | `--around N` | What's near line N? (verbatim ±N lines) |
-| `--flow=if` | What conditional branches exist? |
-| `--flow=try` | What try/except structure exists? |
-| `--exits` | Which static exit sites and syntactic gates were recorded? |
+| `--view flow --kind if` | What conditional branches exist? |
+| `--view flow --kind try` | What try/except structure exists? |
+| `--view exits` | Which static exit sites and syntactic gates were recorded? |
 | `--callsites` | What does this call? (sub-element scope) |
 | `--varflow VAR` | Where is VAR read, written, or tested? |
 | `--varflow VAR --cross-calls` | Same, but follows VAR across function call boundaries |
 | `--narrow VAR` | How does VAR's type narrow through control-flow branches? |
 | `--inputs` | Candidate inputs (undefined reads; review bindings) |
 | `--outputs` | What does this range write that's read later? |
-| `--effects` | What DB/HTTP/FS/log/sleep calls fire here? |
-| `--flow=loop` | What loops exist, and how are they nested? |
-| `--effects --in-loops` | Which loops make DB/HTTP/FS/log calls inside them? (N+1 / per-item fan-out review) |
-| `--effects --state` | Detected global/nonlocal/field/env/session/cache/db/file writes |
+| `--view effects` | What DB/HTTP/FS/log/sleep calls fire here? |
+| `--view flow --kind loop` | What loops exist, and how are they nested? |
+| `--view effects --in-loops` | Which loops make DB/HTTP/FS/log calls inside them? (N+1 / per-item fan-out review) |
+| `--view effects --state` | Detected global/nonlocal/field/env/session/cache/db/file writes |
 | `--keys VAR` | Which keys/properties of VAR are read, written, or tested (dict/object/array shape)? |
-| `--boundary` | One-shot contract: inputs + builtins + environment + effects |
+| `--view boundary` | One-shot contract: inputs + builtins + environment + effects |
 
-`--effects` reports ordinary classified sites. Choose one exclusive mode with
-`--effects --in-loops` (loop groups) or `--effects --state` (persistent/shared
-writes). Selectors require `--effects`; combining selectors or another navigation
-analysis is rejected. `--transitive` applies only to ordinary effects. Its depth
-accepts integers 1–5, default 2. An explicit depth is rejected for ordinary
-nontransitive effects and state mode. Loop depth remains positive, default 3,
-with no additional cap. Effects require one code file; URI targets, `@file` lists and `--stdin` batches are
-unsupported. Early discovery/special modes (including `--show-ast`, `--capabilities`,
-`--explain-file`, `--decorator-stats` and `--languages`) cannot preempt effects.
-Directory listings, metadata/check/grep and structural-query
-views cannot be combined with them. `--head`/`--tail` are rejected; use inclusive
-`--range` to select lines. Frontmatter `--validate-schema` and specialized nginx
-views (`--extract`, `--check-acl`, `--validate-nginx-acme`, `--global-audit`,
-`--check-conflicts`, `--cpanel-certs`, `--diagnose`) are also exclusive with effects.
-These validation errors exit 2 before producing findings.
+One request asks for one answer: two views, a view beside another analysis (`--varflow`,
+`--inputs`, ...), or a modifier the selected view does not read (`--kind` on `exits`,
+`--in-loops` on `boundary`, `--depth` without `--transitive`) exits 2 naming what the answer
+reads. Other path-read options (`--limit`, `--files`, `--head`/`--tail`, ...) are not element
+options and exit 2 too; use inclusive `--range` to select lines. A directory refuses every
+element view. These validation errors exit 2 before producing findings.
 
-Retired `--sideeffects`, `--fanout` and `--statewrites` still run with one
-replacement correction. Their existing payloads, `meta.flag` values (`sideeffects`,
-`fanout`, `statewrites`), grouping, order and warnings also identify the new modes.
-Legacy modifier/depth behavior remains unchanged, including `--boundary`.
+`--view effects` reports ordinary classified sites. Choose one exclusive mode with
+`--view effects --in-loops` (loop groups) or `--view effects --state` (persistent/shared
+writes). `--transitive` applies only to ordinary effects; its `--depth` accepts integers 1–5,
+default 2. Loop structure depth is `--nesting-depth`, positive, default 3, with no
+additional cap. Effects require one code file; URI targets, `@file` lists and `--stdin`
+batches are unsupported. Early discovery/special modes (including `--show-ast`,
+`--capabilities`, `--explain-file`, `--decorator-stats` and `--languages`) cannot preempt
+effects. Frontmatter `--validate-schema` and specialized nginx views (`--extract`,
+`--check-acl`, `--validate-nginx-acme`, `--global-audit`, `--check-conflicts`,
+`--cpanel-certs`, `--diagnose`) are also exclusive with element views.
 
-Bare `--flow` includes all recognized skeleton records. Select with `--flow=if`,
-`--flow=loop` or `--flow=try`, or combine them: `--flow=if,loop`. Unions retain
-source order and remove duplicate selections. `if` includes switch/case; `try`
-includes handlers/finally. Empty or unknown selector members are rejected before
-analysis. Put the target first for bare flow; use equals-form selectors to avoid
-an optional value consuming a following path. File-only flow inspects the full
-source region; file hierarchy and Markdown headings remain `--outline`.
+Bare `--view flow` includes all recognized skeleton records. Select with `--kind if`,
+`--kind loop` or `--kind try`, or repeat `--kind` to combine them:
+`--view flow --kind if --kind loop`. Unions retain source order and remove duplicate
+selections. `if` includes switch/case; `try` includes handlers/finally. Unknown kinds are
+rejected before analysis. File-only flow inspects the full source region; file hierarchy and
+Markdown headings remain `--outline`.
 
 ```bash
 reveal app.py --outline
-reveal app.py process_order --flow
-reveal app.py process_order --flow=if,loop --depth 8
+reveal app.py process_order --view flow
+reveal app.py process_order --view flow --kind if --kind loop --nesting-depth 8
 reveal guide.md Setup --outline
 ```
 
-The retired code-element `--outline` spelling is replaced by `--flow`; file and
-Markdown-section outlines remain valid. Retired `--ifmap`, `--loopmap` and
-`--catchmap` are replaced by the corresponding flow selectors. Retired `--returns`
-and `--flowto` are replaced by `--exits`, which reports static sites and recorded
-gates rather than a reachability verdict. Old spellings run the canonical answer
-and report one correction until the cut. JSON `meta.flag` is `flow` or `exits`;
-`meta.flow_selectors` records the normalized union (empty for bare flow).
+Old spellings still run until the cut and print one note naming their replacement: the
+element flags `--boundary`, `--effects`, `--flow[=SEL]` and `--exits` (replaced by
+`--view ...`), `--sideeffects`, `--fanout`, `--statewrites`, `--ifmap`, `--loopmap`,
+`--catchmap`, `--returns`, `--flowto` and the code-element `--outline`; `--deps`,
+`--mutations`/`--writes` and `--calls` (replaced by `--inputs`, `--outputs`, `--callsites`).
+On these old flags `--depth` keeps its old meaning (the structural depth, or the transitive
+depth clamped to 1–5). JSON `meta.flag` keeps its value on either spelling (`flow`, `exits`,
+`boundary`, `sideeffects`, `fanout`, `statewrites`, `inputs`, ...); an old spelling adds a
+`retired_spelling` diagnostic in `meta.warnings`. `meta.flow_selectors` records the
+normalized `--kind` union (empty for bare flow). `--view exits` reports static sites and
+recorded gates rather than the retired `--flowto` reachability verdict.
 
 Structural navigation lists recognized nodes, not every exit expression. Inspect
-`--exits` for candidate exit sites. Implicit tail returns are inferred only for the
+`--view exits` for candidate exit sites. Implicit tail returns are inferred only for the
 resolved scope, not for nested callable scopes in a literal source region. Named
 callables and source regions therefore need not record the same implicit tails.
-These limits appear in text and JSON alongside the selected scope. The supported output formats for flow/exits are text and JSON; other formats are rejected.
+JSON carries these standing rules (`meta.structure_scope`, `meta.exit_scope`); text names the
+selected scope and points at them with one `Rules: --format json (...)` line. The supported
+output formats for flow/exits are text and JSON; other formats are rejected.
 
-For `--flow` (including selectors) and `--effects --in-loops`,
-`--depth` limits logical nesting (default 3). A TRY and its CATCH/EXCEPT/FINALLY
+For `--view flow` (including `--kind`) and `--view effects --in-loops`,
+`--nesting-depth` limits logical nesting (default 3). A TRY and its CATCH/EXCEPT/FINALLY
 alternatives remain peers, including at the depth boundary. Text names the requested
 depth; JSON carries `meta.depth` and `meta.depth_limited`. When the limit leaves structural
 regions overlapping the selected range unexpanded, text and `meta.warnings` disclose
 that boundary. Other analyses, such as fanout effect collection, may inspect those regions. This does not claim a count of omitted records or matching loops/branches;
-increase `--depth` to expand those structures. Range filtering alone is not a depth cut.
+increase `--nesting-depth` to expand those structures. Range filtering alone is not a depth cut.
 
-For these code-element structural views, an explicit `--depth` must be a positive
-integer; zero and negative values are rejected instead of becoming a default or an
-empty answer. This does not change file, directory or Markdown depth controls.
+An explicit `--nesting-depth` must be a positive integer; zero and negative values are
+rejected instead of becoming a default or an empty answer. This does not change file,
+directory or Markdown `--depth`.
 
 Code-analysis navigation flags reject languages explicitly classified as structure-only
 (for example, SQL), data and document formats that hold no functions (Markdown, JSON, YAML,
@@ -133,11 +137,11 @@ supported analysis with no findings still succeeds.
 If you only learn three, learn these:
 
 ```bash
-reveal app.py process_order --boundary
+reveal app.py process_order --view boundary
 # → INPUTS (undefined reads), ENVIRONMENT (PHP superglobals), EFFECTS (db/http/log/file/...)
 # Best single-flag summary of what a code range receives and what it does.
 
-reveal app.py process_order --effects
+reveal app.py process_order --view effects
 # → flat list of classified external calls, in line order
 # Useful for blast-radius assessment and retry-safety review.
 
@@ -155,8 +159,8 @@ Planning to extract a block of lines into a new function?
 ```bash
 reveal file.py :120-340 --inputs        # → candidate parameters; review bindings
 reveal file.py :120-340 --outputs   # → candidate return values
-reveal file.py :120-340 --exits       # → spot unexpected early exits
-reveal file.py :120-340 --boundary    # → inputs + environment + classified effects
+reveal file.py :120-340 --view exits       # → spot unexpected early exits
+reveal file.py :120-340 --view boundary    # → inputs + environment + classified effects
 ```
 
 ---
@@ -166,20 +170,20 @@ reveal file.py :120-340 --boundary    # → inputs + environment + classified ef
 Useful for WordPress, CodeIgniter, or any large flat PHP file.
 
 ```bash
-reveal legacy_handler.php :878-2130 --flow=if        # control-flow skeleton
-reveal legacy_handler.php :120-340 --boundary      # what does this slice consume + emit?
-reveal legacy_handler.php :120-340 --effects   # which DB / curl / session calls fire?
-reveal legacy_handler.php :120-340 --exits       # exits + reported syntactic conditions
+reveal legacy_handler.php :878-2130 --view flow --kind if        # control-flow skeleton
+reveal legacy_handler.php :120-340 --view boundary      # what does this slice consume + emit?
+reveal legacy_handler.php :120-340 --view effects   # which DB / curl / session calls fire?
+reveal legacy_handler.php :120-340 --view exits       # exits + reported syntactic conditions
 reveal legacy_handler.php :120-340 --varflow $userId  # where does $userId flow?
 ```
 
-`--boundary` on PHP additionally surfaces superglobals (`$_GET`, `$_POST`, `$_SESSION`, etc.) in a separate ENVIRONMENT section.
+`--view boundary` on PHP additionally surfaces superglobals (`$_GET`, `$_POST`, `$_SESSION`, etc.) in a separate ENVIRONMENT section.
 
 ---
 
 ## Exit Scope and Ownership
 
-`--exits` reports static candidate sites with recorded syntactic gate chains.
+`--view exits` reports static candidate sites with recorded syntactic gate chains.
 When the resolved target is a qualified callable, separately owned nested function,
 method and lambda bodies are excluded. Expressions evaluated while forming a nested
 declaration remain where qualified: Python decorators/defaults, JavaScript computed
@@ -256,16 +260,16 @@ Different scope, different question.
 
 ## Known Limitations
 
-- `--exits` reports static syntactic gates; enclosing branch/handler conditions do not describe every preceding exit, loop iteration or runtime exception. Check source before making reachability claims.
-- `--inputs` respects supported closure/with/except/catch/comprehension/range binders and preserves free captures and default-expression reads. Registered Python builtins remain visible as BUILTIN/JSON `kind: builtin`, separate from `--boundary` INPUTS. Explicit lexical shadows stay candidate inputs. Dynamic names and unsupported binding shapes still require source review.
-- `--effects --state` detects Python/JS module-bound container writes and explicit Python/PHP `global` assignments; explicit Python `nonlocal` writes are separate. PHP also recognizes `$GLOBALS`. Local/parameter containers stay local. Implicit enclosing-container captures without `nonlocal`, PHP reference captures, aliases, dynamic names, and imported-object resolution remain outside coverage. An empty result does not establish that shared state is untouched.
-- `--boundary` includes assignment writes in EFFECTS (JSON `via: assignment`). Under `--transitive`, call effects follow callees but assignment writes remain entry-function only; text and JSON warnings disclose this limit. Inputs/builtins/environment also remain entry-function scoped.
+- `--view exits` reports static syntactic gates; enclosing branch/handler conditions do not describe every preceding exit, loop iteration or runtime exception. Check source before making reachability claims.
+- `--inputs` respects supported closure/with/except/catch/comprehension/range binders and preserves free captures and default-expression reads. Registered Python builtins remain visible as BUILTIN/JSON `kind: builtin`, separate from `--view boundary` INPUTS. Explicit lexical shadows stay candidate inputs. Dynamic names and unsupported binding shapes still require source review.
+- `--view effects --state` detects Python/JS module-bound container writes and explicit Python/PHP `global` assignments; explicit Python `nonlocal` writes are separate. PHP also recognizes `$GLOBALS`. Local/parameter containers stay local. Implicit enclosing-container captures without `nonlocal`, PHP reference captures, aliases, dynamic names, and imported-object resolution remain outside coverage. An empty result does not establish that shared state is untouched.
+- `--view boundary` includes assignment writes in EFFECTS (JSON `via: assignment`). Under `--transitive`, call effects follow callees but assignment writes remain entry-function only; JSON `meta.warnings` carries this limit and text points at it with one `Rules:` line. Inputs/builtins/environment also remain entry-function scoped.
 
-- `--effects --transitive` and `--boundary --transitive` identify each callee effect with a JSON `file` alongside `line` and a text `[file:line]` suffix. Callee paths follow the target's absolute or relative spelling. Entry-function effects keep their existing request-file context without a new `file` field. These modes retain required directory enumeration failures through collection and text/JSON warnings. Surviving effects remain visible; empty results describe the analyzed portion when discovery failed. Directory counts identify failed directories, with unknown missing file populations. Existing file-analysis notes remain separate, and CLI exits retain their current policy.
+- `--view effects --transitive` and `--view boundary --transitive` identify each callee effect with a JSON `file` alongside `line` and a text `[file:line]` suffix. Callee paths follow the target's absolute or relative spelling. Entry-function effects keep their existing request-file context without a new `file` field. These modes retain required directory enumeration failures through collection and text/JSON warnings. Surviving effects remain visible; empty results describe the analyzed portion when discovery failed. Directory counts identify failed directories, with unknown missing file populations. Existing file-analysis notes remain separate, and CLI exits retain their current policy.
 - PHP `foreach` loop variables (`$k`, `$v` in `foreach($arr as $k => $v)`) are tracked but classified as READ rather than WRITE.
 - Variable tracking is name-based; same-named variables in different scopes within a flat file may merge.
 - `--scope` and `--around` take a single `:LINE`. A range (`:100-110`) exits 2 with an error naming the line it would have used; to print a range, drop `--around` (`reveal app.py :100-110`).
-- Named-argument labels (`json` in Python `f(json=x)`, C# / Dart / Swift `f(json: x)`, Kotlin / Scala `f(json = x)`) are not reads: `--inputs`, `--boundary` and `--varflow` report only the value `x`.
+- Named-argument labels (`json` in Python `f(json=x)`, C# / Dart / Swift `f(json: x)`, Kotlin / Scala `f(json = x)`) are not reads: `--inputs`, `--view boundary` and `--varflow` report only the value `x`.
 
 ---
 

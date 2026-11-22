@@ -956,7 +956,7 @@ AST queries operate on individual code elements, not relationships between files
 AST is static analysis only:
 
 ❌ "Find functions that throw exceptions"
-✅ `reveal file.py fn --effects` lists a function's db/http/cache/log/file calls
+✅ `reveal file.py fn --view effects` lists a function's db/http/cache/log/file calls
 
 **3. Comment/docstring content**
 

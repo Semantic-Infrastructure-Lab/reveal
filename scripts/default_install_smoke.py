@@ -156,7 +156,7 @@ def smoke_commands(cli: Path, root: Path, env: dict[str, str]) -> None:
         ('src/app.py',): 'main',
         ('src/app.py', 'main'): 'return bool(token)',
         ('calls', 'src/', '--callers', 'main'): 'run_login',
-        ('src/app.py', 'main', '--boundary'): 'token',
+        ('src/app.py', 'main', '--view', 'boundary'): 'token',
         ('check', 'src/'): 'No issues found',
     }
     commands = readme_commands(Path(__file__).resolve().parent.parent / 'README.md')
@@ -204,7 +204,7 @@ def validate_first_screen(cli: Path, root: Path, env: dict[str, str]) -> None:
     require(calls['total_callers'] == 1 and [(row['file'], row['caller'])
             for row in calls['levels'][0]['callers']] == [('src/login.py', 'run_login')],
             'calls: expected the one real main caller')
-    boundary = answer('src/app.py', 'main', '--boundary')
+    boundary = answer('src/app.py', 'main', '--view', 'boundary')
     require([(row['kind'], row['var']) for row in boundary['findings']]
             == [('input', 'token'), ('builtin', 'bool')], 'boundary: expected input token and builtin bool')
     checked = answer('check', 'src/')
