@@ -353,8 +353,8 @@ def _python_referenced_names(directory: Path, *,
     equivalent JS/TS mechanisms (JSX invocation, test-framework callbacks,
     object shorthand) need the same treatment in that analyzer.
     """
-    from ...utils.exclusions import active_exclusions
-    cache_key = (_dir_cache_key(directory), active_exclusions(), gitignore_enabled())
+    from ...utils.exclusions import scope_cache_key
+    cache_key = (_dir_cache_key(directory), scope_cache_key(), gitignore_enabled())
     dir_str = str(directory)
     hosted = in_host_request()  # outside a request nothing revalidates an entry (BACK-2474)
     known_loss = structures is not None and bool(getattr(structures, 'traversal_failures', ()))
@@ -624,8 +624,8 @@ def build_callers_index(path: str, structures: Optional[StructureList] = None, *
     # later filtered request over the same tree — _dir_cache_key fingerprints
     # directory mtimes only, which exclusion does not change. BACK-1386: same
     # for the gitignore switch (--no-gitignore changes the file set).
-    from ...utils.exclusions import active_exclusions
-    cache_key = (_dir_cache_key(directory), active_exclusions(), gitignore_enabled())
+    from ...utils.exclusions import scope_cache_key
+    cache_key = (_dir_cache_key(directory), scope_cache_key(), gitignore_enabled())
     cached = _cached_callers_index(dir_str, cache_key, structures)
     if cached is not None:
         return cached
@@ -1040,8 +1040,8 @@ class CalleeScope(NamedTuple):
 
 
 def _callee_scope(root: str) -> CalleeScope:
-    from ...utils.exclusions import active_exclusions
-    return CalleeScope(os.path.abspath(root), active_exclusions(), gitignore_enabled())
+    from ...utils.exclusions import scope_cache_key
+    return CalleeScope(os.path.abspath(root), scope_cache_key(), gitignore_enabled())
 
 
 def source_directory(path: str) -> Path:

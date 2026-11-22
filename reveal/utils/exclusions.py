@@ -57,6 +57,16 @@ def active_exclusions() -> Tuple[Optional[Path], Tuple[str, ...]]:
     return _ACTIVE_ROOT, _ACTIVE_PATTERNS
 
 
+def scope_cache_key() -> Tuple[Optional[Path], Tuple[str, ...]]:
+    """The active scope as part of a cache key. A result keyed on it was built under it, so a scope that holds patterns
+    counts as consulted: a cache hit applies the exclusion as surely as the walk that filled the entry (the flag
+    ledger reported ``--exclude`` unused on a hit inside one host request, BACK-2730)."""
+    global _CONSULTED
+    if _ACTIVE_PATTERNS and _ACTIVE_ROOT is not None:
+        _CONSULTED = True
+    return _ACTIVE_ROOT, _ACTIVE_PATTERNS
+
+
 def policy_path(path: Path) -> Path:
     """Logical source path for exclusion/config policy only, never filesystem I/O."""
     if not _POLICY_PATHS:

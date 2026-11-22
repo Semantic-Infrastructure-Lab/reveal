@@ -137,3 +137,27 @@ def test_the_typed_api_applies_the_uri_key_on_a_walk_the_adapter_does_not_scope_
     files = {row['file'] for row in api.query('metrics://.?view=provenance&exclude=sub')['files']}
     assert files and not any(path.startswith('sub') for path in files)
     assert any(row['file'].startswith('sub') for row in api.query('metrics://.?view=provenance')['files'])
+
+
+def test_a_cache_keyed_on_the_scope_counts_it_consulted(tree):
+    """A cache hit applied the exclusion its entry was built under: reading the scope as a key counts as consulted, so
+    the ledger never notes --exclude unused on a hit (the calls and imports caches key on it)."""
+    from reveal.utils import exclusions
+    exclusions.set_active_exclusions(tree, ['sub'])
+    assert not exclusions.exclusions_consulted()
+    assert exclusions.active_exclusions() == (tree, ('sub',)) and not exclusions.exclusions_consulted()  # a plain read
+    assert exclusions.scope_cache_key() == (tree, ('sub',)) and exclusions.exclusions_consulted()
+    exclusions.clear_active_exclusions()
+    assert exclusions.scope_cache_key() == (None, ()) and not exclusions.exclusions_consulted()  # no scope: none
+
+
+def test_a_cached_callees_answer_counts_the_scope_applied(tree):
+    """Two callees requests with one --exclude in one MCP server (its tool calls share the callee cache): the second is
+    a cache hit and still says nothing about --exclude (it said "Input --exclude has no effect")."""
+    pytest.importorskip('mcp')
+    import json
+    from reveal.mcp_server import reveal_run
+    (tree / 'app.py').write_text('def load():\n    return 1\n\n\ndef serve():\n    return load()\n', encoding='utf-8')
+    for _ in range(2):
+        doc = json.loads(reveal_run(['calls', '.', '--callees', 'serve', '--exclude', 'sub', '--format', 'json']))
+        assert not [w for w in doc['meta']['warnings'] if w.get('code') == 'unused_flag'], doc['meta']['warnings']

@@ -15,7 +15,7 @@ from .base import get_extractor, get_all_extensions, scanned_rule_traits
 from . import build_cache, extraction as file_extraction, resolution
 from .file_index import under_directory
 from ...core import disk_cache
-from ...utils.exclusions import active_exclusions
+from ...utils.exclusions import scope_cache_key
 from ...utils.gitignore import gitignore_enabled
 from .inputs import (ScanScope, ImportFileSet, ResolutionContext, discover, resolve_primary,
                      resolve_targets, mark_structural)
@@ -90,7 +90,7 @@ def _stored_build(scope: ScanScope, key: Optional[str]
     stored under. A whole-root build of the same tree answers a focused request too (it resolved
     every file); a focused build is stored under its own key (BACK-2565), never served to a
     request that needs the whole graph."""
-    variant = (key or '', active_exclusions(), gitignore_enabled())
+    variant = (key or '', scope_cache_key(), gitignore_enabled())
     cached = build_cache._cached_graph(scope.root, key, variant)
     if cached is None and scope.focus_only and key is not None:
         key = build_cache._focused_graph_key(key, scope.focus)
