@@ -785,8 +785,8 @@ Shows WAL mode, but not WAL file details:
 
 Each error prints `Error (sqlite://): ...` once. A wrong target (a missing file, a file that is not
 a database, a table that does not exist) exits 2; a database that could not be read (locked,
-unreadable, corrupt) exits 3, `--view health` included. `--view health` keeps the codes `--check` had (0 clean,
-1 foreign-key violations, 2 integrity failure); `--fail-on none` reports the violations with exit 0.
+unreadable, corrupt) exits 3, `--view health` included. `--view health` gates on its findings by default: 0 clean,
+1 when the integrity check fails or a foreign-key violation is found; `--fail-on none` reports them with exit 0.
 
 **1. Database file not found**
 

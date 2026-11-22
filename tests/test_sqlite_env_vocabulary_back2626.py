@@ -81,7 +81,7 @@ def test_sqlite_target_that_matches_nothing_exits_2(db, uri, message):
 
 def test_sqlite_health_check(db):
     run, doc = _json(f'sqlite://{db}', '--check')
-    assert run.returncode == 1  # a foreign-key violation only (BACK-2753 owns the health exit codes)
+    assert run.returncode == 1  # a foreign-key violation: a finding under the health view's default gate
     assert (doc['type'], doc['status'], doc['integrity'], doc['foreign_key_violations']) == (
         'sqlite_health', 'warning', True, 1)
 
@@ -178,7 +178,7 @@ def test_sqlite_view_health_is_the_health_answer_and_check_its_legacy_spelling(d
     view_run, view_doc = _json('sqlite', 'app.db', '--view', 'health')
     check_run, check_doc = _json('sqlite', 'app.db', '--check')
     uri_run, uri_doc = _json('sqlite://app.db', '--view', 'health')
-    assert (view_run.returncode, check_run.returncode, uri_run.returncode) == (1, 1, 1)  # BACK-2753 owns the codes
+    assert (view_run.returncode, check_run.returncode, uri_run.returncode) == (1, 1, 1)  # findings, default gate
     assert view_doc['type'] == 'sqlite_health' and view_doc['foreign_key_violations'] == 1
     assert _answer(view_doc)['foreign_key_violations'] == _answer(check_doc)['foreign_key_violations']
     notes = [w for w in check_doc['meta']['warnings'] if '--check' in w.get('message', '')]

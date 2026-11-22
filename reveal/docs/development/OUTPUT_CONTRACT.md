@@ -804,9 +804,8 @@ Direct `sqlite://DB` overviews and `sqlite://DB/TABLE` views use owner execution
 `invalid_request` and exit `2`; a database that could not be read (permissions, lock,
 corruption) is a failed analysis and exits `3`. The answers keep the `sqlite_database` and
 `sqlite_table` identities. `--view health` (`sqlite_health`; `--check` is its deprecated spelling) uses the same owner
-facts and keeps the 0/1/2 integrity gate `--check` had until BACK-2753 decides it: a foreign-key violation is a finding
-(exit 1 under sqlite's default `--fail-on findings`), a failed integrity check exits 2, an unreadable database exits 3
-(BACK-2626).
+facts and gates on findings by default (`--fail-on findings`): a failed integrity check and a foreign-key violation are
+findings and exit 1, `--fail-on none` reports them with 0, and an unreadable database exits 3 (BACK-2626, BACK-2753).
 
 Direct `xlsx://FILE` views use owner execution facts the same way (BACK-2325): a missing file,
 a file that is not an Excel workbook, a sheet, range or Power Query name that names nothing, and a

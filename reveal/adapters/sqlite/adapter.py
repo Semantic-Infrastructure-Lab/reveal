@@ -134,7 +134,8 @@ _SCHEMA_OUTPUT_TYPES = [
                 'foreign_key_violations': {'type': 'integer'},
                 'detections': {'type': 'array'},
                 'status': {'type': 'string', 'enum': ['pass', 'warning', 'failure']},
-                'exit_code': {'type': 'integer', 'description': '0 clean, 1 foreign-key violations, 2 integrity failure'}
+                'exit_code': {'type': 'integer', 'description': '0 clean, 1 findings (foreign-key violations or an '
+                                                                'integrity failure)'}
             }
         }
     }
@@ -197,8 +198,9 @@ class SQLiteAdapter(ResourceAdapter):
     # filesystem path the binder may stat or walk.
     RESOURCE_SPEC = ResourceSpec(name='resource', cli_default=None, uri_default='', required=True, walks=False,
                                  filesystem=False)
-    # The health answer keeps the gate --check had: 1 on foreign-key violations without --fail-on (BACK-2753 owns the
-    # health exit codes); the database and table answers have no findings, so the gate never fires on them.
+    # The health answer is a check answer: it gates on its findings (integrity failures, foreign-key violations) by
+    # default, exit 1, as --check did (D6; ruling on BACK-2626 step 3, settling BACK-2753). The database and table
+    # answers have no findings, so the gate never fires on them.
     DEFAULT_FAIL_ON = 'findings'
     FINDINGS_POLICIES = ('none', 'findings')
 
@@ -230,17 +232,15 @@ class SQLiteAdapter(ResourceAdapter):
     @staticmethod
     def execution_facts(result):
         """A missing database or table, or a non-database file, is a request failure (exit 2);
-        any other failed read (permissions, corruption) is a failed analysis (exit 3).
+        any other failed read (permissions, corruption that stops the read) is a failed analysis (exit 3).
 
-        The health answer keeps the codes --check had until BACK-2753 decides them: a foreign-key violation is a
-        finding (exit 1 under the default gate), and a failed integrity check exits 2."""
+        The health answer's findings are a failed integrity check and foreign-key violations (D6: exit 1 under the
+        default findings gate, 0 with --fail-on none); a check that completed is never an invalid request."""
         codes = {entry.get('code') for entry in result.get('meta', {}).get('errors', [])} if isinstance(result, dict) else set()
         cause = FailureCause.INVALID_REQUEST if 'invalid_request' in codes else FailureCause.ANALYSIS
         if isinstance(result, dict) and result.get('type') == 'sqlite_health' and not codes:
-            if result.get('integrity') is False:
-                return ExecutionFacts(AnalysisCompleteness.COMPLETE, findings=True,
-                                      failures=frozenset({FailureCause.INVALID_REQUEST}))
-            return ExecutionFacts(AnalysisCompleteness.COMPLETE, findings=bool(result.get('foreign_key_violations')))
+            return ExecutionFacts(AnalysisCompleteness.COMPLETE,
+                                  findings=result.get('integrity') is False or bool(result.get('foreign_key_violations')))
         return result_execution_facts(result, completeness=AnalysisCompleteness.COMPLETE, failure_cause=cause)
 
     @staticmethod
@@ -600,8 +600,8 @@ class SQLiteAdapter(ResourceAdapter):
         The schema, ``--check`` help and the overview's next step all promised this and the
         adapter had no ``check()``, so the flag was dropped with a "no effect" note.
 
-        Exit codes (exit-code contract): 0 clean, 1 foreign-key violations only (a warning),
-        2 the integrity check failed (corruption).
+        Exit codes (D6): 0 clean, 1 findings: foreign-key violations (status warning) or a failed
+        integrity check (status failure, corruption).
         """
         self._get_connection()
         if not self.db_path:
@@ -631,7 +631,7 @@ class SQLiteAdapter(ResourceAdapter):
                 'foreign_key_violations': len(violations),
                 'detections': detections,
                 'status': 'failure' if not integrity else ('warning' if violations else 'pass'),
-                'exit_code': 2 if not integrity else (1 if violations else 0),
+                'exit_code': 1 if (violations or not integrity) else 0,
             },
         )
 
