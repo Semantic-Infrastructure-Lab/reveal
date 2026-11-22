@@ -32,14 +32,16 @@ VARIANTS = {
     'boundary-transitive-depth': (['--view', 'boundary', '--transitive', '--depth', '3'],
                                   ['--boundary', '--transitive', '--depth', '3']),
     'effects-loops': (['--view', 'effects', '--in-loops'], ['--effects', '--in-loops']),
-    'effects-loops-depth': (['--view', 'effects', '--in-loops', '--depth', '2'], ['--effects', '--in-loops', '--depth', '2']),
+    # D1 (COMMAND_MODEL Depth row): structural depth on --view is --nesting-depth; the legacy flags keep --depth.
+    'effects-loops-depth': (['--view', 'effects', '--in-loops', '--nesting-depth', '2'],
+                            ['--effects', '--in-loops', '--depth', '2']),
     'effects-state': (['--view', 'effects', '--state'], ['--effects', '--state']),
     'effects-transitive': (['--view', 'effects', '--transitive', '--depth', '1'], ['--effects', '--transitive', '--depth', '1']),
     'flow-if': (['--view', 'flow', '--kind', 'if'], ['--flow=if']),
     'flow-loop': (['--view', 'flow', '--kind', 'loop'], ['--flow=loop']),
     'flow-try': (['--view', 'flow', '--kind', 'try'], ['--flow=try']),
     'flow-if-try': (['--view', 'flow', '--kind', 'if', '--kind', 'try'], ['--flow=if,try']),
-    'flow-depth': (['--view', 'flow', '--depth', '1'], ['--flow', '--depth', '1']),
+    'flow-depth': (['--view', 'flow', '--nesting-depth', '1'], ['--flow', '--depth', '1']),
 }
 
 
@@ -127,7 +129,7 @@ def test_old_flag_and_view_together_are_one_answer_or_two(copies):  # noqa: F811
     same = run(path, element, '--view', 'boundary', '--boundary', '--format', 'json')
     assert same.returncode == 0, same.stderr[:400]  # one view, two spellings: equal values are one
     other = run(path, element, '--view', 'exits', '--boundary', '--format', 'json')
-    assert other.returncode == 2 and 'one answer per request' in other.stdout + other.stderr
+    _refused(other, '--view', '--boundary', 'conflicting spellings')  # D2: one control, two values
 
 
 # -- X4: effects keeps D10's strict validation on the new spelling -------------------------------------------------
@@ -227,14 +229,22 @@ def test_retired_flags_answer_what_their_named_view_answers(copies, old, new):  
 
 # -- E6 (One answer per request): two views exit 2 naming both -----------------------------------------------------
 
+# Two views of the one view control are its two values: the binder's Conflicting-values error naming both (D2); a
+# view beside a standalone operation, or two operations, are two answers.
 TWO_VIEWS = [
-    pytest.param(['{element}', '--boundary', '--exits'], ('boundary', 'exits'), id='boundary-exits'),
-    pytest.param(['{element}', '--varflow', 'result', '--boundary'], ('varflow', 'boundary'), id='varflow-boundary'),
-    pytest.param(['{element}', '--inputs', '--outputs'], ('inputs', 'outputs'), id='inputs-outputs'),
-    pytest.param(['{element}', '--flow', '--exits'], ('flow', 'exits'), id='flow-exits'),
-    pytest.param(['{element}', '--boundary', '--outline'], ('boundary', 'outline'), id='boundary-outline'),
-    pytest.param(['{element}', '--callsites', '--keys', 'result'], ('callsites', 'keys'), id='callsites-keys'),
-    pytest.param([':13', '--scope', '--boundary'], ('scope', 'boundary'), id='scope-boundary'),
+    pytest.param(['{element}', '--boundary', '--exits'], ('boundary', 'exits', 'conflicting spellings'),
+                 id='boundary-exits'),
+    pytest.param(['{element}', '--varflow', 'result', '--boundary'], ('varflow', 'boundary', 'one answer per request'),
+                 id='varflow-boundary'),
+    pytest.param(['{element}', '--inputs', '--outputs'], ('inputs', 'outputs', 'one answer per request'),
+                 id='inputs-outputs'),
+    pytest.param(['{element}', '--flow', '--exits'], ('flow', 'exits', 'conflicting spellings'), id='flow-exits'),
+    pytest.param(['{element}', '--boundary', '--outline'], ('boundary', 'outline', 'conflicting spellings'),
+                 id='boundary-outline'),
+    pytest.param(['{element}', '--callsites', '--keys', 'result'], ('callsites', 'keys', 'one answer per request'),
+                 id='callsites-keys'),
+    pytest.param([':13', '--scope', '--boundary'], ('scope', 'boundary', 'one answer per request'),
+                 id='scope-boundary'),
 ]
 
 
@@ -242,7 +252,7 @@ TWO_VIEWS = [
 def test_two_views_exit_2_naming_both(copies, argv, names):
     path, element = _python(copies)
     response = run(path, *[word.replace('{element}', element) for word in argv], '--format', 'json')
-    _refused(response, *names, 'one answer per request')
+    _refused(response, *names)
 
 
 def test_sibling_one_view_given_twice_is_one_view_and_effects_already_refuses_a_second(copies):
@@ -268,11 +278,9 @@ UNREAD = [
     pytest.param(['--boundary', '--cross-calls'], 'cross', id='boundary-cross-calls'),
     pytest.param(['--keys', 'result', '--cross-calls'], 'cross', id='keys-cross-calls'),
     pytest.param(['--boundary', '--head', '2'], 'head', id='boundary-head'),
-    pytest.param(['--boundary', '--limit', '2'], 'limit', id='boundary-limit'),
     pytest.param(['--exits', '--depth', '2'], 'depth', id='exits-depth'),
     pytest.param(['--varflow', 'result', '--depth', '2'], 'depth', id='varflow-depth'),
     pytest.param(['--varflow', 'result', '--cross-calls', '--depth', '2'], 'depth', id='cross-calls-depth'),
-    pytest.param(['--boundary', '--depth', '2'], 'depth', id='boundary-depth'),
 ]
 
 
@@ -280,6 +288,21 @@ UNREAD = [
 def test_unread_modifier_exits_2_naming_it(copies, flags, name):
     path, element = _python(copies)
     _refused(run(path, element, *flags, '--format', 'json'), name, 'not read by this answer')
+
+
+def test_depth_without_transitive_exits_2_naming_what_it_requires(copies):
+    """F-a: boundary reads --depth only with --transitive, so the binder's requires message refuses it."""
+    path, element = _python(copies)
+    _refused(run(path, element, '--boundary', '--depth', '2', '--format', 'json'), 'depth', 'transitive')
+
+
+@pytest.mark.parametrize('flags,name', [(['--boundary', '--limit', '2'], '--limit'), (['--exits', '--files'], '--files'),
+                                        (['--view', 'flow', '--meta'], '--meta')])
+def test_a_main_parser_control_no_element_view_reads_exits_2_as_unsupported(copies, flags, name):
+    """D3 (U1): an element request takes the globals, its declarations and the measured reads; any other given
+    main-parser control is an unsupported control (D18), exit 2 naming it."""
+    path, element = _python(copies)
+    _refused(run(path, element, *flags, '--format', 'json'), name, 'unsupported control')
 
 
 def test_callsites_value_and_range_conflict(copies):
