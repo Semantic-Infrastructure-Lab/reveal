@@ -202,14 +202,17 @@ def test_a_uri_format_is_the_format_flag_of_the_cli_and_mcp_forms_only(project):
     assert _without_command(_json(canonical_run)) == uri_doc
 
 
-def test_a_format_the_flag_does_not_offer_has_no_canonical_form(project):  # noqa: F811
-    """calls:// answers ?format=dot (a Graphviz graph); the subcommand's --format offers no dot, so the request has no
-    flag form to recommend and says no request note (it was noted as the request without its format: a text answer)."""
-    with pytest.raises(canonical.UnrenderableRequest):
-        _render_uri('cli', 'calls', 'proj', 'callers=serve&format=dot')
+def test_a_dot_format_is_noted_as_its_format_flag(project):  # noqa: F811
+    """calls:// answers ?format=dot (a Graphviz graph). It had no canonical form while the subcommand's --format offered
+    no dot (no request note); --format dot is its flag form now (BACK-2722), so the note recommends it, and that command
+    draws the same graph."""
+    line = _render_uri('cli', 'calls', 'proj', 'callers=serve&format=dot')
+    assert shlex.split(line) == ['reveal', 'calls', 'proj', '--callers', 'serve', '--format', 'dot']
     run = _run_reveal_direct('calls://proj?callers=serve&format=dot')
     assert run.returncode == 0 and 'digraph' in run.stdout
-    assert 'request is deprecated' not in run.stderr
+    assert f'request is deprecated and works until 1.0; use {line}.' in run.stderr
+    canonical_run = _run_reveal_direct(*shlex.split(line)[1:])
+    assert (canonical_run.returncode, canonical_run.stdout) == (run.returncode, run.stdout)
 
 
 def test_the_walk_policy_a_uri_splits_off_is_repeated_as_its_flag(project):  # noqa: F811

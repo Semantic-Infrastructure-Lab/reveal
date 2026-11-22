@@ -259,8 +259,8 @@ class TestPreservation:
         for value in ('text', 'json'):
             result, answer = cli_json(uri(project, f'importers&format={value}'))
             assert result.returncode == 0 and answer == plain
-        subcommand = run('imports', str(project), '--importers', '--format', 'dot')
-        assert subcommand.returncode == 2 and 'invalid choice' in subcommand.stderr
+        subcommand = run('imports', str(project), '--importers', '--format', 'dot')  # its flag form (BACK-2722)
+        assert (subcommand.returncode, subcommand.stdout) == (0, dot.stdout)
         result, answer = cli_json(uri(project, 'rank=fan-in&format=dot'))  # format is ?importers' (BACK-2656)
         assert result.returncode == 2 and "control 'format' is not read by this answer (fan_in_ranking" in answer['error']
 

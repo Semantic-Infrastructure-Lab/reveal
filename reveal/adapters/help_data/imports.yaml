@@ -174,3 +174,4 @@ see_also:
 output_formats:
   - text
   - json
+  - dot

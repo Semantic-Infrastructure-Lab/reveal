@@ -119,7 +119,7 @@ def test_a_dot_graph_request_teaches_its_format_flag(tmp_path):
     assert (planned[calls].kind, planned[calls].new_line) == (
         'rewrite', 'reveal calls src --callers main --format dot | dot -Tsvg > g.svg')
     assert (planned[imports].kind, planned[imports].new_line) == (
-        'rewrite', 'reveal imports src --importers --scope path --format dot')
+        'rewrite', 'reveal imports src --scope path --importers --format dot')
 
 
 def test_twin_and_undeclared_schemes_and_other_nouns_are_left_with_their_reason(tmp_path):

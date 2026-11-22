@@ -273,9 +273,12 @@ class TestPreservation:
     def test_uri_dot_is_retained_without_widening_global_formats(self, project):
         old = run(uri(project, 'callers=sink&format=dot'))
         assert old.returncode == 0 and old.stdout.startswith('digraph')
+        # BACK-2722: the calls subcommand's --format offers dot (its flag form); the global choices stay unwidened.
         current = run('calls', str(project), '--callers', 'sink', '--format', 'dot')
-        assert current.returncode == 2
-        assert 'invalid choice' in current.stderr and 'dot' in current.stderr
+        assert (current.returncode, current.stdout) == (0, old.stdout)
+        path_route = run(str(project / 'app.py'), '--format', 'dot')
+        assert path_route.returncode == 2
+        assert 'invalid choice' in path_route.stderr and 'dot' in path_route.stderr
 
 
 class TestProposedChanges:

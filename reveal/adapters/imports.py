@@ -220,11 +220,11 @@ _IMPORTERS = ParamSpec(
 # files are mostly in a language where one package/module sees its own files with no import (BACK-1428).
 
 
-# BACK-2194: the Graphviz module view, the replacement for calls ?modules &format=dot. URI-only, as
-# on calls:// (dot has no --format spelling); it draws the edges ?importers lists for a directory.
+# BACK-2194: the Graphviz module view, the replacement for calls ?modules &format=dot. --format dot is
+# its flag form, as on calls (BACK-2722); it draws the edges ?importers lists for a directory.
 _FORMAT = ParamSpec(
     'format', 'string',
-    'URI output override for ?importers on a directory: dot draws one importer -> module edge per '
+    'Output format for ?importers on a directory: dot (--format dot) draws one importer -> module edge per '
     'listed importer as Graphviz (pipe to dot -Tsvg); text and json follow --format. Any other view refuses it',
     None, _choice_value, examples=('imports://src?importers&scope=path&format=dot',),
     choices=('text', 'json', 'dot'), role='presentation', answers=('importer_summary',),

@@ -151,8 +151,8 @@ _DETAIL = ParamSpec('detail', 'boolean', 'Callees only: normal or full; full add
                    role='analysis', cli=CliBinding(('--detail',), nargs='?', const=True, metavar='LEVEL'), answers=(_C,))
 _TEST_FRAMEWORK = _flag_spec('test-framework', 'Include test-framework entrypoints: as callers in rank, and as '
                              'dead-code candidates in uncalled (default: false)', dest='test_framework', answers=(_K, _U))
-_FORMAT = ParamSpec('format', 'string', 'URI output override: text, json or dot (Graphviz; dot has no --format '
-                    'spelling; it draws callers, a callees walk, root and modules, and exits 2 on the other views)', None, nonempty_scalar, examples=('format=dot',), choices=('text', 'json', 'dot'),
+_FORMAT = ParamSpec('format', 'string', 'Output format: text, json or dot (Graphviz, --format dot; it draws '
+                    'callers, a callees walk, root and modules, and exits 2 on the other views)', None, nonempty_scalar, examples=('format=dot',), choices=('text', 'json', 'dot'),
                     role='presentation', answers=(_Q, _C, _R, _U, _M))
 
 _RESOURCE = ResourceSpec(uri_codec='existing-path-first')
@@ -277,9 +277,9 @@ _HELP: Dict[str, Any] = {
     'see_also': [
         'reveal calls <path> --callers NAME - CLI subcommand form, same parameters',
         'reveal help://patches - Test churn + call-graph together identifies blast radius',
-        'dot -Tsvg - Render ?format=dot output with Graphviz (external tool)',
+        'dot -Tsvg - Render --format dot output with Graphviz (external tool)',
     ],
-    'output_formats': ['text', 'json'],
+    'output_formats': ['text', 'json', 'dot'],
 }
 
 _SCHEMA: Dict[str, Any] = {
@@ -608,10 +608,10 @@ class CallsRenderer:
     so the first positional parameter is the result dict, NOT ``self``.  This
     mirrors the pattern used by ImportsRenderer and other adapters.
 
-    The ``format=dot`` query-string parameter takes precedence over the CLI
-    ``--format`` flag for calls:// because ``dot`` is a calls://-specific
-    format that has no CLI-flag equivalent.  The adapter stores the chosen
-    format in result[``_query_format``] so the renderer can pick it up.
+    The ``format`` control (``?format=dot``, or ``--format dot``, which binds it,
+    BACK-2722) takes precedence over the presentation ``--format``: ``dot`` is a
+    format only this noun draws.  The adapter stores the chosen format in
+    result[``_query_format``] so the renderer can pick it up.
     """
 
     ACCEPTS_DETAIL = True
