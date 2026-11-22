@@ -613,7 +613,8 @@ def get_schema() -> Dict[str, Any]:
             "Quote URIs with > or < operators: 'ast://path?lines>50' (shell interprets > as redirect)",
             'Operators: = (equals), != (not equals), > < (numeric), ~= (regex/glob), .. (range)',
             'Result control: sort=field, sort=-field (descending), limit=N, offset=M',
-            'Sort note: text output groups results by file; use --format=json or --format=grep for globally sorted output',
+            'Sort note: text keeps the sorted order -- rows sit under a File heading while each file\'s rows are consecutive, '
+            'and print one per line with their file when the sort interleaves files',
             'Supports the tree-sitter languages listed by reveal --languages (Python, JS, TS, Rust, Go, Java, C, C++, ...)',
             'Complexity is proper McCabe cyclomatic complexity for tree-sitter languages; falls back to a keyword-count estimate (shared with metrics:// and C901) for unsupported languages',
             'Call graph fields on functions/methods in JSON: calls[] (outgoing), called_by[] (within-file incoming); cross-file targets: calls://<path>?callees=FILE:NAME&depth=2 (resolved_calls[] is retired, BACK-2566)',

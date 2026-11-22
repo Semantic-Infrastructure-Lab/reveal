@@ -1503,8 +1503,8 @@ long or deeply nested functions, churn), each with its quality score, issues and
 `provenance` tag (`test`/`vendor`/`minified`, `null` = first party). `summary.has_findings` is true when
 any analysed file has quality below 70 or a function with complexity above 20, taken over every analysed
 file before filters and cuts; `--fail-on findings` exits 1 on it, the default `--fail-on none` reports it.
-The `ast://` query ranks functions by cyclomatic complexity across the tree (text groups them by file;
-JSON keeps the global order).
+The `ast://` query ranks functions by cyclomatic complexity across the tree (text keeps that global order
+and names the file on each row, as JSON does).
 
 `reveal hotspots` (and `hotspots://`) is retired: it answers as before until the cut and prints a note
 naming these two commands; `--files-only` is `metrics --view hotspots`, `--functions-only` the `ast://` query
