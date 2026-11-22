@@ -74,7 +74,8 @@ control whatever its value type; 1b, 1d and 6 read every spelling (aliases and n
       that a note-stage RETIREMENTS row spells (the key typing it notes: a declared control's ``flag:NOUN.FLAG`` or
       ``param:NOUN.WORD``, a global flag's ``flag:FLAG``; a short option goes with its argument's long ones), and each
       such option still parses (rules 2, 1b, 1c and 23 hold its note and answer); every canonical control's flag is still
-      listed. help://schemas keeps listing legacy spellings (machine data, not help).
+      listed. Measured on the usage line and the help's argument lines: prose (a description or epilog that explains a
+      legacy spelling) is no listing. help://schemas keeps listing legacy spellings (machine data, not help).
 
 A cell is ``conforms`` (asserted), ``not_yet`` (recorded below with the behaviour observed; the count may only
 fall and must reach zero before the cut) or ``exempt`` (a written reason; the probe must find nothing to run).
@@ -2038,6 +2039,13 @@ def _named_in(text, option):
     return re.search(rf'(?<![\w-]){re.escape(option)}(?![\w-])', text) is not None
 
 
+def _listed_in(help_text, option):
+    """Whether --help lists *option* as an argument: on an invocation line (two-space indent, the option strings before
+    the help column), not in prose (a description or epilog explaining a legacy spelling is no listing)."""
+    return any(_named_in(re.split(r'\s{2,}', line.strip())[0], option)
+               for line in help_text.splitlines() if re.match(r'^  -', line))
+
+
 def probe_help_one_spelling(noun):
     """Rule 28: none for a noun with no parser of its own (stats)."""
     if noun not in COMMANDS:
@@ -2051,14 +2059,15 @@ def probe_help_one_spelling(noun):
         # An argument all of whose long flags retire takes its short spellings along (-v is --verbose).
         spelled = action.option_strings if longs and legacy == longs else legacy
         for option in spelled:
-            where = [name for name, body in (('usage', usage), ('help', text)) if _named_in(body, option)]
+            where = [name for name, shown in (('usage', _named_in(usage, option)), ('help', _listed_in(text, option)))
+                     if shown]
             cases.append(Case(f'{option} hidden', not where, f'`reveal {noun} -h` names {option} in its {where}'))
             cases.append(Case(f'{option} still parses', parser._option_string_actions.get(option) is action,
                               f'{option} is no longer an option of `reveal {noun}`'))
     for spec in specs:  # the positive control: what the rule keeps
         own = [flag for flag in (spec.cli.flags if spec.cli else ()) if not _note_stage(_noted_key(noun, flag, specs))]
         if own:
-            cases.append(Case(f'{own[0]} listed', _named_in(text, own[0]), f'`reveal {noun} -h` hides {own[0]}'))
+            cases.append(Case(f'{own[0]} listed', _listed_in(text, own[0]), f'`reveal {noun} -h` hides {own[0]}'))
     return cases
 
 
