@@ -26,7 +26,7 @@ def page_result(result: Dict[str, Any], params) -> Dict[str, Any]:
     rows = result.get(field) if field else None
     receipt: Dict[str, Any] = {'field': field, 'limit': params.get('limit'), 'offset': params.get('offset', 0),
                                'count_rule': PAGE_RULE}
-    if not isinstance(rows, list):
+    if field is None or not isinstance(rows, list):
         if not result.get('error'):
             raise RequestValidationError('limit/offset require a list in the selected answer')
         receipt.update(applied=False, total=None, shown=None,
