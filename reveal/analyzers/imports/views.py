@@ -273,8 +273,7 @@ class ImportView:
             scanned=self.analysis.scanned_files)
         assert self.test_layout is not None
         rule['test_scope'] = self.test_scope()
-        basis = rule['test_scope']
-        rule['text'] += f" Test paths: {basis['basis']}; anchor {basis['anchor']}."
+        rule['text'] += service.test_scope_note(rule['test_scope'])
         return rule
 
     def test_scope(self) -> Dict[str, Any]:

@@ -211,6 +211,16 @@ def test_fallback_discloses_unknown_project_scope_and_retains_suite_name(tmp_pat
     assert 'unknown' in layout.as_dict(root)['basis']
 
 
+def test_a_selected_project_basis_is_the_standing_rule_behind_the_pointer(tmp_path):
+    # Control for the fallback disclosure (BACK-2685): with a project boundary the test-path basis is the rule's, which
+    # the text points at; only the scan-root fallback (project boundary unknown) is this scan's own fact.
+    root = _write(tmp_path / 'normal/repo')
+    assert _cli(root, 'importers&tests=exclude')['edge_rule']['test_scope']['include_anchor_name'] is False
+    rendered = _run_reveal_direct(f'imports://{root}?importers&tests=exclude')
+    assert rendered.returncode == 0 and 'Rules: --format json (edge_rule.text)' in rendered.stdout
+    assert 'Test paths:' not in rendered.stdout
+
+
 @pytest.mark.parametrize('view', ['importers', 'external'])
 def test_fallback_basis_is_visible_in_both_text_and_json(tmp_path, view):
     root = _write(tmp_path / 'tests', {'runner.py': 'import core\n', 'core.py': 'VALUE=1\n'})
