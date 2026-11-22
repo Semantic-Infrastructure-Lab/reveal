@@ -114,3 +114,26 @@ def test_the_uri_route_reads_exclude_from_the_declaration():
     assert not _declares_exclude(SimpleNamespace(PARAM_SPECS=())) and not _declares_exclude(None)
     assert _uri_exclude_patterns('src?exclude=a%2Cb,c&sort=name&exclude=c') == ['a,b', 'c']
     assert _uri_exclude_patterns('src?sort=name') == []
+
+
+def test_the_typed_api_route_publishes_the_bound_exclude(tree):
+    """``api.query(URI)`` builds the adapter itself (no CLI route): the exclude it bound, from the URI or a keyword, is
+    its walk scope too; a request naming none, or a noun that walks no tree, publishes none (as before)."""
+    from reveal import api
+    from reveal.utils.query_parser import ResourceSpec
+    walking = SimpleNamespace(RESOURCE_SPEC=ResourceSpec(), PARAM_SPECS=())
+    root, patterns = api._walk_scope(walking, '.?exclude=sub', SimpleNamespace(query_params=QueryParams(
+        {'exclude': 'sub,a%2Cb'})))
+    assert root.resolve() == tree.resolve() and patterns == ['sub', 'a,b']
+    assert api._walk_scope(walking, '.', SimpleNamespace(query_params=QueryParams())) == (None, [])
+    assert api._walk_scope(SimpleNamespace(RESOURCE_SPEC=ResourceSpec(walks=False)), '.',
+                           SimpleNamespace(query_params=QueryParams({'exclude': 'sub'}))) == (None, [])
+
+
+def test_the_typed_api_applies_the_uri_key_on_a_walk_the_adapter_does_not_scope_itself(tree):
+    """metrics' provenance walk reads no exclude of its own: only the published scope prunes it."""
+    from reveal import api
+    (tree / 'sub' / 'c.py').write_text('y = 2\n', encoding='utf-8')
+    files = {row['file'] for row in api.query('metrics://.?view=provenance&exclude=sub')['files']}
+    assert files and not any(path.startswith('sub') for path in files)
+    assert any(row['file'].startswith('sub') for row in api.query('metrics://.?view=provenance')['files'])
