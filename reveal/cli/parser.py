@@ -588,7 +588,7 @@ def _add_code_analysis_options(parser: argparse.ArgumentParser) -> None:
                              '(e.g., reveal file.py process_order --statewrites  or  reveal file.php :1-800 --statewrites)')
     parser.add_argument('--varflow', type=str, metavar='VAR',
                         help='Trace reads/writes of a variable within a function or flat file '
-                             '(e.g., reveal file.py myfunc --varflow result  or  reveal file.php :1-2000 --varflow errormsg)')
+                             '(e.g., reveal file.py myfunc --varflow result  or  reveal file.php :1-2000 --varflow "$errormsg")')
     parser.add_argument('--keys', type=str, metavar='VAR',
                         help='Show which keys/properties of a dict/object/array variable are read, written, or used '
                              'in a condition — the dynamic-shape surface --varflow collapses into generic READ lines '

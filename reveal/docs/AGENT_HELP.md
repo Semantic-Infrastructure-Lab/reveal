@@ -809,7 +809,7 @@ Useful when a stack trace or grep result gives you a line number and you need to
 **`--varflow VAR` → read/write trace for a variable**
 ```bash
 reveal app.py process_batch --varflow results   # inside a named function
-reveal flat_file.php :1-2000 --varflow errormsg  # flat procedural file
+reveal flat_file.php :1-2000 --varflow '$errormsg'  # flat procedural file (PHP names keep their $)
 
 # Output:
 # WRITE     L2:  results = []
@@ -4352,7 +4352,7 @@ reveal app.py --format=json | jq -r '.structure.functions[]? | "\(.name) (\(.lin
 | Scope at a line | `reveal file.py :123 --scope` |
 | Lines around a line | `reveal file.py :123 --around` |
 | Trace a variable | `reveal file.py func_name --varflow result` |
-| Trace var in flat file | `reveal file.php :1-2000 --varflow errormsg` |
+| Trace var in flat file | `reveal file.php :1-2000 --varflow '$errormsg'` |
 | Trace var across calls | `reveal file.py func_name --varflow result --cross-calls` |
 | Type-narrowing path | `reveal file.py func_name --narrow response` |
 | Calls in a range | `reveal file.py func_name --callsites 89-120` |

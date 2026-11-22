@@ -346,7 +346,7 @@ class TestCLIWithFilesIntegration(unittest.TestCase):
             os.unlink(temp_file)
 
     def test_nav_dispatch_scope_without_element_exits_error(self):
-        """reveal file.py --scope (no element) should exit 1 with a clear error."""
+        """reveal file.py --scope (no element) is an invalid request: exit 2 with a clear error (D6, BACK-2627 E9)."""
         import tempfile
         import os
         with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
@@ -354,7 +354,7 @@ class TestCLIWithFilesIntegration(unittest.TestCase):
             temp_file = f.name
         try:
             result = self.run_reveal_on_file(temp_file, '--scope')
-            self.assertEqual(result.returncode, 1)
+            self.assertEqual(result.returncode, 2)
             self.assertIn('--scope', result.stderr)
         finally:
             os.unlink(temp_file)

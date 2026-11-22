@@ -535,7 +535,7 @@ class TestRenderDeps(unittest.TestCase):
         deps = [{'var': 'data', 'first_read_line': 3, 'first_write_line': None}]
         result = render_deps(deps, 1, 20)
         self.assertIn('data', result)
-        self.assertIn('PARAM', result)
+        self.assertIn('INPUT', result)  # a candidate read, not necessarily a parameter (BACK-2627 E16)
         self.assertIn('never written', result)
 
     def test_dep_with_write(self):
