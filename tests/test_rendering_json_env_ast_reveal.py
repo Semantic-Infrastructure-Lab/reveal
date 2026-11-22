@@ -393,7 +393,7 @@ class TestRenderAstStructure(unittest.TestCase):
         }
         output = capture_stdout(render_ast_structure, data, 'text')
         self.assertIn("'functions' is not a valid filter", output)
-        self.assertIn('?kind=function', output)
+        self.assertIn('--kind function', output)  # the flag (BACK-2613)
 
     def test_no_hint_on_valid_keys_with_zero_results(self):
         """Should NOT show hint when valid keys are used but yield no results."""

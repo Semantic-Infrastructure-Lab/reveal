@@ -269,7 +269,7 @@ class TestConvenienceFlagsErrorHandling(unittest.TestCase):
             result = self.run_reveal(temp_file, '--search', 'LIVE_SIGNALS')
             self.assertEqual(result.returncode, 0, f"Failed with: {result.stderr}")
             self.assertIn('Results: 0', result.stdout)
-            self.assertIn('reveal_type=LIVE_SIGNALS', result.stdout)
+            self.assertIn('--reveal-type LIVE_SIGNALS', result.stdout)  # the subcommand (BACK-2613)
             self.assertIn('not a named code element', result.stdout)
         finally:
             os.unlink(temp_file)

@@ -45,7 +45,7 @@ def test_warning_names_the_languages_that_were_not_analyzed(mixed_tree):
     assert warning['code'] == W_CAP_PYTHON_ONLY
     assert '3 file(s)' in warning['message']
     assert 'javascript (2)' in warning['message'] and 'go (1)' in warning['message']
-    assert 'show=dict-heatmap' in warning['message']
+    assert 'reveal ast --view dict-heatmap' in warning['message']  # the subcommand, not ?show= (BACK-2613)
 
 
 def test_no_warning_for_an_all_python_tree_or_a_missing_path(python_tree, tmp_path):

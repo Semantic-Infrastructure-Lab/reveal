@@ -1,9 +1,10 @@
-"""Text renderers for ast://...?show=dict-heatmap and ?show=dict-schemas.
+"""Text renderers for reveal ast PATH --view dict-heatmap and --view dict-schemas.
 
 The analysis lives in reveal/analyzers/_python_dict_usage.py, shared with rule T006.
 """
 from __future__ import annotations
 
+import shlex
 from collections import Counter
 from typing import Any, Dict, List
 
@@ -73,9 +74,9 @@ def render_dict_heatmap(
         f"  {len(items)} candidate(s) ({source_summary}), {total_keys} total distinct key(s)"
     )
     lines.append('')
-    lines.append(f"  → Shared shapes across files: reveal 'ast://{path}?show=dict-schemas'")
+    lines.append(f"  → Shared shapes across files: reveal ast {shlex.quote(path)} --view dict-schemas")
     lines.append(f"  → Check for TypedDicts:       reveal check {path} --select T006")
-    lines.append(f"  → Trace a name:               reveal 'ast://{path}?reveal_type=<name>'")
+    lines.append(f"  → Trace a name:               reveal ast {shlex.quote(path)} --reveal-type <name>")
     return '\n'.join(lines)
 
 
@@ -97,7 +98,7 @@ def render_dict_schemas(
         return (
             f"dict schemas: no untyped dict shape is read in {SCHEMA_MIN_CONSUMERS}+ "
             f"functions in {path}\n"
-            f"  (per-function candidates: reveal 'ast://{path}?show=dict-heatmap')"
+            f"  (per-function candidates: reveal ast {shlex.quote(path)} --view dict-heatmap)"
         )
 
     lines = [
@@ -114,7 +115,7 @@ def render_dict_schemas(
         " — scan the package root to see them all)"
     )
     lines.append('')
-    lines.append(f"  → Per-function detail:      reveal 'ast://{path}?show=dict-heatmap'")
+    lines.append(f"  → Per-function detail:      reveal ast {shlex.quote(path)} --view dict-heatmap")
     lines.append(f"  → Params bypassing a match: reveal check {path} --select T006")
     return '\n'.join(lines)
 

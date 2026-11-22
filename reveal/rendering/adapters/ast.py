@@ -2,6 +2,7 @@
 
 
 import re
+import shlex
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, cast
@@ -12,12 +13,12 @@ from reveal.utils.formatting import lines_label
 
 # Maps bare shorthand names users commonly try to the correct filter syntax
 _FILTER_SHORTHANDS = {
-    'functions': '?kind=function',
-    'function': '?kind=function',
-    'classes': '?kind=class',
-    'class': '?kind=class',
-    'methods': '?kind=method',
-    'imports': '?kind=import',
+    'functions': '--kind function',
+    'function': '--kind function',
+    'classes': '--kind class',
+    'class': '--kind class',
+    'methods': '--kind method',
+    'imports': '--kind import',
 }
 
 # All keys that ast:// actually understands (the echo prints the canonical fields kind and nesting_depth)
@@ -303,7 +304,7 @@ def _render_reveal_type(data: Dict[str, Any], output_format: str) -> None:
     print(f"  {len(results)} occurrence(s) {consequence}")
     print()
     print(f"  → Trace reads/writes: reveal file.py <function> --varflow {var_name}")
-    print(f"  → Find functions:     reveal 'ast://{path}?param_type={var_name}'")
+    print(f"  → Find functions:     reveal ast {shlex.quote(path)} --where param_type={var_name}")
     _print_capability_warnings(data)
 
 
@@ -332,7 +333,7 @@ def _suggest_reveal_type_if_variable(query: str, path: str) -> None:
     suffix = file_path.suffix.lower()
     if suffix in ('.py', '.pyi'):
         print(f"Hint: '{term}' exists in this file but is not a named code element (function/class/struct).")
-        print(f"  For variables and constants: reveal 'ast://{path}?reveal_type={term}'")
+        print(f"  For variables and constants: reveal ast {shlex.quote(path)} --reveal-type {term}")
     else:
         print(f"Hint: '{term}' exists in this file but is not a named element.")
         print(f"  For text search: reveal {path} --grep '{term}'")
@@ -353,7 +354,7 @@ def _suggest_filter_correction(query: str) -> None:
         if correction:
             print()
             print(f"Hint: '{field}' is not a valid filter. Did you mean '{correction}'?")
-            print(f"  reveal 'ast://path/{correction}'")
+            print(f"  reveal ast PATH {correction}")
             return
 
     # Check for unknown keys not in any known set

@@ -133,9 +133,9 @@ class PythonOnlyFeature:
 
 
 PYTHON_ONLY_FEATURES: Dict[str, PythonOnlyFeature] = {
-    "dict-heatmap": PythonOnlyFeature("ast://?show=dict-heatmap", "ranks untyped dicts by keys read"),
-    "dict-schemas": PythonOnlyFeature("ast://?show=dict-schemas", "clusters untyped dicts into implicit schemas"),
-    "reveal-type": PythonOnlyFeature("ast://?reveal_type=<name>", "type evidence for a variable"),
+    "dict-heatmap": PythonOnlyFeature("reveal ast --view dict-heatmap", "ranks untyped dicts by keys read"),
+    "dict-schemas": PythonOnlyFeature("reveal ast --view dict-schemas", "clusters untyped dicts into implicit schemas"),
+    "reveal-type": PythonOnlyFeature("reveal ast --reveal-type NAME", "type evidence for a variable"),
     "rule-T006": PythonOnlyFeature("rule T006", "flags untyped dicts that a TypedDict already covers"),
     "typed-elements": PythonOnlyFeature("--typed", "Python-specific element semantics"),
     "docstrings": PythonOnlyFeature("docstring extraction", "leading-docstring detection in outlines"),

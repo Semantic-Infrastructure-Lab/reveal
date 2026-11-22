@@ -62,4 +62,4 @@ def test_sole_name_query_keeps_variable_hint(source):
     result = run(f'ast://{source}?name=VALUE')
     assert result.returncode == 0, result.stderr
     assert 'not a named code element' in result.stdout
-    assert 'reveal_type=VALUE' in result.stdout
+    assert '--reveal-type VALUE' in result.stdout  # the subcommand, not ?reveal_type= (BACK-2613)

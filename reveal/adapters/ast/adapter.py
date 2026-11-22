@@ -316,18 +316,16 @@ def _query_warnings(structures: List[Dict[str, Any]], filtered: List[Dict[str, A
 @register_adapter('ast')
 @register_renderer(AstRenderer)
 class AstAdapter(ResourceAdapter):
-    """Adapter for querying code as an AST database via ast:// URIs.
+    """Adapter for querying code as an AST database: ``reveal ast PATH --flags`` (or ``ast://PATH --flags``).
 
     Examples:
-        ast://./src                      # All code structure
-        ast://./src?lines>50             # Functions with >50 lines
-        ast://./src?complexity>10        # Complex functions
-        ast://app.py?type=function       # Only functions
-        ast://.?lines>20&complexity<5    # Long but simple functions
-        ast://.?type!=function           # All non-functions (NEW: != operator)
-        ast://.?name~=^test_             # Regex match (NEW: ~= operator)
-        ast://.?lines=50..200            # Range filter (NEW: .. operator)
-        ast://.?complexity>10&sort=-complexity&limit=10  # Top 10 most complex (NEW: sort, limit)
+        reveal ast ./src                                  # All code structure
+        reveal ast ./src --where 'lines>50'               # Functions with >50 lines
+        reveal ast app.py --kind function                 # Only functions
+        reveal ast . --where 'lines>20' --where 'complexity<5'   # Long but simple functions
+        reveal ast . --where 'kind!=function'             # All non-functions
+        reveal ast . --where 'name~=^test_'               # Regex match
+        reveal ast . --where 'complexity>10' --sort=-complexity --limit 10  # Top 10 most complex
     """
 
     # Names a path and selects an analysis (COMMAND_MODEL rule 2): its request is `reveal NOUN TARGET --flags`; the
@@ -414,11 +412,9 @@ class AstAdapter(ResourceAdapter):
         Returns JSON schema for AI agent integration.
         """
         schema = _get_schema()
-        fields = {key: value for key, value in schema['query_params'].items()
-                  if key not in ('show', 'reveal_type')}
-        fields['kind'] = fields['type']
-        fields['nesting_depth'] = fields['depth']  # the canonical field; depth is its retired word (Q10)
-        return {**schema, 'filter_fields': fields,
+        # The where fields under their canonical names: kind and nesting_depth (type and depth are their noted legacy
+        # words, Q5/Q10); the retired calls/callee_of are not offered (B11).
+        return {**schema, 'filter_fields': schema['query_params'],
                 'query_params': param_schema(PARAM_SPECS),
                 'resource': AstAdapter.RESOURCE_SPEC.schema()}
 
@@ -449,8 +445,8 @@ class AstAdapter(ResourceAdapter):
                     f"ast:// does not support multi-file colon syntax: {path!r}\n"
                     "  Each ast:// query targets one file or directory.\n"
                     "  Run separate queries:\n"
-                    f"    reveal 'ast://{left}?<filter>'\n"
-                    f"    reveal 'ast://{right}?<filter>'"
+                    f"    reveal ast {left} --where EXPR\n"
+                    f"    reveal ast {right} --where EXPR"
                 )
 
         try:

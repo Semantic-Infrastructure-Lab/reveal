@@ -7,91 +7,91 @@ from reveal.reveal_types import CONTRACT_VERSION
 
 _HELP_EXAMPLES = [
     {
-        'uri': 'ast://./src',
+        'uri': 'reveal ast ./src',
         'description': 'All code structure in src directory'
     },
     {
-        'uri': 'ast://app.py?lines>50',
+        'uri': "reveal ast app.py --where 'lines>50'",
         'description': 'Functions with more than 50 lines'
     },
     {
-        'uri': 'ast://./src?complexity>10',
+        'uri': "reveal ast ./src --where 'complexity>10'",
         'description': 'Complex functions (high cyclomatic complexity)'
     },
     {
-        'uri': 'ast://main.py?kind=function',
-        'description': 'Functions and methods (not classes); type=method for methods only'
+        'uri': 'reveal ast main.py --kind function',
+        'description': 'Functions and methods (not classes); --kind method for methods only'
     },
     {
-        'uri': 'ast://.?kind=class|function',
+        'uri': "reveal ast . --kind 'class|function'",
         'description': 'Both classes and functions (OR logic)'
     },
     {
-        'uri': 'ast://.?name=test_*',
+        'uri': "reveal ast . --where 'name=test_*'",
         'description': 'All functions/classes starting with test_'
     },
     {
-        'uri': 'ast://src/?name=*helper*',
+        'uri': "reveal ast src/ --where 'name=*helper*'",
         'description': 'All functions/classes containing "helper" in name'
     },
     {
-        'uri': 'ast://.?lines>30&complexity<5',
+        'uri': "reveal ast . --where 'lines>30' --where 'complexity<5'",
         'description': 'Long but simple functions (low complexity)'
     },
     {
-        'uri': "ast://./src?complexity>10 --format=json",
+        'uri': "reveal ast ./src --where 'complexity>10' --format=json",
         'description': 'JSON output for scripting'
     },
     {
-        'uri': 'ast://.?decorator=property',
+        'uri': 'reveal ast . --where decorator=property',
         'description': 'Find all @property decorated methods'
     },
     {
-        'uri': 'ast://.?decorator=*cache*',
+        'uri': "reveal ast . --where 'decorator=*cache*'",
         'description': 'Find all cached functions (@lru_cache, @cached_property, etc.)'
     },
     {
-        'uri': 'ast://.?decorator=staticmethod',
+        'uri': 'reveal ast . --where decorator=staticmethod',
         'description': 'Find all @staticmethod methods'
     },
     {
-        'uri': 'ast://.?decorator=property&lines>10',
+        'uri': "reveal ast . --where decorator=property --where 'lines>10'",
         'description': 'Find complex properties (potential code smell)'
     },
     {
-        'uri': 'ast://.?kind!=function',
-        'description': 'All non-function elements (NEW: != operator)'
+        'uri': "reveal ast . --where 'kind!=function'",
+        'description': 'All non-function elements (!= operator)'
     },
     {
-        'uri': 'ast://.?name~=^test_',
-        'description': 'Functions starting with test_ using regex (NEW: ~= operator)'
+        'uri': "reveal ast . --where 'name~=^test_'",
+        'description': 'Functions starting with test_ using regex (~= operator)'
     },
     {
-        'uri': 'ast://.?lines=50..200',
-        'description': 'Functions between 50-200 lines (NEW: .. range operator)'
+        'uri': 'reveal ast . --where lines=50..200',
+        'description': 'Functions between 50-200 lines (.. range operator)'
     },
     {
-        'uri': 'ast://.?complexity>10&sort=-complexity',
-        'description': 'Most complex functions first (NEW: sort)'
+        'uri': "reveal ast . --where 'complexity>10' --sort=-complexity",
+        'description': 'Most complex functions first'
     },
     {
-        'uri': 'ast://.?kind=function&sort=lines&limit=10',
-        'description': 'Top 10 shortest functions (NEW: sort + limit)'
+        'uri': 'reveal ast . --kind function --sort lines --limit 10',
+        'description': 'Top 10 shortest functions'
     },
     {
-        'uri': 'ast://.?complexity>5&sort=-lines&limit=20&offset=10',
-        'description': 'Complex functions, paginated results (NEW: full result control)'
+        'uri': "reveal ast . --where 'complexity>5' --sort=-lines --limit 20 --offset 10",
+        'description': 'Complex functions, paginated results'
     },
     {
-        'uri': "ast://src/?depth>4",
+        'uri': "reveal ast src/ --where 'nesting_depth>4'",
         'description': 'Find deeply nested functions (exceeds C905 threshold)'
     },
     {
-        'uri': "ast://src/?has_annotations=false&kind=function",
+        'uri': 'reveal ast src/ --where has_annotations=false --kind function',
         'description': 'Find fully unannotated functions for type coverage audit'
     },
     {
-        'uri': "ast://src/?callers>5&complexity>10",
+        'uri': "reveal ast src/ --where 'callers>5' --where 'complexity>10'",
         'description': 'Find high-coupling AND high-complexity functions (prime refactor targets)'
     },
 ]
@@ -101,8 +101,8 @@ _HELP_WORKFLOWS = [
         'name': 'Find Refactoring Targets',
         'scenario': 'Codebase feels messy, need to find problem areas',
         'steps': [
-            "reveal 'ast://./src?complexity>10'        # Find complex functions",
-            "reveal 'ast://./src?lines>100'            # Find oversized functions",
+            "reveal ast ./src --where 'complexity>10'        # Find complex functions",
+            "reveal ast ./src --where 'lines>100'            # Find oversized functions",
             "reveal src/problem_file.py --outline      # Understand structure",
             "reveal src/problem_file.py big_function   # Extract for refactoring",
         ]
@@ -111,9 +111,9 @@ _HELP_WORKFLOWS = [
         'name': 'Explore Unknown Codebase',
         'scenario': 'New project, need to find entry points and structure',
         'steps': [
-            "reveal 'ast://.?name=main*'               # Find entry points",
-            "reveal 'ast://.?name=*cli*|*command*'     # Find CLI handlers",
-            "reveal 'ast://.?kind=class'               # See class hierarchy",
+            "reveal ast . --where 'name=main*'               # Find entry points",
+            "reveal ast . --where 'name=*cli*|*command*'     # Find CLI handlers",
+            "reveal ast . --kind class               # See class hierarchy",
             "reveal src/core.py --outline              # Drill into key file",
         ]
     },
@@ -121,7 +121,7 @@ _HELP_WORKFLOWS = [
         'name': 'Pre-PR Review',
         'scenario': 'About to review changes, want quick quality check',
         'steps': [
-            "git diff --name-only | grep '\\.py$' | xargs -I{} reveal 'ast://{}?complexity>8'",
+            "git diff --name-only | grep '\\.py$' | xargs -I{} reveal ast {} --where 'complexity>8'",
             "git diff --name-only | reveal --stdin --check",
         ]
     },
@@ -129,32 +129,32 @@ _HELP_WORKFLOWS = [
         'name': 'Trace Function Call Graph',
         'scenario': 'Understand what calls what — trace execution paths and identify hotspots',
         'steps': [
-            "reveal 'ast://src/?kind=function' --format json      # calls[] and called_by[] on every function",
-            "reveal 'calls://src/?callers=validate_item'           # Cross-file: who calls validate_item project-wide?",
-            "reveal 'calls://src/?callees=validate_item'           # Cross-file: what does validate_item call?",
-            "reveal 'calls://src/?callers=validate_item&depth=2'   # Callers-of-callers (transitive, 2 levels)",
-            "reveal 'calls://src/?callers=main&format=dot' | dot -Tsvg > call_graph.svg  # Graphviz SVG",
+            "reveal ast src/ --kind function --format json      # calls[] and called_by[] on every function",
+            "reveal calls src/ --callers validate_item             # Cross-file: who calls validate_item project-wide?",
+            "reveal calls src/ --callees validate_item             # Cross-file: what does validate_item call?",
+            "reveal calls src/ --callers validate_item --depth 2   # Callers-of-callers (transitive, 2 levels)",
+            "reveal calls src/ --callers main --format dot | dot -Tsvg > call_graph.svg  # Graphviz SVG",
         ]
     },
     {
         'name': 'Analyze Decorator Patterns',
         'scenario': 'Understand caching, properties, and API surface',
         'steps': [
-            "reveal 'ast://.?decorator=property'            # All properties",
-            "reveal 'ast://.?decorator=*cache*'             # All cached/memoized functions",
-            "reveal 'ast://.?decorator=staticmethod'        # Static methods (might not need class)",
-            "reveal 'ast://.?decorator=abstractmethod'      # Abstract interface",
-            "reveal 'ast://.?decorator=property&lines>10'   # Complex properties (code smell)",
+            "reveal ast . --where decorator=property            # All properties",
+            "reveal ast . --where 'decorator=*cache*'             # All cached/memoized functions",
+            "reveal ast . --where decorator=staticmethod        # Static methods (might not need class)",
+            "reveal ast . --where decorator=abstractmethod      # Abstract interface",
+            "reveal ast . --where decorator=property --where 'lines>10'   # Complex properties (code smell)",
         ]
     },
     {
         'name': 'Find Implicit Dict Contracts (Python)',
         'scenario': 'Dict[str, Any] records passed between modules with no declared shape',
         'steps': [
-            "reveal 'ast://src/?show=dict-schemas'      # Shapes read in several places + TypedDict drift",
-            "reveal 'ast://src/?show=dict-heatmap'      # Every untyped-dict name, most keys first",
+            "reveal ast src/ --view dict-schemas      # Shapes read in several places + TypedDict drift",
+            "reveal ast src/ --view dict-heatmap      # Every untyped-dict name, most keys first",
             "reveal check src/ --select T006            # Params that should take an existing TypedDict",
-            "reveal 'ast://src/?reveal_type=elem'       # Where one variable's shape comes from",
+            "reveal ast src/ --reveal-type elem       # Where one variable's shape comes from",
         ]
     },
 ]
@@ -162,17 +162,17 @@ _HELP_WORKFLOWS = [
 _HELP_ANTI_PATTERNS = [
     {
         'bad': "grep -r 'class UserManager' .",
-        'good': "reveal 'ast://.?name=UserManager&kind=class'",
+        'good': "reveal ast . --where name=UserManager --kind class",
         'why': 'Semantic search vs text matching - no false positives from comments/strings'
     },
     {
         'bad': "find . -name '*.py' -exec grep -l 'def process' {} \\;",
-        'good': "reveal 'ast://.?name=process*&kind=function'",
+        'good': "reveal ast . --where 'name=process*' --kind function",
         'why': 'One command, structured output with line numbers and complexity'
     },
     {
         'bad': "grep -rn 'def test_' tests/",
-        'good': "reveal 'ast://tests/?name=test_*'",
+        'good': "reveal ast tests/ --where 'name=test_*'",
         'why': 'Wildcard matching + metadata (find long tests with lines>50)'
     },
 ]
@@ -190,13 +190,13 @@ _SCHEMA_QUERY_PARAMS = {
         'operators': ['>', '<', '>=', '<=', '=='],
         'examples': ['complexity>10', 'complexity<5']
     },
-    'type': {
+    'kind': {
         'type': 'string',
-        'description': ('Element type. function matches every function, methods included; '
+        'description': ('Element kind (also --kind; type is its noted legacy word). function matches every function, methods included; '
                         'method only members of a class, struct, impl, trait or interface (not a mod/namespace or nested function); '
                         'also struct, import, interface (trait), module, namespace, test'),
         'operators': ['==', '!=', '|'],
-        'examples': ['type=function', 'type=method', 'type=class|function'],
+        'examples': ['kind=function', 'kind=method', 'kind=class|function'],
         'valid_values': ['function', 'class', 'method', 'struct', 'import', 'interface',
                          'trait', 'module', 'namespace', 'test']
     },
@@ -216,21 +216,6 @@ _SCHEMA_QUERY_PARAMS = {
         'operators': ['==', '!=', '~='],
         'examples': ['decorator=property', 'decorator=*cache*', 'decorator=HttpGet', 'decorator=derive']
     },
-    'calls': {
-        'type': 'string',
-        'description': ('Retired (prints a replaced-by note): use calls://<path>?callers=NAME, or '
-                        "--grep 'PATTERN' for a pattern. Finds functions/methods whose calls list "
-                        '(extracted from function bodies) matches a name (wildcard supported).'),
-        'operators': ['==', '~='],
-        'examples': ['calls=validate_item', 'calls=*send*', 'calls=db.*']
-    },
-    'callee_of': {
-        'type': 'string',
-        'description': ('Retired (prints a replaced-by note): use calls://<path>?callees=NAME. Finds '
-                        'functions whose called_by list (within-file) matches a name.'),
-        'operators': ['==', '~='],
-        'examples': ['callee_of=main', 'callee_of=process_batch', 'callee_of=*handler*']
-    },
     'param_type': {
         'type': 'string',
         'description': 'Find functions where any parameter has a given type annotation. Parses the signature string; glob patterns supported. Bare type name matches generics too (Dict* matches Dict[str, Any]).',
@@ -243,49 +228,24 @@ _SCHEMA_QUERY_PARAMS = {
         'operators': ['==', 'glob', '~='],
         'examples': ['return_type=bool', 'return_type=None', 'return_type=List*', 'return_type=Dict*']
     },
-    'depth': {
+    'nesting_depth': {
         'type': 'integer',
-        'description': 'Maximum nesting depth within the function (same metric as C905 rule). depth>4 is the C905 threshold; depth>6 is severe.',
+        'description': ('Maximum nesting depth within the function (same metric as C905 rule; depth is its noted legacy '
+                        'word). nesting_depth>4 is the C905 threshold; nesting_depth>6 is severe.'),
         'operators': ['>', '<', '>=', '<=', '=='],
-        'examples': ['depth>4', 'depth>6', 'depth<=2']
+        'examples': ['nesting_depth>4', 'nesting_depth>6', 'nesting_depth<=2']
     },
     'has_annotations': {
         'type': 'boolean',
-        'description': 'Filter by presence of type annotations. has_annotations=false finds fully unannotated functions (no param or return hints). Combine with type=function for a codebase annotation coverage audit.',
+        'description': 'Filter by presence of type annotations. has_annotations=false finds fully unannotated functions (no param or return hints). Combine with --kind function for a codebase annotation coverage audit.',
         'operators': ['=='],
         'examples': ['has_annotations=false', 'has_annotations=true']
     },
     'callers': {
         'type': 'integer',
-        'description': 'Number of inbound callers in the same file (length of called_by list); for project-wide callers use calls://<path>?callers=NAME. callers>5 finds high-coupling functions; combine with complexity>10 for refactor priorities.',
+        'description': 'Number of inbound callers in the same file (length of called_by list); for project-wide callers use reveal calls <path> --callers NAME. callers>5 finds high-coupling functions; combine with complexity>10 for refactor priorities.',
         'operators': ['>', '<', '>=', '<=', '=='],
-        'examples': ['callers>5', 'callers>3&complexity>10', 'callers==0']
-    },
-    'reveal_type': {
-        'type': 'string',
-        'description': (
-            'Show all type evidence for a named variable: every parameter annotation, '
-            'assignment with inferred RHS shape (dict literal keys, call return, etc.), '
-            'and for-loop binding. Works on unannotated code — no source edits needed. '
-            'Replaces the mypy reveal_type() workflow non-destructively.'
-        ),
-        'operators': ['=='],
-        'examples': ['reveal_type=trade', 'reveal_type=result', 'reveal_type=config']
-    },
-    'show': {
-        'type': 'string',
-        'description': (
-            'Display mode (not a filter): show=calls (retired, prints a replaced-by note: use '
-            'calls://<path>?callers=NAME or ?callees=NAME) renders a compact call graph view; '
-            'show=dict-heatmap ranks untyped-dict names (annotated/unannotated params, loop '
-            'variables, locals) by distinct string keys read (TypedDict migration priority list); '
-            'show=dict-schemas clusters those across functions into shared implicit record '
-            'shapes, naming any existing TypedDict that already covers one and the keys it '
-            'fails to declare. Python only.'
-        ),
-        'operators': ['=='],
-        'valid_values': ['calls', 'dict-heatmap', 'dict-schemas'],
-        'examples': ['show=dict-heatmap', 'show=dict-schemas']
+        'examples': ['callers>5', 'callers>3', 'callers==0']
     },
 }
 
@@ -345,7 +305,7 @@ _SCHEMA_OUTPUT_TYPES = [
     },
     {
         'type': 'ast_dict_heatmap',
-        'description': 'show=dict-heatmap: untyped-dict names ranked by distinct string keys read',
+        'description': '--view dict-heatmap: untyped-dict names ranked by distinct string keys read',
         'schema': {
             'type': 'object',
             'properties': {
@@ -395,7 +355,7 @@ _SCHEMA_OUTPUT_TYPES = [
     {
         'type': 'ast_dict_schemas',
         'description': (
-            'show=dict-schemas: untyped dict shapes read in 2+ functions, with any '
+            '--view dict-schemas: untyped dict shapes read in 2+ functions, with any '
             'existing TypedDict that covers them and the keys it does not declare'
         ),
         'schema': {
@@ -457,6 +417,45 @@ _SCHEMA_OUTPUT_TYPES = [
             }]
         }
     },
+    {
+        'type': 'ast_reveal_type',
+        'description': '--reveal-type NAME: every annotation, assignment shape and loop binding of one variable',
+        'schema': {
+            'type': 'object',
+            'properties': {
+                'contract_version': {'type': 'string'},
+                'type': {'type': 'string', 'const': 'ast_reveal_type'},
+                'path': {'type': 'string'},
+                'var_name': {'type': 'string'},
+                'analysis': {'type': 'object', 'description': 'candidate, analyzed, failed and recovered file counts'},
+                'total_results': {'type': 'integer'},
+                'results': {
+                    'type': 'array',
+                    'items': {
+                        'type': 'object',
+                        'properties': {
+                            'file': {'type': 'string'},
+                            'function': {'type': 'string'},
+                            'func_line': {'type': 'integer'},
+                            'line': {'type': 'integer'},
+                            'kind': {'type': 'string', 'enum': ['param', 'assign', 'for']},
+                            'annotation': {'type': 'string'},
+                            'shape': {'type': 'string'},
+                        }
+                    }
+                }
+            }
+        },
+        'example': {
+            'contract_version': CONTRACT_VERSION,
+            'type': 'ast_reveal_type',
+            'path': 'src',
+            'var_name': 'elem',
+            'total_results': 1,
+            'results': [{'file': 'src/render.py', 'function': 'render', 'func_line': 12, 'line': 12,
+                         'kind': 'param', 'annotation': 'dict', 'shape': ''}],
+        }
+    },
 ]
 
 _SCHEMA_EXAMPLE_QUERIES = [
@@ -466,42 +465,42 @@ _SCHEMA_EXAMPLE_QUERIES = [
         'output_type': 'ast_query'
     },
     {
-        'uri': 'ast://./src?lines>50',
+        'uri': "ast://./src --where 'lines>50'",
         'description': 'Functions with more than 50 lines',
         'output_type': 'ast_query'
     },
     {
-        'uri': 'ast://./src?complexity>10',
+        'uri': "ast://./src --where 'complexity>10'",
         'description': 'Complex functions (high cyclomatic complexity)',
         'output_type': 'ast_query'
     },
     {
-        'uri': 'ast://main.py?kind=function',
-        'description': 'Functions and methods (not classes); type=method for methods only',
+        'uri': 'ast://main.py --kind function',
+        'description': 'Functions and methods (not classes); --kind method for methods only',
         'output_type': 'ast_query'
     },
     {
-        'uri': 'ast://.?name=test_*',
+        'uri': "ast://. --where 'name=test_*'",
         'description': 'All functions/classes starting with test_',
         'output_type': 'ast_query'
     },
     {
-        'uri': 'ast://.?decorator=property',
+        'uri': 'ast://. --where decorator=property',
         'description': 'Find all @property decorated methods',
         'output_type': 'ast_query'
     },
     {
-        'uri': 'ast://.?lines>30&complexity<5',
+        'uri': "ast://. --where 'lines>30' --where 'complexity<5'",
         'description': 'Long but simple functions',
         'output_type': 'ast_query'
     },
     {
-        'uri': 'ast://src/?show=dict-heatmap',
+        'uri': 'ast://src/ --view dict-heatmap',
         'description': 'Untyped dicts (params, loop vars, locals) ranked by keys read',
         'output_type': 'ast_dict_heatmap'
     },
     {
-        'uri': 'ast://src/?show=dict-schemas',
+        'uri': 'ast://src/ --view dict-schemas',
         'description': 'Dict shapes read in several places, and TypedDicts that already cover them',
         'output_type': 'ast_dict_schemas'
     },
@@ -513,50 +512,57 @@ def get_help() -> Dict[str, Any]:
     return {
         'name': 'ast',
         'description': 'Query code as an AST database - find functions by complexity, size, type',
-        'syntax': 'ast://<path>?<filter1>&<filter2>&...',
+        'syntax': 'reveal ast <path> [--where EXPR]... [--kind KIND] [--sort [-]FIELD] [--limit N|--all] [--offset N] '
+                  '| --view dict-heatmap|dict-schemas | --reveal-type NAME',
+        'epilog': ('URI: ast://<path> names the same resource and takes the same flags; its legacy query string '
+                   '(?complexity>10&kind=function) still works with a replaced-by note.'),
         'operators': {
             '>': 'Greater than',
             '<': 'Less than',
             '>=': 'Greater than or equal',
             '<=': 'Less than or equal',
             '==': 'Equal to',
-            '!=': 'Not equal to (NEW)',
-            '~=': 'Regex match (NEW)',
-            '..': 'Range (e.g., lines=50..200) (NEW)'
+            '!=': 'Not equal to',
+            '~=': 'Regex match',
+            '..': "Range (e.g., --where lines=50..200)"
         },
         'filters': {
-            'lines': 'Number of lines in function/class (e.g., lines>50, lines=10..100)',
+            'lines': "Number of lines in function/class (e.g., --where 'lines>50', --where lines=10..100)",
             'complexity': 'McCabe cyclomatic complexity (industry threshold: >10 needs refactoring, >20 is high risk)',
-            'type': 'Element type: function (methods included), method (members of a type), class, struct, import, interface, module, namespace, test. Supports OR with | or , (e.g., type=function, type=class|function)',
-            'name': 'Element name pattern with wildcards or regex (e.g., name=test_*, name~=^test_)',
+            'kind': ('Element kind, also --kind: function (methods included), method (members of a type), class, struct, '
+                     "import, interface, module, namespace, test. OR with | or , (--kind function, --kind 'class|function'); "
+                     'type is its noted legacy word'),
+            'name': "Element name pattern with wildcards or regex (e.g., --where 'name=test_*', --where 'name~=^test_')",
             'decorator': ('Decorator, annotation or attribute name - find decorated functions/classes '
-                          '(e.g., decorator=property, decorator=HttpGet for C# [HttpGet], decorator=derive '
-                          'for Rust #[derive(Debug)], decorator!=property)'),
-            'calls': "Retired: use calls://<path>?callers=NAME, or --grep 'PATTERN' (prints a note)",
-            'callee_of': 'Retired: use calls://<path>?callees=NAME (prints a note)',
-            'param_type': 'Find functions where any param has this type annotation (e.g., param_type=dict, param_type=Dict*)',
-            'return_type': 'Find functions with this return annotation (e.g., return_type=bool, return_type=None)',
-            'reveal_type': 'Show type evidence for a variable: params, assignments, for-loops across the file (e.g., reveal_type=trade)',
-            'show': (
-                'Display mode: show=calls (retired: use calls://) renders call graph, show=dict-heatmap ranks '
-                'untyped-dict params/loop vars/locals by distinct keys read (TypedDict '
-                'migration priority list), show=dict-schemas clusters them into shared '
-                'implicit record shapes and flags existing TypedDicts that readers bypass '
-                'or that have drifted (Python only)'
-            ),
+                          '(e.g., --where decorator=property, decorator=HttpGet for C# [HttpGet], decorator=derive '
+                          "for Rust #[derive(Debug)], --where 'decorator!=property')"),
+            'param_type': 'Find functions where any param has this type annotation (e.g., --where param_type=dict)',
+            'return_type': 'Find functions with this return annotation (e.g., --where return_type=bool)',
+            'nesting_depth': "Maximum nesting depth (e.g., --where 'nesting_depth>4'); depth is its noted legacy word",
+            'has_annotations': 'Annotation presence (e.g., --where has_annotations=false)',
+            'callers': "Inbound callers in the same file (e.g., --where 'callers>5')",
         },
-        'result_control': {
-            'sort': 'Sort results by field (e.g., sort=complexity, sort=-lines for descending)',
-            'limit': 'Limit number of results (e.g., limit=10)',
-            'offset': 'Skip first N results (e.g., offset=5)'
-        },
+        'cli_flags': [
+            {'flag': '--where EXPR', 'description': 'A filter over the fields above; repeat to AND'},
+            {'flag': '--kind KIND', 'description': 'Element kind (the kind field)'},
+            {'flag': '--view dict-heatmap|dict-schemas',
+             'description': ('Untyped dicts ranked by keys read, or clustered into shared shapes (Python only; '
+                             'reads no row control)')},
+            {'flag': '--reveal-type NAME',
+             'description': ('Type evidence for one variable (Python only; reads no row control); a name with no '
+                             'occurrence exits 2')},
+            {'flag': '--sort [-]FIELD', 'description': 'Sort the listing; text keeps the sorted order'},
+            {'flag': '--limit N | --all', 'description': 'Listing rows (default cap 200; --limit 0 or --all is every row)'},
+            {'flag': '--offset N', 'description': 'Listing rows skipped after sorting'},
+            {'flag': '--builtins', 'description': 'Keep builtin names in calls[]'},
+        ],
         'examples': _HELP_EXAMPLES,
         # Executable examples for current directory
         'try_now': [
-            "reveal 'ast://.?complexity>10'",
-            "reveal 'ast://.?name=test_*'",
-            "reveal 'ast://.?decorator=property'",
-            "reveal 'ast://.?decorator=*cache*'",
+            "reveal ast . --where 'complexity>10'",
+            "reveal ast . --where 'name=test_*'",
+            "reveal ast . --where decorator=property",
+            "reveal ast . --where 'decorator=*cache*'",
         ],
         # Scenario-based workflow patterns
         'workflows': _HELP_WORKFLOWS,
@@ -564,16 +570,16 @@ def get_help() -> Dict[str, Any]:
         'anti_patterns': _HELP_ANTI_PATTERNS,
         'notes': [
             'Ordinary filter queries exit 2 for invalid requests and 3 for required analysis/output loss; healthy empty results and display cuts exit 0. Dict/type-evidence modes, checks and mixed batches keep their legacy policy.',
-            'Quote URIs with > or < operators: \'ast://path?lines>50\' (shell interprets > as redirect)',
-            'NEW operators: != (not equals), ~= (regex), .. (range)',
-            'NEW result control: sort=field (or sort=-field for descending), limit=N, offset=M',
+            "Quote --where expressions with > or < operators: --where 'lines>50' (the shell reads > as a redirect)",
+            'Operators: != (not equals), ~= (regex), .. (range)',
+            'Result control: --sort FIELD (or --sort=-FIELD for descending), --limit N, --offset M',
             'Result control enables efficient pagination for AI agents and large codebases',
             'Complexity is proper McCabe cyclomatic complexity for tree-sitter languages; falls back to a keyword-count estimate (shared with metrics:// and C901)',
             'Scans all code files in directory recursively',
             'Supports Python, JS, TS, Rust, Go and more via tree-sitter (reveal --languages)',
             'Use --format=json for programmatic filtering with jq',
-            'Call graph: calls=, callee_of= and show=calls are retired (each prints a note); use calls:// for callers (?callers=X) and callees (?callees=X), or --grep for a text pattern',
-            'JSON output includes calls[] and called_by[] fields on each function/method; where a call lands across files is calls://<path>?callees=FILE:NAME&depth=2',
+            "Call graph: the calls= and callee_of= fields and the calls view are retired (each prints a note); use reveal calls <path> --callers X / --callees X, or --grep for a text pattern",
+            'JSON output includes calls[] and called_by[] fields on each function/method; where a call lands across files is reveal calls <path> --callees FILE:NAME --depth 2',
         ],
         'output_formats': ['text', 'json', 'grep'],
         'see_also': [
@@ -591,7 +597,7 @@ def get_schema() -> Dict[str, Any]:
     return {
         'adapter': 'ast',
         'description': 'Query code as an AST database - find functions, classes, methods by properties',
-        'uri_syntax': 'ast://<path>?<filter1>&<filter2>&...',
+        'uri_syntax': 'ast://<path> [--where EXPR]... [--kind KIND] [--view VIEW] [--reveal-type NAME] [--sort FIELD] [--limit N]',
         'query_params': _SCHEMA_QUERY_PARAMS,
         'operators': {
             '>': 'Greater than (numeric)',
@@ -600,28 +606,29 @@ def get_schema() -> Dict[str, Any]:
             '<=': 'Less than or equal (numeric)',
             '==': 'Equal to (exact match)',
             '~=': 'Pattern match (with wildcards)',
-            '&': 'AND (combine filters)',
+            '--where ... --where': 'AND (combine filters)',
             '|': 'OR (alternate values)'
         },
         'elements': {},  # AST adapter doesn't use element-based queries
-        'cli_flags': ['--format=json', '--format=grep', '--outline'],
+        'cli_flags': ['--where', '--kind', '--view', '--reveal-type', '--builtins', '--sort', '--limit', '--all',
+                      '--offset', '--format=json', '--format=grep'],
         'supports_batch': False,
         'supports_advanced': False,
         'output_types': _SCHEMA_OUTPUT_TYPES,
         'example_queries': _SCHEMA_EXAMPLE_QUERIES,
         'notes': [
-            "Quote URIs with > or < operators: 'ast://path?lines>50' (shell interprets > as redirect)",
+            "Quote --where expressions with > or < operators: --where 'lines>50' (shell interprets > as redirect)",
             'Operators: = (equals), != (not equals), > < (numeric), ~= (regex/glob), .. (range)',
-            'Result control: sort=field, sort=-field (descending), limit=N, offset=M',
+            'Result control: --sort FIELD, --sort=-FIELD (descending), --limit N, --offset M',
             'Sort note: text keeps the sorted order -- rows sit under a File heading while each file\'s rows are consecutive, '
             'and print one per line with their file when the sort interleaves files',
             'Supports the tree-sitter languages listed by reveal --languages (Python, JS, TS, Rust, Go, Java, C, C++, ...)',
             'Complexity is proper McCabe cyclomatic complexity for tree-sitter languages; falls back to a keyword-count estimate (shared with metrics:// and C901) for unsupported languages',
-            'Call graph fields on functions/methods in JSON: calls[] (outgoing), called_by[] (within-file incoming); cross-file targets: calls://<path>?callees=FILE:NAME&depth=2 (resolved_calls[] is retired, BACK-2566)',
-            'calls=, callee_of= and show=calls are retired spellings (a replaced-by note until the cut): '
-            "use calls://<path>?callers=NAME or ?callees=NAME, or --grep 'PATTERN' for a text pattern",
-            'show=dict-heatmap / show=dict-schemas are Python-only and return their own '
-            'result types (ast_dict_heatmap / ast_dict_schemas), not ast_query; TypedDicts '
+            'Call graph fields on functions/methods in JSON: calls[] (outgoing), called_by[] (within-file incoming); cross-file targets: reveal calls <path> --callees FILE:NAME --depth 2 (resolved_calls[] is retired, BACK-2566)',
+            'The calls= and callee_of= fields and the calls view are retired spellings (a replaced-by note until the cut): '
+            "use reveal calls <path> --callers NAME or --callees NAME, or --grep 'PATTERN' for a text pattern",
+            '--view dict-heatmap / --view dict-schemas and --reveal-type are Python-only and return their own '
+            'result types (ast_dict_heatmap / ast_dict_schemas / ast_reveal_type), not ast_query; TypedDicts '
             'are matched only if defined under the scanned path. The rule form is T006: '
             'reveal check <path> --select T006',
         ]
