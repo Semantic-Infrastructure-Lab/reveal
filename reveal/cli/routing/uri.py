@@ -717,8 +717,12 @@ def _resolve(adapter_class: type, renderer_class: type[Any], scheme: str, resour
     # not a real type (e.g. a Mock callable in tests) or lacks from_uri.
     from ...adapters.base import _default_from_uri
     _reject_missing_path(adapter_class, scheme, resource, classify_validation=facts_of is not None)
-    # Canonical construction ignores the element; the legacy try-chain may still read it (BACK-948).
-    if element and not hasattr(renderer_class, 'render_element') and not getattr(adapter_class, 'LEGACY_INIT', True):
+    # Canonical construction ignores the element; the legacy try-chain may still read it (BACK-948). A class that binds
+    # its query as a declared noun reads none, whatever its renderer offers: the retired stats:// refuses as metrics://
+    # and api.query do (BACK-2694).
+    from ...adapters.factory import uses_bound_query_call
+    if element and (uses_bound_query_call(adapter_class) or (
+            not hasattr(renderer_class, 'render_element') and not getattr(adapter_class, 'LEGACY_INIT', True))):
         _fail_unread_element(adapter_class, scheme, resource, element)
     if isinstance(adapter_class, type) and hasattr(adapter_class, 'from_uri'):
         adapter = _call_adapter(lambda: adapter_class.from_uri(scheme, resource, element),

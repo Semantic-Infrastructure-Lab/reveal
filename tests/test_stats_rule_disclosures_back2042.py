@@ -174,6 +174,9 @@ def test_actual_public_stats_and_element_print_the_counting_rule_not_a_rule_disc
     args = [f'stats://{root}/checked.py'] if target == 'file' else [f'stats://{root}', 'checked.py']
     response = run(*args, '--format', output_format)
     assert observed['events'] == []
+    if target == 'element':  # refused before any read, as metrics:// refuses it (BACK-2694)
+        assert response.returncode == 2 and "takes no positional element ('checked.py')" in response.stderr
+        return
     assert response.returncode == 0
     if output_format == 'json':
         assert_no_scan_note(json.loads(response.stdout))
