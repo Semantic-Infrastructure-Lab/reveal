@@ -50,27 +50,37 @@ def _rule_lines(text):
     return [line for line in text.splitlines() if line.strip().startswith('Rule')]
 
 
+def _rules(root):
+    rules = json.loads(_overview(root, '--format', 'json'))['map']['rules']
+    return [rules['edge_rule']['text'], *(section['text'] for section in rules['edge_rule_sections'].values())]
+
+
+# The first screen points at the rules' JSON fields (BACK-2685); the vocabulary checks read those fields.
+
 def test_rust_first_screen_has_no_python_vocabulary(tmp_path):
-    text = _overview(_project(tmp_path, RUST))
-    assert 'Rule:' in text and 'Active entrypoint candidates' in text
-    assert 'TYPE_CHECKING' not in text
+    root = _project(tmp_path, RUST)
+    text = _overview(root)
+    assert 'Rules: --format json (' in text and 'Active entrypoint candidates' in text
+    assert 'TYPE_CHECKING' not in text and not any('TYPE_CHECKING' in rule for rule in _rules(root))
     assert '__init__.py' not in text
 
 
 def test_shared_clauses_appear_once(tmp_path):
-    text = _overview(_project(tmp_path, RUST))
+    root = _project(tmp_path, RUST)
+    text = _overview(root)
     lines = _rule_lines(text)
-    assert [line.split(':')[0].strip() for line in lines] == ['Rule', 'Rule (entry points)', 'Rule (cycles)']
-    assert text.count('takes no &lazy') == 1
-    assert text.count('Test paths:') == 1
+    assert len(lines) == 1 and lines[0].startswith('Rules: --format json (')
+    assert lines[0].endswith('map.rules.edge_rule.text, map.rules.edge_rule_sections.entry_points.text, '
+                             'map.rules.edge_rule_sections.cycles.text)')
+    assert text.count('takes no &lazy') == 0 and text.count('Test paths:') == 0  # stated once, in each JSON rule
     assert text.count('Import scope is unknown') <= 1
 
 
 def test_each_section_still_names_what_differs(tmp_path):
-    lines = _rule_lines(_overview(_project(tmp_path, RUST)))
-    assert 'function-level (lazy) imports included (default)' in lines[0]
-    assert 'importers under a test path not counted' in lines[1]
-    assert 'function-level (lazy) imports excluded (default)' in lines[2]
+    rules = _rules(_project(tmp_path, RUST))
+    assert 'function-level (lazy) imports included (default)' in rules[0]
+    assert 'importers under a test path not counted' in rules[1]
+    assert 'function-level (lazy) imports excluded (default)' in rules[2]
 
 
 def test_json_keeps_the_full_rule_per_section(tmp_path):
@@ -83,10 +93,12 @@ def test_json_keeps_the_full_rule_per_section(tmp_path):
 
 @pytest.mark.parametrize('files', [PYTHON, MIXED], ids=['python', 'rust+python'])
 def test_python_scan_still_states_python_clauses(tmp_path, files):
-    """Control: a scan holding Python files keeps both Python clauses, each once."""
-    text = _overview(_project(tmp_path, files))
-    assert 'TYPE_CHECKING imports excluded' in text
+    """Control: a scan holding Python files keeps both Python clauses: the entrypoint predicate once in text, the
+    TYPE_CHECKING clause in the JSON rule the text points at (BACK-2685)."""
+    root = _project(tmp_path, files)
+    text = _overview(root)
+    assert 'TYPE_CHECKING imports excluded' in _rules(root)[0]
     assert 'not __init__.py' in text
-    assert text.count('TYPE_CHECKING') == 1
+    assert text.count('TYPE_CHECKING') == 0
     assert text.count('not __init__.py') == 1
-    assert text.count('takes no &lazy') == 1
+    assert text.count('takes no &lazy') == 0

@@ -179,7 +179,7 @@ def test_actual_public_stats_and_element_print_the_counting_rule_not_a_rule_disc
         assert_no_scan_note(json.loads(response.stdout))
     else:
         assert 'D005' not in response.stdout and 'incomplete' not in response.stdout.lower(), response.stdout
-        assert 'file-local rules only' in response.stdout, response.stdout
+        assert 'Rules: --format json (meta.issue_count.rule)' in response.stdout, response.stdout  # BACK-2685
 
 
 @pytest.mark.parametrize('query', ['min_lines=99', 'summary_only=true', 'limit=1&offset=1'])

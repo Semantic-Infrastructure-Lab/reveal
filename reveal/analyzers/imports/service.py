@@ -358,9 +358,25 @@ class ResolvedAt:
 _VIA_ORDER = ('direct', 'constant', 'namespace', 'member', 'module', 'convention')
 
 
-def _outside_root_note(at: ResolvedAt) -> str:
+def _outside_root_note(count: int) -> str:
     """The sentence naming the edges no count includes because their target lies outside the scan root."""
-    return f' {at.outside_root} edge(s) resolve outside the scan root, not counted.' if at.outside_root else ''
+    return f' {count} edge(s) resolve outside the scan root, not counted.' if count else ''
+
+
+def _ungated_note(languages: Iterable[str], edges: int) -> str:
+    """The sentence naming the scanned languages no recall oracle gates (BACK-2703)."""
+    languages = sorted(languages)
+    if not languages:
+        return ''
+    return f' Not gated by default recall checks: {", ".join(languages)}, {edges} edge(s); treat those counts as unmeasured.'
+
+
+def _unclassified_note(count: int, languages: Iterable[str]) -> str:
+    """The sentence naming the edges whose import scope is unknown, and what each &lazy view does with them."""
+    if not count:
+        return ''
+    return (f' Import scope is unknown for {count} edge(s) in {", ".join(languages)}: '
+            'retained by &lazy=include and &lazy=exclude, and omitted by &lazy=only.')
 
 
 def _ungated_scanned(at: ResolvedAt, scanned: Iterable[Path]) -> set:
@@ -395,11 +411,9 @@ def _resolution_fields(graph: ImportGraph, at: ResolvedAt,
         text += '; edges by stage: ' + ', '.join(f'{tag} {n}' for tag, n in via.items())
     if at.cycles:
         text += '; module and convention edges never close a cycle'
-    text += '.' + _outside_root_note(at)
+    text += '.' + _outside_root_note(at.outside_root)
     text += _package_wildcard_disclosure(at, fields)
-    if ungated:
-        text += (f' Not gated by default recall checks: {", ".join(sorted(ungated))}, '
-                 f'{sum(ungated.values())} edge(s); treat those counts as unmeasured.')
+    text += _ungated_note(ungated, sum(ungated.values()))
     return fields, text
 
 
@@ -418,16 +432,35 @@ def _package_wildcard_disclosure(at: ResolvedAt, fields: Dict[str, Any]) -> str:
     requested = {pkg: packages[pkg] for pkg in at.requested_packages if pkg in packages}
     fields['package_wildcards'] = {'statements': at.wildcard_statements, 'importers': at.wildcard_importers, 'packages': packages,
                  'requested_file': requested, 'rule': _PACKAGE_WILDCARD_RULE}
-    shown = ', '.join(f'{pkg} ({n})' for pkg, n in at.package_wildcards[:_WILDCARD_PACKAGES_SHOWN])
+    return _wildcard_note(fields['package_wildcards'])
+
+
+def _wildcard_note(wildcards: Dict[str, Any]) -> str:
+    """The sentence of the ``package_wildcards`` facts: packages by importer count, the first few by name."""
+    packages = wildcards['packages']
+    shown = ', '.join(f'{pkg} ({n})' for pkg, n in list(packages.items())[:_WILDCARD_PACKAGES_SHOWN])
     rest = len(packages) - _WILDCARD_PACKAGES_SHOWN
     if rest > 0:
         shown += f' and {rest} more'
-    text = (f' {at.wildcard_statements} in-tree package wildcard import(s) in {at.wildcard_importers} file(s) name a '
+    text = (f' {wildcards["statements"]} in-tree package wildcard import(s) in {wildcards["importers"]} file(s) name a '
             f'package, not a file, and are not counted: importers, fan-in and cycles are lower bounds for '
             f'files in package(s) {shown} (wildcard importer files each).')
-    for pkg, n in requested.items():
+    for pkg, n in wildcards['requested_file'].items():
         text += f' This file\'s package {pkg} is wildcard-imported by {n} file(s) that no count here includes.'
     return text
+
+
+def edge_rule_disclosures(rule: Optional[Dict[str, Any]]) -> List[str]:
+    """The request-specific sentences of a counting rule, from its structured fields: edges of unknown import scope,
+    edges outside the scan root, uncounted package wildcards and ungated languages. A text answer that points at the
+    rule (``edge_rule_fields``) keeps these visible (BACK-2599 note #1, BACK-2685); the rule's text states them too."""
+    if not rule:
+        return []
+    notes = [_unclassified_note(rule.get('unclassified_edges', 0), rule.get('unclassified_languages', ())),
+             _outside_root_note(rule.get('outside_root_edges', 0)),
+             _wildcard_note(rule['package_wildcards']) if rule.get('package_wildcards') else '',
+             _ungated_note(rule.get('ungated_languages', ()), rule.get('ungated_edges', 0))]
+    return [note.strip() for note in notes if note]
 
 
 def _where_phrase(scope: str) -> str:
@@ -469,9 +502,7 @@ def edge_rule(graph: ImportGraph, lazy: str, *, lazy_default: bool, subject: str
         clauses.append('TYPE_CHECKING imports excluded')
     clauses.append(f'{_LAZY_PHRASES[lazy]} ({source})')
     text = f"Rule: {'; '.join(clauses)}; {hint}."
-    if unclassified:
-        text += (f' Import scope is unknown for {len(unclassified)} edge(s) in {", ".join(languages)}: '
-                 'retained by &lazy=include and &lazy=exclude, and omitted by &lazy=only.')
+    text += _unclassified_note(len(unclassified), languages)
     rule = {
         'subject': subject,
         'lazy': lazy,
@@ -559,6 +590,16 @@ def edge_rule_lines(result: Dict[str, Any]) -> List[str]:
     for name, section in (result.get('edge_rule_sections') or {}).items():
         lines.append(_section_line(name, rule, section))
     return lines
+
+
+def edge_rule_fields(result: Dict[str, Any], prefix: str = '') -> Tuple[str, ...]:
+    """The JSON paths of an answer's counting-rule sentences (``edge_rule.text``, then each section's), which a text
+    answer names in its one ``Rules:`` pointer (``utils.warning_render.rule_text_lines``, BACK-2599/BACK-2685).
+    *prefix*: where the answer nests its rules (overview: ``map.rules.``)."""
+    if not result.get('edge_rule'):
+        return ()
+    sections = result.get('edge_rule_sections') or {}
+    return (f'{prefix}edge_rule.text', *(f'{prefix}edge_rule_sections.{name}.text' for name in sections))
 
 
 def _section_line(name: str, head: Dict[str, Any], section: Dict[str, Any]) -> str:

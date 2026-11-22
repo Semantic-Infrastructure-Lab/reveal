@@ -3,9 +3,9 @@ import sys
 from typing import Any, Dict, Optional
 
 from ..base import BaseRenderer
-from ...analyzers.imports.service import edge_rule_lines
+from ...analyzers.imports.service import edge_rule_disclosures, edge_rule_fields
 from ...utils import print_json_result
-from ...utils.warning_render import meta_warning_lines
+from ...utils.warning_render import meta_warning_lines, rule_text_lines
 
 
 def _page_heading(name: str, page: dict) -> str:
@@ -16,8 +16,7 @@ def _render_scope(scope: dict) -> list[str]:
     if not scope:
         return ['\nCode census unavailable']
     qualification = '' if scope['complete'] else ' observed; census incomplete'
-    lines = [f"\nCode scope  {scope['total_code_files']} recognized code files{qualification}",
-             f"  {scope['counting_rule']}"]
+    lines = [f"\nCode scope  {scope['total_code_files']} recognized code files{qualification}"]
     for row in scope['languages']:
         lines.append(f"  {row['language']}: {row['files']} files ({row.get('capability_tier', 'unknown')})")
     hidden = scope['hidden']
@@ -38,7 +37,8 @@ def _render_import_coverage(metadata: dict, rules: dict) -> list[str]:
     regime = metadata.get('autoload_regime')
     if regime:
         lines.append(f"  Framework evidence: {regime['framework']} — {regime['evidence']}; static imports can omit convention-loaded files.")
-    lines.extend('  ' + line for line in edge_rule_lines(rules))
+    # The rule itself is the Rules: pointer at the top; what this scan left uncertain or uncounted stays here (BACK-2685).
+    lines.extend('  ' + line for line in edge_rule_disclosures(rules.get('edge_rule')))
     return lines
 
 
@@ -78,6 +78,10 @@ def _render_map(facts: dict) -> list[str]:
 def overview_text(report: Dict[str, Any], top: int = 5) -> str:
     # Projection already bounded both formats; the renderer never reslices or scans.
     lines = [f"Overview: {report['path']}"]
+    # The counting rules (the code census, the import edges and each section's) are one pointer to their JSON fields
+    # (BACK-2599, BACK-2685); the full sentences stay there.
+    rule_fields = ('scope.counting_rule', *edge_rule_fields((report.get('map') or {}).get('rules') or {}, 'map.rules.'))
+    lines.extend(rule_text_lines(report, fields=rule_fields, standing_types=frozenset()))
     lines.extend(_render_scope(report['scope']))
     lines.append('\n' + report['reading_note'])
     status = report['map_status']

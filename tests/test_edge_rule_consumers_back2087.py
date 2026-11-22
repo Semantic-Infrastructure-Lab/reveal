@@ -115,11 +115,26 @@ def _assert_rules(owner, root, noun='architecture://'):
     _assert_rule(sections['cycles'], CYCLES)
 
 
-def _assert_rule_lines(text):
+def _assert_rule_text(text):
+    """A text answer that still states the rule in full (the comparison, ``architecture --against``)."""
     assert 'Rule: ' in text and 'function-level (lazy) imports included (default)' in text
     assert 'TYPE_CHECKING imports excluded' in text
     assert 'Rule (entry points): ' in text and 'importers under a test path not counted' in text
     assert 'Rule (cycles): ' in text and 'function-level (lazy) imports excluded (default)' in text
+
+
+def _assert_rule_lines(uri):
+    """The text names the JSON fields of the headline rule and of each section's (BACK-2685); the JSON states them."""
+    text, data = _run(uri), _json(uri)
+    assert ('map.rules.edge_rule.text, map.rules.edge_rule_sections.entry_points.text, '
+            'map.rules.edge_rule_sections.cycles.text)') in text
+    rules = data['map']['rules']
+    head, sections = rules['edge_rule']['text'], rules['edge_rule_sections']
+    assert head.startswith('Rule: ') and 'function-level (lazy) imports included (default)' in head
+    assert 'TYPE_CHECKING imports excluded' in head
+    assert 'importers under a test path not counted' in sections['entry_points']['text']
+    assert 'function-level (lazy) imports excluded (default)' in sections['cycles']['text']
+    assert head not in text
 
 
 # ------------------------------------------------------------------ architecture://
@@ -135,14 +150,14 @@ def test_architecture_states_its_rule_in_json(project):
 
 
 def test_architecture_states_its_rule_in_text(project):
-    _assert_rule_lines(_run(f'architecture://{to_posix(project)}'))
+    _assert_rule_lines(f'architecture://{to_posix(project)}')
 
 
 def test_architecture_without_imports_states_no_rule(project):
     """Negative control: no edge was counted, so no rule is claimed."""
     data = _json(f'architecture://{to_posix(project)}?no_imports=true')
     assert 'edge_rule' not in data and 'edge_rule_sections' not in data
-    assert 'Rule' not in _run(f'architecture://{to_posix(project)}?no_imports=true')
+    assert 'edge_rule' not in _run(f'architecture://{to_posix(project)}?no_imports=true')  # its pointer names none
 
 
 def test_architecture_names_a_language_whose_scope_is_not_recorded(tmp_path):
@@ -166,13 +181,13 @@ def test_overview_states_its_rule_in_json(project):
 
 
 def test_overview_states_its_rule_in_text(project):
-    _assert_rule_lines(_run(f'overview://{to_posix(project)}'))
+    _assert_rule_lines(f'overview://{to_posix(project)}')
 
 
 def test_overview_without_imports_states_no_rule(project):
     data = _json(f'overview://{to_posix(project)}?no_imports=true')
     assert data['map'] is None and data['map_status'] == 'not_requested'
-    assert 'Rule' not in _run(f'overview://{to_posix(project)}?no_imports=true')
+    assert 'edge_rule' not in _run(f'overview://{to_posix(project)}?no_imports=true')  # its pointer names none
 
 
 # ------------------------------------------------------------------ pack
@@ -257,7 +272,7 @@ def test_architecture_against_states_its_rule_in_text(tmp_path):
     (root / 'lazy.py').write_text(FILES['lazy.py'], encoding='utf-8')
     text = _run(f'architecture://{to_posix(root)}?against=HEAD')
     assert 'late.py' in text and 'Fan-in changes' in text
-    _assert_rule_lines(text)
+    _assert_rule_text(text)
 
 
 def test_overview_against_text_names_live_noun_and_new_files(tmp_path):

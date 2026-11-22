@@ -19,7 +19,7 @@ import json
 import pytest
 
 from conftest import _run_reveal_direct as run
-from reveal.adapters.stats.issue_count import COUNTING_RULE, COUNT_FIELD, issue_count_line
+from reveal.adapters.stats.issue_count import COUNTING_RULE, COUNT_FIELD
 from reveal.rules import RuleRegistry
 from reveal.cli.invocation import RETIREMENTS, Retirement
 
@@ -174,8 +174,9 @@ def test_metrics_keeps_the_file_local_issue_count_and_names_its_rule_set(project
 
     text = run(*METRICS_SPELLINGS[spelling](project))
     assert text.returncode == 0, text.stderr
-    assert issue_count_line(doc) in text.stdout
-    assert f"set {basis['rule_set_id']}" in text.stdout
+    # The text points at the rule; the rule, its count and its set stay in the JSON above (BACK-2685).
+    assert 'Rules: --format json (meta.issue_count.rule)' in text.stdout
+    assert COUNTING_RULE not in text.stdout and basis['rule_set_id']
 
 
 @pytest.mark.parametrize('spelling', HOTSPOT_SPELLINGS)

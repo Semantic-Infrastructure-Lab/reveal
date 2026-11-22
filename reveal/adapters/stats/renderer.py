@@ -3,15 +3,14 @@
 from typing import Any, Dict
 
 from ...utils import print_json_result
-from ...utils.warning_render import render_meta_warnings
-from .issue_count import issue_count_line
+from ...utils.warning_render import render_meta_warnings, rule_text_lines
 from .provenance import PROVENANCE_RESULT_TYPE
 
 
 def _print_issue_count_line(result: dict) -> None:
-    """The footer that names the counting rule behind the quality score (BACK-1884)."""
-    line = issue_count_line(result)
-    if line:
+    """The footer that points at the counting rule behind the quality score (BACK-1884): one pointer to the JSON field
+    that states it, which also names the rule count and rule set (BACK-2599, BACK-2685)."""
+    for line in rule_text_lines(result, fields=('meta.issue_count.rule',), standing_types=frozenset()):
         print(f"\n{line}")
 
 

@@ -751,8 +751,16 @@ class ImportsRenderer:
 
     @staticmethod
     def _render_edge_rule(result: dict) -> None:
-        """The counting rule of an edge-derived answer, as the JSON states it (BACK-2077)."""
-        for line in import_analysis.edge_rule_lines(result):
+        """The counting rule of an edge-derived answer: one pointer to the JSON fields that state it (BACK-2077), the
+        full sentences under --detail full where the view takes it, and its request-specific sentences (unknown scope,
+        edges outside the root, uncounted wildcards, ungated languages) always (BACK-2599, BACK-2685)."""
+        from ..utils.warning_render import rule_text_lines
+        detail = bool(result.get('verbose'))
+        lines = rule_text_lines(result, fields=import_analysis.edge_rule_fields(result), standing_types=frozenset(),
+                                detail=detail, detail_supported=result.get('type') in _VERBOSE_VIEW_TYPES)
+        if lines and not detail:
+            lines += import_analysis.edge_rule_disclosures(result.get('edge_rule'))
+        for line in lines:
             print(f"  {line}\n")
 
     @staticmethod

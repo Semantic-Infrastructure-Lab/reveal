@@ -198,16 +198,18 @@ def test_schema_declares_lazy():
 # ------------------------------------------------------------------ printed rule (text)
 
 def test_text_prints_the_rule(project):
-    fan_in = _run(_uri(project, 'rank=fan-in'))
+    """Text points at the rule (BACK-2685); the JSON states it, and circular's --detail full prints it."""
+    for query in ('rank=fan-in', 'circular', 'rank=fan-in&lazy=only'):
+        assert 'Rules: --format json (edge_rule.text)' in _run(_uri(project, query))
+    fan_in = _json(_uri(project, 'rank=fan-in'))['edge_rule']['text']
     assert 'Rule:' in fan_in and 'function-level (lazy) imports included' in fan_in
     assert 'TYPE_CHECKING imports excluded' in fan_in
-    circular = _run(_uri(project, 'circular'))
+    circular = _json(_uri(project, 'circular'))['edge_rule']['text']
     assert 'Rule:' in circular and 'function-level (lazy) imports excluded' in circular
     assert '&lazy=include' in circular
-    only = _run(_uri(project, 'rank=fan-in&lazy=only'))
-    assert 'only function-level (lazy) imports' in only
-    summary = _run(f'imports://{to_posix(project)}')
-    assert 'Rule:' in summary
+    assert circular in _run(_uri(project, 'circular&detail=full'))
+    assert 'only function-level (lazy) imports' in _json(_uri(project, 'rank=fan-in&lazy=only'))['edge_rule']['text']
+    assert 'Rules: --format json (edge_rule.text)' in _run(f'imports://{to_posix(project)}')
 
 
 def test_depends_prints_its_rule(project):

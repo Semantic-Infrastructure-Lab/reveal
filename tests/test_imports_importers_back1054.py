@@ -330,11 +330,14 @@ def test_importers_through_the_cli_json(fx, monkeypatch):
 
 def test_importers_text_lists_each_importer_with_stage_and_scope(fx, capsys):
     from reveal.adapters.imports import ImportsRenderer
-    ImportsRenderer.render_structure(_structure(fx / 'pkg' / 'core.py', 'importers'))
+    structure = _structure(fx / 'pkg' / 'core.py', 'importers')
+    ImportsRenderer.render_structure(structure)
     text = capsys.readouterr().out
     assert 'Importers of core.py: 5' in text
     assert 'b.py:2  pkg.core  [direct, local]' in text
-    assert 'Resolved at the scan root ..' in text
+    # The rule is a pointer in text and in full in the JSON (BACK-2685).
+    assert 'Rules: --format json (edge_rule.text); --detail for full text' in text
+    assert 'Resolved at the scan root ..' in structure['edge_rule']['text']
     ImportsRenderer.render_structure(_structure(fx / 'pkg', 'importers'))
     text = capsys.readouterr().out
     assert 'Modules with importers: 6' in text and 'core.py  (5)' in text
