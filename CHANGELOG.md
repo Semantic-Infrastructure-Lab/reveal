@@ -18,6 +18,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Behavior changes
 
+- `reveal sqlite DB[/TABLE]` is a subcommand answering as `sqlite://DB[/TABLE]`, and the integrity check is `--view health` (`--check` and `?check` still work, with a deprecation note). `--view health` gates on findings by default: a failed integrity check now exits 1 like a foreign-key violation (it exited 2), `--fail-on none` reports them with 0, and an unreadable database exits 3 (it exited 1 under `--check`). Query keys and flags sqlite never read (`?limit`, `--limit`, `--head`, `--lint`, `--only-failures`) exit 2 naming `view` instead of a note (BACK-2626, BACK-2753).
+
 - Element views (`--boundary`, `--varflow`, `--keys`, `--narrow`, `--callsites`, `--flow`, `--exits`, `--effects`, ...) no longer answer an empty view, exit 0, for a request that matches nothing: a variable with no read or write in the selected lines, a line range or `--range`/`--callsites` range past the end of the file, a reversed line range, `--callsites abc`, an empty variable name and `--around -1` now exit 2 naming what was searched (BACK-2627).
 
 - Element views on files they cannot analyze exit 2: Markdown, JSON, YAML, TOML, GraphQL, Protobuf, INI, CSV, XML and office files decline like structure-only languages (they answered an empty or invented view), and `--scope`/`--around` without a line and files tree-sitter cannot parse exit 2 instead of 1; `--format grep|typed` exits 2 on every element view instead of printing text. An untested language or fallback grammar answers with one warning naming its tier (BACK-2627).
@@ -127,6 +129,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 - The git guide and the git lines of the shared guides teach the subcommand with flags (`reveal git src/app.py --view history --where 'author~=John'`), keeping the resource URI where it names a ref (`reveal git://src/app.py@abc1234 --view diff`), and the README, AGENT_HELP and `help://quick` first screens teach `reveal git . --view history`. Git's help and schema examples, hints and error messages name flags too (`--view blame --detail full`, `--ignore off`, `--detail raw`) (BACK-2616).
 
 ### Fixed
+
+- `reveal.api.query('env://NAME')` answers that variable, as `reveal env://NAME --format json` does; it returned the whole environment listing. A variable that is not set raises `RequestValidationError`, where the CLI exits 2 (BACK-2626).
 
 - The once-a-day "Update available" notice now prints on stderr. It printed two lines on stdout in front of the answer, so `--format json` output did not parse on the day an older install learned of a new release (BACK-2738).
 
