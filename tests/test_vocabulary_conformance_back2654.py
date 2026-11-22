@@ -81,6 +81,15 @@ control whatever its value type; 1b, 1d and 6 read every spelling (aliases and n
       control and the accepted forms on the subcommand, the URI, ``api.query`` (RequestValidationError) and MCP; each
       form (``2026``, ``2026-02``, ``2026-02-01``, ``today``, a zoned time) binds as written and answers. Pack's ``since``
       is a git ref, not a time (NOT_A_TIME_WINDOW), so Pack declares no time window.
+  26  walk exclusion (Scott 2026-11-22, BACK-2730, Option B): ``exclude`` is the walk control of every walking noun,
+      the shared ``exclude_param()`` declared once: ``?exclude=P`` answers as ``--exclude P`` (equal JSON and exit), as
+      the keyword ``exclude=P``, as ``api.query`` of the URI and as MCP, and repeated keys combine as repeated flags. Until
+      the cut a noun whose where fields come from the data (AST, Markdown) declares none: there a bare ``?exclude=V``
+      keeps its field-filter answer, the answer of ``?where=exclude=V``, with the generated ``param:NOUN.exclude`` note,
+      while ``--exclude`` and the keyword stay the walk control. On every walking noun an empty pattern
+      (``--exclude ''``, ``?exclude=``, ``exclude=''``) exits 2 with ``SPELLING needs a pattern: --exclude PATTERN``, and
+      a file target satisfies ``--exclude`` quietly (the answer without it, no note, no refusal; D-2730-2 (a)). Retired
+      twins and nouns that walk no tree are exempt.
   27  empty match term (Scott 2026-11-22, BACK-2736): an empty or whitespace-only term is an invalid request, refused by
       one rule in the binder before the answer is selected: every spelling of a match or a where (its name and legacy
       words, ``?search=``, ``?filter=``, ``?body-contains=``) and every standalone word or flag-only modifier whose
@@ -126,7 +135,7 @@ def _declared_nouns():
 NOUNS = _declared_nouns()
 ELEMENT = 'element'  # the element views' pseudo-noun: its own cells at the end of this file (BACK-2627 S3b-5)
 RULES = ('1a', '1b', '1c', '1d', '2', '3', '3b', '4', '5', '6', '8a', '8b', '10', '12', '16', '17', '18', '20',
-         '14', '21j', '22', '23', '24', '28', '25', '27')
+         '14', '21j', '22', '23', '24', '28', '25', '27', '26')
 
 # The request each noun answers by default: the parity gate's table (CLI argv after the noun, URI suffix), plus
 # the declared noun it has no row for. None: no subcommand (stats is metrics' retired scheme).
@@ -163,7 +172,7 @@ CONTROL_BASES = {('calls', 'kind'): (['--uncalled'], '?uncalled'), ('calls', 'ex
 # presentation), head/tail/range (path reads only) and max-entries/dir-limit (directory reads only).
 _PROBE_VALUES = {'limit': '1', 'offset': '1', 'sort': 'name', 'where': 'lines>1', 'match': 'x', 'detail': 'full',
                  'kind': 'function', 'depth': '1', 'tests': 'exclude', 'since': '2020-01-01',
-                 'until': '2030-01-01', 'against': 'HEAD'}
+                 'until': '2030-01-01', 'against': 'HEAD', 'exclude': 'tests'}
 SHARED_CONTROLS = {name: _PROBE_VALUES[name] for name in SHARED_CONTROL_NAMES if name != 'view'}
 
 # --- the recorded matrix -----------------------------------------------------------------------------------
@@ -226,6 +235,12 @@ EXEMPT = {
                      'to be empty (hotspots ?functions_only is a switch)'
        for noun in ('architecture', 'calls', 'contracts', 'deps', 'env', 'hotspots', 'imports', 'overview', 'pack',
                     'sqlite', 'surface', 'testability', 'trace')},
+    **{(noun, '26'): 'does not walk a tree: no walk to exclude from (--exclude and ?exclude= are refused by rule 3; JSON\'s '
+                     'bare ?exclude= is its generated legacy where term, rule 8a)'
+       for noun in ('claude', 'codex', 'env', 'git', 'json', 'sqlite', 'xlsx')},
+    **{(noun, '26'): 'a retired twin: its URI answers through its own scheme: row until the cut (rule 24\'s exemption); '
+                     'its --exclude is the walk scope every walking parser carries'
+       for noun in ('architecture', 'deps', 'hotspots', 'testability', 'trace')},
 }
 
 # Rules 1, 2, 5, 6, 10 and 12 are the shared seams' defaults (Scott 2026-11-16; BACK-2654 Step 3): their cells must
@@ -281,7 +296,7 @@ NOT_YET: dict = {}
 
 NOT_YET_BASELINE = {'1a': 0, '1b': 0, '1c': 0, '1d': 0, '2': 0, '3': 0, '3b': 0, '4': 0, '5': 0, '6': 0,
                     '8a': 0, '8b': 0, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 0, '14': 0, '21j': 0, '22': 0,
-                    '23': 0, '24': 0, '28': 0, '25': 0, '27': 0}
+                    '23': 0, '24': 0, '28': 0, '25': 0, '27': 0, '26': 0}
 
 
 # --- the fixture -------------------------------------------------------------------------------------------
@@ -951,7 +966,9 @@ def probe_unsupported_controls(noun):
                                   f'{run.brief()} (wants exit 0 with the param:{noun}.{control} note)'))
             else:
                 cases.append(Case(f'?{control}=', _teaches(run, noun, control), f'{run.brief()} ({wants})'))
-        if _sub(noun) is not None and f'--{control}' not in flags:
+        # --exclude is the walk control every walking noun's parser carries (rule 26), declared or not
+        walk_control = control == 'exclude' and bool(getattr(_adapter(noun).RESOURCE_SPEC, 'walks', False))
+        if _sub(noun) is not None and f'--{control}' not in flags and not walk_control:
             run = _run(*_sub(noun, f'--{control}', value), '--format', 'json')
             cases.append(Case(f'subcommand --{control}', _teaches(run, noun, control), f'{run.brief()} ({wants})'))
         flag = global_flags.get(control)
@@ -2260,6 +2277,155 @@ def probe_empty_match_term(noun):
     return cases
 
 
+# --- rule 26: walk exclusion (Scott 2026-11-22, BACK-2730, Option B) -------------------------------------------------
+
+# The retired twins answer through their own scheme: row until the cut (rule 24's exemption); they are not measured here.
+RETIRED_TWINS = ('architecture', 'deps', 'hotspots', 'testability', 'trace')
+# Two patterns the fixture project holds (its tests/ directory and a Markdown file), so an exclusion changes most answers.
+_WALK_A, _WALK_B = 'tests', 'guide.md'
+_FILE_TARGET = 'proj/app.py'
+
+
+def _walks(noun):
+    return bool(getattr(_adapter(noun).RESOURCE_SPEC, 'walks', False))
+
+
+def _open_where(noun):
+    spec = _spec_for(noun, 'where')
+    return spec is not None and spec.role == 'filter-expression' and bool(spec.open_fields)
+
+
+def _base_keywords(noun):
+    """The noun's base request (BASE) as ``api.query`` keywords: ``--callers serve`` is ``callers='serve'``."""
+    words, keywords = list(BASE[noun][0] or ()), {}
+    while words:
+        flag = words.pop(0)[2:].replace('-', '_')
+        keywords[flag] = words.pop(0) if words and not words[0].startswith('--') else True
+    return keywords
+
+
+def _needs_a_pattern(text, spelling):
+    return f'{spelling} needs a pattern' in text
+
+
+def _api_outcome(call):
+    """``api.query``'s answer with its notes left out (as ``_answer`` leaves them), or the raised class and message."""
+    try:
+        doc = call()
+    except Exception as exc:  # the raised class and its message are the measured outcome
+        return f'raised {type(exc).__name__}: {str(exc)[:160]}'
+    doc = json.loads(json.dumps(doc, default=str))
+    meta = doc.get('meta') if isinstance(doc, dict) else None
+    if isinstance(meta, dict) and isinstance(meta.get('warnings'), list):
+        meta['warnings'] = [w for w in meta['warnings'] if w.get('code') not in ('retired_spelling', 'unused_flag',
+                                                                                  'unused_query_param')]
+        if not meta['warnings'] and set(meta) == {'warnings'}:
+            del doc['meta']
+    return doc
+
+
+def _mcp_answer(request, noun):
+    from reveal.mcp_server import reveal_run
+    try:
+        shown = reveal_run([*request, '--format', 'json'])
+    except Exception as exc:  # a tool error is a measured outcome
+        return f'error: {exc}'
+    return _answer(Run(tuple(request), 0, shown, ''), noun)[1]
+
+
+def _empty_pattern_cases(noun, declared):
+    """An empty pattern is an invalid request on every transport (BACK-2736's shared rule, extended): the walk control's
+    flag on the subcommand and the keyword, and on a noun that declares the control its URI key and that URI on api."""
+    from reveal import api
+    from reveal.errors import RequestValidationError
+    cases = []
+    requests = [_sub(noun, '--exclude', ''), _sub(noun, '--exclude', _WALK_A, '--exclude', ' ')]
+    if declared:
+        requests.append([_uri(noun, 'exclude=')])
+    for request in requests:
+        run = _run(*request, '--format', 'json')
+        spelling = 'exclude' if '://' in request[0] else '--exclude'
+        cases.append(Case(f"empty pattern: {' '.join(request)!r}",
+                          run.rc == 2 and _needs_a_pattern(_error_message(run), spelling),
+                          f'{run.brief()} (wants exit 2: {spelling} needs a pattern)'))
+    target = TARGETS.get(noun, 'proj')
+    calls = [(f'api.query({noun!r}, {target!r}, exclude=\'\')', '--exclude',
+              lambda: api.query(noun, target, exclude='', **_base_keywords(noun)))]
+    if declared:
+        calls.append((f'api.query({_uri(noun, "exclude=")!r})', 'exclude', lambda: api.query(_uri(noun, 'exclude='))))
+    for label, spelling, call in calls:
+        outcome = _api_outcome(call)
+        cases.append(Case(label, isinstance(outcome, str) and 'RequestValidationError' in outcome
+                          and _needs_a_pattern(outcome, spelling),
+                          f'{label} {outcome!r:.200} (wants RequestValidationError: {spelling} needs a pattern)'))
+    return cases
+
+
+def _file_target_cases(noun, declared):
+    """A file target has nothing to prune: ``--exclude`` (and the declared URI key) answers as without it, with no
+    unused note and no refusal (D-2730-2 (a)), where the noun answers the file at all."""
+    cases = []
+    base_sub = [noun, _FILE_TARGET, *BASE[noun][0]]
+    base_uri = f'{noun}://{_FILE_TARGET}{BASE[noun][1]}'
+    forms = [('subcommand', base_sub, [*base_sub, '--exclude', _WALK_A])]
+    if declared:
+        joiner = '&' if '?' in base_uri else '?'
+        forms.append(('URI', [base_uri], [f'{base_uri}{joiner}exclude={_WALK_A}']))
+    for form, base, excluded in forms:
+        plain = _run(*base, '--format', 'json')
+        if plain.rc != 0:
+            continue  # the noun does not answer a file target
+        run = _run(*excluded, '--format', 'json')
+        cases.append(Case(f'file target {form} --exclude is satisfied quietly', _answer(run, noun) == _answer(plain, noun),
+                          f'{run.brief()} answers differently from {plain.brief()} (wants the same answer, no note)'))
+    return cases
+
+
+def probe_walk_exclusion(noun):
+    """Rule 26: none for a noun that does not walk, or a retired twin."""
+    from reveal import api
+    from reveal.utils.query_parser import exclude_param
+    if noun in RETIRED_TWINS or noun == ELEMENT or not _walks(noun):
+        return []
+    target = TARGETS.get(noun, 'proj')
+    declared = _spec_for(noun, 'exclude')
+    cases = []
+    one_flag, two_flags = _sub(noun, '--exclude', _WALK_A), _sub(noun, '--exclude', _WALK_A, '--exclude', _WALK_B)
+    flag_answer = _answer(_run(*one_flag, '--format', 'json'), noun)
+    cases.append(Case('--exclude answers', flag_answer[0] == 0, f'{one_flag} -> exit {flag_answer[0]} (wants exit 0)'))
+    keyword = _api_outcome(lambda: api.query(noun, target, exclude=_WALK_A, **_base_keywords(noun)))
+    cases.append(Case('the keyword exclude= answers as --exclude', keyword == flag_answer[1],
+                      f'api.query({noun!r}, {target!r}, exclude={_WALK_A!r}) -> {str(keyword)[:160]} differs from --exclude'))
+    cases.append(Case('MCP --exclude answers as the subcommand', _mcp_answer(one_flag, noun) == flag_answer[1],
+                      f'reveal_run({one_flag}) differs from the subcommand'))
+    if _open_where(noun):
+        # Option B: until the cut a bare ?exclude=V keeps its field-filter answer, noted param:NOUN.exclude (rule 8)
+        cases.append(Case('declares no exclude until the cut (the bare key is the legacy field filter)', declared is None,
+                          f'{noun} declares {declared!r}'))
+        bare, where = _run(_uri(noun, 'exclude=yes'), '--format', 'json'), _run(_uri(noun, 'where=exclude=yes'), '--format', 'json')
+        doc = json.loads(bare.out) if bare.out.strip().startswith('{') else None
+        cases.append(Case('?exclude=V answers as --where exclude=V, noted', _answer(bare, noun) == _answer(where, noun)
+                          and _noted(f'param:{noun}.exclude', _retired_fields(doc)),
+                          f'{bare.brief()} vs {where.brief()} (wants the where answer with the param:{noun}.exclude note)'))
+    else:
+        cases.append(Case('declares the shared exclude control', declared == exclude_param(),
+                          f'{noun} declares {declared!r} (wants query_parser.exclude_param(), declared once)'))
+        uri = _uri(noun, f'exclude={_WALK_A}')
+        uri_run = _run(uri, '--format', 'json')
+        cases.append(Case('?exclude=P answers as --exclude P', _answer(uri_run, noun) == flag_answer,
+                          f'{uri_run.brief()} answers differently from --exclude {_WALK_A}'))
+        both = _run(_uri(noun, f'exclude={_WALK_A}', f'exclude={_WALK_B}'), '--format', 'json')
+        cases.append(Case('?exclude=A&exclude=B combines as --exclude A --exclude B',
+                          _answer(both, noun) == _answer(_run(*two_flags, '--format', 'json'), noun),
+                          f'{both.brief()} answers differently from two --exclude flags'))
+        cases.append(Case('api.query(URI ?exclude=P) answers as the keyword', _api_outcome(lambda: api.query(uri)) == keyword,
+                          f'api.query({uri!r}) differs from api.query({noun!r}, {target!r}, exclude={_WALK_A!r})'))
+        cases.append(Case('MCP ?exclude=P answers as the URI', _mcp_answer([uri], noun) == _answer(uri_run, noun)[1],
+                          f'reveal_run([{uri!r}]) differs from the CLI URI'))
+    return cases + _empty_pattern_cases(noun, declared is not None and not _open_where(noun)) + \
+        _file_target_cases(noun, declared is not None and not _open_where(noun))
+
+
 PROBES = {'1a': probe_uri_and_flag, '1b': probe_alias_and_name, '1c': probe_repeated_spelling,
           '1d': probe_repeatable_aliases, '3': probe_unsupported_controls, '3b': probe_unknown_keys,
           '4': probe_verbose_is_detail_full, '8a': probe_bare_shared_keys,
@@ -2267,9 +2433,10 @@ PROBES = {'1a': probe_uri_and_flag, '1b': probe_alias_and_name, '1c': probe_repe
           '16': probe_legacy_operations, '17': probe_one_answer, '18': probe_repeated_global_flags,
           '20': probe_applicability, '14': probe_defaults, '21j': probe_invalid_requests_answer_json,
           '22': probe_config_failures, '23': probe_flags_after_uri, '24': probe_request_note,
-          '28': probe_help_one_spelling, '25': probe_time_window, '27': probe_empty_match_term}
+          '28': probe_help_one_spelling, '25': probe_time_window, '27': probe_empty_match_term,
+          '26': probe_walk_exclusion}
 # These call the MCP tools (the optional mcp extra) besides the CLI.
-MCP_PROBES = ('2', '5', '6', '24', '25', '27')
+MCP_PROBES = ('2', '5', '6', '24', '25', '27', '26')
 # These also run the retirement cases' sample file.
 SAMPLE_PROBES = {'2': probe_retirement_notes, '5': probe_legacy_declarations, '6': probe_alias_notes}
 
@@ -2718,7 +2885,7 @@ def test_no_declared_noun_warns_about_unknown_keys_itself(noun):
 def test_the_shared_control_names_are_declared_once_in_shared_code():
     """COMMAND_MODEL "Shared control names": one declared list in shared code (rule 7) that the binder reads (rule 8)."""
     assert SHARED_CONTROL_NAMES == ('limit', 'offset', 'sort', 'where', 'match', 'detail', 'kind', 'depth', 'tests',
-                                    'since', 'until', 'against', 'view')
+                                    'since', 'until', 'against', 'view', 'exclude')
     assert set(SHARED_CONTROLS) == set(SHARED_CONTROL_NAMES) - {'view'}  # the probes read the one list
 
 
@@ -3082,6 +3249,7 @@ ELEMENT_EXEMPT = {
     '25': 'element views declare no since/until: no time window to check',
     '27': 'element views declare no match or where: the path read\'s --grep and --name are the main parser\'s own '
           'operations (BACK-2627), not a declared noun\'s term',
+    '26': 'a path read of one element walks no tree: no walk to exclude from',
 }
 ELEMENT_NOT_YET = {
     '3': 'a shared control the main parser has no flag for (--offset, --where, --match, --detail, --tests, --against) '
