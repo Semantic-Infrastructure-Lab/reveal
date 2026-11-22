@@ -2,6 +2,7 @@
 from typing import Any, Dict
 import json
 from ...errors import RequestValidationError
+from ...utils.match_terms import empty_term_error
 from .resources import _parse_session_identifier, operation_type, NON_SESSION_NAMESPACES
 
 
@@ -20,8 +21,8 @@ def apply_view(params, resource):
         raise RequestValidationError(f'view={view} conflicts with resource view {previous}')
     _validate_view_selectors(params, view)
     base = 'session/' + name if resource.startswith('session/') else name
-    if view == 'search' and 'match' not in params:
-        params.setdefault('search', '')
+    if view == 'search' and 'match' not in params and 'search' not in params:  # a search with no term (BACK-2736)
+        raise empty_term_error('view=search', '--match TEXT')
     return base + '/' + target if target else base
 
 
@@ -212,7 +213,7 @@ def validate_selectors(params, resource):
         misplaced = SESSION_OPERATIONS.intersection(params)
         if misplaced:
             raise RequestValidationError('Session selectors require a session resource: ' + ', '.join(sorted(misplaced)))
-    # Empty root search historically selects the session listing.
-    searched = 'search' in params and not (resource.rstrip('/') in ('', '.') and params.get('search') == '')
-    if searched and operation_type(resource, params) not in SEARCH_POPULATIONS:
+    if namespace == 'search' and not resource.partition('/')[2].strip() and not params.get('search'):
+        raise empty_term_error('search', '--match TEXT')  # the address of a search with no term (BACK-2736)
+    if 'search' in params and operation_type(resource, params) not in SEARCH_POPULATIONS:
         raise RequestValidationError('search selector is unsupported on this resource')

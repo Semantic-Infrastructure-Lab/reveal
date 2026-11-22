@@ -72,15 +72,21 @@ def test_original_invalid_tail_is_not_hidden_by_override(claude):
         query('claude://session/my-session?tail=invalid', tail=1)
 
 
-@pytest.mark.parametrize('name,kind', [('tools', 'claude_tool_calls'), ('search', 'claude_search_results')])
-def test_empty_string_keeps_the_selected_legacy_reader(claude, name, kind):
-    original = query(f'claude://session/my-session?{name}=')
-    overridden = query(f'claude://session/my-session?{name}=absent', **{name: ''})
-    assert original['type'] == overridden['type'] == kind
-    if name == 'tools':
-        assert original['call_count'] == overridden['call_count'] == 0
-    else:
-        assert original['match_count'] == overridden['match_count'] > 0
+def test_empty_string_keeps_the_selected_legacy_reader(claude):
+    original = query('claude://session/my-session?tools=')
+    overridden = query('claude://session/my-session?tools=absent', tools='')
+    assert original['type'] == overridden['type'] == 'claude_tool_calls'
+    assert original['call_count'] == overridden['call_count'] == 0
+
+
+def test_an_empty_legacy_search_is_an_invalid_request_on_both_sources(claude):
+    """An empty search term (Scott 2026-11-22, BACK-2736): it matched every message of the session; now exit 2 from the
+    URI and from an override alike."""
+    from reveal.errors import RequestValidationError
+    with pytest.raises(RequestValidationError, match='search needs a term'):
+        query('claude://session/my-session?search=')
+    with pytest.raises(RequestValidationError, match='search needs a term'):
+        query('claude://session/my-session?search=absent', search='')
 
 
 def test_patches_retains_legacy_string_rule_and_typed_false(claude):

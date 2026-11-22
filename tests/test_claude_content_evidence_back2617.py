@@ -85,11 +85,12 @@ def test_missing_tracking_path_and_failed_output_are_distinct(transcript):
     assert failed.returncode == 3
 
 
-def test_legacy_empty_search_requires_no_content_reads(transcript):
+def test_legacy_empty_search_is_refused_before_any_content_read(transcript):
+    """``claude://search`` with no term is an empty search, an invalid request (Scott 2026-11-22, BACK-2736): refused
+    before the sessions are read, where it answered an empty search after scanning none."""
     result = _run_reveal_in(transcript.parent, 'claude://search', '--format', 'json')
-    assert result.returncode == 0
-    proof = json.loads(result.stdout)['meta']['session_content']
-    assert proof['candidate_sessions'] == proof['scanned_sessions'] == 0
+    assert result.returncode == 2 and 'search needs a term' in result.stderr
+    assert 'session_content' not in json.loads(result.stdout).get('meta', {})
 
 
 @pytest.mark.parametrize('uri', ['claude://sessions?search=auth',

@@ -76,7 +76,7 @@ REFUSED = [
     (('claude://?search=',), 'search'),  # listed every session ("Empty root search historically selects ...")
     (('claude://sessions/?filter=',), 'filter'),
     (('claude', 'sessions', '--where', ''), '--where'),
-    (('claude', 'sessions', '--where', 'session~='), '--where'),  # ?filter= is this term, so it refuses alike
+    (('claude', 'sessions', '--where', 'session~='), 'session~='),  # ?filter= is this term, so it refuses alike
     (('claude', 'history', '--match', ''), '--match'),
     ((f'{SESSION}?search=',), 'search'),
     ((SESSION, '--match', ''), '--match'),
@@ -95,7 +95,7 @@ REFUSED = [
     (('codex://sessions/?search=',), 'search'),
     (('codex://sessions/?filter=',), 'filter'),
     (('codex', 'sessions', '--where', ''), '--where'),
-    (('codex', 'sessions', '--where', 'session~='), '--where'),
+    (('codex', 'sessions', '--where', 'session~='), 'session~='),
     (('markdown', 'docs', '--match', ''), '--match'),
     (('markdown', 'docs', '--match', ' '), '--match'),
     (('markdown://docs?match=',), 'match'),

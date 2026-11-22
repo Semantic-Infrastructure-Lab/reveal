@@ -33,7 +33,8 @@ def test_view_matches_existing_resource_reader(transcript, workspace_home, view)
 def test_search_view_uses_existing_content_search_and_match(transcript):
     answer = query('claude://session/my-session', view='search', match='auth')
     assert answer == query('claude://session/my-session', search='auth')
-    assert query('claude://session/my-session', view='search')['type'] == 'claude_search_results'
+    with pytest.raises(RequestValidationError, match='view=search needs a term'):  # no term: BACK-2736
+        query('claude://session/my-session', view='search')
 
 
 @pytest.mark.parametrize('resource,kwargs', [

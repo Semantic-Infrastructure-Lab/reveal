@@ -6,6 +6,7 @@ from ...utils.query_binding import (bind_declared_params, legacy_presence_value 
                                     string_value as text)
 from ...utils.query_parser import CliBinding, LegacySpelling, ParamSpec, ParamValueError, where_param, nonnegative_display_limit, nonempty_scalar, legacy_check, legacy_slices
 from ...utils.time_window import time_window_param
+from ...utils.match_terms import TermValue, empty_term_message
 from .schema import _SCHEMA_QUERY_PARAMS
 from .resources import SESSION_VIEW_NAMES
 from .pagination import PAGE_SPECS
@@ -31,20 +32,21 @@ def snippet(value):
 
 
 def name_predicates(value):
+    """Claude's where terms: ``session~=TEXT`` on catalogs, ``tool==NAME`` on workflows. A term with no text is an empty
+    term (COMMAND_MODEL "Empty match term", BACK-2736): ``?filter=`` is ``session~=``, so both exit 2 alike."""
     terms = [value] if isinstance(value, str) else value
     if not isinstance(terms, (list, tuple)) or any(not isinstance(term, str) for term in terms):
         raise ParamValueError('where requires session~=TEXT expressions')
     for term in terms:
-        if not term:
-            continue
-        session = term.partition('~=')
-        tool = term.partition('==')
-        if session[0].strip() == 'session' and session[1]:
-            continue
-        if tool[0].strip() == 'tool' and tool[1] and tool[2]:
-            continue
-        raise ParamValueError('where supports session~=TEXT on catalogs or tool==NAME on workflows')
-    return [term for term in terms if term]
+        for field, operator, example in (('session', '~=', 'session~=TEXT'), ('tool', '==', 'tool==NAME')):
+            name, given, text = term.partition(operator)
+            if name.strip() == field and given:
+                if not text.strip():
+                    raise ParamValueError(empty_term_message(field + operator, '--where ' + example))
+                break
+        else:
+            raise ParamValueError('where supports session~=TEXT on catalogs or tool==NAME on workflows')
+    return list(terms)
 
 
 def _last_count(value):
@@ -102,6 +104,8 @@ def _spec(name, schema):
         convert = int
     elif name == 'snippet':
         convert = snippet
+    elif name in ('search', 'contains'):  # standalone words of a match: an empty one is an empty term (BACK-2736)
+        convert = TermValue(name, '--match TEXT')
     kind = 'integer' if name == 'tail' else schema['type']
     retired = {'summary', 'search', 'contains', 'tail', 'full', 'raw'}
     cli = None if name in retired else CliBinding(('--' + name,), action='store_true' if kind == 'flag' else None)
@@ -154,9 +158,11 @@ _SLICES['tail'] = replace(_SLICES['tail'], name='tail_rows',
 PARAM_SPECS = (*PARAM_SPECS, *_SLICES.values(),
     # The workflow, catalog and history readers' legacy filters (Scott 2026-11-19, BACK-2708 ruling 3; supported legacy
     # under D18 until the cut): tests/test_claude_workflow_selection_back2617.py compares the canonical controls with them.
-    ParamSpec('type', 'string', 'Legacy: workflow steps of this tool', None, str, flag_only='applied',
+    ParamSpec('type', 'string', 'Legacy: workflow steps of this tool', None,
+              TermValue('--type', '--where tool==TYPE'), flag_only='applied',
               cli=CliBinding(('--type',), metavar='TYPE'), answers=('claude_workflow',)),
-    ParamSpec('name', 'string', 'Legacy: rows whose text contains PATTERN', None, str, flag_only='applied',
+    ParamSpec('name', 'string', 'Legacy: rows whose text contains PATTERN', None,
+              TermValue('--name', '--match TEXT or --where session~=TEXT'), flag_only='applied',
               cli=CliBinding(('--name', '--search'), dest='name', metavar='PATTERN'),
               answers=('claude_workflow', 'claude_session_list', 'claude_history')),
     legacy_check())

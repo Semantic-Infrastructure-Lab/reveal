@@ -6,6 +6,7 @@ from ...utils.query_binding import (bind_declared_params, boolean_value, legacy_
 from ...utils.query_parser import (CliBinding, LegacySpelling, ParamSpec, ParamValueError, legacy_check,
                                    legacy_slices, nonnegative_display_limit, where_param, whole_number)
 from ...utils.time_window import time_window_param
+from ...utils.match_terms import TermValue, empty_term_message
 
 # The answers each control is read by (COMMAND_MODEL "Applicability", BACK-2656): the path or --view selects most
 # answers (qualification.selected_type); search and match select the content search. The selectors search and view
@@ -34,17 +35,19 @@ def _session_substring(value):
 
 
 def _session_terms(value):
-    """Codex's where terms: ``session~=TEXT`` only (the closed field ``session``). A term with no text selects no filter,
-    as an empty ``filter`` never did (the empty-term decision is parked for every noun)."""
+    """Codex's where terms: ``session~=TEXT`` only (the closed field ``session``). A term with no text is an empty term
+    (COMMAND_MODEL "Empty match term", BACK-2736): ``?filter=`` is ``session~=``, so both exit 2 alike."""
     terms = [value] if isinstance(value, str) else value
     if not isinstance(terms, (list, tuple)) or any(not isinstance(term, str) for term in terms):
         raise ParamValueError('where requires session~=TEXT expressions')
     for term in terms:
-        field, operator, _text = term.partition('~=')
-        if term and (field.strip() != 'session' or not operator):
+        field, operator, text = term.partition('~=')
+        if field.strip() != 'session' or not operator:
             raise ParamValueError('where supports session~=TEXT: a case-insensitive substring of the title or first '
                                   'user message')
-    return [term for term in terms if term.partition('~=')[2]]
+        if not text.strip():
+            raise ParamValueError(empty_term_message('session~=', "--where 'session~=TEXT'"))
+    return list(terms)
 
 
 def _terms(value):
@@ -76,8 +79,8 @@ def _view_word(name):
 # retiring spelling (COMMAND_MODEL "Retirement notes"). Each URI word keeps its param:codex row naming the canonical flag.
 SEARCH = ParamSpec('search', 'string',
                    'Deprecated compatibility control; full-text search across session JSONL user_message and '
-                   'agent_message payloads (its JSON query is the string given)', None, string_value,
-                   role='operation')
+                   'agent_message payloads (its JSON query is the string given)', None,
+                   TermValue('search', '--match TEXT'), role='operation')
 # match is read by the content search it selects, not beside a legacy search (that answer reads search's own term).
 MATCH = ParamSpec('match', 'array', 'Match text in session content (user and agent messages) on the catalog; repeat '
                   'to require every term in each session', None, _terms, uri_codec='percent', repeatable=True,
