@@ -102,6 +102,7 @@ def _declared_nouns():
 
 
 NOUNS = _declared_nouns()
+ELEMENT = 'element'  # the element views' pseudo-noun: its own cells at the end of this file (BACK-2627 S3b-5)
 RULES = ('1a', '1b', '1c', '1d', '2', '3', '3b', '4', '5', '6', '8a', '8b', '10', '12', '16', '17', '18', '20',
          '14', '21j', '22', '23', '24')
 
@@ -287,6 +288,8 @@ def workspace(tmp_path, monkeypatch):
 # --- requests ----------------------------------------------------------------------------------------------
 
 def _adapter(noun):
+    if noun == ELEMENT:  # the element pseudo-noun's declarations (BACK-2627 S3b-5): no adapter, the file route's specs
+        return _ElementNoun
     return declared_adapter_class(noun) if noun in COMMANDS else get_adapter_class(noun)
 
 
@@ -345,7 +348,11 @@ def _uri(noun, *pairs, base=True, control=None):
 
 
 def _sub(noun, *extra, base=True, control=None):
-    """The subcommand argv, or None when the noun has no subcommand."""
+    """The subcommand argv, or None when the noun has no subcommand. The element pseudo-noun's is its path read,
+    ``FILE ELEMENT [view] *extra`` (BACK-2627 S3b-5)."""
+    if noun == ELEMENT:
+        element, view = ELEMENT_REQUESTS.get(control, ELEMENT_REQUESTS[None])[:2]
+        return [ELEMENT_FILE, element, *(view if base else ()), *extra]
     cli = BASE[noun][0] if BASE[noun][0] is None else CONTROL_BASES.get((noun, control), BASE[noun])[0]
     target = CONTROL_TARGETS.get((noun, control), TARGETS.get(noun, 'proj'))
     return None if cli is None else [noun, target, *(cli if base else ()), *extra]
@@ -2647,3 +2654,457 @@ def test_the_ignored_file_fixture_changes_walking_answers(workspace):
                != _answer(_run(_uri(noun), '--format', 'json'), noun)]
     assert _run('proj', '--no-gitignore').out != _run('proj').out
     assert {'ast', 'metrics', 'overview'} <= set(changed), changed
+
+
+# --- the element pseudo-noun (BACK-2627 S3b-5) ----------------------------------------------------------------
+# Element views are a declared answer of the file route, not an adapter (X1): ``reveal FILE ELEMENT --view V``, with
+# the controls of nav_params.ELEMENT_VIEW_SPECS. A path read has no URI, query string, scheme or api.query form (X12),
+# so the URI-shaped probes above cannot run on it; the cells below are generated from the same declarations on the path
+# read argv (``_sub(ELEMENT, ...)``) and reuse the shared matchers (_conflict_case, _equal_case, _teaches, _answer).
+
+from reveal.nav_params import ELEMENT_RESOURCE, ELEMENT_VIEW_SPECS, _PATH_READ_CONTROLS  # noqa: E402
+
+ELEMENT_FILE = 'proj/sample.py'  # the python conformance fixture, copied (element_workspace)
+
+
+class _ElementNoun:
+    """The element pseudo-noun as the shared helpers read a noun: its declarations, its resource, no URI flags."""
+    PARAM_SPECS = ELEMENT_VIEW_SPECS
+    RESOURCE_SPEC = ELEMENT_RESOURCE
+    CLI_QUERY_FLAGS: dict = {}
+    HONORS_RESULT_CONTROL = False
+
+
+# control -> (element, the view request that reads it, value a, a different value b); None is the base request,
+# ``FILE process_order --view boundary``. A switch has no values; an operation control is its own request.
+ELEMENT_REQUESTS = {
+    None: ('process_order', ['--view', 'boundary'], None, None),
+    'view': ('process_order', [], 'boundary', 'exits'),
+    'kind': ('process_order', ['--view', 'flow'], 'if', 'try'),
+    'nesting-depth': ('process_order', ['--view', 'flow'], '2', '4'),
+    'in-loops': ('Batch.run', ['--view', 'effects'], None, None),
+    'state': ('Batch.run', ['--view', 'effects'], None, None),
+    'transitive': ('process_order', ['--view', 'boundary'], None, None),
+    'depth': ('process_order', ['--view', 'boundary', '--transitive'], '2', '4'),
+    'range': ('process_order', ['--view', 'boundary'], '13-14', '15-16'),
+    'cross-calls': ('process_order', ['--varflow', 'order'], None, None),
+    'inputs': ('process_order', [], None, None),
+    'outputs': ('process_order', [], None, None),
+    'callsites': ('process_order', [], '13-14', '15-16'),
+    'varflow': ('process_order', [], 'order', 'result'),
+    'keys': ('process_order', [], 'order', 'result'),
+    'narrow': ('process_order', [], 'order', 'result'),
+    'scope': (':14', [], None, None),
+    'around': (':14', [], '2', '3'),
+    'head': ('process_order', ['--view', 'boundary'], '1', '2'),
+    'tail': ('process_order', ['--view', 'boundary'], '1', '2'),
+}
+_PATH_READ_NAMES = {spec.name for spec in _PATH_READ_CONTROLS}
+
+# The recorded element matrix: rule -> (state, reason). A conforming cell has no reason; an exempt cell's probe is not
+# run (it has no form to run); a not_yet cell must still fail, and the list only shrinks.
+_NO_URI = 'a path read has no URI and no query string (X12): '
+ELEMENT_EXEMPT = {
+    '1a': _NO_URI + 'no URI key to give beside a global flag',
+    '3b': _NO_URI + 'no query key to be unknown; an unknown flag is column 3\'s and 21j\'s',
+    '8a': _NO_URI + 'no bare key, and element views declare no where control',
+    '8b': 'element views declare no where control: there are no field filters',
+    '23': _NO_URI + 'no URI to put flags after; every element option is already a path-read flag',
+    '24': _NO_URI + 'no query key or analysis-only scheme to say the request note',
+}
+ELEMENT_NOT_YET = {
+    '3': 'a shared control the main parser has no flag for (--offset, --where, --match, --detail, --tests, --against) '
+         'and an unknown flag exit 2 with argparse\'s usage error before the element request binds, not the shared '
+         'unsupported-controls message (--limit and --since do teach it): the main parser\'s unrecognized-argument path '
+         'is the shared owner',
+    '4': '--verbose is a global option D3 accepts on an element request (the global options parser\'s dests), and it '
+         'answers exit 0 with no note: element views have no detail control, so the rule wants exit 2 naming detail',
+    '21j': 'an invalid path read in --format json (unknown flag, a value outside --view\'s choices, a missing value, an '
+           'extra argument, a malformed --output) exits 2 with stdout empty, not the invalid-request JSON document',
+    '22': 'REVEAL_CONFIG naming no file exits 2 on the answers that read configuration (--transitive walks), but the '
+          'other element views read none and answer exit 0, as every plain path read does; the row says every noun',
+}
+ELEMENT_NOT_YET_BASELINE = 4
+
+
+@pytest.fixture
+def element_workspace(tmp_path, monkeypatch):
+    """A private copy of the python conformance fixture: the transitive views walk the project (BACK-2159)."""
+    import shutil
+    from pathlib import Path
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / 'proj').mkdir()
+    shutil.copy(Path(__file__).parent / 'fixtures' / 'conformance' / 'python' / 'sample.py', tmp_path / ELEMENT_FILE)
+    return tmp_path
+
+
+def _element_specs():
+    """The element controls a probe may give: the declarations minus the path read's own selectors (grep, name, ...,
+    another answer of the path read) and the rebind-only legacy-depth (no spelling of its own)."""
+    return [spec for spec in _specs(ELEMENT) if spec.name not in _PATH_READ_NAMES and spec.cli is not None]
+
+
+def _flag_of(spec, value=True):
+    """*spec* = *value* as flags: a switch is its bare flag, a value control its flag and value."""
+    if spec.type == 'boolean':
+        return [spec.cli.flags[0]] if value in (True, 'true') else []
+    return [spec.cli.flags[0], str(value)]
+
+
+def _legacy_argv(entry, raw=None):
+    if raw is True:  # an old flag that is one more option string of a switch (--deps of --inputs)
+        return [entry.flag]
+    if getattr(entry, 'flag_optional', False):
+        return [f'{entry.flag}={raw}']
+    return [entry.flag] if entry.flag_value is not None else [entry.flag, raw]
+
+
+def _implied_argv(entry, raw=None):
+    """The canonical flags a legacy word's ``sets`` stand for (``--fanout``: ``--in-loops``)."""
+    return [flag for control, value in _implied(entry, raw) for flag in _flag_of(_spec_for(ELEMENT, control), value)]
+
+
+def _flagged_entries(spec):
+    return [entry for entry in _named_entries(spec) if getattr(entry, 'flag', None)]
+
+
+def _entry_raw(spec, entry):
+    """A raw legacy value and the canonical value it translates to (a repeatable control's one-item list as its item)."""
+    if spec.type == 'boolean':
+        return True, True
+    raw = 'loop' if getattr(entry, 'flag_optional', False) else (
+        entry.flag_value if entry.flag_value is not None else ELEMENT_REQUESTS[spec.name][2])
+    value = entry.translate(raw)[spec.name]
+    return raw, (value[0] if isinstance(value, (list, tuple)) and len(value) == 1 else value)
+
+
+def _ej(*argv):
+    return _run(*argv, '--format', 'json')
+
+
+def element_alias_and_name():
+    """1b: an old flag beside its control: a different value exits 2 naming both, an equal one answers as the name."""
+    cases = []
+    for spec in _element_specs():
+        if _repeatable(spec):
+            continue
+        for entry in _flagged_entries(spec):
+            raw, value = _entry_raw(spec, entry)
+            canonical, legacy = _flag_of(spec, value), _legacy_argv(entry, raw)
+            label = f'{spec.cli.flags[0]} vs {entry.flag}'
+            cases.append(_equal_case(label, ELEMENT, _ej(*_sub(ELEMENT, *canonical, *legacy, base=False, control=spec.name)),
+                                     _ej(*_sub(ELEMENT, *canonical, *_implied_argv(entry, raw), base=False,
+                                               control=spec.name))))
+            others = [str(c) for c in spec.choices if str(c) != value] or (
+                [ELEMENT_REQUESTS[spec.name][3]] if spec.type != 'boolean' else [])
+            if others:
+                run = _ej(*_sub(ELEMENT, *_flag_of(spec, others[0]), *legacy, base=False, control=spec.name))
+                cases.append(_conflict_case(label, run, (spec.cli.flags[0], entry.flag)))
+    return cases
+
+
+def element_repeated_spelling():
+    """1c: a scalar control's flag twice: different values exit 2 naming both, equal values answer once."""
+    cases = []
+    for spec in _element_specs():
+        if _repeatable(spec) or spec.name not in ELEMENT_REQUESTS:
+            continue
+        _element, _view, a, b = ELEMENT_REQUESTS[spec.name]
+        flag = spec.cli.flags[0]
+        sub = partial(_sub, ELEMENT, control=spec.name)
+        if a is None:  # a switch: given twice it is one
+            cases.append(_equal_case(f'{flag} twice', ELEMENT, _ej(*sub(flag, flag)), _ej(*sub(flag))))
+            continue
+        cases.append(_conflict_case(f'{flag} twice', _ej(*sub(flag, a, flag, b)), (flag, a, b)))
+        cases.append(_equal_case(f'{flag} twice', ELEMENT, _ej(*sub(flag, a, flag, a)), _ej(*sub(flag, a))))
+    return cases
+
+
+def element_repeatable_aliases():
+    """1d: the repeatable --kind accumulates its old flags' values: ``--kind try --ifmap`` is ``--kind try --kind if``."""
+    cases = []
+    for spec in _element_specs():
+        if not _repeatable(spec):
+            continue
+        a, other = ELEMENT_REQUESTS[spec.name][2:]
+        for entry in _flagged_entries(spec):
+            raw, value = _entry_raw(spec, entry)
+            first = other if value == a else a
+            mixed = _ej(*_sub(ELEMENT, spec.cli.flags[0], first, *_legacy_argv(entry, raw), control=spec.name))
+            same = _ej(*_sub(ELEMENT, spec.cli.flags[0], first, spec.cli.flags[0], value, control=spec.name))
+            cases.append(Case(f'{spec.cli.flags[0]} with {entry.flag} accumulates',
+                              same.rc == 0 and _answer(mixed, ELEMENT) == _answer(same, ELEMENT),
+                              f'{mixed.brief()} answers differently from {same.brief()}'))
+    return cases
+
+
+def _element_rows():
+    """Every legacy entry with an old flag -> its RETIREMENTS key; the contextual code-element --outline row too."""
+    rows = {f'flag:{entry.flag}': (spec, entry) for spec in _element_specs() for entry in _flagged_entries(spec)}
+    outline = next(entry for entry in _named_entries(_spec_for(ELEMENT, 'view')) if entry.name == 'outline')
+    return {**rows, 'target:nav.outline': (_spec_for(ELEMENT, 'view'), outline)}
+
+
+def _row_argv(spec, entry):
+    if entry.name == 'outline':
+        return _sub(ELEMENT, '--outline', base=False, control='view')
+    raw, _value = _entry_raw(spec, entry)
+    request = 'view' if spec.name in ('view', 'kind') else spec.name
+    return _sub(ELEMENT, *_legacy_argv(entry, raw), base=False, control=request)
+
+
+def element_retirement_notes(_sample=None):
+    """2: each old element spelling answers with its one note on CLI text, CLI JSON and MCP reveal_run (the api.query
+    column is exempt, X12: a path read has no api.query form)."""
+    from reveal.mcp_server import reveal_run
+    cases = []
+    for key, (spec, entry) in sorted(_element_rows().items()):
+        text_note = f'note: {RETIREMENTS[key].text}'
+        argv = _row_argv(spec, entry)
+        text = _run(*argv)
+        cases.append(Case(f'{key} CLI text', text.rc == 0 and text.err.count(text_note) == 1,
+                          f'{text.brief()} (wants one note line)'))
+        as_json = _ej(*argv)
+        doc = json.loads(as_json.out) if as_json.out.strip().startswith('{') else None
+        cases.append(Case(f'{key} CLI JSON', key in _retired_fields(doc) and text_note not in as_json.err,
+                          f'{as_json.brief()}: retired_spelling fields {_retired_fields(doc)}'))
+        try:
+            out = reveal_run([*argv, '--format', 'json'])
+            fields = _retired_fields(json.loads(out))
+            evidence = f'reveal_run({argv!r}): retired_spelling fields {fields}'
+        except Exception as exc:  # a ToolError or a non-JSON answer is evidence, never a pass
+            fields, evidence = [], f'reveal_run({argv!r}) raised {type(exc).__name__}: {str(exc)[:120]}'
+        cases.append(Case(f'{key} MCP reveal_run', key in fields, evidence))
+    return cases
+
+
+def element_unsupported_controls():
+    """3: a shared control element views do not declare, and an unknown flag, exit 2 naming the supported controls."""
+    declared = {spec.name for spec in _specs(ELEMENT)}
+    wants = 'wants exit 2 naming the control and the supported controls'
+    cases = []
+    for control, value in SHARED_CONTROLS.items():
+        if control in declared:
+            continue
+        run = _ej(*_sub(ELEMENT, f'--{control}', value))
+        cases.append(Case(f'--{control}', _teaches(run, ELEMENT, control), f'{run.brief()} ({wants})'))
+    run = _ej(*_sub(ELEMENT, '--zz-unknown', '1'))
+    cases.append(Case('unknown flag --zz-unknown', _teaches(run, ELEMENT, '--zz-unknown'), f'{run.brief()} ({wants})'))
+    return cases
+
+
+def element_verbose_is_detail():
+    """4: element views have no detail control, so the global --verbose exits 2 naming detail."""
+    run = _ej(*_sub(ELEMENT, '--verbose'))
+    return [Case('--verbose (no detail control)', run.rc == 2 and run.says('detail'),
+                 f'{run.brief()} (wants exit 2 naming detail)')]
+
+
+def element_legacy_declarations(_sample=None):
+    """5: each note-stage row that spells an element flag is declared once, as a legacy entry of the control it
+    replaces, and every such entry has its row."""
+    owners = {}
+    for spec in _specs(ELEMENT):
+        for entry in _named_entries(spec):
+            key = f'flag:{entry.flag}' if getattr(entry, 'flag', None) else 'target:nav.outline'
+            owners.setdefault(key, []).append(spec.name)
+    cases = [Case(f'{key} declared once', len(names) == 1 and key in RETIREMENTS and RETIREMENTS[key].stage == 'note',
+                  f'{key}: declared on {names}, row {RETIREMENTS.get(key)}') for key, names in sorted(owners.items())]
+    flags = {entry.flag for spec in _specs(ELEMENT) for entry in _flagged_entries(spec)}
+    parser = create_argument_parser('0', full_help=True)
+    group = next(g for g in parser._action_groups if (g.title or '').startswith('Code analysis'))
+    for action in group._group_actions:  # every row of a Code analysis flag is declared (no hand-noted old flag)
+        for option in action.option_strings:
+            if f'flag:{option}' in RETIREMENTS and option != '--outline':
+                cases.append(Case(f'flag:{option} has its entry', option in flags, f'{option} has a row and no entry'))
+    return cases
+
+
+def element_alias_notes(_sample=None):
+    """6: every different word carries a row, and no row's replacement names a spelling that itself retires."""
+    retiring = {key.partition(':')[2] for key in RETIREMENTS if key.startswith('flag:--')}
+    cases = []
+    for key in sorted(_element_rows()):
+        replacement = RETIREMENTS[key].replacement if key in RETIREMENTS else ''
+        named = sorted(flag for flag in retiring if re.search(rf'(?<![\w-]){re.escape(flag)}(?![\w-])', replacement))
+        cases.append(Case(f'{key} row names no retiring spelling', key in RETIREMENTS and not named,
+                          f'{key}: replacement {replacement!r} names {named}'))
+    return cases
+
+
+def element_spellings_declared():
+    """10: aliases are spelling variants only, a control's flags spell its name, and each old flag is generated."""
+    parser = create_argument_parser('0', full_help=True)
+    cases = []
+    for spec in _element_specs():
+        variants = all(alias.replace('_', '-') == spec.name.replace('_', '-') for alias in spec.aliases)
+        cases.append(Case(f'{spec.name} aliases are spelling variants', variants, f'aliases {spec.aliases}'))
+        spelled = all(flag[2:] in (spec.name, *spec.aliases) for flag in spec.cli.flags)
+        cases.append(Case(f'{spec.name} flags spell its name', spelled, f'flags {spec.cli.flags}'))
+        cases.append(Case(f'{spec.name} has no alias_normalize', getattr(spec, 'alias_normalize', None) is None, ''))
+        for entry in _flagged_entries(spec):
+            action = parser._option_string_actions.get(entry.flag)
+            # its own argument (a word with a value or a translation), or one more option string of the control's
+            generated = action is not None and action.dest in (entry.name, spec.name.replace('-', '_'))
+            cases.append(Case(f'{entry.flag} generated', generated,
+                              f'{entry.flag}: {action!r}'))
+    return cases
+
+
+def element_repeatability_declared():
+    """12: the CLI appends exactly when a control is repeatable; view, depth and the slices are scalar settings."""
+    actions = create_argument_parser('0', full_help=True)._option_string_actions
+    cases = []
+    for spec in _element_specs():
+        appends = isinstance(actions[spec.cli.flags[0]], argparse._AppendAction)
+        cases.append(Case(f'{spec.cli.flags[0]} appends iff repeatable', appends == bool(_repeatable(spec)),
+                          f'{spec.name}: repeatable={_repeatable(spec)}, append action={appends}'))
+    scalar = {spec.name: _repeatable(spec) for spec in _element_specs() if spec.name in ('view', 'depth', 'range')}
+    cases.append(Case('view, depth, range are scalar', scalar == dict.fromkeys(('view', 'depth', 'range'), False),
+                      f'{scalar}'))
+    return cases
+
+
+def element_defaults():
+    """14: REVEAL_FORMAT is a default: the request answers as --format json, and an explicit --format text overrides."""
+    base = _sub(ELEMENT)
+    with _env(REVEAL_FORMAT='json'):
+        defaulted, overridden = _run(*base), _run(*base, '--format', 'text')
+    explicit, plain = _ej(*base), _run(*base)
+    return [Case('REVEAL_FORMAT=json answers as --format json', _answer(defaulted, ELEMENT) == _answer(explicit, ELEMENT),
+                 f'{defaulted.brief()} vs {explicit.brief()}'),
+            Case('--format text overrides REVEAL_FORMAT', (overridden.rc, overridden.out) == (plain.rc, plain.out),
+                 f'{overridden.brief()} vs {plain.brief()}')]
+
+
+def element_legacy_operations():
+    """16: each old word translates only when it answers exactly as its replacement (JSON notes aside, and the text);
+    the answers kept as their own legacy parameters (--inputs, --outputs, --callsites, --varflow, --keys, --narrow)
+    select the answer (role='operation')."""
+    cases = []
+    for key, (spec, entry) in sorted(_element_rows().items()):
+        legacy = _row_argv(spec, entry)
+        if entry.name == 'outline':
+            canonical = _sub(ELEMENT, '--view', 'flow', base=False, control='view')
+        else:
+            raw, value = _entry_raw(spec, entry)
+            request = 'view' if spec.name in ('view', 'kind') else spec.name
+            implied = [] if spec.name == 'kind' and value is None else _implied_argv(entry, raw)
+            own = [] if (spec.name == 'kind' and raw == ()) else _flag_of(spec, value)
+            canonical = _sub(ELEMENT, *implied, *own, base=False, control=request)
+        same_json = _answer(_ej(*legacy), ELEMENT) == _answer(_ej(*canonical), ELEMENT)
+        left, right = _run(*legacy), _run(*canonical)
+        cases.append(Case(f'{key} answers as {" ".join(canonical[2:])}', same_json and (left.rc, left.out) == (right.rc, right.out),
+                          f'{left.brief()} vs {right.brief()}'))
+    for name in ('inputs', 'outputs', 'callsites', 'varflow', 'keys', 'narrow'):
+        spec = _spec_for(ELEMENT, name)
+        cases.append(Case(f'{name} is a legacy operation', spec.role == 'operation', f'{name} role {spec.role!r}'))
+    return cases
+
+
+def _element_selection(spec):
+    value = ELEMENT_REQUESTS.get(spec.name, (None, None, 'x'))[2]
+    return _flag_of(spec, True if value is None else value)
+
+
+def element_one_answer():
+    """17: two selections (role='operation') exit 2 naming both; view is such a selection."""
+    view = _spec_for(ELEMENT, 'view')
+    cases = [Case('view selects the answer', view.role == 'operation', f'view role {view.role!r}')]
+    operations = [spec for spec in _specs(ELEMENT) if spec.role == 'operation']
+    for index, first in enumerate(operations):
+        for second in operations[index + 1:]:
+            if first.name in _PATH_READ_NAMES and second.name in _PATH_READ_NAMES:
+                continue  # two path-read selectors are the path read's own rule, not the element answer's
+            run = _ej(ELEMENT_FILE, 'process_order', *_element_selection(first), *_element_selection(second))
+            cases.append(Case(f'{first.name} with {second.name}', run.rc == 2 and run.says(first.name, second.name),
+                              f'{run.brief()} (wants exit 2 naming both selections)'))
+    return cases
+
+
+def element_repeated_global_flags():
+    """18: a scalar global flag twice: different values exit 2 naming both, equal values answer once."""
+    cases = []
+    for flag, (a, b) in GLOBAL_REPEATS.items():
+        run = _run(*_sub(ELEMENT), f'{flag}={a}', f'{flag}={b}')
+        cases.append(Case(f'{flag} twice', run.rc == 2 and run.says(flag, a, b), f'{run.brief()} (wants exit 2)'))
+        cases.append(_equal_case(f'{flag} twice', ELEMENT, _run(*_sub(ELEMENT), f'{flag}={a}', f'{flag}={a}'),
+                                 _run(*_sub(ELEMENT), f'{flag}={a}')))
+    return cases
+
+
+def element_applicability():
+    """20: every element answer given each modifier it does not read exits 2 naming it, never answers with it unread."""
+    answers = [(f'view={view}', ['--view', view], {'view', f'view={view}'}) for view in _spec_for(ELEMENT, 'view').choices]
+    answers += [(spec.name, _element_selection(spec), {spec.name}) for spec in _element_specs()
+                if spec.role == 'operation' and spec.name not in ('scope', 'around', 'view')]
+    modifiers = [spec for spec in _specs(ELEMENT) if spec.role != 'operation' and spec.cli is not None]
+    cases = []
+    for label, selection, facets in answers:
+        for spec in modifiers:
+            if any(answer in facets for answer in spec.answers):
+                continue  # this answer reads it
+            run = _ej(ELEMENT_FILE, 'process_order', *selection, *_element_selection(spec))
+            if run.rc == 2 and 'is not read by this answer' in run.err:
+                cases.append(Case(f'{label} {spec.cli.flags[0]} refused', True, run.brief()))
+            elif run.rc == 0:
+                cases.append(Case(f'{label} {spec.cli.flags[0]} unread', False, f'{run.brief()}: answered with it unread'))
+    return cases
+
+
+def element_invalid_requests_answer_json():
+    """21j: an invalid path read in --format json answers with the invalid-request JSON document on stdout, exit 2."""
+    requests = {'unknown flag': ['--zz-unknown'], 'value outside --view\'s choices': ['--view', 'nosuch'],
+                'missing value': ['--view', 'boundary', '--varflow'], 'extra argument': ['--view', 'boundary', 'extra']}
+    cases = []
+    for label, extra in requests.items():
+        run = _run(ELEMENT_FILE, 'process_order', *extra, '--format', 'json')
+        cases.append(Case(label, bool(_invalid_document(run)), f'{run.brief()}; stdout {run.out[:80]!r}'))
+    run = _run(*_sub(ELEMENT), '--output', 'json=')
+    cases.append(Case('malformed --output', bool(_invalid_document(run)), f'{run.brief()}; stdout {run.out[:80]!r}'))
+    return cases
+
+
+def element_config_failures():
+    """22: REVEAL_CONFIG naming no file exits 2 naming it, on every element answer."""
+    missing = os.path.join('no-such-dir', 'reveal.yaml')
+    cases = []
+    for label, argv in (('view=boundary', _sub(ELEMENT)), ('view=boundary --transitive', _sub(ELEMENT, control='depth')),
+                        ('view=flow', _sub(ELEMENT, control='kind'))):
+        with _env(REVEAL_CONFIG=missing):
+            run = _ej(*argv)
+        cases.append(Case(label, run.rc == 2 and run.says('no-such-dir'), f'{run.brief()} (wants exit 2 naming it)'))
+    return cases
+
+
+ELEMENT_PROBES = {'1b': element_alias_and_name, '1c': element_repeated_spelling, '1d': element_repeatable_aliases,
+                  '2': element_retirement_notes, '3': element_unsupported_controls, '4': element_verbose_is_detail,
+                  '5': element_legacy_declarations, '6': element_alias_notes, '10': element_spellings_declared,
+                  '12': element_repeatability_declared, '14': element_defaults, '16': element_legacy_operations,
+                  '17': element_one_answer, '18': element_repeated_global_flags, '20': element_applicability,
+                  '21j': element_invalid_requests_answer_json, '22': element_config_failures}
+
+
+def test_the_element_cells_cover_every_rule():
+    assert set(ELEMENT_PROBES) | set(ELEMENT_EXEMPT) == set(RULES) and not set(ELEMENT_PROBES) & set(ELEMENT_EXEMPT)
+    assert set(ELEMENT_NOT_YET) <= set(ELEMENT_PROBES) and len(ELEMENT_NOT_YET) == ELEMENT_NOT_YET_BASELINE
+    assert all(reason.strip() for reason in [*ELEMENT_EXEMPT.values(), *ELEMENT_NOT_YET.values()])
+
+
+@pytest.mark.parametrize('rule', sorted(ELEMENT_PROBES))
+def test_element_cell(element_workspace, rule):
+    if rule == '2':
+        pytest.importorskip('mcp')
+    cases = ELEMENT_PROBES[rule]()
+    state = 'exempt' if not cases else 'conforms' if all(case.ok for case in cases) else 'not_yet'
+    failing = [f'{case.label}: {case.evidence}' for case in cases if not case.ok]
+    report = os.environ.get('REVEAL_CONFORMANCE_REPORT')
+    if report:
+        with open(report, 'a', encoding='utf-8') as sink:
+            sink.write(json.dumps({'noun': ELEMENT, 'rule': rule, 'state': state, 'cases': len(cases),
+                                   'failing': failing}) + '\n')
+    if rule in ELEMENT_NOT_YET:
+        assert state == 'not_yet', (f'element x {rule} now conforms: remove it from ELEMENT_NOT_YET and lower '
+                                    'ELEMENT_NOT_YET_BASELINE (ratchets only fall)')
+    else:
+        assert state == 'conforms', f'element x {rule} does not conform:\n  ' + '\n  '.join(failing or ['no cases'])
