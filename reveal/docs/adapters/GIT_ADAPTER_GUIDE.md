@@ -756,8 +756,8 @@ The fields a `where` expression (or a bare `FIELD OP VALUE` key) filters commits
 | `hash` | string | `=`, `~=` | Filter by commit short hash: `=` compares the whole 7-character hash; a prefix is `hash~=^PREFIX` |
 | `date` | ISO date | `=`, `!=`, `>`, `<`, `>=`, `<=`, `=a..b` | Filter by commit date, e.g. `date>=2026-01-01`. A year, month or day is the whole period: `date=2026-02-06` is any commit that day, `date>2026-01` excludes January, `date>=P`/`date<=P` include it. A timestamp may use a space or `T` (`2026-01-31T12:00:00`), and may end in a zone (`Z`, `+02:00`) |
 | `timestamp` | integer | `=`, `!=`, `>`, `<`, `>=`, `<=` | Filter by commit time in epoch seconds, e.g. `timestamp>1767225600` |
-| `since` | ISO date | `=` only | Ergonomic alias for `date>=` (`since=2026-01` includes January) |
-| `until` | ISO date | `=` only | Ergonomic alias for `date<=` (`until=2026-01` includes January) |
+| `since` | date | `=` only | Ergonomic alias for `date>=` (`since=2026-01` includes January); `today`, a period or a time, anything else exits 2 |
+| `until` | date | `=` only | Ergonomic alias for `date<=` (`until=2026-01` includes January); `today`, a period or a time, anything else exits 2 |
 
 **Dates and zones.** A commit's `date` is its commit time written in the local time of the machine
 running reveal, followed by that zone's UTC offset (`2026-10-27 15:46:04 -0700`, BACK-2643). A bound

@@ -145,7 +145,7 @@ reveal 'codex://memories/pipeline'
 | `codex://sessions/` | Same as bare `codex://` |
 | `codex://sessions/ --where 'session~=<term>'` | Filter by title or first message (SQLite metadata, fast, no JSONL scan); repeated terms AND |
 | `codex://sessions/ --match <term>` | Full-text JSONL search across all sessions; repeated terms AND per session |
-| `codex://sessions/ --match <term> --since <date>` | Full-text search scoped to sessions updated on/after `<date>` (ISO 8601 or `today`) |
+| `codex://sessions/ --match <term> --since <date>` | Full-text search scoped to sessions updated on/after `<date>` (`YYYY[-MM[-DD]]`, a time, or `today`; any other value exits 2) |
 | `codex://sessions/ --match <term> --since <date> --until <date>` | Full-text search scoped to a date range |
 | `codex://sessions/ --match <term> --matches <n>` | Snippets kept per session (default 3, `0` keeps all); a cut is reported as a truncation naming `--matches N` |
 | `codex://sessions/ --where 'session~=<term>' --since <date> --until <date>` | Metadata filter, same date scoping |

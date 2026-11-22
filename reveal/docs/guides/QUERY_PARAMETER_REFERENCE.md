@@ -179,7 +179,8 @@ reveal 'imports://src?circular&detail=full'   # Cycle paths
     with no zone is read in that local time too. A bound with a zone (`Z`, `+02:00`,
     `-0700`) is converted to that local time first, so it names the same instant everywhere.
     Write `+` as itself; git:// does not percent-decode query values.
-  - `since=D` is `date>=D` and `until=D` is `date<=D`
+  - `since=D` is `date>=D` and `until=D` is `date<=D`; `D` is `today` (the local date), a period or a time,
+    the one grammar of `--since`/`--until` on every noun, and any other value exits 2 naming the forms
   - **Examples**:
     ```bash
     reveal git . --where 'date>2026-02-01'                       # commits after 1 Feb

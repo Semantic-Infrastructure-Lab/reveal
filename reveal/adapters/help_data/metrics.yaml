@@ -80,7 +80,7 @@ filters:
   code-only: 'Leave data/config files out of the walk (--code-only; code_only is its alias)'
   churn: 'on|off: fold commit-touch counts into the hotspot score (--churn off)'
   merges: 'on|off: count merge commits in the churn tally (--merges off)'
-  since: 'Bound the churn walk to commits on/after an ISO date'
+  since: 'Bound the churn walk to commits on/after a date, from its start: today, YYYY[-MM[-DD]] or a time'
   tests: 'In view=hotspots, include (default) or exclude test/support files selected by conventional names plus project test_layout.additional_paths; changes only the ranking, preserving totals'
   detail: 'normal (per-file rows) or summary (the aggregate only: --detail summary)'
   hotspots: 'Replaced by view=hotspots (hotspots=true still answers files plus the ranking, with a note)'

@@ -85,7 +85,7 @@ def list_sessions(db_path: Path) -> Dict[str, Any]:
 def filter_sessions(db_path: Path, where: Sequence[str], since: str = '', until: str = '') -> Dict[str, Any]:
     """Filter sessions by ``session~=TEXT`` terms, ANDed: each a case-insensitive substring of the title or the first
     user message (SQLite metadata, no JSONL scan). Legacy ``?filter=TEXT`` is the one term ``session~=TEXT`` (ruling
-    Q2). Optional ?since=/?until= (ISO date or "today") scope by updated_at — BACK-945.
+    Q2). Optional ?since=/?until= (a time-window bound: a date, a time or "today") scope by updated_at — BACK-945.
 
     Returns codex_session_list result filtered to matches, echoing its ``where`` terms.
     """
@@ -136,7 +136,7 @@ def search_sessions(db_path: Path, query: Union[str, Sequence[str]], max_matches
 
     Query param: ?search=<term> (renamed from ?content= — BACK-947 — to match
     claude://'s ?search= meaning full-text content search, not metadata filtering).
-    Optional ?since=/?until= (ISO date or "today") scope the corpus by updated_at
+    Optional ?since=/?until= (a time-window bound) scope the corpus by updated_at
     before scanning JSONL — BACK-945.
 
     Scans agent_message and user_message payloads in each session's rollout file. *query* is the legacy search's

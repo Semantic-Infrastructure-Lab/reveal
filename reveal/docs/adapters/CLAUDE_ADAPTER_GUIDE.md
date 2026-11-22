@@ -1928,8 +1928,8 @@ reveal claude://sessions/ --word --match auth
 | Param | Effect |
 |-------|--------|
 | `?search=TERM` | Term to find (case-insensitive substring by default) |
-| `?since=DATE` | ISO date or `today` — narrows the corpus before scanning (faster) |
-| `?until=DATE` | ISO 8601 upper bound date — pairs with `?since=` for a date range (`?since=2026-06-10&until=2026-06-12`) |
+| `?since=DATE` | `today`, a period (`YYYY`, `YYYY-MM`, `YYYY-MM-DD`) or a time — narrows the corpus before scanning (faster); any other value exits 2 |
+| `?until=DATE` | Upper bound in the same forms, the whole day included — pairs with `?since=` for a date range (`?since=2026-06-10&until=2026-06-12`) |
 | `?word` | Whole-word match — prevents substring hits |
 | `?snippet=N` | Characters of context around each match. Default `120`, clamped to `60–500`. Use a larger value when the 120-char default doesn't show enough to understand why the term matched. |
 | `?filter=SUBSTRING` | Filter the session *list* (not content search) by name substring — alias of `?search=` for list-filtering mode (`?filter=auth-refactor`) |
@@ -2628,7 +2628,7 @@ reveal claude://history --since 2026-02-01 --project sdms --match migration
 |-----------|-------------|
 | `?search=term` | Case-insensitive substring match on prompt text |
 | `?project=path` | Case-insensitive substring match on project path |
-| `?since=DATE` | ISO date (`2026-03-01`) or `today`; excludes older entries |
+| `?since=DATE` | A date (`2026-03-01`, a period or a time) or `today`; excludes older entries; any other value exits 2 |
 
 **CLI Flags**:
 
