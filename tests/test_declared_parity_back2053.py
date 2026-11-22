@@ -22,6 +22,7 @@ CASES = {
     'architecture': ([], ''),
     'calls': (['--callers', 'serve'], '?callers=serve'),
     'claude': ([], ''),
+    'codex': ([], ''),
     'contracts': ([], ''),
     'deps': ([], ''),
     'hotspots': ([], ''),
@@ -143,6 +144,11 @@ def project(tmp_path, monkeypatch):
     claude = build_claude_home(tmp_path / 'home')
     monkeypatch.setattr(ClaudeAdapter, 'CLAUDE_HOME', claude)
     monkeypatch.setattr(ClaudeAdapter, 'CONVERSATION_BASE', claude / 'projects')
+    from codex_session_fixture import build_codex_home
+    CodexAdapter = declared_adapter_class('codex')
+    codex = build_codex_home(tmp_path / 'codex-home')
+    monkeypatch.setattr(CodexAdapter, 'CODEX_HOME', codex)
+    monkeypatch.setattr(CodexAdapter, 'CODEX_DB', codex / 'state_5.sqlite')
     root = tmp_path / 'proj'
     (root / 'tests').mkdir(parents=True)
     (root / 'app.py').write_text(APP, encoding='utf-8')
@@ -161,7 +167,7 @@ def project(tmp_path, monkeypatch):
 
 def argv_for(noun, spelling, resource='proj'):
     cli, query = CASES[noun]
-    if noun == 'claude' and resource == 'proj':
+    if noun in ('claude', 'codex') and resource == 'proj':
         resource = 'sessions'
     if noun == 'json':
         resource += '/data.json'
@@ -307,7 +313,7 @@ def test_missing_resource_is_rejected_alike(project, noun, fmt):
 def test_fail_on_means_the_same_before_after_and_on_a_uri(project, noun, gate):
     """The project carries an unused import and a branchy function, so a declared gate has something to match."""
     cli, query = FINDINGS_VIEWS.get(noun, CASES[noun])
-    target = 'proj/data.json' if noun == 'json' else ('sessions' if noun == 'claude' else 'proj')
+    target = 'proj/data.json' if noun == 'json' else ('sessions' if noun in ('claude', 'codex') else 'proj')
     walk_flags = ['--respect-gitignore=off'] if declared_adapter_class(noun).RESOURCE_SPEC.walks else []
     spellings = {
         'after': [noun, target, *cli, '--fail-on', gate],

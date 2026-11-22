@@ -94,12 +94,14 @@ def test_invalid_full_boolean_is_rejected(session, query):
         api.query(session + '?' + query)
 
 
-def test_limit_zero_remains_a_warned_unsupported_count_control(session):
-    """BACK-2654 rule 3: codex declares no limit, so ?limit=0 exits 2 naming its controls (was warned, exit 0)."""
+def test_limit_zero_keeps_every_exchange(session):
+    """Ruling Q6 (BACK-2598): list answers take the shared --limit, whose zero is uncapped, so ?limit=0 answers every
+    exchange as without it (BACK-2654 rule 3 refused it while codex declared no limit). It pages rows; it never
+    expands text."""
     result = run(session + '?limit=0')
-    assert result.returncode == 2, result.stderr
-    assert "unsupported control 'limit'; supported controls: " in result.stderr and 'full' in result.stderr
-    assert 'ANSWER_END' not in result.stdout
+    plain = run(session)
+    assert result.returncode == plain.returncode == 0, result.stderr
+    assert result.stdout == plain.stdout
 
 
 def test_full_preserves_existing_count_budget(session):

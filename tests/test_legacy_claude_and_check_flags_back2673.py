@@ -79,7 +79,8 @@ def test_check_answers_as_without_it_with_its_note(rich, noun, uri, sub, flag): 
         assert not [w for w in json.loads(run.out)['meta'].get('warnings', []) if w.get('code') == 'unused_flag']
 
 
-def test_codex_keeps_its_old_route(rich):  # noqa: F811  (exempt until BACK-2618)
+def test_codex_check_is_noted_like_every_declared_noun(rich):  # noqa: F811  (BACK-2598 ended the exemption)
     run = C._run('codex://', '--check', '--format', 'json')
     assert run.rc == 0, run.brief()
-    assert not _notes(run, 'codex')
+    assert _notes(run, 'codex') == ['codex --check is deprecated and works until 1.0; use reveal check <path> to check '
+                                    'files (the flag never changed a codex:// answer).']

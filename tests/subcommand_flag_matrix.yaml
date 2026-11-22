@@ -151,6 +151,37 @@ subcommands:
       review: honored
       via:
       - declared-read
+  codex:
+    all:
+      reason: 'BACK-2654 item 1c: accepted as on the URI form; codex declares no --all and no default cap (--limit is
+        unset unless given), so the flag lifts no cap and both forms answer as without it'
+      review: not-applicable
+      via:
+      - declared-unused
+    respect_gitignore:
+      reason: --respect_gitignore is not declared on `reveal codex`'s own parser --
+        argparse rejects it loudly (unrecognized arguments), not a silent gap
+      review: not-applicable
+      via: []
+    since:
+      reason: The filtered or searched catalog reads it on both forms; tests/test_codex_subcommand_back2598.py compares
+        the flag with the URI key on the same fixture home.
+      review: honored
+      via:
+      - declared-read
+    until:
+      reason: The filtered or searched catalog reads it on both forms; tests/test_codex_subcommand_back2598.py compares
+        the flag with the URI key on the same fixture home.
+      review: honored
+      via:
+      - declared-read
+    verbose:
+      reason: 'BACK-2654 rule 4: --verbose is --detail full, bound from the
+        declarations; this noun declares no detail, so it exits 2 naming detail and its
+        controls.'
+      review: honored
+      via:
+      - declared-read
   contracts:
     all:
       reason: 'BACK-2654 item 1c: accepted as on the URI form; contracts declares no --all (no cap it lifts), so the flag ledger names it unused on both forms (unused_flag), compared by test_declared_parity_back2053.py::test_option_values_are_read_alike'

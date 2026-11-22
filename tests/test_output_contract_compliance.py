@@ -167,6 +167,7 @@ KNOWN_VIOLATIONS: dict = {}
 # needs a row here or a NOT_A_QUERY reason.
 SUBCOMMAND_ARGV = {
     'claude': ['sessions', '--base-path', 'home/.claude/projects'],
+    'codex': ['sessions'],
     'git': ['.'],
     'ast': ['proj'],
     'json': ['proj/data.json'],
@@ -187,6 +188,12 @@ SUBCOMMAND_ARGV = {
     'surface': ['proj'],
     'testability': ['proj'],
     'trace': ['proj', '--from', 'main'],
+}
+
+# Subcommands whose input names no path, so an absolute ``source`` is the configured store, not a leak of a relative
+# input (the URI half of the invariant likewise checks only ``://proj`` URIs).
+NO_PATH_INPUT = {
+    'codex': 'the resource names a Codex session or resource; the source is the configured state DB',
 }
 
 NOT_A_QUERY = {
@@ -674,7 +681,7 @@ def _native_separators(harness, payload):
             if '\\' in value and any(needle in value for needle in harness.windows_spellings)]
 
 
-@pytest.mark.parametrize('name', _cases('subcommand_abs_path', sorted(SUBCOMMAND_ARGV)))
+@pytest.mark.parametrize('name', _cases('subcommand_abs_path', sorted(set(SUBCOMMAND_ARGV) - set(NO_PATH_INPUT))))
 def test_no_absolute_fixture_path_in_subcommand_result(harness, name):
     _, out, _, _ = harness.run_subcommand(name, *SUBCOMMAND_ARGV[name], '--format', 'json')
     leaks = _path_leaks(harness, json.loads(out))
@@ -798,9 +805,9 @@ def test_subcommand_result_leaves_through_the_seam(harness, name):
     assert [f for f in _REQUIRED_FIELDS if f not in payload] == []
     declared = COMMANDS[name].declared_adapter
     expected = adapters_base.get_adapter_class(declared).RESULT_TYPE if declared else name
-    # This fixture selects the catalog, rather than Claude's single-session default.
-    if name == 'claude':
-        expected = 'claude_session_list'
+    # This fixture selects the catalog, rather than Claude's or Codex's single-session default.
+    if name in ('claude', 'codex'):
+        expected = f'{name}_session_list'
     assert payload['type'] == expected
     if name in FIXTURE_URIS:
         _, twin, _ = harness.run_fixture(name)
@@ -1065,7 +1072,7 @@ def test_a_disclosed_total_is_the_real_total(harness, scheme):
 def test_the_own_cap_invariant_bites(harness):
     """Positive control: on wide/ a knob at 1 really cuts these adapters' lists, so
     test_an_adapters_own_cap_is_disclosed is not vacuously green."""
-    expected = ['architecture', 'ast', 'calls', 'depends', 'git', 'hotspots', 'imports', 'json', 'markdown', 'metrics', 'overview',
+    expected = ['architecture', 'ast', 'calls', 'codex', 'depends', 'git', 'hotspots', 'imports', 'json', 'markdown', 'metrics', 'overview',
                 'patches', 'stats', 'xlsx']
     cuts = {scheme: _knob_cuts(harness, scheme)
             for scheme in sorted(s for s in FIXTURE_URIS if _cap_knobs(s))}

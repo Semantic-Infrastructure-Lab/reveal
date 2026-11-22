@@ -106,10 +106,10 @@ RULES = ('1a', '1b', '1c', '1d', '2', '3', '3b', '4', '5', '6', '8a', '8b', '10'
          '14', '21j', '22', '23', '24')
 
 # The request each noun answers by default: the parity gate's table (CLI argv after the noun, URI suffix), plus
-# the two declared nouns it has no row for. None: no subcommand (codex is URI-only; stats is metrics' retired scheme).
-BASE = {**CASES, 'stats': (None, ''), 'codex': (None, '')}
+# the declared noun it has no row for. None: no subcommand (stats is metrics' retired scheme).
+BASE = {**CASES, 'stats': (None, '')}
 # Targets that are not the fixture project directory.
-TARGETS = {'claude': 'sessions', 'codex': '', 'json': 'proj/data.json'}
+TARGETS = {'claude': 'sessions', 'codex': 'sessions', 'json': 'proj/data.json'}
 # A control that answers only on another target than its noun's default (Claude's turn slice reads one session):
 # the legacy-word probes (1b, 6, 16) send its spellings there, so they compare answers rather than two rejections.
 CONTROL_TARGETS = {('claude', 'tail'): 'session/my-session', ('git', 'detail'): 'proj/app.py',
@@ -124,8 +124,8 @@ CONTROL_BASES = {('calls', 'kind'): (['--uncalled'], '?uncalled'), ('calls', 'ex
                  ('imports', 'detail'): (['--circular'], '?circular'),
                  ('git', 'detail'): (['--view', 'blame'], '?view=blame'),
                  ('patches', 'where'): (['--view', 'pressure'], '?view=pressure'),
-                 ('codex', 'matches'): (None, '?search=auth'),
-                 **{('codex', bound): (None, '?filter=auth') for bound in ('since', 'until')}}
+                 ('codex', 'matches'): (['--search', 'auth'], '?search=auth'),
+                 **{('codex', bound): (['--filter', 'auth'], '?filter=auth') for bound in ('since', 'until')}}
 
 # The shared controls (rule 7: the one declared list, query_parser.SHARED_CONTROL_NAMES), each probed with a value a
 # supporting noun would accept. Left out: view (the deferred row, D18). Not shared controls: format/output (global
@@ -163,10 +163,6 @@ EXEMPT = {
         'trace')},
     **{(noun, '24'): 'a retired twin: its own scheme: row of RETIREMENTS is its note, not the request note'
        for noun in ('architecture', 'deps', 'hotspots', 'testability', 'trace')},
-    ('codex', '24'): 'no subcommand to recommend until BACK-2618 declares codex\'s parser (a resource URI with flags '
-                     'then is its canonical form)',
-    ('codex', '23'): 'no subcommand to compare the URI form with until BACK-2618 generates codex\'s parser from its '
-                     'declarations through the shared builder',
     **{(noun, '20'): 'no answer reports a declared control unread, on any resource ANSWER_TARGETS lists (a control '
                      'read and not applied is the Step 4 backstop\'s)' for noun in (
         'contracts', 'deps', 'hotspots', 'pack', 'surface', 'testability', 'trace')},

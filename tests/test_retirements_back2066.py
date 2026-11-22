@@ -28,6 +28,11 @@ def source(tmp_path, monkeypatch):
     from reveal.adapters.claude.adapter import ClaudeAdapter
     home = build_claude_home(tmp_path / 'home')
     monkeypatch.setattr(ClaudeAdapter, 'CONVERSATION_BASE', home / 'projects')
+    from codex_session_fixture import build_codex_home
+    from reveal.adapters.codex.adapter import CodexAdapter
+    codex = build_codex_home(tmp_path / 'codex-home')  # codex's legacy slice rows read a session's messages
+    monkeypatch.setattr(CodexAdapter, 'CODEX_HOME', codex)
+    monkeypatch.setattr(CodexAdapter, 'CODEX_DB', codex / 'state_5.sqlite')
     path = tmp_path / 'sample.py'
     path.write_text(SOURCE, encoding='utf-8')
     (tmp_path / 'rows.json').write_text('[{"n": 1}, {"n": 2}]', encoding='utf-8')  # JSON's legacy slice rows
@@ -238,6 +243,7 @@ _MODIFIER_REQUESTS = {
        for noun in ('ast', 'git', 'hotspots', 'markdown', 'metrics', 'pack', 'patches')},
     'calls': lambda f: [f'calls://{Path(f).parent}?sort=-callers'],
     'claude': lambda f: ['claude://session/my-session?view=messages'],
+    'codex': lambda f: ['codex://019e5cc5-0000-7000-8000-000000000001/messages'],  # codex_session_fixture.DOC_SESSION_ID
     'imports': lambda f: [f'imports://{Path(f).parent}?sort=-fan-in'],
     'json': lambda f: [f'json://{Path(f).parent / "rows.json"}'],
     'testability': lambda f: [f'testability://{Path(f).parent}?tests={Path(f).parent}'],

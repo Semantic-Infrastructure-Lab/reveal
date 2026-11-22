@@ -14,6 +14,7 @@ from .renderer import CodexRenderer
 from ...utils.jsonl_records import TranscriptRecords
 from ...utils.results import note_warning
 from ...utils.query_parser import ResourceSpec, param_schema
+from .paging import page_result
 from .params import PARAM_SPECS, FILTER, GOAL, KEY, LAST, SEARCH, SINCE, TOKENS, UNTIL, _MATCHES, _FULL, bind_query
 from .lookup import SessionLookup, attach_lookup_evidence
 from .catalog import CATALOG_PATHS
@@ -86,7 +87,7 @@ class CodexAdapter(ResourceAdapter):
     LEGACY_INIT = False
     BOUND_QUERY_CALL = True
     PARAM_SPECS = PARAM_SPECS
-    RESOURCE_SPEC = ResourceSpec(walks=False, filesystem=False)
+    RESOURCE_SPEC = ResourceSpec(name='resource', cli_default='', uri_default='', walks=False, filesystem=False)
     RESULT_TYPE = 'codex_session_overview'
     RESULT_TYPE_VARIANTS = RESULT_VARIANTS
     DEFAULT_FAIL_ON = 'none'
@@ -133,14 +134,7 @@ class CodexAdapter(ResourceAdapter):
         return result.get('error') or next((item.get('message') for item in result.get('meta', {}).get('errors', [])
                                           if item.get('code') == 'invalid_request'), None)
 
-    # BACK-1379: get_structure already reads since/until from query_params and
-    # threads them into _h_search_sessions/_h_filter_sessions (below), but nothing
-    # declared the flag, so --since/--until were silently dropped on the CLI path
-    # (confirmed live: 79 -> 0 matches with a manually-appended &since=, but no
-    # effect via --since alone). Only takes effect with ?search= or ?filter= —
-    # the bare list mode (_h_list_sessions) ignores since/until entirely.
-    CLI_QUERY_FLAGS = {'since': 'since={value}', 'until': 'until={value}'}
-    # The list each view returns, so --head/--tail/--range and --max-items slice it; each
+    # The list each view returns, so --head/--tail/--range, --limit/--offset and --max-items slice it; each
     # result holds one of them. Undeclared, the router's probe found none of these names and
     # 'codex://sessions/ --head 3' said "no list to slice" over 138 sessions (BACK-1604).
     BUDGET_LIST_FIELD = ('sessions', 'entries', 'memories', 'rules', 'skills', 'plugins',
@@ -269,7 +263,10 @@ class CodexAdapter(ResourceAdapter):
     _MEMORIES_PIPELINE = 'memories/pipeline'
 
     def get_structure(self, **kwargs) -> Dict[str, Any]:
-        """Route codex:// resource to the appropriate handler."""
+        """Route codex:// resource to the appropriate handler, then page a list answer (--limit/--offset)."""
+        return page_result(self._read_structure(), self.query_params)
+
+    def _read_structure(self) -> Dict[str, Any]:
         validate_resource(self.resource)
         self._request_index_error = None
         # Bare or sessions/ → list, search, or content search

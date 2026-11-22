@@ -43,7 +43,8 @@ restores omission, and typed `False` disables a legacy presence flag. URI presen
 semantics remain unchanged (`?last=false` still selects the last agent message).
 `matches=0` keeps every snippet per matching session; it does not cap session input.
 `full=False` or `full=None` restores bounded exchange text while JSON retains the
-complete strings. The Codex subcommand and vocabulary migration remain open. Direct transcript
+complete strings. `reveal codex [RESOURCE]` takes the same controls as flags, with the same answer and exit as
+the URI; the vocabulary migration remains open. Direct transcript
 URI execution, optional goals and SQLite catalog reads are qualified below;
 memory and workspace resource policies remain separate.
 
@@ -160,7 +161,7 @@ reveal 'codex://memories/pipeline'
 | `codex://<UUID>/workflow` | Tool calls + shell commands interleaved chronologically |
 | `codex://<UUID>/timeline` | All events in session order with brief summaries |
 
-Exchange text previews show at most 300 characters per prompt and 600 per answer, with a `?full` hint when cut. Add `?full` or `?full=true` to show complete paired text; `?full=false` keeps the compact preview. JSON always contains complete prompt and answer strings. Existing `--head`, `--tail`, `--range` and `--max-items` controls still limit the number of exchanges; `?limit=0` is unsupported and warns rather than expanding text.
+Exchange text previews show at most 300 characters per prompt and 600 per answer, with a `?full` hint when cut. Add `?full` or `?full=true` to show complete paired text; `?full=false` keeps the compact preview. JSON always contains complete prompt and answer strings. `--limit N`/`--offset N` page the exchanges, like every list answer's rows (`--limit 0` keeps them all); the legacy `--head`, `--tail` and `--range` still slice them with a note naming their replacement, and `--max-items` still limits them. None of them expands text.
 
 **UUID prefix**: A unique prefix of 7+ hex characters works instead of the full UUID: `reveal 'codex://019e5cc5'` resolves to the matching session. A prefix several sessions share exits 2 with `Ambiguous session prefix ...: matches <ids>; use more characters`; the first UUID group (8 characters) is usually enough.
 

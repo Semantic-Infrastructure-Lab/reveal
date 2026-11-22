@@ -94,6 +94,8 @@ COMMANDS: Dict[str, CommandSpec] = {
                      help_guide=_SUBCOMMANDS_GUIDE, also_json=True),
     'claude':       _declared('claude', 'reveal claude [RESOURCE] [--view VIEW] [--match TEXT]',
                      'Inspect Claude sessions and installation resources through declared controls'),
+    'codex':        _declared('codex', 'reveal codex [RESOURCE] [--since DATE] [--limit N]',
+                     'Inspect Codex CLI sessions and installation resources through declared controls'),
     'contracts':    _declared('contracts',
                      'reveal contracts [path]',
                      'Architectural seams: ABCs, Protocols/interfaces, TypedDicts, dataclasses'),
@@ -162,7 +164,7 @@ COMMANDS: Dict[str, CommandSpec] = {
 
 
 # Order of the `--help-all` subcommand listing: task entry points first, tooling last.
-EPILOG_ORDER = ('ast', 'overview', 'imports', 'deps', 'hotspots', 'git', 'claude', 'json', 'markdown', 'metrics', 'contracts', 'surface',
+EPILOG_ORDER = ('ast', 'overview', 'imports', 'deps', 'hotspots', 'git', 'claude', 'codex', 'json', 'markdown', 'metrics', 'contracts', 'surface',
                 'patches', 'testability', 'calls', 'trace', 'check', 'review', 'health', 'pack', 'dev',
                 'scaffold', 'offline', 'architecture')
 
@@ -327,6 +329,10 @@ LEGACY_CLI_MODIFIERS: Dict[str, Dict[str, str]] = {
                **dict.fromkeys(('--name', '--search'), '--match TEXT on the workflow view and history; '
                                                        '--where session~=TEXT on the session list'),
                **_no_check('claude')},
+    # Codex pages its list answers with --limit/--offset (ruling Q6) and has no sort.
+    'codex': {'--head': _LIMIT_N, '--range': _OFFSET,
+              '--tail': '--offset TOTAL-N --limit N (the last N rows have no spelling of their own)',
+              **_no_check('codex')},
     'hotspots': {'--head': '--limit N, which caps each list',
                  '--tail': '--limit N, which keeps each list\'s worst N (each list is ranked worst first)',
                  '--range': '--limit N, which caps each list (hotspots has no offset)'},

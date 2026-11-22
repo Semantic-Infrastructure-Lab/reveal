@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from codex_session_fixture import DOC_SESSION_ID
+from conftest import is_request_note
 from reveal import query
 from test_codex_declared_api_back2618 import codex
 
@@ -163,7 +164,7 @@ def test_goal_keeps_required_index_proof_without_unrelated_rollout_loss(codex):
     assert answer['type'] == 'codex_goal' and answer['goal'] is None
     assert answer['meta']['session_lookup']['decision'] == 'selected'
     assert 'rollout_analysis' not in answer['meta']
-    assert not answer['meta']['warnings']
+    assert not [warning for warning in answer['meta']['warnings'] if not is_request_note(warning)]
 
 
 @pytest.mark.mcp

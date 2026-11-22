@@ -163,7 +163,7 @@ def test_a_single_value_control_given_several_values_is_refused_before_anything_
 
 
 @pytest.mark.parametrize('word,match', [
-    ('codex', r"no subcommand: name the resource by its URI, query\('codex://"),
+    ('stats', r"no subcommand: name the resource by its URI, query\('stats://"),  # codex has one since BACK-2598
     ('frobnicate', r'neither a noun nor a URI\. Nouns: .*calls'),
 ])
 def test_a_word_that_is_not_a_noun_names_what_to_use(word, match):
