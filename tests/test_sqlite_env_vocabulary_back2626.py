@@ -127,3 +127,24 @@ def test_env_text_answer(variables):
     run = _run_reveal_direct(f'env://{TOKEN}')
     assert run.returncode == 0
     assert f'Environment Variable: {TOKEN}' in run.stdout and 'Value: ***' in run.stdout
+
+
+# --- B2: the typed API answers the variable the URI names (one answer, CLI/API parity, rule 9) ----------------------
+
+@pytest.mark.parametrize('name', [PLAIN, TOKEN])
+def test_api_env_uri_answers_the_variable_as_the_cli_does(variables, name):
+    """api.query('env://NAME') answered the whole listing (type environment), not the variable the URI names."""
+    assert api.query(f'env://{name}') == _json(f'env://{name}')[1]
+
+
+def test_api_env_uri_naming_no_variable_is_an_invalid_request(variables):
+    """A variable that is not set is not a listing: the CLI exits 2, so the API raises the request error."""
+    with pytest.raises(RequestValidationError, match=MISSING):
+        api.query(f'env://{MISSING}')
+
+
+def test_api_env_listing_is_unchanged(variables):
+    """Negative control: the bare env:// is still the listing on the API."""
+    doc = api.query('env://')
+    assert doc['type'] == 'environment'
+    assert {v['name'] for rows in doc['categories'].values() for v in rows} >= {TOKEN, PLAIN}
