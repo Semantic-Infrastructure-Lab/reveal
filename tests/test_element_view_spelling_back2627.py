@@ -305,6 +305,23 @@ def test_a_main_parser_control_no_element_view_reads_exits_2_as_unsupported(copi
     _refused(run(path, element, *flags, '--format', 'json'), name, 'unsupported control')
 
 
+@pytest.mark.parametrize('flags', [['--view', 'boundary'], ['--view', 'flow', '--kind', 'if'], ['--boundary'],
+                                   ['--varflow', 'result']], ids=['view-boundary', 'view-flow', 'old-boundary', 'varflow'])
+def test_verbose_on_an_element_request_exits_2_naming_detail(copies, flags):
+    """Conformance cell 4 (rule 4, BACK-2654 note #17): the global --verbose is --detail full, and element views declare
+    no detail control, so an element request refuses it, exit 2 naming detail, as a declared noun without detail does."""
+    path, element = _python(copies)
+    _refused(run(path, element, *flags, '--verbose', '--format', 'json'), '--verbose', 'detail')
+
+
+def test_sibling_verbose_on_a_path_read_without_an_element_view_still_answers(copies):
+    """Negative control: the refusal is the element request's; a file outline and an element extraction keep their
+    answer with --verbose."""
+    path, element = _python(copies)
+    for argv in ((path, '--verbose'), (path, element, '--verbose')):
+        assert run(*argv, '--format', 'json').returncode == 0, argv
+
+
 def test_callsites_value_and_range_conflict(copies):
     """X9: --callsites N-M's value retires into --range, so both together are two values of one selection."""
     path, element = _python(copies)
