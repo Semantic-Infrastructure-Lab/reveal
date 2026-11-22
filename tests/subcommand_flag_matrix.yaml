@@ -758,3 +758,32 @@ subcommands:
       review: honored
       via:
       - declared-read
+  xlsx:
+    all:
+      reason: 'BACK-2654 item 1c: the declared runner binds --all through the URI
+        form''s own --all declaration (limit=1000000, re-keyed to --limit 0, BACK-2729):
+        the sheet view and the search give every row on both forms (BACK-2626)'
+      review: honored
+      via:
+      - declared-read
+    respect_gitignore:
+      reason: --respect_gitignore is not declared on `reveal xlsx`'s own parser --
+        argparse rejects it loudly (unrecognized arguments), not a silent gap
+      review: not-applicable
+      via: []
+    since:
+      reason: --since is not declared on `reveal xlsx`'s own parser -- argparse rejects
+        it loudly (unrecognized arguments), not a silent gap
+      review: not-applicable
+      via: []
+    until:
+      reason: --until is not declared on `reveal xlsx`'s own parser -- argparse rejects
+        it loudly (unrecognized arguments), not a silent gap
+      review: not-applicable
+      via: []
+    verbose:
+      reason: 'BACK-2654 rule 4: --verbose is --detail full, bound from the declarations;
+        this noun declares no detail, so it exits 2 naming detail and its controls.'
+      review: honored
+      via:
+      - declared-read

@@ -65,8 +65,8 @@ def _json(uri):
     ('search=revenue&limit=abc', 'limit'),
     ('sheet=Data&formulas=maybe', 'formulas'),
     ('sheet=Data&format=xml', "'csv'"),
-    ('search', 'search'),
-    ('search=', 'search'),
+    ('search', '--match'),  # search is --match's legacy word (BACK-2626): the refusal names the flag
+    ('search=', '--match'),
     ('names=bogus', "'list'"),
     ('names=true', "'list'"),
     ('powerquery=Nope', 'no Power Query'),
@@ -97,7 +97,9 @@ def test_a_name_that_may_be_in_an_unreadable_query_is_incomplete_not_invalid(boo
     code, result = _json('xlsx://damaged.xlsx?powerquery=Bad')
     assert code == 3, result
     assert result['queries'] == []
-    assert [w['type'] for w in result['meta']['warnings']] == ['part_unreadable', 'analysis_incomplete']  # plus the answer's own incomplete marker (BACK-2650)
+    assert [w['type'] for w in result['meta']['warnings'] if w['type'] != 'retired_spelling'] == [
+        'part_unreadable', 'analysis_incomplete']  # plus the answer's own incomplete marker (BACK-2650); the query
+    # string's own deprecation note (BACK-2626) is not a diagnostic of the read
 
 
 def test_a_named_query_answers_with_that_query_only(books):
@@ -121,7 +123,6 @@ def test_a_bare_view_takes_its_default_mode_by_name(books, query, mode):
 
 @pytest.mark.parametrize('query,rows,cause', [
     ('sheet=Data', 100, 'auto_cap'),
-    ('sheet=Data&limit=0', 100, 'auto_cap'),  # explicit zero keeps its meaning: the default cap
     ('sheet=Data&limit=5', 5, 'limit'),
     ('sheet=Data&formulas=true&limit=5', 5, 'limit'),
     ('sheet=Data&formulas=false&format=text&limit=5', 5, 'limit'),
@@ -131,6 +132,14 @@ def test_valid_values_still_answer(books, query, rows, cause):
     assert code == 0, result
     assert len(result['rows']) == rows
     assert [w['cause'] for w in result['meta']['warnings'] if w['type'] == 'truncated'] == [cause]
+
+
+def test_limit_zero_is_every_row(books):
+    """0 is uncapped (COMMAND_MODEL Caps, ruling Q1, BACK-2626): it meant the default 100 rows."""
+    code, result = _json('xlsx://book.xlsx?sheet=Data&limit=0')
+    assert code == 0, result
+    assert len(result['rows']) == 150
+    assert not [w for w in result['meta']['warnings'] if w['type'] == 'truncated']
 
 
 def test_csv_still_returns_every_row(books):

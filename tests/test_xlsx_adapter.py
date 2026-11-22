@@ -37,7 +37,7 @@ class TestXlsxAdapterInit:
             uri = f"xlsx://{SAMPLE_XLSX}?sheet=0&limit=10"
             adapter = XlsxAdapter(uri)
             assert adapter.query_params.get('sheet') == '0'
-            assert adapter.query_params.get('limit') == '10'
+            assert adapter.query_params.get('limit') == 10  # bound and typed (BACK-2626)
 
     def test_init_with_file_not_found(self):
         """Test adapter initialization with non-existent file."""
@@ -66,8 +66,8 @@ class TestXlsxAdapterInit:
             uri = f"xlsx://{SAMPLE_XLSX}?sheet=Sales&range=A1:C10&limit=50&format=csv"
             adapter = XlsxAdapter(uri)
             assert adapter.query_params.get('sheet') == 'Sales'
-            assert adapter.query_params.get('range') == 'A1:C10'
-            assert adapter.query_params.get('limit') == '50'
+            assert adapter.query_params.get('cells') == 'A1:C10'  # ?range is --cells' legacy word (BACK-2626)
+            assert adapter.query_params.get('limit') == 50
             assert adapter.query_params.get('format') == 'csv'
 
 
@@ -93,7 +93,7 @@ class TestXlsxAdapterSchema:
         schema = XlsxAdapter.get_schema()
         params = schema['query_params']
         assert 'sheet' in params
-        assert 'range' in params
+        assert 'cells' in params and 'range' in params['cells']['aliases']
         assert 'limit' in params
         assert 'format' in params
 
@@ -601,7 +601,7 @@ class TestXlsxAdapterCrossSheetSearch:
         uri = f"xlsx://{multi_sheet_xlsx}?search=Gadget"
         adapter = XlsxAdapter(uri)
         result = adapter.get_structure()
-        assert result['pattern'] == 'Gadget'
+        assert result['pattern'] == ['Gadget']  # match terms echo as a list, one term included (BACK-2626)
 
 
 @pytest.mark.component

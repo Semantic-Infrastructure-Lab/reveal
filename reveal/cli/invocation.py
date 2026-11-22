@@ -150,6 +150,8 @@ COMMANDS: Dict[str, CommandSpec] = {
                      help_guide=_SUBCOMMANDS_GUIDE),
     'sqlite':       _declared('sqlite', 'reveal sqlite DB[/TABLE] [--view health]',
                      'Inspect a SQLite database, a table or view, or its integrity through declared controls'),
+    'xlsx':         _declared('xlsx', 'reveal xlsx FILE [--sheet NAME] [--match TEXT] [--powerpivot MODE] ...',
+                     'Inspect an Excel workbook: sheets, cells, search, Power Pivot, Power Query, names, connections'),
     'surface':      _declared('surface',
                      'reveal surface [path]',
                      'External surfaces: CLI commands, HTTP routes, env vars, network calls, FS writes, subprocess calls'),
@@ -166,7 +168,7 @@ COMMANDS: Dict[str, CommandSpec] = {
 
 
 # Order of the `--help-all` subcommand listing: task entry points first, tooling last.
-EPILOG_ORDER = ('ast', 'overview', 'imports', 'deps', 'hotspots', 'git', 'claude', 'codex', 'json', 'sqlite', 'markdown', 'metrics', 'contracts', 'surface',
+EPILOG_ORDER = ('ast', 'overview', 'imports', 'deps', 'hotspots', 'git', 'claude', 'codex', 'json', 'sqlite', 'xlsx', 'markdown', 'metrics', 'contracts', 'surface',
                 'patches', 'testability', 'calls', 'trace', 'check', 'review', 'health', 'pack', 'dev',
                 'scaffold', 'offline', 'architecture')
 
@@ -322,6 +324,7 @@ def _no_check(noun: str) -> Dict[str, str]:
 LEGACY_CLI_MODIFIERS: Dict[str, Dict[str, str]] = {
     **{noun: _SLICED for noun in ('ast', 'markdown', 'metrics')},
     **{noun: {**_SLICED, **_no_check(noun)} for noun in ('git', 'json')},
+    'xlsx': _no_check('xlsx'),  # --head/--tail/--range never sliced an xlsx answer: they exit 2
     'calls': {'--head': '--limit N on a ranking (--sort=-callers --limit N); --depth N on a callers or callees walk',
               '--tail': 'a descending --sort with --limit N on a ranking (the last N rows have no spelling of their own)',
               '--range': '--limit N on a ranking (calls has no offset)'},
@@ -449,6 +452,10 @@ RETIREMENTS: Dict[str, Retirement] = {
                                        standalone=True),
     # SQLite's integrity check is a view (ruling Q4, BACK-2626): the same answer and exit, one spelling.
     'param:sqlite.check': Retirement('sqlite --check (?check)', '--view health'),
+    # xlsx's different words (BACK-2626): the cell rectangle is --cells, the search is --match (one term answers
+    # exactly as ?search did; repeated terms AND per row).
+    'param:xlsx.range': Retirement('xlsx ?range=RANGE', '--cells RANGE'),
+    'param:xlsx.search': Retirement('xlsx ?search=TEXT', '--match TEXT'),
     'param:contracts.impls': Retirement('contracts ?impls=N (--impls N)', '--implementations-limit N'),
     'param:contracts.no_implementations': Retirement('contracts --no-implementations', '--implementations off'),
     # Surface's D20 words (BACK-2623): the category is a kind, the test filter is tests, the rollup is a view and its

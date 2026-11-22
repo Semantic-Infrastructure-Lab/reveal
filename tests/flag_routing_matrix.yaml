@@ -1114,8 +1114,11 @@ adapters:
       - declared-binding
   xlsx:
     all:
-      review: unreviewed
-      via: []
+      reason: 'declared since BACK-2626: --all binds --limit 0''s value (BACK-2729),
+        so the sheet view and the search give every row'
+      review: honored
+      via:
+      - declared
     code_only:
       reason: 'metrics'' own switch (BACK-2621): no other adapter has a data/config
         file filter; the flag ledger reports it unused here'
@@ -1141,11 +1144,11 @@ adapters:
       review: not-applicable
       via: []
     verbose:
-      reason: 'render_structure(result, format) has no verbose param; confirmed live:
-        ''Unknown query param verbose'' warning (xlsx.py:30). Distinct from BACK-1382
-        (xlsx''s all-gap is analyzer pre-truncation, a count issue)'
-      review: not-applicable
-      via: []
+      reason: 'BACK-2654 rule 4 (declared since BACK-2626): --verbose is --detail full, bound from the declarations;
+        xlsx declares no detail, so it exits 2 naming detail and its controls'
+      review: honored
+      via:
+      - declared-binding
 flags:
 - verbose
 - all

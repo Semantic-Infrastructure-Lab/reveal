@@ -62,7 +62,8 @@ _PROSE_END = re.compile(r'\s(?:[-\u2014]|or|and|instead|then)(?:\s|$)|\s\(|\s{2,
 # A sentence that shows a request in order to say it is refused: its exit 2 is the point, not a fault.
 _REFUSED = re.compile(r'\bexits? 2\b')
 
-_ANSWER_TARGETS = {'claude': 'sessions', 'codex': '', 'json': 'proj/data.json', 'sqlite': 'proj/app.db'}
+_ANSWER_TARGETS = {'claude': 'sessions', 'codex': '', 'json': 'proj/data.json', 'sqlite': 'proj/app.db',
+                   'xlsx': 'proj/sheets.xlsx'}
 _DEFAULT_ARGS = {'calls': ('--callers', 'main'), 'trace': ('--from', 'main')}
 _DEFAULT_QUERY = {'calls': 'callers=main', 'trace': 'from=main'}
 # Requests that make a noun print its cut hints ("... 45 more chars, use ... for the full text"): a low snippet budget,
@@ -75,6 +76,23 @@ _CUT_SURFACES = (('claude://session/infernal-earth-0118/messages', '--max-snippe
                  *((f'claude://session/long-session{view}',) for view in _LONG_VIEWS))
 _FILE_ROUTE = (('proj/app.py',), ('proj/app.py', 'main'), ('proj/README.md',), ('proj/data.json',), ('proj',),
                ('proj/app.py', '--check'))
+
+@pytest.fixture(scope='module', autouse=True)
+def sheets_workbook(harness):
+    """A workbook holding the sheet names xlsx's help and guide examples use (Sales, Data, ...), the target every
+    xlsx example runs on (BACK-2626): a sheet a fixture lacks is a not-found answer, not a spelling fault."""
+    openpyxl = pytest.importorskip('openpyxl')
+    wb = openpyxl.Workbook()
+    wb.active.title = 'Sales'
+    wb.active.append(['region', 'revenue', 'total'])
+    wb.active.append(['west', 100, '=B2*2'])
+    for name in ('Data', 'Summary', 'Sheet1', 'Budget'):
+        wb.create_sheet(name).append(['error', 'pattern'])
+    wb.save(str(harness.root / 'proj' / 'sheets.xlsx'))
+    from doc_command_fixture import _add_power_queries
+    _add_power_queries(harness.root / 'proj' / 'sheets.xlsx', ('SalesData', 'Sales Data'))
+    return harness
+
 
 @pytest.fixture(scope='module')
 def long_session(harness):
@@ -274,6 +292,8 @@ def _target(noun, path):
         return re.sub(r'^(?:<[^>]*>|SESSION-ID)', '019e5cc5', path)
     if noun == 'json':
         return 'proj/data.json'
+    if noun == 'xlsx':  # the workbook with the examples' sheet names (sheets_workbook, BACK-2626)
+        return 'proj/sheets.xlsx'
     if noun == 'sqlite':  # DB[/TABLE]: the harness database, and its one table where the example names a table
         table = re.split(r'\.(?:db|sqlite3?)/', path, maxsplit=1)
         return 'proj/app.db/users' if len(table) == 2 and table[1] else 'proj/app.db'

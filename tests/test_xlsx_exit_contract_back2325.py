@@ -116,7 +116,9 @@ def test_a_search_that_skipped_a_sheet_is_incomplete(books):
     code, result, _ = _json('xlsx://corrupt.xlsx?search=one')
     assert code == 3, result
     assert result['total_matches'] == 1
-    assert [w['type'] for w in result['meta']['warnings']] == ['sheets_unsearched', 'analysis_incomplete']  # plus the answer's own incomplete marker (BACK-2650)
+    assert [w['type'] for w in result['meta']['warnings'] if w['type'] != 'retired_spelling'] == [
+        'sheets_unsearched', 'analysis_incomplete']  # plus the answer's own incomplete marker (BACK-2650); the query
+    # string's own deprecation note (BACK-2626) is not a diagnostic of the read
 
 
 def _lzma_book(root):

@@ -199,7 +199,7 @@ def test_typed_api_binds_every_keyword(book):
     (('xlsx://book.xlsx?sheet=Sales&powerpivot=schema',), 'powerpivot'),  # rule 17: two answers
     (('xlsx://book.xlsx?names&connections',), 'connections'),  # the first view key won
     (('xlsx://book.xlsx?bogus=1',), 'bogus'),  # unknown key: warned, exit 0
-    (('xlsx://book.xlsx?range=A1:B2',), 'range'),  # applicability: the overview reads no cells
+    (('xlsx://book.xlsx?range=A1:B2',), 'cells'),  # applicability: the overview reads no cells (named canonically)
     (('xlsx://book.xlsx?search=revenue&formulas=true',), 'formulas'),  # warned, exit 0
     (('xlsx://book.xlsx?sheet=Sales&limit=1&limit=2',), 'limit'),  # rule 1: was last-wins
     (('xlsx://book.xlsx?format=csv',), 'csv'),  # csv renders the sheet view only: the overview printed text

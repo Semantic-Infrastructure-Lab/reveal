@@ -15,8 +15,7 @@
   "reveal/adapters/markdown/adapter.py": 1,
   "reveal/adapters/mysql/adapter.py": 1,
   "reveal/adapters/patches/adapter.py": 1,
-  "reveal/adapters/reveal/adapter.py": 1,
-  "reveal/adapters/xlsx.py": 1
+  "reveal/adapters/reveal/adapter.py": 1
  },
  "broad-except": {},
  "display-path": {},

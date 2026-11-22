@@ -332,7 +332,8 @@ REFUSED_CONTROL = {'architecture': ('top', '2'), 'ast': ('limit', '2'), 'calls':
                    'deps': ('top', '2'), 'git': ('limit', '2'), 'hotspots': ('limit', '2'), 'imports': ('limit', '2'),
                    'json': ('limit', '2'), 'markdown': ('limit', '2'), 'metrics': ('limit', '2'),
                    'overview': ('top', '2'), 'pack': ('budget', '2000'), 'patches': ('limit', '2'),
-                   'surface': ('top', '2'), 'testability': ('limit', '2'), 'trace': ('depth', '2')}
+                   'surface': ('top', '2'), 'testability': ('limit', '2'), 'trace': ('depth', '2'),
+                   'xlsx': ('limit', '2')}
 # Nouns whose only controls select the answer (role='operation'): an answer selector is never "not read by this answer",
 # so they have no control to refuse (sqlite's view, BACK-2626).
 SELECTORS_ONLY = {noun for noun in NOUNS if noun != 'stats'

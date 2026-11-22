@@ -85,7 +85,7 @@ import pytest
 
 from conftest import _run_reveal_direct
 from test_declared_parity_back2053 import APP, CASES
-from test_retirements_back2066 import PRODUCTION_CASES, SOURCE, _renders, commit_sample, sample_database
+from test_retirements_back2066 import PRODUCTION_CASES, SOURCE, _renders, commit_sample, sample_database, sample_workbook
 from reveal.adapters.base import get_adapter_class, list_supported_schemes
 from reveal.adapters.factory import uses_bound_query_call
 from reveal.cli.invocation import COMMANDS, RETIREMENTS
@@ -109,7 +109,7 @@ RULES = ('1a', '1b', '1c', '1d', '2', '3', '3b', '4', '5', '6', '8a', '8b', '10'
 # the declared noun it has no row for. None: no subcommand (stats is metrics' retired scheme).
 BASE = {**CASES, 'stats': (None, '')}
 # Targets that are not the fixture project directory.
-TARGETS = {'claude': 'sessions', 'codex': 'sessions', 'json': 'proj/data.json', 'sqlite': 'app.db'}
+TARGETS = {'claude': 'sessions', 'codex': 'sessions', 'json': 'proj/data.json', 'sqlite': 'app.db', 'xlsx': 'book.xlsx'}
 # A control that answers only on another target than its noun's default (Claude's turn slice reads one session):
 # the legacy-word probes (1b, 6, 16) send its spellings there, so they compare answers rather than two rejections.
 CONTROL_TARGETS = {('claude', 'tail'): 'session/my-session', ('git', 'detail'): 'proj/app.py', ('git', 'raw'): 'proj/app.py',
@@ -128,6 +128,8 @@ CONTROL_BASES = {('calls', 'kind'): (['--uncalled'], '?uncalled'), ('calls', 'ex
                  ('patches', 'where'): (['--view', 'pressure'], '?view=pressure'),
                  ('surface', 'dir-depth'): (['--view', 'dir'], '?view=dir'),  # only the rollup reads its depth
                  ('codex', 'matches'): (['--match', 'auth'], '?match=auth'),
+                 # xlsx: the sheet view reads the cells, formulas and limit (BACK-2626)
+                 **{('xlsx', control): (['--sheet', 'Sales'], '?sheet=Sales') for control in ('cells', 'formulas', 'limit')},
                  **{('codex', bound): (['--where', 'session~=auth'], '?where=session~=auth')
                     for bound in ('since', 'until')}}
 
@@ -151,17 +153,17 @@ EXEMPT = {
     ('sqlite', '1a'): 'binds no global flag as a URI key (no CLI_QUERY_FLAGS, no walk policy): no key and flag to give '
                       'together',
     **{(noun, '1d'): 'declares no repeatable control with an alias'
-       for noun in NOUNS if noun not in ('ast', 'claude', 'codex', 'markdown', 'metrics', 'patches', 'stats')},
+       for noun in NOUNS if noun not in ('ast', 'claude', 'codex', 'markdown', 'metrics', 'patches', 'stats', 'xlsx')},
     **{(noun, '5'): 'no note-stage param: row whose replacement is a control of this noun' for noun in (
         'trace',)},
     **{(noun, '6'): 'declares no alias: nothing to note or keep note-free' for noun in (
         'architecture', 'deps', 'json', 'overview', 'trace')},
     **{(noun, '8a'): 'no where expression: a bare key is never read as a field'
        for noun in ('architecture', 'calls', 'contracts', 'deps', 'hotspots', 'imports', 'overview',
-                    'pack', 'sqlite', 'surface', 'testability', 'trace')},
+                    'pack', 'sqlite', 'surface', 'testability', 'trace', 'xlsx')},
     **{(noun, '8b'): 'declares no where control: there are no field filters' for noun in (
         'architecture', 'calls', 'contracts', 'deps', 'hotspots', 'imports', 'overview', 'pack', 'sqlite', 'surface',
-        'testability', 'trace')},
+        'testability', 'trace', 'xlsx')},
     **{(noun, '16'): 'no legacy word and no standalone legacy parameter: nothing to translate or mark' for noun in (
         'trace',)},
     **{(noun, '17'): 'one control at most selects the answer: no two selections to give' for noun in (
@@ -276,6 +278,8 @@ def workspace(tmp_path, monkeypatch):
         'from unittest import mock\n\n\n@mock.patch("sample.os.getcwd")\ndef test_it(m):\n    assert m\n', encoding='utf-8')
     (sample.parent / 'rows.json').write_text('[{"n": 1}, {"n": 2}]', encoding='utf-8')  # JSON's retirement cases (BACK-2615)
     sample_database(sample.parent)  # sqlite's retirement case (BACK-2626)
+    sample_workbook(sample.parent)  # xlsx's retirement cases (BACK-2626)
+    sample_workbook(tmp_path)  # xlsx's resource (BACK-2626)
     commit_sample(sample)
     return sample
 
@@ -558,7 +562,9 @@ def _candidate_values(spec):
         low = spec.minimum or 0
         return [str(low + 2), str(low + 1)]
     spellings = (spec.name, *_other_spellings(spec))
-    example = next((e.partition('=')[2] for e in spec.examples if e.partition('=')[0] in spellings), '')
+    # An example may name the answer that reads the control first (xlsx 'sheet=0&cells=A1:C10'): its own part counts.
+    example = next((value for e in spec.examples for key, _, value in (part.partition('=') for part in e.split('&'))
+                    if key in spellings), '')
     return [example or 'function', 'other']
 
 

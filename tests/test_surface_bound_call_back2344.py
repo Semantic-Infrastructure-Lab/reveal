@@ -150,7 +150,7 @@ def test_adopter_callable_and_class_local_capability():
                                                         'metrics', 'stats',
                                                         # their own PARAM_SPECS adopt it (BACK-2656)
                                                         'deps', 'hotspots', 'pack', 'patches', 'testability',
-                                                        'sqlite'))}  # BACK-2626
+                                                        'sqlite', 'xlsx'))}  # BACK-2626
     assert list(inspect.signature(SurfaceAdapter.get_structure).parameters) == ['self']
     assert SurfaceAdapter.__dict__['BOUND_QUERY_CALL'] is True
     assert ResourceAdapter.BOUND_QUERY_CALL is False

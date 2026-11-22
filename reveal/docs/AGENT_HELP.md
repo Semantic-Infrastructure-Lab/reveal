@@ -262,6 +262,7 @@ Reveal has both a **path-based interface** (`reveal <path>` + flags) and a set o
 | `reveal git [path[@REF]] [--view VIEW] [--where EXPR]` | Inspect repository history and historical files | `reveal git --help` |
 | `reveal json FILE[/KEY] [--where EXPR] [--view VIEW]` | Navigate JSON data, filter array elements or inspect schema, keys and types | `reveal json --help` |
 | `reveal sqlite DB[/TABLE] [--view health]` | Inspect a SQLite database, a table or view, or its integrity through declared controls | `reveal sqlite --help` |
+| `reveal xlsx FILE [--sheet NAME] [--match TEXT] [--powerpivot MODE] ...` | Inspect an Excel workbook: sheets, cells, search, Power Pivot, Power Query, names, connections | `reveal xlsx --help` |
 | `reveal markdown [path] [--where EXPR] [--match TEXT]` | Find documents by frontmatter/body; inspect links and aggregate fields | `reveal markdown --help` |
 | `reveal claude [RESOURCE] [--view VIEW] [--match TEXT]` | Inspect Claude sessions and installation resources through declared controls | `reveal claude --help` |
 | `reveal codex [RESOURCE] [--since DATE] [--limit N]` | Inspect Codex CLI sessions and installation resources through declared controls | `reveal codex --help` |
@@ -3197,13 +3198,13 @@ Excel (.xlsx), Word (.docx), PowerPoint (.pptx)
 **xlsx:// cross-sheet search:**
 ```bash
 # Search all sheets in a workbook (case-insensitive)
-reveal 'xlsx://file.xlsx?search=pattern'
+reveal xlsx file.xlsx --match pattern
 
 # Cap results
-reveal 'xlsx://file.xlsx?search=error&limit=20'
+reveal xlsx file.xlsx --match error --limit 20
 
 # JSON output for scripting
-reveal 'xlsx://file.xlsx?search=pattern' --format=json
+reveal xlsx file.xlsx --match pattern --format=json
 ```
 
 **Check supported types:** `reveal --list-supported`

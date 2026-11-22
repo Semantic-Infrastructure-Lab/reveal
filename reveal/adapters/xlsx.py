@@ -17,9 +17,10 @@ from .base import ResourceAdapter, register_adapter, register_renderer
 from ..analyzers.office.openxml import XlsxAnalyzer
 from ..utils import print_json_result
 from ..utils.query import parse_query_params
-from ..utils.query_binding import boolean_value
+from ..utils.query_binding import bind_declared_params, switch_value
 from ..utils.query_parser import (
-    ParamSpec, ParamValueError, mark_query_keys, param_schema, peek_query_items, whole_number,
+    CliBinding, LegacySpelling, ParamSpec, ParamValueError, QueryParams, ResourceSpec, legacy_check, param_schema,
+    peek_query_items, whole_number,
 )
 from ..utils.path_utils import failure_records, to_posix
 from ..errors import RequestValidationError
@@ -29,6 +30,7 @@ from ..utils.results import (
 from ..utils.warning_render import render_meta_warnings
 from reveal.reveal_types import CONTRACT_VERSION
 from reveal.utils.lines import split_lines
+from reveal.utils.match_terms import term_label
 
 logger = logging.getLogger(__name__)
 
@@ -61,12 +63,11 @@ _ARCHIVE_ERRORS: Tuple[Type[Exception], ...] = _PART_ERRORS
 # The DataMashup blob is base64 around a streaming zip that is walked with struct.unpack_from.
 _POWERQUERY_ERRORS: Tuple[Type[Exception], ...] = _ARCHIVE_ERRORS + (binascii.Error, struct.error)
 
-# The view each query parameter selects, in the order a request is matched, with its result type:
-# _get_structure dispatches on it and the router expects its type (BACK-2325). No match is the
-# workbook overview. ?search= selects only with a value.
+# The view each answer selector picks, with its result type: _get_structure dispatches on it and the router expects
+# its type (BACK-2325). No selector is the workbook overview; two are an invalid request (role='operation').
 _VIEWS: Tuple[Tuple[str, str], ...] = (
     ('powerpivot', 'xlsx_powerpivot'), ('powerquery', 'xlsx_powerquery'), ('names', 'xlsx_names'),
-    ('connections', 'xlsx_connections'), ('sheet', 'xlsx_sheet'), ('search', 'xlsx_search'),
+    ('connections', 'xlsx_connections'), ('sheet', 'xlsx_sheet'), ('match', 'xlsx_search'),
 )
 _WORKBOOK = 'xlsx_workbook'
 
@@ -80,24 +81,14 @@ _REQUIRED_PARTS: Dict[str, frozenset] = {
 }
 
 
-def _view_of(values: Dict[str, Any]) -> Optional[str]:
-    """The ``_VIEWS`` key a request's checked values (``_request_values``) select, or None for the
-    workbook overview. Every view key that is present carries a value."""
-    for key, _result_type in _VIEWS:
-        if values.get(key):
-            return key
-    return None
-
-
-def _request_values(params: Dict[str, Any]) -> Dict[str, Any]:
-    """Every declared parameter's checked value, its default when absent, before any work is done.
-    A value a parameter cannot apply was read as its default or as no limit, exit 0 (BACK-2525).
-    Checking is not applying: no key counts as used here; a view marks what it applies (``_value``)."""
-    raw = dict(peek_query_items(params))
-    try:
-        return {spec.name: spec.validate(raw.get(spec.name)) for spec in _PARAM_SPECS}
-    except ValueError as exc:
-        raise RequestValidationError(str(exc)) from exc
+def _result_type(params: Any) -> str:
+    """The answer a request (bound, prepared or a plain mapping) selects, under any spelling of its selector; prediction
+    never raises: a request the binder rejects names no other answer."""
+    given = dict(peek_query_items(params))
+    for key, result_type in _VIEWS:
+        if any(given.get(word) not in (None, False) for word in _SPEC[key].spellings):
+            return result_type
+    return _WORKBOOK
 
 
 class XlsxRenderer:
@@ -151,7 +142,7 @@ class XlsxRenderer:
 
         # Numbered as ?sheet= counts them, from 0 (BACK-1608: listed from 1, so ?sheet=1
         # opened the sheet shown as 2).
-        print(f"Sheets ({len(sheets)}) -- open one with ?sheet=<name> or ?sheet=<index>:")
+        print(f"Sheets ({len(sheets)}) -- open one with --sheet NAME or --sheet INDEX:")
         for i, sheet in enumerate(sheets):
             name = sheet.get('name', f'Sheet{i + 1}')
             dim = sheet.get('dimension', '')
@@ -177,17 +168,17 @@ class XlsxRenderer:
                     if len(table_names) > 8:
                         names_str += f', ... ({len(table_names)} total)'
                     print(f"   Tables: {names_str}")
-                print(f"   Run with ?powerpivot=schema to explore the full model")
+                print("   Run with --powerpivot schema to explore the full model")
             if banner.get('has_powerquery'):
-                print(f"\n\U0001f4e6 Power Query detected — run with ?powerquery=list to explore queries")
+                print("\n\U0001f4e6 Power Query detected — run with --powerquery list to explore queries")
             conn_count = banner.get('connection_count', 0)
             if conn_count:
                 s = 's' if conn_count != 1 else ''
-                print(f"\n\U0001f517 {conn_count} external connection{s} — run with ?connections=list")
+                print(f"\n\U0001f517 {conn_count} external connection{s} — run with --connections list")
             range_count = banner.get('named_range_count', 0)
             if range_count:
                 s = 's' if range_count != 1 else ''
-                print(f"\n\U0001f4ce {range_count} named range{s} — run with ?names=list")
+                print(f"\n\U0001f4ce {range_count} named range{s} — run with --names list")
 
     @staticmethod
     def _render_sheet_data(result: dict, format: str) -> None:
@@ -234,7 +225,7 @@ class XlsxRenderer:
             print_json_result(result)
             return
 
-        pattern = result.get('pattern', '')
+        pattern = term_label(result.get('pattern'))  # one term as typed; several joined by AND
         total = result.get('total_matches', 0)
         sheets_count = result.get('sheets_with_matches', 0)
         sheet_results = result.get('sheet_results', [])
@@ -415,8 +406,8 @@ class XlsxRenderer:
                 expr = q.get('expression', '')
                 lines = len(split_lines(expr))
                 print(f"  {q['name']}  ({lines} lines)")
-            print(f"\nRun with ?powerquery=show to see all M code")
-            print(f"Run with ?powerquery=<name> to see a specific query")
+            print("\nRun with --powerquery show to see all M code")
+            print("Run with --powerquery NAME to see a specific query")
         elif mode == 'show':
             print(f"Power Query: {filename}\n")
             for q in queries:
@@ -494,7 +485,7 @@ class XlsxRenderer:
                 if len(source) > 60:
                     source = source[:57] + '...'
                 print(f"  {name}  [{conn_type}]  {source}")
-            print(f"\nRun with ?connections=show for full connection strings and SQL")
+            print("\nRun with --connections show for full connection strings and SQL")
 
     @staticmethod
     def render_element(result: dict, format: str = 'text') -> None:
@@ -507,9 +498,18 @@ def _text_value(name: str, example: str) -> Callable[[Any], str]:
     nothing. A bare ``?search`` crashed on ``True.lower()`` (exit 3, BACK-2525)."""
     def convert(value: Any) -> str:
         if not isinstance(value, str) or not value.strip():
-            raise ParamValueError(f'{name} needs a value: ?{example}')
+            raise ParamValueError(f'{name} needs a value: {example}')
         return value
     return convert
+
+
+_match_term = _text_value('match', '--match TEXT')
+
+
+def _match_terms(value: Any) -> List[str]:
+    """Match terms: one string, or every repeat of a repeated match (COMMAND_MODEL "Conflicting values"), each a
+    nonblank string; a row matches when it holds every term."""
+    return [_match_term(item) for item in value] if isinstance(value, (list, tuple)) else [_match_term(value)]
 
 
 def _mode_value(bare: str) -> Callable[[Any], str]:
@@ -536,37 +536,61 @@ def _format_value(value: Any) -> str:
     return value
 
 
+def _mode_flag(name: str) -> CliBinding:
+    """A view's flag: bare, it is the view's default mode, as the bare URI key is."""
+    return CliBinding((f'--{name}',), nargs='?', const=True, metavar='MODE')
+
+
 _POWERPIVOT_MODES = ('tables', 'schema', 'measures', 'dax', 'relationships')
 _POWERQUERY_LIST_MODES = ('list', 'show')
-# Each query parameter, declared once: the schema is built from these, and every value is checked
-# before any work (_request_values). Unknown modes, booleans and limits were read as their default.
+_SHEET_ANSWER, _SEARCH_ANSWER = ('xlsx_sheet',), ('xlsx_search',)
+# The declaration `reveal xlsx` and xlsx:// are both generated from (D20, BACK-2626): each value is bound and checked
+# before any work, and an unknown, unread or repeated control is an invalid request. The six views are answer selectors
+# (ruling Q3): two in one request exit 2. ?range and ?search are the legacy words of --cells and --match.
+_SHEET = ParamSpec('sheet', 'string|integer', 'Sheet to show (name, 0-based index or a unique part of a name)', None,
+                   _text_value('sheet', '--sheet NAME'), ('sheet=Sales', 'sheet=0'), role='operation',
+                   cli=CliBinding(('--sheet',), metavar='NAME'))
+_CELLS = ParamSpec('cells', 'string', 'Cells of the sheet view: A1:C10, whole columns B:D, whole rows 5:7, or one '
+                   'cell B2', None, _text_value('cells', '--cells A1:C10'), ('sheet=0&cells=A1:C10', 'sheet=0&cells=B:D', 'sheet=0&cells=5:7'),
+                   cli=CliBinding(('--cells',), metavar='RANGE'), legacy=(LegacySpelling('range'),),
+                   answers=_SHEET_ANSWER)
+_MATCH = ParamSpec('match', 'array', 'Search every sheet for rows holding the text (case-insensitive); repeat to '
+                   'require every term in a row', None, _match_terms, ('match=revenue', 'match=total'),
+                   role='operation', repeatable=True, cli=CliBinding(('--match',), metavar='TEXT'),
+                   legacy=(LegacySpelling('search'),))
+# --format is the global flag; csv is the format only this noun renders (formats.noun_formats), so --format csv binds
+# this control as ?format=csv spells it (BACK-2722 precedent: calls/imports --format dot).
+_FORMAT = ParamSpec('format', 'string', 'Output override: csv (the sheet view as CSV, every row) or json; text follows '
+                    '--format', None, _format_value, ('sheet=0&format=csv', 'format=json'), choices=('text', 'json', 'csv'),
+                    role='presentation')
+_LIMIT = ParamSpec('limit', 'integer', 'Rows (sheet view) or matches (search) to return; 0 = every row. Absent: the '
+                   'sheet view shows 100 and says so; --format csv and the search return every row', None,
+                   _limit_value, ('sheet=0&limit=500', 'sheet=0&limit=0', 'match=total&limit=20'), minimum=0, zero_policy='no cap',
+                   cli=CliBinding(('--limit',), metavar='N'), answers=_SHEET_ANSWER + _SEARCH_ANSWER)
+_FORMULAS = ParamSpec('formulas', 'boolean', 'Sheet view: on shows formulas instead of values (default off)', False,
+                      switch_value, ('sheet=0&formulas=on',), cli=CliBinding(('--formulas',), metavar='on|off'),
+                      answers=_SHEET_ANSWER)
 _PARAM_SPECS: Tuple[ParamSpec, ...] = (
-    ParamSpec('sheet', 'string|integer', 'Sheet to extract (name or 0-based index)', None,
-              _text_value('sheet', 'sheet=NAME'), ('sheet=Sales', 'sheet=0')),
-    ParamSpec('range', 'string', 'Cells A1:C10, whole columns B:D, whole rows 5:7, or one cell B2', None,
-              _text_value('range', 'range=A1:C10'), ('range=A1:C10', 'range=B:D', 'range=5:7')),
-    ParamSpec('search', 'string', 'Search for text across all sheets (case-insensitive)', None,
-              _text_value('search', 'search=TEXT'), ('search=revenue', 'search=total')),
-    ParamSpec('format', 'string', 'Output override: csv (the sheet view as CSV, every row) or json; '
-              'text follows --format', None, _format_value, ('format=csv', 'format=json'),
-              choices=('text', 'json', 'csv'), role='presentation'),
-    ParamSpec('limit', 'integer', 'Rows (sheet view) or matches (search) to return; 0 or absent: the sheet '
-              'view shows 100 and says so, format=csv and search return all', 0, _limit_value,
-              ('limit=500', 'limit=50'), minimum=0, zero_policy='default'),
-    ParamSpec('formulas', 'boolean', 'Show formulas instead of values', False, boolean_value,
-              ('formulas=true',)),
+    _SHEET, _CELLS, _MATCH, _FORMAT, _LIMIT, _FORMULAS,
     ParamSpec('powerpivot', 'string', 'Extract the Power Pivot model; bare means schema', None,
               _mode_value('schema'), ('powerpivot=schema', 'powerpivot=dax', 'powerpivot=tables',
-                                      'powerpivot=measures'), choices=_POWERPIVOT_MODES),
+                                      'powerpivot=measures'), choices=_POWERPIVOT_MODES, role='operation',
+              cli=_mode_flag('powerpivot')),
     ParamSpec('powerquery', 'string', 'Extract Power Query M code: list (bare), show (all M code) or one '
               'query by name (case-insensitive; a name that matches nothing exits 2)', None,
-              _mode_value('list'), ('powerquery=list', 'powerquery=show', 'powerquery=SalesData')),
+              _mode_value('list'), ('powerquery=list', 'powerquery=show', 'powerquery=SalesData'), role='operation',
+              cli=_mode_flag('powerquery')),
     ParamSpec('names', 'string', 'List named ranges defined in the workbook: list (bare)', None,
-              _mode_value('list'), ('names=list', 'names'), choices=('list',)),
+              _mode_value('list'), ('names=list', 'names'), choices=('list',), role='operation',
+              cli=_mode_flag('names')),
     ParamSpec('connections', 'string', 'List external data connections: list (bare) or show (full '
               'connection strings and commands)', None, _mode_value('list'),
-              ('connections=list', 'connections'), choices=('list', 'show')),
+              ('connections=list', 'connections'), choices=('list', 'show'), role='operation',
+              cli=_mode_flag('connections')),
 )
+_SPEC = {spec.name: spec for spec in _PARAM_SPECS}
+# --check never changed an xlsx answer (BACK-2708 ruling 2): an inert flag-only modifier with its note.
+PARAM_SPECS: Tuple[ParamSpec, ...] = (*_PARAM_SPECS, legacy_check())
 _SCHEMA_QUERY_PARAMS = param_schema(_PARAM_SPECS)
 
 _SCHEMA_OUTPUT_TYPES = [
@@ -619,43 +643,45 @@ _SCHEMA_OUTPUT_TYPES = [
 _SCHEMA_NOTES = [
     'Pure stdlib implementation — no extra dependencies required',
     'Sheet can be specified by name or 0-based integer index (sheet=0 for first sheet)',
-    '?range=A1:C10 uses standard A1 notation; omit to get the entire sheet',
-    '?search=term is case-insensitive and searches all sheets simultaneously',
-    '?formulas=true shows raw formulas instead of computed cell values',
-    '?format=csv exports every row of the sheet as CSV — pipe to other tools or save to file',
-    '?powerpivot=schema shows Power Pivot tables and columns (Excel 2010/2013 XMLA format)',
-    '?powerpivot=dax shows DAX measure expressions (requires Excel 2010/2013 XMLA; modern Power BI exports not supported without reveal-cli[powerpivot])',
+    '--cells A1:C10 uses standard A1 notation (also B:D, 5:7, B2); omit it to get the entire sheet',
+    '--match TEXT is case-insensitive and searches all sheets; repeat it to require every term in a row',
+    '--formulas on shows raw formulas instead of computed cell values',
+    '--format csv exports every row of the sheet as CSV — pipe to other tools or save to file',
+    '--limit 0 (or --all) shows every row; without --limit the sheet view shows 100 and says so',
+    'The query-string spellings (?sheet=, ?range=, ?search=, ...) still work until 1.0, each with a note naming the flag',
+    '--powerpivot schema shows Power Pivot tables and columns (Excel 2010/2013 XMLA format)',
+    '--powerpivot dax shows DAX measure expressions (requires Excel 2010/2013 XMLA; modern Power BI exports not supported without reveal-cli[powerpivot])',
 ]
 
 _SCHEMA_EXAMPLE_QUERIES = [
     {'uri': 'xlsx:///path/to/file.xlsx', 'description': 'List all sheets in workbook', 'output_type': 'xlsx_workbook'},
-    {'uri': 'xlsx:///path/to/file.xlsx?sheet=0', 'description': 'Extract first sheet', 'output_type': 'xlsx_sheet'},
-    {'uri': 'xlsx:///path/to/file.xlsx?sheet=Sales&range=A1:C10', 'description': 'Extract cell range from specific sheet', 'output_type': 'xlsx_sheet'},
-    {'uri': 'xlsx:///path/to/file.xlsx?sheet=Sales&format=csv', 'description': 'Export sheet as CSV', 'output_type': 'xlsx_sheet'},
-    {'uri': 'xlsx:///path/to/file.xlsx?search=revenue', 'description': 'Search all sheets for matching rows (case-insensitive)', 'output_type': 'xlsx_search'},
-    {'uri': 'xlsx:///path/to/file.xlsx?search=error&limit=20', 'description': 'Cross-sheet search with result limit', 'output_type': 'xlsx_search'},
-    {'uri': 'xlsx:///path/to/file.xlsx?powerpivot=tables', 'description': 'List Power Pivot tables with column counts', 'output_type': 'xlsx_powerpivot'},
-    {'uri': 'xlsx:///path/to/file.xlsx?powerpivot=schema', 'description': 'Show Power Pivot tables with all column names', 'output_type': 'xlsx_powerpivot'},
-    {'uri': 'xlsx:///path/to/file.xlsx?powerpivot=dax', 'description': 'Show DAX measure expressions', 'output_type': 'xlsx_powerpivot'},
+    {'uri': 'xlsx:///path/to/file.xlsx --sheet 0', 'description': 'Extract first sheet', 'output_type': 'xlsx_sheet'},
+    {'uri': 'xlsx:///path/to/file.xlsx --sheet 0 --cells A1:C10', 'description': 'Extract cell range from the first sheet', 'output_type': 'xlsx_sheet'},
+    {'uri': 'xlsx:///path/to/file.xlsx --sheet 0 --format csv', 'description': 'Export sheet as CSV', 'output_type': 'xlsx_sheet'},
+    {'uri': 'xlsx:///path/to/file.xlsx --match revenue', 'description': 'Search all sheets for matching rows (case-insensitive)', 'output_type': 'xlsx_search'},
+    {'uri': 'xlsx:///path/to/file.xlsx --match error --limit 20', 'description': 'Cross-sheet search with result limit', 'output_type': 'xlsx_search'},
+    {'uri': 'xlsx:///path/to/file.xlsx --powerpivot tables', 'description': 'List Power Pivot tables with column counts', 'output_type': 'xlsx_powerpivot'},
+    {'uri': 'xlsx:///path/to/file.xlsx --powerpivot schema', 'description': 'Show Power Pivot tables with all column names', 'output_type': 'xlsx_powerpivot'},
+    {'uri': 'xlsx:///path/to/file.xlsx --powerpivot dax', 'description': 'Show DAX measure expressions', 'output_type': 'xlsx_powerpivot'},
 ]
 
 _HELP_EXAMPLES = [
     {'uri': 'xlsx:///data/sales.xlsx', 'description': 'Show workbook overview with all sheets'},
-    {'uri': 'xlsx:///data/sales.xlsx?sheet=Q1', 'description': 'Extract "Q1" sheet data'},
-    {'uri': 'xlsx:///data/sales.xlsx?sheet=0', 'description': 'Extract first sheet (by index)'},
-    {'uri': 'xlsx:///data/sales.xlsx?sheet=Q1&range=A1:D10', 'description': 'Extract cell range A1:D10 from Q1 sheet'},
-    {'uri': 'xlsx:///data/sales.xlsx?sheet=Q1&limit=50', 'description': 'Extract first 50 rows from Q1 sheet'},
-    {'uri': 'xlsx:///data/sales.xlsx?sheet=Q1&format=csv', 'description': 'Export Q1 sheet as CSV'},
-    {'uri': 'xlsx:///data/sales.xlsx?search=revenue', 'description': 'Search for "revenue" across all sheets'},
-    {'uri': 'xlsx:///data/model.xlsx?powerpivot=schema', 'description': 'Show Power Pivot data model tables and columns'},
-    {'uri': 'xlsx:///data/model.xlsx?powerpivot=dax', 'description': 'Show all DAX measure expressions'},
-    {'uri': 'xlsx:///data/model.xlsx?powerpivot=relationships', 'description': 'Show table relationship graph'},
-    {'uri': 'xlsx:///data/model.xlsx?powerquery=list', 'description': 'List Power Query (M) queries embedded in the workbook'},
-    {'uri': 'xlsx:///data/model.xlsx?powerquery=show', 'description': 'Show all Power Query M code'},
-    {'uri': 'xlsx:///data/model.xlsx?powerquery=SalesData', 'description': 'Show M code for the "SalesData" query'},
-    {'uri': 'xlsx:///data/model.xlsx?names=list', 'description': 'List all named ranges and defined names'},
-    {'uri': 'xlsx:///data/model.xlsx?connections=list', 'description': 'List external data connections (ODBC, web, etc.)'},
-    {'uri': 'xlsx:///data/model.xlsx?connections=show', 'description': 'Show full connection strings and SQL commands'},
+    {'uri': 'xlsx:///data/sales.xlsx --sheet Sales', 'description': 'Extract "Sales" sheet data'},
+    {'uri': 'xlsx:///data/sales.xlsx --sheet 0', 'description': 'Extract first sheet (by index)'},
+    {'uri': 'xlsx:///data/sales.xlsx --sheet Sales --cells A1:D10', 'description': 'Extract cell range A1:D10 from the Sales sheet'},
+    {'uri': 'xlsx:///data/sales.xlsx --sheet Sales --limit 50', 'description': 'Extract first 50 rows from the Sales sheet'},
+    {'uri': 'xlsx:///data/sales.xlsx --sheet Sales --format csv', 'description': 'Export the Sales sheet as CSV'},
+    {'uri': 'xlsx:///data/sales.xlsx --match revenue', 'description': 'Search for "revenue" across all sheets'},
+    {'uri': 'xlsx:///data/model.xlsx --powerpivot schema', 'description': 'Show Power Pivot data model tables and columns'},
+    {'uri': 'xlsx:///data/model.xlsx --powerpivot dax', 'description': 'Show all DAX measure expressions'},
+    {'uri': 'xlsx:///data/model.xlsx --powerpivot relationships', 'description': 'Show table relationship graph'},
+    {'uri': 'xlsx:///data/model.xlsx --powerquery list', 'description': 'List Power Query (M) queries embedded in the workbook'},
+    {'uri': 'xlsx:///data/model.xlsx --powerquery show', 'description': 'Show all Power Query M code'},
+    {'uri': 'xlsx:///data/model.xlsx --powerquery SalesData', 'description': 'Show M code for the "SalesData" query'},
+    {'uri': 'xlsx:///data/model.xlsx --names list', 'description': 'List all named ranges and defined names'},
+    {'uri': 'xlsx:///data/model.xlsx --connections list', 'description': 'List external data connections (ODBC, web, etc.)'},
+    {'uri': 'xlsx:///data/model.xlsx --connections show', 'description': 'Show full connection strings and SQL commands'},
 ]
 
 _HELP_FEATURES = [
@@ -666,17 +692,17 @@ _HELP_FEATURES = [
     'Row limiting',
     'Cross-sheet search',
     'Power Pivot data model (tables, columns, DAX measures, relationships)',
-    'Power Query M code extraction (?powerquery=)',
-    'Named ranges / defined names (?names=list)',
-    'External data connections (?connections=)',
+    'Power Query M code extraction (--powerquery)',
+    'Named ranges / defined names (--names list)',
+    'External data connections (--connections)',
     'JSON and text output',
 ]
 
 _HELP_TRY_NOW = [
     "reveal xlsx:///path/to/file.xlsx",
-    "reveal xlsx:///path/to/file.xlsx?sheet=0",
-    "reveal xlsx:///path/to/file.xlsx?powerpivot=schema",
-    "reveal xlsx:///path/to/file.xlsx?powerquery=list",
+    "reveal xlsx:///path/to/file.xlsx --sheet 0",
+    "reveal xlsx:///path/to/file.xlsx --powerpivot schema",
+    "reveal xlsx:///path/to/file.xlsx --powerquery list",
 ]
 
 _HELP_WORKFLOWS = [
@@ -685,7 +711,7 @@ _HELP_WORKFLOWS = [
         'scenario': 'Export Excel sheet to CSV for processing',
         'steps': [
             "reveal xlsx:///data/sales.xlsx              # See all sheets",
-            "reveal xlsx:///data/sales.xlsx?sheet=Q1&format=csv > output.csv",
+            "reveal xlsx:///data/sales.xlsx --sheet Sales --format csv > output.csv",
         ],
     },
     {
@@ -693,7 +719,7 @@ _HELP_WORKFLOWS = [
         'scenario': 'Preview large Excel file',
         'steps': [
             "reveal xlsx:///data/huge.xlsx              # List sheets",
-            "reveal xlsx:///data/huge.xlsx?sheet=Summary&limit=20  # Preview first 20 rows",
+            "reveal xlsx:///data/huge.xlsx --sheet Summary --limit 20  # Preview first 20 rows",
         ],
     },
     {
@@ -701,18 +727,18 @@ _HELP_WORKFLOWS = [
         'scenario': 'Understand a Power BI xlsx export data model',
         'steps': [
             "reveal xlsx:///data/report.xlsx                    # Overview — see model detected",
-            "reveal xlsx:///data/report.xlsx?powerpivot=schema  # Tables + columns",
-            "reveal xlsx:///data/report.xlsx?powerpivot=dax     # DAX measures",
-            "reveal xlsx:///data/report.xlsx?powerquery=list    # Power Query ETL queries",
+            "reveal xlsx:///data/report.xlsx --powerpivot schema  # Tables + columns",
+            "reveal xlsx:///data/report.xlsx --powerpivot dax     # DAX measures",
+            "reveal xlsx:///data/report.xlsx --powerquery list    # Power Query ETL queries",
         ],
     },
     {
         'name': 'Audit Data Sources',
         'scenario': 'Find where a workbook pulls its data from',
         'steps': [
-            "reveal xlsx:///data/report.xlsx?connections=list   # External connections",
-            "reveal xlsx:///data/report.xlsx?connections=show   # Full connection strings + SQL",
-            "reveal xlsx:///data/report.xlsx?powerquery=list    # Power Query sources",
+            "reveal xlsx:///data/report.xlsx --connections list   # External connections",
+            "reveal xlsx:///data/report.xlsx --connections show   # Full connection strings + SQL",
+            "reveal xlsx:///data/report.xlsx --powerquery list    # Power Query sources",
         ],
     },
 ]
@@ -723,14 +749,12 @@ _HELP_WORKFLOWS = [
 class XlsxAdapter(ResourceAdapter):
     """Adapter for exploring Excel spreadsheets via xlsx:// URIs.
 
-    Example URIs:
-        xlsx:///path/to/file.xlsx                    # Workbook overview (all sheets)
-        xlsx:///path/to/file.xlsx?sheet=0            # First sheet (by index)
-        xlsx:///path/to/file.xlsx?sheet=Sales        # Sheet by name
-        xlsx:///path/to/file.xlsx?sheet=Sales&range=A1:C10  # Cell range
-        xlsx:///path/to/file.xlsx?search=revenue     # Search across sheets
-        xlsx:///path/to/file.xlsx?sheet=Sales&format=csv  # Export as CSV
-        xlsx:///path/to/file.xlsx?sheet=Sales&limit=50    # Limit rows
+    Example requests (the resource URI takes the same flags, D20):
+        reveal xlsx /path/to/file.xlsx                          # Workbook overview (all sheets)
+        reveal xlsx /path/to/file.xlsx --sheet 0                # First sheet (by index)
+        reveal xlsx /path/to/file.xlsx --sheet Sales --cells A1:C10
+        reveal xlsx /path/to/file.xlsx --match revenue          # Search across sheets
+        reveal xlsx /path/to/file.xlsx --sheet Sales --format csv
     """
     HELP_CLUSTER = 'Data & Config'
 
@@ -738,6 +762,14 @@ class XlsxAdapter(ResourceAdapter):
     RESOURCE_IS_PATH = True  # a missing workbook is an invalid resource (D6 exit 2), not an adapter error
     RESULT_TYPE = _WORKBOOK
     DEFAULT_FAIL_ON = 'none'
+    FINDINGS_POLICIES = ('none',)
+    BOUND_QUERY_CALL = True
+    PARAM_SPECS = PARAM_SPECS
+    RESOURCE_SPEC = ResourceSpec(required=True, walks=False)
+    # --all lifts the selected answer's row cap: it binds --limit 0's value (BACK-2729).
+    CLI_QUERY_FLAGS = {'all': 'limit=1000000'}
+    LEGACY_CHECK_TRANSPORT = True  # --check after the URI takes the router's check path, as json's and codex's
+    result_type_for = staticmethod(_result_type)
 
     @classmethod
     def uri_execution_facts(cls, resource: str):
@@ -747,10 +779,9 @@ class XlsxAdapter(ResourceAdapter):
     @staticmethod
     def uri_result_type(resource: str) -> str:
         try:
-            view = _view_of(_request_values(parse_query_params(resource.partition('?')[2])))
-        except RequestValidationError:  # construction rejects the request (exit 2) before any view runs
-            view = None
-        return dict(_VIEWS)[view] if view else _WORKBOOK
+            return _result_type(parse_query_params(resource.partition('?')[2]))
+        except ValueError:  # a malformed query: construction rejects it (exit 2) before any view runs
+            return _WORKBOOK
 
     @staticmethod
     def execution_facts(result: Any) -> ExecutionFacts:
@@ -772,10 +803,11 @@ class XlsxAdapter(ResourceAdapter):
         return {
             'adapter': 'xlsx',
             'description': 'Excel spreadsheet inspection and data extraction',
-            'uri_syntax': 'xlsx:///path/to/file.xlsx[?query_params]',
+            'uri_syntax': 'xlsx:///path/to/file.xlsx [--sheet NAME]',
             'query_params': _SCHEMA_QUERY_PARAMS,
+            'resource': XlsxAdapter.RESOURCE_SPEC.schema(),
             'elements': {},
-            'cli_flags': [],
+            'cli_flags': [flag for spec in _PARAM_SPECS for flag in spec.flags],
             'supports_batch': False,
             'supports_advanced': False,
             'output_types': _SCHEMA_OUTPUT_TYPES,
@@ -798,53 +830,43 @@ class XlsxAdapter(ResourceAdapter):
             'see_also': ['metrics://']
         }
 
-    def __init__(self, resource: str, query: Optional[str] = None):
+    def __init__(self, resource: str, query: Optional[str] = None, *,
+                 params: Optional[Dict[str, Any]] = None):
         """Initialize xlsx adapter.
 
         Args:
-            resource: /path/to/file.xlsx, with or without the xlsx:// prefix
-                and with or without an embedded ?query_params — _parse_uri
-                strips/splits both, so direct construction
-                (XlsxAdapter("xlsx://x.xlsx?sheet=0")) and router
-                construction (bare path + separate query) both work.
-            query: Query params when passed separately (router construction)
-        """
-        connection_string = resource + (f'?{query}' if query else '')
-        self.connection_string = connection_string
-        self.file_path: Optional[Path] = None
-        self.query_params: Dict[str, str] = {}
-        self.values: Dict[str, Any] = {}  # the checked query values (_request_values); views read these
-        self.analyzer: Optional[XlsxAnalyzer] = None
-
-        self._parse_uri(connection_string)
-        self._init_analyzer()
-
-    def _parse_uri(self, uri: str) -> None:
-        """Parse xlsx:// URI into file path and query parameters.
-
-        Args:
-            uri: xlsx:///path/to/file.xlsx?param=value
+            resource: /path/to/file.xlsx, with or without the xlsx:// prefix and with or without an embedded query,
+                so direct construction (XlsxAdapter("xlsx://x.xlsx?sheet=0")) and router construction (bare path plus
+                a separate query) both work.
+            query: The URI query when passed separately, bound through the declaration
+            params: Already-bound or typed controls, in place of *query*
 
         Raises:
-            ValueError: If URI format is invalid
+            RequestValidationError (a ValueError): an unknown, unread, repeated or invalid control, or a resource that
+                is not a workbook
         """
-        if not uri:
-            raise RequestValidationError("xlsx:// URI required: xlsx:///path/to/file.xlsx")
-
-        # Remove xlsx:// prefix
-        if uri.startswith("xlsx://"):
-            uri = uri[7:]
-
-        # Split path and query string
-        if '?' in uri:
-            path_part, query_part = uri.split('?', 1)
-            self.query_params = parse_query_params(query_part)
-            self._warn_unknown_query_params(self.query_params)  # BACK-507
+        if resource.startswith('xlsx://'):
+            resource = resource[len('xlsx://'):]
+        resource, _, embedded = resource.partition('?')
+        query = query or embedded
+        self.connection_string = resource + (f'?{query}' if query else '')
+        if params is not None:
+            self.query_params = params if isinstance(params, QueryParams) else bind_declared_params(
+                PARAM_SPECS, params, transport='typed')
         else:
-            path_part = uri
-            self.query_params = {}
-        self.values = _request_values(self.query_params)
+            self.query_params = bind_declared_params(PARAM_SPECS, query or '', transport='uri')
+        self.file_path: Optional[Path] = None
+        self.analyzer: Optional[XlsxAnalyzer] = None
 
+        self._parse_uri(resource)
+        self._init_analyzer()
+
+    def _parse_uri(self, path_part: str) -> None:
+        """The workbook path (the query is bound in ``__init__``).
+
+        Raises:
+            RequestValidationError: no path, a missing file, or a file that is not a workbook
+        """
         if not path_part:
             # An empty path read the cwd and named it absolutely in "Invalid Excel format" (BACK-2325).
             raise RequestValidationError("xlsx:// URI requires a workbook path: xlsx:///path/to/file.xlsx")
@@ -895,19 +917,22 @@ class XlsxAdapter(ResourceAdapter):
         if self.file_path:
             self.analyzer = XlsxAnalyzer(str(self.file_path))
 
-    def get_structure(self, **kwargs: Any) -> Dict[str, Any]:
+    def get_structure(self) -> Dict[str, Any]:
         """Get workbook structure or sheet data based on query params.
 
         Returns:
             Dict containing workbook overview or sheet data
         """
         with self.composition_run():
-            return self._get_structure(**kwargs)
+            return self._get_structure()
 
-    def _get_structure(self, **kwargs: Any) -> Dict[str, Any]:
+    def _get_structure(self) -> Dict[str, Any]:
         if not self.analyzer:
             raise ValueError("No file loaded")
-        view = _view_of(self.values)
+        view = next((key for key, _type in _VIEWS if self._value(key) is not None), None)
+        if self._preferred_format() == 'csv' and view != 'sheet':
+            raise RequestValidationError('--format csv renders the sheet view only: give --sheet NAME '
+                                         '(json and text render every answer)')
         if view is None:
             return self._get_workbook_overview()
         value = self._value(view)
@@ -917,7 +942,7 @@ class XlsxAdapter(ResourceAdapter):
             'names': self._get_named_ranges,
             'connections': lambda: self._get_connections(value),
             'sheet': lambda: self._get_sheet_data(value),
-            'search': lambda: self._search_sheets(value),
+            'match': lambda: self._search_sheets(value),
         }
         return handlers[view]()
 
@@ -1017,21 +1042,22 @@ class XlsxAdapter(ResourceAdapter):
         rows_data = sheet['rows_data']
 
         # Apply cell range if specified
-        range_param = self._value('range')
+        range_param = self._value('cells')
         first_row = 1
         if range_param:
             rows_data, first_row = self._apply_cell_range(rows_data, range_param)
 
         all_rows = rows_data = self._pad_rows(rows_data)
         format_param = self._preferred_format()
-        limit, cause, hint = self._value('limit'), 'limit', 'raise ?limit=N'
-        if not limit and format_param != 'csv':
+        limit, cause, hint = self._value('limit'), 'limit', 'raise --limit N (0 = every row)'
+        if limit is None and format_param != 'csv':
             # BACK-1608: the view showed 20 rows of any sheet and said nothing; a CSV
             # export is every row, and the table view caps at a disclosed default.
             limit, cause = DEFAULT_SHEET_ROWS, 'auto_cap'
-            hint = 'set ?limit=N, or ?format=csv for every row'
-        if limit > 0:
-            rows_data = rows_data[:limit]
+            hint = 'set --limit N (0 or --all = every row), or --format csv for every row'
+        cap = _LIMIT.row_cap(limit)  # 0 is every row (COMMAND_MODEL Caps; ruling Q1)
+        if cap is not None:
+            rows_data = rows_data[:cap]
 
         # Build result data
         result_data = {
@@ -1066,9 +1092,8 @@ class XlsxAdapter(ResourceAdapter):
         return value if value != 'text' else None
 
     def _value(self, name: str) -> Any:
-        """A checked query value, counted as used: the flag ledger names a flag no view applied."""
-        mark_query_keys(self.query_params, name)
-        return self.values[name]
+        """A bound control's value (its default when absent)."""
+        return _SPEC[name].read(self.query_params)
 
     def _resolve_sheet_name(self, identifier: str) -> str:
         """The sheet ``?sheet=`` names: an exact name, a 0-based index, then a unique part of a name.
@@ -1091,7 +1116,7 @@ class XlsxAdapter(ResourceAdapter):
             raise RequestValidationError(f"Sheet '{identifier}' is ambiguous: matches {', '.join(partial)}")
         listing = ', '.join(f'{i}={n}' for i, n in enumerate(names))
         raise RequestValidationError(
-            f"Sheet not found: {identifier}. ?sheet= takes a name or a 0-based index: {listing}")
+            f"Sheet not found: {identifier}. --sheet takes a name or a 0-based index: {listing}")
 
     @staticmethod
     def _pad_rows(rows: List[List[Any]]) -> List[List[Any]]:
@@ -1140,24 +1165,24 @@ class XlsxAdapter(ResourceAdapter):
             index = index * 26 + (ord(char) - ord('A') + 1)
         return index - 1
 
-    def _search_sheets(self, pattern: str) -> Dict[str, Any]:
-        """Search for pattern across all sheets (case-insensitive).
+    def _search_sheets(self, terms: List[str]) -> Dict[str, Any]:
+        """The rows of every sheet that hold every term (case-insensitive, each in some cell of the row).
 
         Args:
-            pattern: Search text
+            terms: The match terms, one or more
 
         Returns:
-            Dict with search results grouped by sheet
+            Dict with search results grouped by sheet; ``pattern`` echoes the terms as a list
         """
         if self.analyzer is None:
             raise ValueError("Analyzer not initialized")
 
-        found = self.analyzer.search_all_sheets(pattern)
+        found = self._matching_rows(terms)
 
         # BACK-1543: total_matches was counted after this cut, so ?limit=3 reported 3 of
         # 684 as the total. A negative limit dropped the tail instead of capping.
-        limit = self._value('limit')
-        matches = found[:limit] if limit > 0 else found
+        cap = _LIMIT.row_cap(self._value('limit'))
+        matches = found if cap is None else found[:cap]
 
         # Group by sheet
         sheets_seen: Dict[str, List[Dict[str, Any]]] = {}
@@ -1171,30 +1196,44 @@ class XlsxAdapter(ResourceAdapter):
         ]
 
         result_data = {
-            'pattern': pattern,
+            'pattern': list(terms),
             'total_matches': len(found),
-            'sheets_with_matches': len(sheet_results),
+            # Counted from every match, not the cut (B5: the cut's sheets were counted).
+            'sheets_with_matches': len({m['sheet_name'] for m in found}),
             'sheet_results': sheet_results,
         }
 
-        unsearched = list(getattr(self.analyzer, 'unsearched_sheets', []))
         result = ResultBuilder.create(
             contract_version=CONTRACT_VERSION,
             result_type='xlsx_search',
             source=self.file_path or Path('unknown'),
-            warnings=[{
-                'type': 'sheets_unsearched', 'count': len(unsearched),
-                'files': [name for name, _ in unsearched[:5]],
-                'failures': failure_records(unsearched),
-                'message': (f"{len(unsearched)} sheet(s) could not be read and were not searched, so "
-                            "matches may be missing: "
-                            + ', '.join(f"{name} ({why})" for name, why in unsearched[:5])
-                            + (f" and {len(unsearched) - 5} more" if len(unsearched) > 5 else '')),
-            }] if unsearched else None,
+            warnings=self._unsearched_warnings(),
             data=result_data
         )
-        note_truncation(result, 'matches', len(matches), len(found), 'limit', hint='raise ?limit=N')
+        note_truncation(result, 'matches', len(matches), len(found), 'limit', hint='raise --limit N (0 = every match)')
         return result
+
+    def _matching_rows(self, terms: List[str]) -> List[Dict[str, Any]]:
+        """Every row holding the first term (the analyzer's search), kept when it also holds each other term."""
+        assert self.analyzer is not None
+        rest = [term.lower() for term in terms[1:]]
+        return [m for m in self.analyzer.search_all_sheets(terms[0])
+                if all(any(term in str(cell).lower() for cell in m['cells']) for term in rest)]
+
+    def _unsearched_warnings(self) -> Optional[List[Dict[str, Any]]]:
+        """The ``sheets_unsearched`` warning when a sheet could not be read for the search, else None."""
+        unsearched = list(getattr(self.analyzer, 'unsearched_sheets', []))
+        if not unsearched:
+            return None
+        return [{
+            'type': 'sheets_unsearched', 'count': len(unsearched),
+            'files': [name for name, _ in unsearched[:5]],
+            'failures': failure_records(unsearched),
+            'message': (f"{len(unsearched)} sheet(s) could not be read and were not searched, so "
+                        "matches may be missing: "
+                        + ', '.join(f"{name} ({why})" for name, why in unsearched[:5])
+                        + (f" and {len(unsearched) - 5} more" if len(unsearched) > 5 else '')),
+        }]
 
     # -------------------------------------------------------------------------
     # Power Pivot helpers
@@ -1937,8 +1976,6 @@ class XlsxAdapter(ResourceAdapter):
         Returns:
             Dict with sheet data
         """
-        # Set sheet parameter and get sheet data
-        self.query_params['sheet'] = self.values['sheet'] = element_name
         return self._get_sheet_data(element_name)
 
     def get_metadata(self) -> Dict[str, Any]:

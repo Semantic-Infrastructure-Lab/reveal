@@ -37,6 +37,7 @@ def source(tmp_path, monkeypatch):
     path.write_text(SOURCE, encoding='utf-8')
     (tmp_path / 'rows.json').write_text('[{"n": 1}, {"n": 2}]', encoding='utf-8')  # JSON's legacy slice rows
     sample_database(tmp_path)
+    sample_workbook(tmp_path)
     commit_sample(path)
     return path
 
@@ -47,6 +48,16 @@ def sample_database(directory):
     from contextlib import closing
     with closing(sqlite3.connect(directory / 'store.db')) as connection, connection:
         connection.execute('CREATE TABLE items (id INTEGER PRIMARY KEY)')
+
+
+def sample_workbook(directory):
+    """A small workbook beside the sample: one sheet, Sales, a header and three rows (xlsx's rows, BACK-2626)."""
+    import openpyxl
+    wb = openpyxl.Workbook()
+    wb.active.title = 'Sales'
+    for row in (['name', 'n'], ['x', 1], ['y', 2], ['x total', 3]):
+        wb.active.append(row)
+    wb.save(directory / 'book.xlsx')
 
 
 def commit_sample(path):
@@ -255,6 +266,7 @@ _MODIFIER_REQUESTS = {
     'codex': lambda f: ['codex://019e5cc5-0000-7000-8000-000000000001/messages'],  # codex_session_fixture.DOC_SESSION_ID
     'imports': lambda f: [f'imports://{Path(f).parent}?sort=-fan-in'],
     'json': lambda f: [f'json://{Path(f).parent / "rows.json"}'],
+    'xlsx': lambda f: [f'xlsx://{(Path(f).parent / "book.xlsx").as_posix()}'],
     'testability': lambda f: [f'testability://{Path(f).parent}?tests={Path(f).parent}'],
 }
 _MODIFIER_ARGV = {'--head': ['--head', '1'], '--tail': ['--tail', '1'], '--range': ['--range', '1-1'],
@@ -329,6 +341,8 @@ PRODUCTION_CASES = {
     'param:json.length': lambda f: [f'json://{Path(f).parent / "rows.json"}?length'],
     'param:json.data-only': lambda f: [f'json://{Path(f).parent / "rows.json"}?view=flatten&data-only'],
     'param:sqlite.check': lambda f: ['sqlite', str(Path(f).parent / 'store.db'), '--check'],
+    'param:xlsx.range': lambda f: [f"xlsx://{(Path(f).parent / 'book.xlsx').as_posix()}?sheet=Sales&range=A1:B2"],
+    'param:xlsx.search': lambda f: [f"xlsx://{(Path(f).parent / 'book.xlsx').as_posix()}?search=x"],
     'param:contracts.impls': lambda f: ['contracts', str(Path(f).parent), '--impls', '1'],
     'param:contracts.no_implementations': lambda f: ['contracts', str(Path(f).parent), '--no-implementations'],
     'param:surface.type': lambda f: ['surface', str(Path(f).parent), '--type', 'env'],

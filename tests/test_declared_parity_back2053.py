@@ -35,6 +35,7 @@ CASES = {
     'pack': ([], ''),
     'patches': ([], ''),
     'sqlite': ([], ''),
+    'xlsx': ([], ''),
     'surface': ([], ''),
     'testability': ([], ''),
     'trace': (['--from', 'serve'], '?from=serve'),
@@ -157,6 +158,8 @@ def project(tmp_path, monkeypatch):
         connection.executescript('CREATE TABLE users(id INTEGER PRIMARY KEY);'
                                  'CREATE TABLE posts(id INTEGER, user_id INTEGER REFERENCES users(id));'
                                  'INSERT INTO posts VALUES (1, 9);')
+    from test_retirements_back2066 import sample_workbook
+    sample_workbook(tmp_path)  # xlsx's resource, beside proj (BACK-2626)
     root = tmp_path / 'proj'
     (root / 'tests').mkdir(parents=True)
     (root / 'app.py').write_text(APP, encoding='utf-8')
@@ -179,6 +182,8 @@ def argv_for(noun, spelling, resource='proj'):
         resource = 'sessions'
     if noun == 'sqlite' and resource == 'proj':
         resource = 'app.db'
+    if noun == 'xlsx' and resource == 'proj':
+        resource = 'book.xlsx'
     if noun == 'json':
         resource += '/data.json'
     if spelling == 'cli':
@@ -323,7 +328,8 @@ def test_missing_resource_is_rejected_alike(project, noun, fmt):
 def test_fail_on_means_the_same_before_after_and_on_a_uri(project, noun, gate):
     """The project carries an unused import and a branchy function, so a declared gate has something to match."""
     cli, query = FINDINGS_VIEWS.get(noun, CASES[noun])
-    target = {'json': 'proj/data.json', 'claude': 'sessions', 'codex': 'sessions', 'sqlite': 'app.db'}.get(noun, 'proj')
+    target = {'json': 'proj/data.json', 'claude': 'sessions', 'codex': 'sessions', 'sqlite': 'app.db',
+              'xlsx': 'book.xlsx'}.get(noun, 'proj')
     walk_flags = ['--respect-gitignore=off'] if declared_adapter_class(noun).RESOURCE_SPEC.walks else []
     spellings = {
         'after': [noun, target, *cli, '--fail-on', gate],

@@ -172,6 +172,7 @@ SUBCOMMAND_ARGV = {
     'ast': ['proj'],
     'json': ['proj/data.json'],
     'sqlite': ['proj/app.db'],
+    'xlsx': ['proj/data.xlsx'],
     'markdown': ['proj'],
     'architecture': ['proj'],
     'calls': ['proj', '--target', 'main'],
