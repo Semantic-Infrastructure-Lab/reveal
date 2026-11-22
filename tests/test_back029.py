@@ -277,13 +277,12 @@ class TestCrossSessionSearchRouting:
         sessions_found = {m['session'] for m in result['matches']}
         assert 'old-sess' not in sessions_found
 
-    def test_empty_search_term_returns_zero_matches(self, tmp_path):
+    def test_empty_search_term_is_an_invalid_request(self, tmp_path):
+        # An empty ?search= is an empty term (Scott 2026-11-22, BACK-2736): it fell back to the session list
+        from reveal.errors import RequestValidationError
         with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', tmp_path):
-            adapter = ClaudeAdapter('', query='search=')
-            # Empty ?search= should not route to content search
-            # (falls back to _list_sessions since query_params.get('search') is falsy)
-            result = adapter.get_structure()
-        assert result['type'] == 'claude_session_list'
+            with pytest.raises(RequestValidationError, match='search needs a term'):
+                ClaudeAdapter('', query='search=').get_structure()
 
 
 # ─── Integration: real corpus in tmp_path ─────────────────────────────────────

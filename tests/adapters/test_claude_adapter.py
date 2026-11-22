@@ -636,13 +636,13 @@ class TestSessionListing:
 class TestSearchSubcommand:
     """Tests for claude://search routing — now a real content search."""
 
-    def test_search_subcommand_routes_to_content_search(self, tmp_path):
-        """claude://search (no term) routes to cross-session search with empty term."""
-        adapter = ClaudeAdapter('search', query=None)
+    def test_search_subcommand_without_a_term_is_an_invalid_request(self, tmp_path):
+        """claude://search with no term is an empty search, an invalid request (Scott 2026-11-22, BACK-2736); it
+        answered a cross-session search with an empty term."""
+        from reveal.errors import RequestValidationError
         with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', tmp_path):
-            result = adapter.get_structure()
-
-        assert result['type'] == 'claude_cross_session_search'
+            with pytest.raises(RequestValidationError, match='search needs a term'):
+                ClaudeAdapter('search', query=None).get_structure()
 
     def test_search_subpath_uses_path_term(self, tmp_path):
         """claude://search/<term> extracts the term from the path."""
