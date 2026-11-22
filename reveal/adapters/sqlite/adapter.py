@@ -514,14 +514,14 @@ class SQLiteAdapter(ResourceAdapter):
                 fk_count += len(fks)
         return fk_count
 
-    def get_structure(self, **kwargs) -> Dict[str, Any]:
+    def get_structure(self) -> Dict[str, Any]:
         """Get SQLite database overview.
 
         Returns:
             Dict containing database structure and statistics
         """
         if _VIEW.read(self.query_params) == 'health':
-            return self.check()
+            return dict(self.check())  # the health answer (a RevealResult, which is a dict)
         # If table specified, delegate to get_element
         if self.table:
             element_data = self.get_element(self.table)
