@@ -9,6 +9,7 @@ import json
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -50,11 +51,11 @@ def _warnings(doc):
 
 
 def _rows(doc):
-    return sorted(row['relative_path'].rsplit('/', 1)[-1] for row in doc['results'])
+    return sorted(Path(row['relative_path']).name for row in doc['results'])
 
 
 def _rows_in_order(doc):
-    return [row['relative_path'].rsplit('/', 1)[-1] for row in doc['results']]
+    return [Path(row['relative_path']).name for row in doc['results']]
 
 
 def _notes(doc):
