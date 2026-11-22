@@ -15,7 +15,8 @@ from pathlib import PurePosixPath
 import pytest
 
 from conftest import _run_reveal_direct as run, without_retirement_notes
-from test_element_views_back2627 import LANGUAGES, copies, target  # noqa: F401  (copies is a fixture)
+from test_element_views_back2627 import (LANGUAGES, _python, _refused, _tool_error, copies,  # noqa: F401  (copies is a fixture)
+                                         target)
 
 pytestmark = pytest.mark.conformance
 
@@ -216,3 +217,116 @@ def test_retired_flags_answer_what_their_named_view_answers(copies, old, new):  
     assert current.returncode == 0, current.stderr[:400]
     legacy = json.loads(run(path, element, *old, '--format', 'json').stdout)
     assert without_retirement_notes(legacy) == json.loads(current.stdout)
+
+
+# =================================================================================================================
+# Applicability, One answer per request and Conflicting values on the legacy flags (E6, E7, E13; moved here from
+# test_element_views_back2627.py at S4). They come from the declarations S3a adds (X1); a hand-written check is
+# forbidden, so they stay RED with the spelling until then.
+# =================================================================================================================
+
+# -- E6 (One answer per request): two views exit 2 naming both -----------------------------------------------------
+
+TWO_VIEWS = [
+    pytest.param(['{element}', '--boundary', '--exits'], ('boundary', 'exits'), id='boundary-exits'),
+    pytest.param(['{element}', '--varflow', 'result', '--boundary'], ('varflow', 'boundary'), id='varflow-boundary'),
+    pytest.param(['{element}', '--inputs', '--outputs'], ('inputs', 'outputs'), id='inputs-outputs'),
+    pytest.param(['{element}', '--flow', '--exits'], ('flow', 'exits'), id='flow-exits'),
+    pytest.param(['{element}', '--boundary', '--outline'], ('boundary', 'outline'), id='boundary-outline'),
+    pytest.param(['{element}', '--callsites', '--keys', 'result'], ('callsites', 'keys'), id='callsites-keys'),
+    pytest.param([':13', '--scope', '--boundary'], ('scope', 'boundary'), id='scope-boundary'),
+]
+
+
+@pytest.mark.parametrize('argv,names', TWO_VIEWS)
+def test_two_views_exit_2_naming_both(copies, argv, names):
+    path, element = _python(copies)
+    response = run(path, *[word.replace('{element}', element) for word in argv], '--format', 'json')
+    _refused(response, *names, 'one answer per request')
+
+
+def test_sibling_one_view_given_twice_is_one_view_and_effects_already_refuses_a_second(copies):
+    path, element = _python(copies)
+    twice = run(path, element, '--boundary', '--boundary', '--format', 'json')
+    assert twice.returncode == 0 and json.loads(twice.stdout)['meta']['flag'] == 'boundary'
+    assert run(path, element, '--effects', '--boundary', '--format', 'json').returncode == 2  # D10
+
+
+def test_two_views_are_a_tool_error_on_reveal_run(copies):
+    pytest.importorskip('mcp')
+    from reveal.mcp_server import reveal_run
+    path, element = _python(copies)
+    _tool_error(reveal_run([path, element, '--boundary', '--exits', '--format', 'json']), 'boundary', 'exits')
+
+
+# -- E7 (Applicability): a modifier the selected view does not read exits 2 naming it -------------------------------
+
+UNREAD = [
+    pytest.param(['--inputs', '--transitive'], 'transitive', id='inputs-transitive'),
+    pytest.param(['--exits', '--transitive'], 'transitive', id='exits-transitive'),
+    pytest.param(['--flow', '--transitive'], 'transitive', id='flow-transitive'),
+    pytest.param(['--boundary', '--cross-calls'], 'cross', id='boundary-cross-calls'),
+    pytest.param(['--keys', 'result', '--cross-calls'], 'cross', id='keys-cross-calls'),
+    pytest.param(['--boundary', '--head', '2'], 'head', id='boundary-head'),
+    pytest.param(['--boundary', '--limit', '2'], 'limit', id='boundary-limit'),
+    pytest.param(['--exits', '--depth', '2'], 'depth', id='exits-depth'),
+    pytest.param(['--varflow', 'result', '--depth', '2'], 'depth', id='varflow-depth'),
+    pytest.param(['--varflow', 'result', '--cross-calls', '--depth', '2'], 'depth', id='cross-calls-depth'),
+    pytest.param(['--boundary', '--depth', '2'], 'depth', id='boundary-depth'),
+]
+
+
+@pytest.mark.parametrize('flags,name', UNREAD)
+def test_unread_modifier_exits_2_naming_it(copies, flags, name):
+    path, element = _python(copies)
+    _refused(run(path, element, *flags, '--format', 'json'), name, 'not read by this answer')
+
+
+def test_callsites_value_and_range_conflict(copies):
+    """X9: --callsites N-M's value retires into --range, so both together are two values of one selection."""
+    path, element = _python(copies)
+    _refused(run(path, element, '--callsites', '13-14', '--range', '15-16', '--format', 'json'), 'callsites', 'range')
+
+
+@pytest.mark.parametrize('flags', [['--boundary', '--transitive'], ['--boundary', '--transitive', '--depth', '3'],
+                                   ['--flow', '--depth', '2'], ['--effects', '--in-loops', '--depth', '2'],
+                                   ['--varflow', 'result', '--cross-calls'], ['--effects', '--transitive', '--depth', '1']])
+def test_sibling_modifiers_their_view_reads_answer(copies, flags):
+    path, element = _python(copies)
+    response = run(path, element, *flags, '--format', 'json')
+    assert response.returncode == 0, response.stderr
+    assert not [w for w in json.loads(response.stdout)['meta']['warnings'] if w.get('type') == 'unused_flag']
+
+
+def test_sibling_effects_already_refuses_an_unread_depth(copies):
+    path, element = _python(copies)
+    assert run(path, element, '--effects', '--depth', '2', '--format', 'json').returncode == 2  # D10
+
+
+def test_unread_modifier_is_a_tool_error_on_reveal_run(copies):
+    pytest.importorskip('mcp')
+    from reveal.mcp_server import reveal_nav, reveal_run
+    path, element = _python(copies)
+    _tool_error(reveal_run([path, element, '--exits', '--transitive', '--format', 'json']), 'transitive')
+    _tool_error(reveal_nav(path, element, 'boundary', transitive=True), 'effects')  # sibling: typed controls refuse
+
+
+# -- E13: an element view on a directory -------------------------------------------------------------------------
+
+@pytest.mark.parametrize('view', [['--boundary'], ['--varflow', 'x'], ['--exits'], ['--flow'], ['--inputs'],
+                                  ['--callsites']], ids=lambda view: view[0][2:])
+def test_element_view_on_a_directory_exits_2(copies, view):
+    folder = PurePosixPath(copies['python']).parent.as_posix()
+    _refused(run(folder, *view, '--format', 'json'))
+
+
+def test_sibling_directory_effects_already_refuses_and_listing_answers(copies):
+    folder = PurePosixPath(copies['python']).parent.as_posix()
+    assert run(folder, '--effects').returncode == 2  # D10
+    assert run(folder).returncode == 0
+
+
+def test_element_view_on_a_directory_is_a_tool_error_on_reveal_run(copies):
+    pytest.importorskip('mcp')
+    from reveal.mcp_server import reveal_run
+    _tool_error(reveal_run([PurePosixPath(copies['python']).parent.as_posix(), '--boundary', '--format', 'json']))
