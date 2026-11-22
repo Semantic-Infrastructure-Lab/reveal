@@ -89,7 +89,9 @@ def test_source_warning_visible_once_and_empty_is_scoped(tmp_path, mode, output)
 
 
 @pytest.mark.parametrize('mode', MODES)
-@pytest.mark.parametrize('options', [[], ['--fields', 'results'], ['--head', '0'], ['--max-items', '0']])
+# --head is read by the listing only (BACK-2613): on this answer it exits 2 before analysis
+# (test_ast_vocabulary_back2613::test_b3_legacy_slices_are_read_by_the_listing_only).
+@pytest.mark.parametrize('options', [[], ['--fields', 'results'], ['--max-items', '0']])
 def test_partial_loss_precedes_projection(tmp_path, mode, options):
     (tmp_path / 'healthy.py').write_text(SOURCE, encoding='utf-8')
     (tmp_path / 'broken.py').write_text('def broken(:\n', encoding='utf-8')

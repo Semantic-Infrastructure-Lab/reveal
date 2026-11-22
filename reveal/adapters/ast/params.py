@@ -60,7 +60,7 @@ OFFSET = ParamSpec('offset', 'integer', 'Answer rows skipped after sorting', 0, 
 PARAM_SPECS: Tuple[ParamSpec, ...] = (WHERE, KIND, VIEW, BUILTINS, REVEAL_TYPE, SORT, LIMIT, OFFSET)
 # --head/--tail/--range slice this noun's rows today: flag-only legacy modifiers until the cut, read by the answers named
 # (BACK-2673; their notes are the flag:<noun>.<flag> RETIREMENTS rows).
-PARAM_SPECS = (*PARAM_SPECS, *legacy_slices(head=(), tail=(), range=()))
+PARAM_SPECS = (*PARAM_SPECS, *legacy_slices(head=_LISTING, tail=_LISTING, range=_LISTING))
 
 
 def _and_field(query: dict, field: str, condition: dict) -> None:
