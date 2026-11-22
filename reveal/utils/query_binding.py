@@ -1071,16 +1071,38 @@ def convert_flag_only(specs: Iterable[ParamSpec], args: Any) -> None:
             pass
 
 
+def _owned_by_parser(parser, spec: ParamSpec) -> bool:
+    """Whether *parser* already owns every flag of *spec*'s own argument (the main parser's ``--depth``, ``--range``,
+    ``--head``, ``--tail``, which other path-read answers read): that argument is not generated again, and its value is
+    the control's (the typed source reads the dest). An owned flag storing another destination would hand the control
+    another control's value: a declaration error."""
+    cli = spec.cli
+    owned = [parser._option_string_actions.get(flag) for flag in cli.flags] if cli is not None else []
+    if not owned or any(action is None for action in owned):
+        return False
+    dest = cli.dest or spec.name
+    for flag, action in zip(cli.flags, owned):
+        if action.dest != dest:
+            raise ValueError(f'{spec.name}: {flag} is owned by the parser\'s {action.dest!r} argument, not {dest!r}')
+    return True
+
+
 def add_declared_arguments(parser: argparse.ArgumentParser, specs: Iterable[ParamSpec],
-                           resource: ResourceSpec) -> None:
-    """Generate local arguments; global presentation/exclusion owners remain unchanged."""
-    parser.add_argument(resource.name, nargs=None if resource.required else '?',
-                        default=resource.cli_default)
+                           resource: Optional[ResourceSpec]) -> None:
+    """Generate local arguments; global presentation/exclusion owners remain unchanged. *resource* None: no positional
+    (the main parser's path read keeps its own, BACK-2627). A control whose flags the parser already owns keeps that
+    argument (``_owned_by_parser``); a declared noun's parser owns none of its controls' flags."""
+    if resource is not None:
+        parser.add_argument(resource.name, nargs=None if resource.required else '?',
+                            default=resource.cli_default)
     groups: Dict[str, Any] = {}
     for spec in specs:
         _add_legacy_cli_arguments(parser, spec)
         cli = spec.cli
         if cli is None:
+            continue
+        if _owned_by_parser(parser, spec):
+            _add_legacy_flag_arguments(parser, spec)
             continue
         box: Dict[str, Any] = {}
         options: Dict[str, Any] = {'dest': cli.dest or spec.name, 'default': argparse.SUPPRESS,
