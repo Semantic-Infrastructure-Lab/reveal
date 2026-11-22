@@ -225,7 +225,7 @@ class GitAdapter(ResourceAdapter):
     LEGACY_INIT = False
     BOUND_QUERY_CALL = True
     PARAM_SPECS = PARAM_SPECS
-    RESOURCE_SPEC = ResourceSpec(walks=False, filesystem=False)
+    RESOURCE_SPEC = ResourceSpec(walks=False, filesystem=False, address='@')  # git://app.py@main: @REF is an address
     RESULT_TYPE = 'git_repository'
     DEFAULT_FAIL_ON = 'none'
     FINDINGS_POLICIES = ('none',)

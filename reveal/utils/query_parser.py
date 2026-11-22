@@ -346,6 +346,9 @@ class ResourceSpec:
     kind: Optional[str] = None
     walks: bool = True
     filesystem: bool = True
+    # The characters that start an address part of the resource beyond its path (git's ``@REF``): a resource holding one
+    # names more than a path, so a guide keeps its URI rather than the subcommand's plain path (BACK-2726 form ruling).
+    address: str = ''
 
     def schema(self) -> Dict[str, Any]:
         result = {'name': self.name, 'required': self.required,
@@ -355,6 +358,8 @@ class ResourceSpec:
             result['walks'] = False
         if not self.filesystem:
             result['filesystem'] = False
+        if self.address:
+            result['address'] = self.address
         if self.kind is not None:
             result['kind'] = self.kind
         return result
