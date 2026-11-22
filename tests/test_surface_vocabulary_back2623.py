@@ -200,8 +200,9 @@ def test_limit_cuts_each_category_in_json_and_text_with_the_cut_marker(proj):
     cuts = {w['field']: (w['shown'], w['total']) for w in doc['meta']['warnings'] if w.get('type') == 'truncated'}
     assert cuts == {'surfaces.http': (1, 2), 'surfaces.env': (1, 5), 'surfaces.fs': (1, 2)}
     code, out, _ = _text('surface', '.', '--limit', '1')
-    assert code == 0 and 'Environment variables (5):' in out and '… 4 more' in out and 'C_KEY' not in out
-    assert out.count('showing 1 of 5') <= 1  # one disclosure of each cut, not a second one under the rows
+    assert code == 0 and 'Environment variables (5):' in out and 'C_KEY' not in out  # the heading keeps the uncut count
+    # the shared cut marker, once per cut list, after the body; no second, renderer-made disclosure
+    assert out.count('Truncated surfaces.env: showing 1 of 5') == 1 and '… 4 more' not in out
     assert _strip_notes(_cli('surface', '.', '--limit', '0')[1]) == _strip_notes(_cli('surface', '.')[1])
 
 

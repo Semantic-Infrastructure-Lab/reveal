@@ -76,16 +76,16 @@ def _empty_report(report: Dict[str, Any], warning: str) -> List[str]:
 
 
 def _by_dir(rows: List[Dict[str, Any]], top: Optional[int], cut: Optional[int]) -> List[str]:
-    """*cut*: the uncut directory count when --limit cut the rows in the answer itself, else None."""
+    """*cut*: the uncut directory count when --limit cut the rows in the answer itself (the shared result-control
+    note discloses that cut after the body), else None."""
     shown = rows[:top] if top is not None else rows
-    total = cut if cut is not None else len(rows)
     width = max((len(r['dir']) for r in shown), default=0)
-    lines = [f"By directory ({total}):"]
+    lines = [f"By directory ({cut if cut is not None else len(rows)}):"]
     for row in shown:
         cells = '  '.join(f"{cat} {row['counts'][cat]}" for cat in _SURFACE_LABELS if cat in row['counts'])
         lines.append(f"  {row['dir']:<{width}}  {row['total']:>4}  {cells}")
-    if total > len(shown):
-        lines.append(f"  … {total - len(shown)} more directories ({_see_all(total, cut)})")
+    if len(rows) > len(shown):
+        lines.append(f"  … {len(rows) - len(shown)} more directories (omit --top to see all)")
     lines.extend(['', _TAXONOMY_NOTE, ''])
     return lines
 
@@ -135,13 +135,9 @@ def _entry(surface_type: str, entry: Dict[str, Any]) -> Optional[str]:
     return None
 
 
-def _see_all(total: int, cut: Optional[int]) -> str:
-    """How to see every row: --limit cut the answer itself (JSON too); the legacy --top cut only the text."""
-    return f"use --limit {total} to see all" if cut is not None else 'omit --top to see all'
-
-
 def _cut_totals(report: Dict[str, Any]) -> Dict[str, int]:
-    """{field: uncut count} of the lists --limit cut in the answer (their one disclosure is the '… N more' line)."""
+    """{field: uncut count} of the lists --limit cut in the answer. The cut itself is disclosed once, after the body, by
+    the shared result-control note (``print_result_control_notes``); a list's heading keeps its uncut count."""
     return {w['field']: w['total'] for w in (report.get('meta') or {}).get('warnings', [])
             if w.get('type') == 'truncated' and w.get('cause') == 'limit'}
 
@@ -196,8 +192,8 @@ def surface_text(report: Dict[str, Any], top: Optional[int] = None) -> str:
             count = cut if cut is not None else len(entries)
             lines.append(f"{label} ({count}):")
             lines.extend(text for text in (_entry(key, e) for e in shown) if text is not None)
-            if count > len(shown):
-                lines.append(f"  … {count - len(shown)} more ({_see_all(count, cut)})")
+            if len(entries) > len(shown):  # the legacy --top: a text-only cut the answer does not record
+                lines.append(f"  … {len(entries) - len(shown)} more (omit --top to see all)")
             lines.append('')
         lines.extend([_TAXONOMY_NOTE, ''])
     return '\n'.join(lines) + '\n'
@@ -218,13 +214,10 @@ class SurfaceRenderer(BaseRenderer):
     def _body(cls, result: Dict[str, Any], top: Optional[int] = None) -> str:
         meta = result.get('meta') or {}
         # Coverage and parser diagnostics are already printed above the inventory.
-        # So are --limit's cuts, as each list's '… N more' line.
         inline = {'W-SURFACE-1', 'W-SURFACE-2', 'W-SURFACE-3'}
-        cut = set(_cut_totals(result))
         remaining = {**result, 'meta': {**meta, 'warnings': [
             warning for warning in meta.get('warnings', [])
-            if warning.get('code') not in inline and not (warning.get('type') == 'truncated'
-                                                          and warning.get('field') in cut)]}}
+            if warning.get('code') not in inline]}}
         diagnostics = meta_warning_lines(remaining)
         return surface_text(result, top) + ('\n'.join(diagnostics) + '\n' if diagnostics else '')
 

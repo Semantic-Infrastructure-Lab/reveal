@@ -1,8 +1,8 @@
 """surface text: the '… N more' hint names a way that shows the rest.
 
 The legacy --top cut the text only, so its hint says to omit it (BACK-2623: the hint names no retiring spelling, and
-a category filter never lifted the cut, so it is not offered). --limit cuts the answer itself, and its hint names the
---limit that shows every row.
+a category filter never lifted the cut, so it is not offered). --limit cuts the answer itself: the heading keeps the
+uncut count and the shared result-control note discloses the cut after the body.
 """
 
 from reveal.rendering.adapters.surface import surface_text
@@ -30,6 +30,7 @@ def test_unfiltered_report_offers_the_same_and_no_category_filter():
     assert _hint(surfaces) == ['  … 2 more (omit --top to see all)']
 
 
-def test_a_limit_cut_names_the_limit_that_shows_every_row():
+def test_a_limit_cut_keeps_the_uncut_count_and_leaves_its_disclosure_to_the_shared_note():
     cut = {'type': 'truncated', 'field': 'surfaces.env', 'shown': 1, 'total': 3, 'cause': 'limit'}
-    assert _hint({'env': ENTRIES[:1]}, top=None, meta={'warnings': [cut]}) == ['  … 2 more (use --limit 3 to see all)']
+    text = surface_text(_report({'env': ENTRIES[:1]}, meta={'warnings': [cut]}))
+    assert 'Environment variables (3):' in text and 'more (' not in text
