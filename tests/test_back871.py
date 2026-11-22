@@ -180,11 +180,12 @@ class TestLintRouting:
         result = adapter.get_structure()
         assert result['contract_version'] == '1.1'
 
-    def test_link_graph_takes_precedence_over_lint(self, tmp_path):
+    def test_link_graph_and_lint_are_two_views(self, tmp_path):
+        """Two spellings of view with different values: the Conflicting-values error names both (BACK-2614 B2; link-graph
+        used to win silently)."""
         _write(tmp_path / 'a.md', 'No frontmatter.\n')
-        adapter = MarkdownQueryAdapter(str(tmp_path), 'link-graph&lint')
-        result = adapter.get_structure()
-        assert result['type'] == 'markdown_link_graph'
+        with pytest.raises(ValueError, match='view: conflicting spellings: link-graph, lint'):
+            MarkdownQueryAdapter(str(tmp_path), 'link-graph&lint')
 
 
 # ─── Renderer ──────────────────────────────────────────────────────────────────

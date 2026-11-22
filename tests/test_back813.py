@@ -129,12 +129,12 @@ class TestBacklinksRouting:
         result = adapter.get_structure()
         assert result['type'] == 'markdown_backlinks'
 
-    def test_link_graph_takes_precedence_over_backlinks(self, tmp_path):
-        """Both flags present is a degenerate case; link-graph wins deterministically."""
+    def test_link_graph_and_backlinks_are_two_answers(self, tmp_path):
+        """Both selections in one request: one answer per request, the error names both (BACK-2614 B2; link-graph
+        used to win silently)."""
         _write(tmp_path / 'a.md', 'x')
-        adapter = MarkdownQueryAdapter(str(tmp_path), query='link-graph&backlinks=a.md')
-        result = adapter.get_structure()
-        assert result['type'] == 'markdown_link_graph'
+        with pytest.raises(ValueError, match='link-graph and backlinks select different answers'):
+            MarkdownQueryAdapter(str(tmp_path), query='link-graph&backlinks=a.md')
 
 
 # ─── Renderer ─────────────────────────────────────────────────────────────────
