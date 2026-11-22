@@ -70,6 +70,11 @@ control whatever its value type; 1b, 1d and 6 read every spelling (aliases and n
       counting as the same. A declared control's flag meets the URI's key under rule 1: ``?k=A --flag A`` answers as
       ``?k=A``; a scalar ``?k=A --flag B`` exits 2 naming the flag and ``k=A``; a repeatable one answers as
       ``?k=A&k=B``. stats is ruled exempt (rule 9); codex has no subcommand until BACK-2618.
+  28  help shows the one spelling (Scott 2026-11-22, BACK-2755): a declared noun's usage and ``--help`` name no option
+      that a note-stage RETIREMENTS row spells (the key typing it notes: a declared control's ``flag:NOUN.FLAG`` or
+      ``param:NOUN.WORD``, a global flag's ``flag:FLAG``; a short option goes with its argument's long ones), and each
+      such option still parses (rules 2, 1b, 1c and 23 hold its note and answer); every canonical control's flag is still
+      listed. help://schemas keeps listing legacy spellings (machine data, not help).
 
 A cell is ``conforms`` (asserted), ``not_yet`` (recorded below with the behaviour observed; the count may only
 fall and must reach zero before the cut) or ``exempt`` (a written reason; the probe must find nothing to run).
@@ -108,7 +113,7 @@ def _declared_nouns():
 NOUNS = _declared_nouns()
 ELEMENT = 'element'  # the element views' pseudo-noun: its own cells at the end of this file (BACK-2627 S3b-5)
 RULES = ('1a', '1b', '1c', '1d', '2', '3', '3b', '4', '5', '6', '8a', '8b', '10', '12', '16', '17', '18', '20',
-         '14', '21j', '22', '23', '24')
+         '14', '21j', '22', '23', '24', '28')
 
 # The request each noun answers by default: the parity gate's table (CLI argv after the noun, URI suffix), plus
 # the declared noun it has no row for. None: no subcommand (stats is metrics' retired scheme).
@@ -253,7 +258,7 @@ NOT_YET: dict = {}
 
 NOT_YET_BASELINE = {'1a': 0, '1b': 0, '1c': 0, '1d': 0, '2': 0, '3': 0, '3b': 0, '4': 0, '5': 0, '6': 0,
                     '8a': 0, '8b': 0, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 0, '14': 0, '21j': 0, '22': 0,
-                    '23': 0, '24': 0}
+                    '23': 0, '24': 0, '28': 0}
 
 
 # --- the fixture -------------------------------------------------------------------------------------------
@@ -2003,13 +2008,68 @@ def probe_request_note(noun):
     return cases
 
 
+# --- rule 28: help shows the one spelling (Scott 2026-11-22, BACK-2755) ----------------------------------------------
+
+def _noted_key(noun, option, specs):
+    """The RETIREMENTS key typing *option* on the noun's subcommand notes, from the declarations: a declared control's
+    flag-only modifier ``flag:NOUN.FLAG``; its other flags ``param:NOUN.WORD``, WORD the legacy word (an entry's old flag),
+    alias or name the flag spells; any other option (a global flag) ``flag:OPTION``."""
+    for spec in specs:
+        if spec.cli is None:
+            continue
+        if option in spec.cli.flags:
+            if spec.flag_only:
+                return f'flag:{noun}.{option}'
+            word = next((name for name in (spec.name, *spec.aliases) if option[2:] in (name, name.replace('_', '-'))),
+                        spec.name)
+            return f'param:{noun}.{word}'
+        entry = next((entry for entry in _named_entries(spec) if getattr(entry, 'flag', None) == option), None)
+        if entry is not None:
+            return f'param:{noun}.{entry.name}'
+    return f'flag:{option}'
+
+
+def _note_stage(key):
+    row = RETIREMENTS.get(key)
+    return row is not None and row.stage == 'note'
+
+
+def _named_in(text, option):
+    return re.search(rf'(?<![\w-]){re.escape(option)}(?![\w-])', text) is not None
+
+
+def probe_help_one_spelling(noun):
+    """Rule 28: none for a noun with no parser of its own (stats)."""
+    if noun not in COMMANDS:
+        return []
+    parser, specs = create_declared_parser(noun), _adapter(noun).PARAM_SPECS
+    usage, text = parser.format_usage(), parser.format_help()
+    cases = []
+    for action in parser._actions:
+        longs = [option for option in action.option_strings if option.startswith('--')]
+        legacy = [option for option in longs if _note_stage(_noted_key(noun, option, specs))]
+        # An argument all of whose long flags retire takes its short spellings along (-v is --verbose).
+        spelled = action.option_strings if longs and legacy == longs else legacy
+        for option in spelled:
+            where = [name for name, body in (('usage', usage), ('help', text)) if _named_in(body, option)]
+            cases.append(Case(f'{option} hidden', not where, f'`reveal {noun} -h` names {option} in its {where}'))
+            cases.append(Case(f'{option} still parses', parser._option_string_actions.get(option) is action,
+                              f'{option} is no longer an option of `reveal {noun}`'))
+    for spec in specs:  # the positive control: what the rule keeps
+        own = [flag for flag in (spec.cli.flags if spec.cli else ()) if not _note_stage(_noted_key(noun, flag, specs))]
+        if own:
+            cases.append(Case(f'{own[0]} listed', _named_in(text, own[0]), f'`reveal {noun} -h` hides {own[0]}'))
+    return cases
+
+
 PROBES = {'1a': probe_uri_and_flag, '1b': probe_alias_and_name, '1c': probe_repeated_spelling,
           '1d': probe_repeatable_aliases, '3': probe_unsupported_controls, '3b': probe_unknown_keys,
           '4': probe_verbose_is_detail_full, '8a': probe_bare_shared_keys,
           '8b': probe_bare_field_filters, '10': probe_spellings_declared, '12': probe_repeatability_declared,
           '16': probe_legacy_operations, '17': probe_one_answer, '18': probe_repeated_global_flags,
           '20': probe_applicability, '14': probe_defaults, '21j': probe_invalid_requests_answer_json,
-          '22': probe_config_failures, '23': probe_flags_after_uri, '24': probe_request_note}
+          '22': probe_config_failures, '23': probe_flags_after_uri, '24': probe_request_note,
+          '28': probe_help_one_spelling}
 # These call the MCP tools (the optional mcp extra) besides the CLI.
 MCP_PROBES = ('2', '5', '6', '24')
 # These also run the retirement cases' sample file.
@@ -2819,6 +2879,8 @@ ELEMENT_EXEMPT = {
     '8b': 'element views declare no where control: there are no field filters',
     '23': _NO_URI + 'no URI to put flags after; every element option is already a path-read flag',
     '24': _NO_URI + 'no query key or analysis-only scheme to say the request note',
+    '28': 'no parser of its own: element views are the main parser\'s path read, whose --help digest already names no '
+          'old flag (BACK-2627); the main parser\'s help is outside "every declared noun" (BACK-2755)',
 }
 ELEMENT_NOT_YET = {
     '3': 'a shared control the main parser has no flag for (--offset, --where, --match, --detail, --tests, --against) '
