@@ -218,9 +218,11 @@ def test_root_param_pins_the_root_and_a_refused_one_says_why(fx, tmp_path_factor
     assert _fan_in(refused)['core.py'] == 5
     assert any(w.get('type') == 'root_rejected' and 'does not contain the target' in w['message']
                for w in refused['meta']['warnings'])
-    ignored = _structure(fx / 'pkg', f'rank=fan-in&scope=path&root={fx}')
-    assert any(w.get('type') == 'root_rejected' and 'scope=path' in w['message']
-               for w in ignored['meta']['warnings'])
+    # root pins the climb, which scope=path never takes: the two conflict, refused before the build (BACK-2697).
+    from reveal import api
+    from reveal.errors import RequestValidationError
+    with pytest.raises(RequestValidationError, match=r"control 'root' requires scope=root; this request gives scope=path"):
+        api.query(f'imports://{fx / "pkg"}?rank=fan-in&scope=path&root={fx}')
 
 
 def test_max_files_is_one_disclosed_budget(fx):

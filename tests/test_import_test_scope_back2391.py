@@ -187,8 +187,11 @@ def test_explicit_boundary_overrides_nested_project_markers(tmp_path):
     assert selected.anchor == outer and selected.source == 'explicit_root'
     assert selected.is_test(inner / 'pkg' / 'app.py') is True
     assert _cli(inner / 'pkg', f'importers&tests=exclude&root={outer}')['entries'] == []
-    ignored = _cli(inner / 'pkg', f'importers&tests=exclude&scope=path&root={outer}')
-    assert ignored['entries'] == [{'file': 'core.py', 'fan_in': 1, 'importers': ['app.py']}]
+    path_scoped = _cli(inner / 'pkg', 'importers&tests=exclude&scope=path')
+    assert path_scoped['entries'] == [{'file': 'core.py', 'fan_in': 1, 'importers': ['app.py']}]
+    # root pins the climb, which scope=path never takes: the two conflict, exit 2 naming both (BACK-2697).
+    conflict = _run_reveal_direct(f'imports://{inner / "pkg"}?importers&tests=exclude&scope=path&root={outer}')
+    assert conflict.returncode == 2 and "control 'root' requires scope=root" in conflict.stderr, conflict.stderr
 
 
 def test_explicit_test_named_boundary_does_not_classify_all_sources_as_tests(tmp_path):

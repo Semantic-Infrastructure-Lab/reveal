@@ -192,9 +192,12 @@ _ROOT = ParamSpec(
     'root', 'string',
     'Pin the scan root to DIR (beats .reveal.yaml, package and VCS markers): resolved against cwd, '
     'must be an existing directory containing the path, not a filesystem/home/system root; a refused '
-    'value says why and the climb decides. Ignored with scope=path',
+    'value says why and the climb decides. Needs scope=root (the default): under scope=path the path is the scan '
+    'root, so the two conflict (exit 2)',
     None, _choice_value, examples=('imports://src/app.py?importers&root=.',),
     role='analysis', cli=_request_cli('root'),
+    # The climb's pin: scope=path never climbs, so root there is a conflicting request (BACK-2656 requires, BACK-2697).
+    requires=(f'scope={SCOPE_ROOT}',),
 )
 # An input budget, not a row cap (limit cuts rows): a walk it cuts is incomplete analysis, exit 3.
 _SCAN_LIMIT = ParamSpec(
@@ -1375,11 +1378,9 @@ def _typed_params(params: Any) -> QueryParams:
 def _scan_root_of(params: Any, target_path: Path) -> resolution.ScanRoot:
     """Where a request resolves: the requested path itself under ``&scope=path``, else the project
     root the shared climb finds (``resolution.choose_scan_root``: ``&root=``, markers, the inferred subtree)."""
-    raw_root = params.get(_ROOT.name)  # a read: the build applies it
-    if _SCOPE.read(params) == SCOPE_PATH:
-        rejected = f'?root={raw_root} is ignored under scope=path' if raw_root else None
-        return resolution.ScanRoot(target_path, 'path', override_rejected=rejected)
-    return resolution.choose_scan_root(target_path, raw_root)
+    if _SCOPE.read(params) == SCOPE_PATH:  # root requires scope=root, refused before the build (BACK-2697)
+        return resolution.ScanRoot(target_path, 'path')
+    return resolution.choose_scan_root(target_path, params.get(_ROOT.name))  # a read: the build applies it
 
 
 def _usage_rejection(result: Dict[str, Any]) -> bool:
