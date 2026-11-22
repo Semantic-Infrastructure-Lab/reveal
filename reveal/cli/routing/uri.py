@@ -83,7 +83,7 @@ def _detached(error: RequestValidationError) -> RequestValidationError:
     import copy
     try:
         kept = copy.copy(error)
-    except Exception:  # boundary-ok: broad-except -- an exception whose constructor rejects its own args: strip in place
+    except (TypeError, copy.Error):  # a constructor that rejects its own args: strip the error itself in place
         kept = error
     kept.__traceback__ = None
     kept.__context__ = kept.__cause__ = None
