@@ -26,7 +26,7 @@ from reveal import api
 from reveal.adapters.codex.adapter import CodexAdapter
 from reveal.adapters.codex.params import PARAM_SPECS
 from reveal.cli.invocation import RETIREMENTS
-from reveal.errors import RequestValidationError
+from reveal.errors import RequestValidationError, UnsupportedOverrideError
 
 
 @pytest.fixture
@@ -132,9 +132,15 @@ def test_the_typed_api_takes_the_canonical_keywords_and_the_legacy_ones(codex):
     canonical = api.query('codex', 'sessions', where='session~=auth')
     legacy = api.query('codex://sessions/?filter=auth')
     assert _answer(legacy) == _answer(canonical) and canonical['total'] == 1
-    assert _answer(api.query('codex', S, view='last')) == _answer(api.query('codex', S, last=True))
+    # The legacy keywords are URI spellings: the URI form takes them as overrides; the noun form takes the subcommand's
+    # flags, which they are not (as Claude's filter=).
+    assert _answer(api.query('codex', S, view='last')) == _answer(api.query(f'codex://{S}', last=True))
+    assert _answer(api.query('codex://sessions/', filter='auth')) == _answer(canonical)
+    for keywords in ({'last': True}, {'filter': 'auth'}, {'full': True}):
+        with pytest.raises(UnsupportedOverrideError, match=next(iter(keywords))):
+            api.query('codex', S, **keywords)
     # a typed False restores omission, as it always did (BACK-2701): the overview
-    assert api.query('codex', S, last=False)['type'] == 'codex_session_overview'
+    assert api.query(f'codex://{S}', last=False)['type'] == 'codex_session_overview'
 
 
 # --- Q2: the where population -------------------------------------------------------------------------------

@@ -53,7 +53,7 @@ def _terms(value):
 
 def _view_word(name):
     """Legacy ``?NAME`` (``last``, ``tokens``, ``goal``) is ``view=NAME`` (ruling Q4): bare, empty or a true spelling
-    selects it, and the old ``--NAME`` flag too; a typed False restores omission (BACK-2701). A false or malformed value
+    selects it; a typed False restores omission (BACK-2701). A false or malformed value
     used to select the answer as well; it now exits 2 naming the view (D18: unsupported spellings reject now)."""
     def codec(value):
         if value is False:
@@ -70,10 +70,13 @@ def _view_word(name):
     return codec
 
 
+# The legacy words (filter, search, full, last, tokens, goal) are URI spellings only, with no flag: `reveal codex` never
+# shipped them, so a flag would be born deprecated, and a --search flag would make ?search='s request note recommend a
+# retiring spelling (COMMAND_MODEL "Retirement notes"). Each URI word keeps its param:codex row naming the canonical flag.
 SEARCH = ParamSpec('search', 'string',
                    'Deprecated compatibility control; full-text search across session JSONL user_message and '
                    'agent_message payloads (its JSON query is the string given)', None, string_value,
-                   role='operation', cli=CliBinding(('--search',)))
+                   role='operation')
 # match is read by the content search it selects, not beside a legacy search (that answer reads search's own term).
 MATCH = ParamSpec('match', 'array', 'Match text in session content (user and agent messages) on the catalog; repeat '
                   'to require every term in each session', None, _terms, uri_codec='percent', repeatable=True,
@@ -81,7 +84,7 @@ MATCH = ParamSpec('match', 'array', 'Match text in session content (user and age
 WHERE = replace(where_param('Session predicates, ANDed: session~=TEXT, a case-insensitive substring of the title or '
                             'first user message in the SQLite session index (not content search). A bare URI key with '
                             'its operator (?session~=TEXT) is the same filter',
-                            legacy=(LegacySpelling('filter', codec=_session_substring, flag='--filter'),),
+                            legacy=(LegacySpelling('filter', codec=_session_substring),),
                             convert=_session_terms, default=None, fields=('session',)), answers=(_LIST,))
 _BOUNDS, _BOUNDED_BY = (_LIST, _SEARCH), ('where|search|match',)
 SINCE, UNTIL = (
@@ -95,13 +98,11 @@ KEY = ParamSpec('key', 'string', 'Dot-path config key lookup, applied after secr
 VIEW = ParamSpec('view', 'string', 'A session answer: ' + ', '.join(SESSION_VIEWS) + '; a path view (/tools) is '
                  'the same selection', None, string_value, choices=tuple(SESSION_VIEWS),
                  role='operation', cli=CliBinding(('--view',)),
-                 legacy=tuple(LegacySpelling(name, codec=_view_word(name), flag=f'--{name}', flag_value=True)
-                              for name in QUERY_VIEWS))
+                 legacy=tuple(LegacySpelling(name, codec=_view_word(name)) for name in QUERY_VIEWS))
 DETAIL = ParamSpec('detail', 'string', 'For /exchanges: full shows complete prompts and answers in text output (JSON '
                    'already contains full text); normal shows previews', None, string_value, choices=('normal', 'full'),
                    cli=CliBinding(('--detail',)), answers=('codex_exchanges',),
-                   legacy=(LegacySpelling('full', codec=legacy_switch('full', 'full', 'normal'), flag='--full',
-                                          flag_value=True),))
+                   legacy=(LegacySpelling('full', codec=legacy_switch('full', 'full', 'normal')),))
 # The answers that hold a list of rows (CodexAdapter.BUDGET_LIST_FIELD): the shared --limit/--offset page them, and the
 # legacy --head/--tail/--range slice them (ruling Q6; COMMAND_MODEL Caps: --limit 0 is uncapped).
 PAGE_FIELDS = {
