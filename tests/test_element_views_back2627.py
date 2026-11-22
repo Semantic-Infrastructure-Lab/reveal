@@ -332,3 +332,477 @@ def test_callsites_and_outputs_answers(source):
     assert _json(source, ':2-3', '--outputs')['findings'] == [
         {'kind': 'mutation', 'var': 'total', 'line': 2, 'next_read_line': 8},
         {'kind': 'mutation', 'var': 'config', 'line': 3, 'next_read_line': 5}]
+
+
+# =================================================================================================================
+# REDs (step 2b). Each asserts the ruled answer through an existing entry point (CLI, MCP reveal_nav, MCP reveal_run)
+# and fails on the current code; the test after it is an unaffected sibling that passes. Rulings: geteno-1121 X1-X15
+# (rule 9 = plan section 5 rule 9; D6 = one exit contract; Applicability / One answer per request / Conflicting values
+# = COMMAND_MODEL "Cross-noun rules").
+# =================================================================================================================
+
+ABSENT = 'no_such_var'
+
+
+def _refused(response, *names):
+    """An invalid request (D6): exit 2, no element-view answer, and the message names each of *names*."""
+    said = response.stdout + response.stderr
+    assert response.returncode == 2, (response.returncode, said[:400])
+    assert '"element_view"' not in response.stdout, response.stdout[:400]
+    for name in names:
+        assert name in said, (name, said[:400])
+
+
+def _tool_error(result, *names):
+    from reveal.mcp_server import _ToolFailure
+    assert isinstance(result, _ToolFailure), str(result)[:400]
+    for name in names:
+        assert name in result, (name, str(result)[:400])
+
+
+def _tool_answer(result):
+    from reveal.mcp_server import _ToolFailure
+    assert not isinstance(result, _ToolFailure), str(result)[:400]
+    return result
+
+
+def _python(copies):
+    return copies['python'], target('python')[1]
+
+
+@pytest.fixture(scope='module')
+def others(tmp_path_factory):
+    """Files with no fixture in the checkout: an untested language (Elixir), a fallback grammar (R), a CSV and an
+    office document (a minimal .docx)."""
+    import zipfile
+
+    folder = tmp_path_factory.mktemp('others')
+    (folder / 'x.ex').write_text('defmodule Shop do\n  def process_order(order) do\n    result = validate(order)\n'
+                                 '    File.write("orders.log", result)\n    result\n  end\nend\n', encoding='utf-8')
+    (folder / 'x.r').write_text('process_order <- function(order) {\n  result <- validate(order)\n'
+                                '  write(result, file = "orders.log")\n  result\n}\n', encoding='utf-8')
+    (folder / 'x.csv').write_text('a,b\n1,2\n', encoding='utf-8')
+    with zipfile.ZipFile(folder / 'x.docx', 'w') as document:
+        document.writestr('[Content_Types].xml', '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/'
+                          'package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/></Types>')
+        document.writestr('word/document.xml', '<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats'
+                          '.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Hi</w:t></w:r></w:p></w:body>'
+                          '</w:document>')
+    return {path.suffix: path.as_posix() for path in folder.iterdir()}
+
+
+# -- E1, X14 (rule 9): a variable that matches nothing is not a zero -----------------------------------------------
+
+@pytest.mark.parametrize('language', LANGUAGES)
+def test_absent_variable_exits_2_naming_it_and_the_element(copies, language):
+    element = target(language)[1]
+    _refused(run(copies[language], element, '--varflow', ABSENT, '--format', 'json'), ABSENT, element)
+
+
+@pytest.mark.parametrize('language', ['python', 'typescript', 'go'])
+@pytest.mark.parametrize('view', [['--keys', ABSENT], ['--narrow', ABSENT], ['--varflow', ABSENT, '--cross-calls']],
+                         ids=['keys', 'narrow', 'cross-calls'])
+def test_absent_variable_exits_2_on_every_variable_view(copies, language, view):
+    element = target(language)[1]
+    _refused(run(copies[language], element, *view, '--format', 'json'), ABSENT, element)
+
+
+@pytest.mark.parametrize('language', LANGUAGES)
+def test_sibling_present_variable_answers(copies, language):
+    _, element, _, var, _ = target(language)
+    response = run(copies[language], element, '--varflow', var, '--format', 'json')
+    assert response.returncode == 0 and json.loads(response.stdout)['findings']
+
+
+def test_absent_variable_is_a_tool_error_on_mcp(copies):
+    pytest.importorskip('mcp')
+    from reveal.mcp_server import reveal_nav, reveal_run
+    path, element = _python(copies)
+    _tool_error(reveal_nav(path, element, 'varflow', ABSENT), ABSENT)
+    _tool_error(reveal_run([path, element, '--varflow', ABSENT, '--format', 'json']), ABSENT)
+
+
+def test_sibling_present_variable_answers_on_mcp(copies):
+    pytest.importorskip('mcp')
+    from reveal.mcp_server import reveal_nav, reveal_run
+    path, element = _python(copies)
+    assert 'WRITE' in _tool_answer(reveal_nav(path, element, 'varflow', 'result'))
+    assert json.loads(_tool_answer(reveal_run([path, element, '--varflow', 'result', '--format', 'json'])))['findings']
+
+
+# -- E3, X14 (rule 9): a line range outside the file, or reversed, matches nothing ---------------------------------
+
+NOWHERE = [
+    pytest.param([':900-950', '--boundary'], ('900',), id='range-past-end'),
+    pytest.param([':30-10', '--boundary'], ('30', '10'), id='range-reversed'),
+    pytest.param(['{element}', '--boundary', '--range', '900-950'], ('900',), id='element-range-past-end'),
+    pytest.param(['{element}', '--callsites', '900-950'], ('900',), id='callsites-range-past-end'),
+    pytest.param([':900-950', '--exits'], ('900',), id='exits'),
+    pytest.param([':900-950', '--flow'], ('900',), id='flow'),
+    pytest.param([':900-950', '--effects'], ('900',), id='effects'),
+    pytest.param([':900-950', '--inputs'], ('900',), id='inputs'),
+]
+
+
+@pytest.mark.parametrize('argv,names', NOWHERE)
+def test_lines_that_match_nothing_exit_2(copies, argv, names):
+    path, element = _python(copies)
+    _refused(run(path, *[word.replace('{element}', element) for word in argv], '--format', 'json'), *names)
+
+
+@pytest.mark.parametrize('argv', [[':13-13', '--boundary'], ['process_order', '--boundary', '--range', '13-14'],
+                                  ['process_order', '--callsites', '13-14'], [':40-49', '--exits']])
+def test_sibling_lines_inside_the_file_answer(copies, argv):
+    response = run(copies['python'], *argv, '--format', 'json')
+    assert response.returncode == 0, response.stderr
+    assert json.loads(response.stdout)['type'] == 'element_view'
+
+
+def test_lines_that_match_nothing_are_a_tool_error_on_mcp(copies):
+    pytest.importorskip('mcp')
+    from reveal.mcp_server import reveal_nav, reveal_run
+    path = copies['python']
+    _tool_error(reveal_nav(path, ':900-950', 'boundary'), '900')
+    _tool_error(reveal_run([path, ':900-950', '--boundary', '--format', 'json']), '900')
+    _tool_answer(reveal_nav(path, ':13-13', 'boundary'))  # sibling
+
+
+# -- E2, X14: narrow on an unannotated variable is a decline the JSON carries ---------------------------------------
+
+def test_narrow_decline_is_a_json_warning_with_the_text_sentence(copies):
+    path, element = _python(copies)
+    sentence = "No annotation for 'order' — cannot narrow"
+    assert run(path, element, '--narrow', 'order').stdout.strip() == sentence  # the text says it today
+    response = run(path, element, '--narrow', 'order', '--format', 'json')
+    assert response.returncode == 0
+    answer = json.loads(response.stdout)
+    assert answer['findings'] == []
+    assert any(sentence in warning.get('message', '') for warning in answer['meta']['warnings']), answer['meta']
+
+
+def test_narrow_decline_is_a_json_warning_on_mcp(copies):
+    pytest.importorskip('mcp')
+    from reveal.mcp_server import reveal_run
+    path, element = _python(copies)
+    answer = json.loads(_tool_answer(reveal_run([path, element, '--narrow', 'order', '--format', 'json'])))
+    assert any("No annotation for 'order'" in warning.get('message', '') for warning in answer['meta']['warnings'])
+
+
+# (sibling: test_narrow_on_an_annotated_variable above -- an annotated variable narrows with no warning)
+
+
+# -- E4: a callsites range that is not a range ---------------------------------------------------------------------
+
+@pytest.mark.parametrize('spelling', [['--callsites', 'abc'], ['--callsites=abc']])
+def test_callsites_garbage_range_exits_2_naming_it(copies, spelling):
+    path, element = _python(copies)
+    _refused(run(path, element, *spelling, '--format', 'json'), 'abc')
+
+
+def test_sibling_callsites_range_selects_lines(copies):
+    path, element = _python(copies)
+    answer = json.loads(run(path, element, '--callsites', '13-14', '--format', 'json').stdout)
+    assert (answer['meta']['from_line'], answer['meta']['to_line']) == (13, 14)
+
+
+def test_callsites_garbage_range_is_a_tool_error_on_mcp(copies):
+    pytest.importorskip('mcp')
+    from reveal.mcp_server import reveal_nav, reveal_run
+    path, element = _python(copies)
+    _tool_error(reveal_nav(path, element, 'callsites', 'abc'), 'abc')
+    _tool_error(reveal_run([path, element, '--callsites', 'abc', '--format', 'json']), 'abc')
+    _tool_answer(reveal_nav(path, element, 'callsites', '13-14'))  # sibling
+
+
+# -- E5: an empty variable name ------------------------------------------------------------------------------------
+
+@pytest.mark.parametrize('view', ['varflow', 'keys', 'narrow'])
+def test_empty_variable_name_exits_2_naming_the_view(copies, view):
+    path, element = _python(copies)
+    _refused(run(path, element, '--' + view, '', '--format', 'json'), view)
+
+
+def test_empty_variable_name_is_a_tool_error_on_reveal_run(copies):
+    pytest.importorskip('mcp')
+    from reveal.mcp_server import reveal_run
+    path, element = _python(copies)
+    _tool_error(reveal_run([path, element, '--varflow', '', '--format', 'json']), 'varflow')
+
+
+@pytest.mark.parametrize('view', ['varflow', 'keys', 'narrow'])
+def test_sibling_reveal_nav_already_refuses_an_empty_variable_name(copies, view):
+    pytest.importorskip('mcp')
+    from reveal.mcp_server import reveal_nav
+    path, element = _python(copies)
+    _tool_error(reveal_nav(path, element, view, ''), view)
+
+
+# -- E6 (One answer per request): two views exit 2 naming both -----------------------------------------------------
+
+TWO_VIEWS = [
+    pytest.param(['{element}', '--boundary', '--exits'], ('boundary', 'exits'), id='boundary-exits'),
+    pytest.param(['{element}', '--varflow', 'result', '--boundary'], ('varflow', 'boundary'), id='varflow-boundary'),
+    pytest.param(['{element}', '--inputs', '--outputs'], ('inputs', 'outputs'), id='inputs-outputs'),
+    pytest.param(['{element}', '--flow', '--exits'], ('flow', 'exits'), id='flow-exits'),
+    pytest.param(['{element}', '--boundary', '--outline'], ('boundary', 'outline'), id='boundary-outline'),
+    pytest.param(['{element}', '--callsites', '--keys', 'result'], ('callsites', 'keys'), id='callsites-keys'),
+    pytest.param([':13', '--scope', '--boundary'], ('scope', 'boundary'), id='scope-boundary'),
+]
+
+
+@pytest.mark.parametrize('argv,names', TWO_VIEWS)
+def test_two_views_exit_2_naming_both(copies, argv, names):
+    path, element = _python(copies)
+    response = run(path, *[word.replace('{element}', element) for word in argv], '--format', 'json')
+    _refused(response, *names, 'one answer per request')
+
+
+def test_sibling_one_view_given_twice_is_one_view_and_effects_already_refuses_a_second(copies):
+    path, element = _python(copies)
+    twice = run(path, element, '--boundary', '--boundary', '--format', 'json')
+    assert twice.returncode == 0 and json.loads(twice.stdout)['meta']['flag'] == 'boundary'
+    assert run(path, element, '--effects', '--boundary', '--format', 'json').returncode == 2  # D10
+
+
+def test_two_views_are_a_tool_error_on_reveal_run(copies):
+    pytest.importorskip('mcp')
+    from reveal.mcp_server import reveal_run
+    path, element = _python(copies)
+    _tool_error(reveal_run([path, element, '--boundary', '--exits', '--format', 'json']), 'boundary', 'exits')
+
+
+# -- E7 (Applicability): a modifier the selected view does not read exits 2 naming it -------------------------------
+
+UNREAD = [
+    pytest.param(['--inputs', '--transitive'], 'transitive', id='inputs-transitive'),
+    pytest.param(['--exits', '--transitive'], 'transitive', id='exits-transitive'),
+    pytest.param(['--flow', '--transitive'], 'transitive', id='flow-transitive'),
+    pytest.param(['--boundary', '--cross-calls'], 'cross', id='boundary-cross-calls'),
+    pytest.param(['--keys', 'result', '--cross-calls'], 'cross', id='keys-cross-calls'),
+    pytest.param(['--boundary', '--head', '2'], 'head', id='boundary-head'),
+    pytest.param(['--boundary', '--limit', '2'], 'limit', id='boundary-limit'),
+    pytest.param(['--exits', '--depth', '2'], 'depth', id='exits-depth'),
+    pytest.param(['--varflow', 'result', '--depth', '2'], 'depth', id='varflow-depth'),
+    pytest.param(['--varflow', 'result', '--cross-calls', '--depth', '2'], 'depth', id='cross-calls-depth'),
+    pytest.param(['--boundary', '--depth', '2'], 'depth', id='boundary-depth'),
+]
+
+
+@pytest.mark.parametrize('flags,name', UNREAD)
+def test_unread_modifier_exits_2_naming_it(copies, flags, name):
+    path, element = _python(copies)
+    _refused(run(path, element, *flags, '--format', 'json'), name, 'not read by this answer')
+
+
+def test_callsites_value_and_range_conflict(copies):
+    """X9: --callsites N-M's value retires into --range, so both together are two values of one selection."""
+    path, element = _python(copies)
+    _refused(run(path, element, '--callsites', '13-14', '--range', '15-16', '--format', 'json'), 'callsites', 'range')
+
+
+@pytest.mark.parametrize('flags', [['--boundary', '--transitive'], ['--boundary', '--transitive', '--depth', '3'],
+                                   ['--flow', '--depth', '2'], ['--effects', '--in-loops', '--depth', '2'],
+                                   ['--varflow', 'result', '--cross-calls'], ['--effects', '--transitive', '--depth', '1']])
+def test_sibling_modifiers_their_view_reads_answer(copies, flags):
+    path, element = _python(copies)
+    response = run(path, element, *flags, '--format', 'json')
+    assert response.returncode == 0, response.stderr
+    assert not [w for w in json.loads(response.stdout)['meta']['warnings'] if w.get('type') == 'unused_flag']
+
+
+def test_sibling_effects_already_refuses_an_unread_depth(copies):
+    path, element = _python(copies)
+    assert run(path, element, '--effects', '--depth', '2', '--format', 'json').returncode == 2  # D10
+
+
+def test_unread_modifier_is_a_tool_error_on_reveal_run(copies):
+    pytest.importorskip('mcp')
+    from reveal.mcp_server import reveal_nav, reveal_run
+    path, element = _python(copies)
+    _tool_error(reveal_run([path, element, '--exits', '--transitive', '--format', 'json']), 'transitive')
+    _tool_error(reveal_nav(path, element, 'boundary', transitive=True), 'effects')  # sibling: typed controls refuse
+
+
+# -- E8: the transitive depth stated is the depth used -------------------------------------------------------------
+
+def _depth_values(meta):
+    return [value for key, value in meta.items() if 'depth' in key]
+
+
+def test_boundary_transitive_states_the_clamped_depth(copies):
+    path, element = _python(copies)
+    text = run(path, element, '--boundary', '--transitive', '--depth', '9').stdout
+    assert 'depth=9' not in text and 'depth=5' in text, [line for line in text.splitlines() if 'depth' in line]
+    answer = json.loads(run(path, element, '--boundary', '--transitive', '--depth', '9', '--format', 'json').stdout)
+    assert _depth_values(answer['meta']) == [5], answer['meta']
+
+
+def test_boundary_transitive_json_states_the_default_depth_for_zero(copies):
+    path, element = _python(copies)
+    answer = json.loads(run(path, element, '--boundary', '--transitive', '--depth', '0', '--format', 'json').stdout)
+    assert _depth_values(answer['meta']) == [2], answer['meta']
+
+
+@pytest.mark.parametrize('given,stated', [('3', '3'), ('0', '2')])
+def test_sibling_boundary_transitive_text_states_depths_up_to_five(copies, given, stated):
+    path, element = _python(copies)
+    assert f'depth={stated}' in run(path, element, '--boundary', '--transitive', '--depth', given).stdout
+
+
+# -- E9, X15: invalid requests exit 2, not 1 (D6) -----------------------------------------------------------------
+
+@pytest.mark.parametrize('fixture', ['formats/ini/sample.ini', 'formats/xml/pom.xml', 'formats/jsonl/sample.jsonl',
+                                     'formats/nginx/nginx.conf', 'xlsx/dynamic_arrays.xlsx'])
+def test_files_without_tree_sitter_analysis_exit_2(fixture):
+    _refused(run(f'tests/fixtures/{fixture}', '--boundary', '--format', 'json'))
+
+
+@pytest.mark.parametrize('suffix', ['.csv', '.docx'])
+def test_csv_and_office_documents_exit_2(others, suffix):
+    _refused(run(others[suffix], '--boundary', '--format', 'json'))
+
+
+@pytest.mark.parametrize('argv,names', [
+    pytest.param(['{element}', '--scope'], ('scope',), id='scope-named-element'),
+    pytest.param(['--around', '3'], ('around',), id='around-without-line'),
+    pytest.param(['{element}', '--boundary', '--range', 'abc'], ('abc',), id='range-not-a-range'),
+])
+def test_requests_missing_or_malformed_lines_exit_2(copies, argv, names):
+    path, element = _python(copies)
+    _refused(run(path, *[word.replace('{element}', element) for word in argv], '--format', 'json'), *names)
+
+
+def test_sibling_structure_only_language_and_line_views_answer_as_today(copies):
+    assert run('tests/fixtures/formats/sql/sample.sql', '--boundary').returncode == 2
+    for flags in (['--scope'], ['--around', '3']):
+        response = run(copies['python'], ':13', *flags, '--format', 'json')
+        assert response.returncode == 0 and json.loads(response.stdout)['findings']
+
+
+# -- E10: negative context lines -----------------------------------------------------------------------------------
+
+def test_negative_around_exits_2(copies):
+    _refused(run(copies['python'], ':13', '--around', '-1', '--format', 'json'), 'around')
+
+
+def test_sibling_zero_around_is_the_target_line(copies):
+    answer = json.loads(run(copies['python'], ':13', '--around', '0', '--format', 'json').stdout)
+    assert [(f['line'], f['is_target']) for f in answer['findings']] == [(13, True)]
+
+
+def test_negative_around_is_a_tool_error_on_mcp(copies):
+    pytest.importorskip('mcp')
+    from reveal.mcp_server import reveal_nav
+    _tool_error(reveal_nav(copies['python'], ':13', 'around', '-1'), 'around')
+    _tool_answer(reveal_nav(copies['python'], ':13', 'around', '0'))  # sibling
+
+
+# -- E11, X15: formats the views do not apply to decline; untested languages name their tier ----------------------
+
+DATA_FORMATS = ['formats/markdown/sample.md', 'formats/json/sample.json', 'formats/yaml/sample.yaml',
+                'formats/toml/pyproject.toml', 'formats/graphql/sample.graphql', 'formats/protobuf/sample.proto']
+
+
+@pytest.mark.parametrize('view', [['--boundary'], ['--flow'], ['--varflow', 'name']], ids=['boundary', 'flow', 'varflow'])
+@pytest.mark.parametrize('fixture', DATA_FORMATS, ids=lambda fixture: fixture.rsplit('.', 1)[1])
+def test_data_formats_decline_with_exit_2(fixture, view):
+    _refused(run(f'tests/fixtures/{fixture}', *view, '--format', 'json'))
+
+
+def test_data_format_decline_is_a_tool_error_on_mcp():
+    pytest.importorskip('mcp')
+    from reveal.mcp_server import reveal_nav, reveal_run
+    _tool_error(reveal_run(['tests/fixtures/formats/markdown/sample.md', '--boundary', '--format', 'json']))
+    _tool_error(reveal_nav('tests/fixtures/formats/markdown/sample.md', ':1-5', 'boundary'))
+    _tool_error(reveal_nav('tests/fixtures/formats/sql/sample.sql', ':1-5', 'boundary'))  # sibling: structure-only
+
+
+TIER_VIEWS = [['--boundary'], ['--inputs'], ['--outputs'], ['--callsites'], ['--effects'], ['--flow'], ['--exits'],
+              ['--varflow', 'result']]
+
+
+def _warnings(response):
+    assert response.returncode == 0, response.stderr
+    return [w for w in json.loads(response.stdout)['meta']['warnings'] if w.get('type') != 'retired_spelling']
+
+
+TIER_CASES = [pytest.param(suffix, view, id=f'{name}-{view[0][2:]}')
+              for suffix, name in (('.ex', 'elixir-untested'), ('.r', 'r-fallback')) for view in TIER_VIEWS
+              if (suffix, view[0]) != ('.ex', '--varflow')]  # Elixir varflow names its tier today: the sibling below
+
+
+@pytest.mark.parametrize('suffix,view', TIER_CASES)
+def test_untested_languages_answer_with_one_tier_warning_on_every_view(others, suffix, view):
+    warnings = _warnings(run(others[suffix], *view, '--format', 'json'))
+    assert len(warnings) == 1, warnings
+
+
+def test_sibling_elixir_varflow_names_its_tier_and_verified_languages_carry_none(others, copies):
+    assert len(_warnings(run(others['.ex'], '--varflow', 'result', '--format', 'json'))) == 1
+    path, element = _python(copies)
+    for view in TIER_VIEWS:
+        argv = [element, *view]
+        assert _warnings(run(path, *argv, '--format', 'json')) == [], view
+
+
+# -- E12: a format the view cannot render is not silently text -----------------------------------------------------
+
+UNRENDERED = [['--boundary'], ['--boundary', '--transitive'], ['--inputs'], ['--outputs'], ['--callsites'],
+              ['--effects'], ['--effects', '--in-loops'], ['--effects', '--state'], ['--varflow', 'result'],
+              ['--keys', 'result']]
+
+
+@pytest.mark.parametrize('form', ['grep', 'typed'])
+@pytest.mark.parametrize('view', UNRENDERED, ids=lambda view: '-'.join(word.strip('-') for word in view))
+def test_grep_and_typed_are_not_silently_text(copies, view, form):
+    path, element = _python(copies)
+    text = run(path, element, *view)
+    other = run(path, element, *view, '--format', form)
+    assert not (other.returncode == 0 and other.stdout == text.stdout), f'--format {form} printed the text answer'
+
+
+@pytest.mark.parametrize('form', ['grep', 'typed'])
+@pytest.mark.parametrize('view', ['--flow', '--exits'])
+def test_sibling_flow_and_exits_refuse_grep_and_typed(copies, view, form):
+    path, element = _python(copies)
+    _refused(run(path, element, view, '--format', form), form)
+
+
+# -- E13: an element view on a directory -------------------------------------------------------------------------
+
+@pytest.mark.parametrize('view', [['--boundary'], ['--varflow', 'x'], ['--exits'], ['--flow'], ['--inputs'],
+                                  ['--callsites']], ids=lambda view: view[0][2:])
+def test_element_view_on_a_directory_exits_2(copies, view):
+    folder = PurePosixPath(copies['python']).parent.as_posix()
+    _refused(run(folder, *view, '--format', 'json'))
+
+
+def test_sibling_directory_effects_already_refuses_and_listing_answers(copies):
+    folder = PurePosixPath(copies['python']).parent.as_posix()
+    assert run(folder, '--effects').returncode == 2  # D10
+    assert run(folder).returncode == 0
+
+
+def test_element_view_on_a_directory_is_a_tool_error_on_reveal_run(copies):
+    pytest.importorskip('mcp')
+    from reveal.mcp_server import reveal_run
+    _tool_error(reveal_run([PurePosixPath(copies['python']).parent.as_posix(), '--boundary', '--format', 'json']))
+
+
+# -- E16: the inputs text labels a function and a module PARAM ------------------------------------------------------
+
+def _labels(path, element):
+    return {line.split()[1]: line.split()[0] for line in run(path, element, '--inputs').stdout.splitlines() if line}
+
+
+def test_inputs_text_does_not_call_a_function_or_module_a_parameter(copies):
+    path, element = _python(copies)
+    labels = _labels(path, element)
+    assert labels['validate'] != 'PARAM' and labels['os'] != 'PARAM', labels
+
+
+def test_sibling_inputs_text_labels_builtins_and_json_says_dep(copies):
+    path, element = _python(copies)
+    assert _labels(path, element)['open'] == 'BUILTIN'
+    findings = json.loads(run(path, element, '--inputs', '--format', 'json').stdout)['findings']
+    assert {f['var']: f['kind'] for f in findings}['validate'] == 'dep'
