@@ -2717,14 +2717,12 @@ ELEMENT_NOT_YET = {
          'and an unknown flag exit 2 with argparse\'s usage error before the element request binds, not the shared '
          'unsupported-controls message (--limit and --since do teach it): the main parser\'s unrecognized-argument path '
          'is the shared owner',
-    '4': '--verbose is a global option D3 accepts on an element request (the global options parser\'s dests), and it '
-         'answers exit 0 with no note: element views have no detail control, so the rule wants exit 2 naming detail',
     '21j': 'an invalid path read in --format json (unknown flag, a value outside --view\'s choices, a missing value, an '
            'extra argument, a malformed --output) exits 2 with stdout empty, not the invalid-request JSON document',
     '22': 'REVEAL_CONFIG naming no file exits 2 on the answers that read configuration (--transitive walks), but the '
           'other element views read none and answer exit 0, as every plain path read does; the row says every noun',
 }
-ELEMENT_NOT_YET_BASELINE = 4
+ELEMENT_NOT_YET_BASELINE = 3
 
 
 @pytest.fixture

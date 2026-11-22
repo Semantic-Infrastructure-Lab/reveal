@@ -613,11 +613,18 @@ _ELEMENT_READS = frozenset({'fallback', 'respect_gitignore', 'stdin'})
 
 def _reject_unsupported_element_controls(args: 'Namespace') -> None:
     """D3/U1: an element request takes the global options, its own declarations and the measured reads; any other
-    main-parser control it gives is an unsupported control (D18), exit 2, with the one shared message."""
+    main-parser control it gives is an unsupported control (D18), exit 2, with the one shared message. The global
+    ``--verbose`` is ``--detail full`` (rule 4), which element views do not declare: the shared ``verbose_binding``
+    refuses it naming detail, as on a declared noun without detail."""
     from ...nav_params import ELEMENT_VIEW_SPECS
-    from ...errors import NavRequestValidationError
-    from ...utils.query_binding import legacy_flag_dests, unsupported_controls_message
+    from ...errors import NavRequestValidationError, RequestValidationError
+    from ...utils.query_binding import legacy_flag_dests, unsupported_controls_message, verbose_binding
     from ..parser import _build_global_options_parser
+    if getattr(args, 'verbose', False) is True:
+        try:
+            verbose_binding(ELEMENT_VIEW_SPECS)
+        except RequestValidationError as exc:  # the nav owner's bounded origin: exit 2 on every transport
+            raise NavRequestValidationError(str(exc)) from None
     accepted = {action.dest for action in _build_global_options_parser(main_modes=False)._actions} | _ELEMENT_READS
     accepted |= {'path', 'element', 'outline'} | {dest for spec in ELEMENT_VIEW_SPECS
                                                   for dest in ((spec.cli.dest if spec.cli else None) or spec.name,
