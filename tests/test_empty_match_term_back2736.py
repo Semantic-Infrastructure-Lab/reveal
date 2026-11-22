@@ -189,8 +189,8 @@ def test_mcp_reports_the_refusal(home, argv, spelling):
     assert 'rror' in shown and f'{spelling} needs a term' in shown, shown[:300]
 
 
-def test_an_empty_exclude_still_refuses_as_before(home):
-    """Negative control: ``exclude`` is a walk control, not a term (BACK-2730 owns it); its empty URI value already
-    exited 2 with its own message, unchanged."""
+def test_an_empty_exclude_still_refuses_as_a_pattern(home):
+    """Negative control: ``exclude`` is a walk control, not a term; its empty URI value already exited 2, and since
+    BACK-2730 the same rule names what it needs, a pattern, not a term."""
     run, doc = _json('metrics://.?exclude=')
-    assert run.returncode == 2 and 'exclude must be a valid string' in _error(run, doc)
+    assert run.returncode == 2 and 'exclude needs a pattern: --exclude PATTERN' in _error(run, doc)

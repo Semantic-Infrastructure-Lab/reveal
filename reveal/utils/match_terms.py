@@ -2,7 +2,9 @@
 repeated match ANDs its terms per row of the answer, and every answer echoes its terms through one seam.
 
 An empty term is an invalid request on every noun (COMMAND_MODEL "Empty match term", Scott 2026-11-22, BACK-2736):
-the binder refuses one in any spelling of a term control (``query_binding``), with the one message built here."""
+the binder refuses one in any spelling of a term control (``query_binding``), with the one message built here. The same
+rule refuses an empty pattern of the walk control ``exclude`` (COMMAND_MODEL "Walk exclusion", BACK-2730), which is no
+term: its message says it needs a pattern."""
 from dataclasses import dataclass
 from typing import Any, List, Sequence, Union
 
@@ -11,6 +13,8 @@ from .query_parser import ParamValueError
 
 # The shared controls whose values are terms, with the term a refusal teaches: a match's text, a where's expressions.
 TERM_EXAMPLES = {'match': '--match TEXT', 'where': '--where FIELD OP VALUE'}
+# The walk control (BACK-2730): not a term, but an empty or blank pattern is refused by the same rule.
+PATTERN_EXAMPLES = {'exclude': '--exclude PATTERN'}
 
 
 def match_terms(value: Any) -> List[str]:
@@ -45,14 +49,15 @@ def is_blank_term(value: Any) -> bool:
     return any(isinstance(item, str) and not item.strip() for item in items)
 
 
-def empty_term_message(spelling: str, example: str) -> str:
-    """The one refusal of an empty term: the spelling as the request typed it, and the term it needs."""
-    return f'{spelling} needs a term: {example}'
+def empty_term_message(spelling: str, example: str, needs: str = 'a term') -> str:
+    """The one refusal of an empty term: the spelling as the request typed it, and the term it needs (a walk pattern:
+    *needs* is ``'a pattern'``)."""
+    return f'{spelling} needs {needs}: {example}'
 
 
-def empty_term_error(spelling: str, example: str) -> RequestValidationError:
+def empty_term_error(spelling: str, example: str, needs: str = 'a term') -> RequestValidationError:
     """An empty term, an invalid request (exit 2) on every transport."""
-    return RequestValidationError(empty_term_message(spelling, example))
+    return RequestValidationError(empty_term_message(spelling, example, needs))
 
 
 @dataclass(frozen=True)

@@ -4,14 +4,14 @@ import argparse
 import re
 import stat
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Union
+from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Tuple, Union
 from urllib.parse import quote, unquote
 
 from ..errors import RequestValidationError, UnreadControlError, UnsupportedOverrideError
-from .match_terms import TERM_EXAMPLES, TermValue, empty_term_error, is_blank_term
+from .match_terms import PATTERN_EXAMPLES, TERM_EXAMPLES, TermValue, empty_term_error, is_blank_term
 from .query_parser import (SHARED_CONTROL_NAMES, CliBinding, LegacySpelling, ParamSpec, ParamValueError, QueryParams,
-                           ResourceSpec, mark_query_keys, parse_query_params, peek_query_items, query_key,
-                           query_key_recorder, whole_number)
+                           ResourceSpec, exclude_param, mark_query_keys, parse_query_params, peek_query_items,
+                           query_key, query_key_recorder, whole_number)
 
 
 def boolean_value(value: Any) -> bool:
@@ -162,12 +162,16 @@ def _conflicting_spellings(spec: ParamSpec, present: list, spelled: Optional[Map
     return f'{spec.name}: conflicting spellings: ' + ', '.join((spelled or {}).get(name, name) for name in present)
 
 
-def _term_example(spec: ParamSpec) -> Optional[str]:
-    """The term an empty value of *spec* is refused with, or None when *spec* states no term: match and where by their
-    shared names, a standalone word or legacy filter by its declared ``TermValue`` converter."""
+def _term_example(spec: ParamSpec) -> Optional[Tuple[str, str]]:
+    """(what an empty value of *spec* needs, the example it is refused with), or None when *spec* states no term: match
+    and where need a term by their shared names, a standalone word or legacy filter by its declared ``TermValue``
+    converter, and the walk control ``exclude`` a pattern (BACK-2730)."""
     if isinstance(spec.convert, TermValue):
-        return spec.convert.example
-    return TERM_EXAMPLES.get(spec.name)
+        return 'a term', spec.convert.example
+    if spec.name in PATTERN_EXAMPLES:
+        return 'a pattern', PATTERN_EXAMPLES[spec.name]
+    example = TERM_EXAMPLES.get(spec.name)
+    return None if example is None else ('a term', example)
 
 
 def _decoded_terms(spec: ParamSpec, value: Any) -> Any:
@@ -191,9 +195,16 @@ def _reject_empty_terms(declarations: tuple, given: Iterable[tuple], spelled: Op
              for example in (_term_example(spec),) if example is not None for name in spec.spellings}
     for name, value in given:
         if name in terms and value is not None:
-            spec, example = terms[name]
+            spec, (needs, example) = terms[name]
             if is_blank_term(_decoded_terms(spec, value) if uri else value):
-                raise empty_term_error((spelled or {}).get(name, name), example)
+                raise empty_term_error((spelled or {}).get(name, name), example, needs)
+
+
+def reject_empty_walk_patterns(patterns: Iterable[Any], spelling: str = '--exclude') -> None:
+    """The walk control's flag meets the same rule (BACK-2730): every walking noun's parser carries ``--exclude``,
+    declared or not (AST and Markdown keep the bare key as a field filter until the cut), so an empty or blank pattern
+    among *patterns* is refused here, before the request binds, named as typed."""
+    _reject_empty_terms((exclude_param(),), [('exclude', list(patterns))], {'exclude': spelling})
 
 
 def _normalize_aliases(declarations: Iterable[ParamSpec], supplied: Mapping[str, Any],
