@@ -299,6 +299,23 @@ def _entry(spec, spelling):
     return next((entry for entry in _named_entries(spec) if entry.name == spelling), None)
 
 
+def _implied(entry, raw):
+    """(control, value) for each control a legacy word sets besides its owner (``LegacySpelling.sets``, BACK-2614:
+    Markdown ``aggregate=F`` is ``field=F`` and ``view=aggregate``): the canonical request it answers as names them too."""
+    if entry is None or not getattr(entry, 'sets', ()):
+        return []
+    return [(control, value) for control, value in entry.translate(raw).items()
+            if control != entry.owner and value is not None]
+
+
+def _implied_pairs(entry, raw):
+    return [f'{control}={value}' for control, value in _implied(entry, raw)]
+
+
+def _implied_flags(entry, raw):
+    return [f'--{control.replace("_", "-")}={value}' for control, value in _implied(entry, raw)]
+
+
 def _spec_for(noun, key):
     return next((spec for spec in _specs(noun) if key in (spec.name, *_other_spellings(spec))), None)
 
@@ -600,7 +617,7 @@ def _alias_on_subcommand(noun, spec, alias, values):
         return []
     label = f'{names[0]} vs {names[1]}'
     cases = [_conflict_case(label, _run(*conflict, '--format', 'json'), names)] if conflict else []
-    single = _sub(noun, f'{name_flag}={value}', base=base)
+    single = _sub(noun, f'{name_flag}={value}', *_implied_flags(entry, same), base=base)
     return cases + [_equal_case(label, noun, _run(*pair, '--format', 'json'), _run(*single, '--format', 'json'))]
 
 
@@ -620,7 +637,8 @@ def probe_alias_and_name(noun):
                 conflict = _uri(noun, f'{spec.name}={other}', f'{alias}={same}', base=base, control=spec.name)
                 cases.append(_conflict_case(label, _run(conflict, '--format', 'json'), (spec.name, alias)))
             pair = _uri(noun, f'{spec.name}={value}', f'{alias}={same}', base=base, control=spec.name)
-            single = _uri(noun, f'{spec.name}={value}', base=base, control=spec.name)
+            single = _uri(noun, f'{spec.name}={value}', *_implied_pairs(_entry(spec, alias), same), base=base,
+                          control=spec.name)
             cases.append(_equal_case(label, noun, _run(pair, '--format', 'json'), _run(single, '--format', 'json')))
             cases += _alias_on_subcommand(noun, spec, alias, values)
     return cases
@@ -1055,8 +1073,9 @@ def _legacy_conflict_cases(noun, key, legacy, specs, sample):
     raw = next(((pair.partition('=')[2] if '=' in pair else True) for pair in pairs
                 if pair.partition('=')[0] == legacy), True)  # a bare key is present: true
     without = base + '?' + '&'.join(pair for pair in pairs if pair.partition('=')[0] != legacy)
+    translated = dict(entry.translate(raw))
     cases = []
-    for name, value in dict(entry.translate(raw)).items():
+    for name, value in translated.items():
         spec = _spec_for(noun, name)
         if spec is None or _repeatable(spec):
             continue  # a repeatable canonical control accumulates the legacy term (rule 1)
@@ -1065,8 +1084,10 @@ def _legacy_conflict_cases(noun, key, legacy, specs, sample):
         label = f'?{legacy}= vs ?{name}='
         if other is not None:
             cases.append(_conflict_case(label, _run(f'{uri}&{name}={other}', '--format', 'json'), (legacy, name)))
+        canonical = '&'.join(f'{other_name}={other_value}' for other_name, other_value in translated.items()
+                             if other_value is not None)  # every control the legacy value stands for (LegacySpelling.sets)
         cases.append(_equal_case(label, noun, _run(f'{uri}&{name}={value}', '--format', 'json'),
-                                 _run(f'{without}&{name}={value}'.replace('?&', '?'), '--format', 'json')))
+                                 _run(f'{without}&{canonical}'.replace('?&', '?'), '--format', 'json')))
     return cases
 
 
@@ -1244,7 +1265,8 @@ def probe_legacy_operations(noun):
             value, same, _other_value = values
             base = spec.role != 'operation'
             legacy_uri = _uri(noun, f'{entry.name}={same}', base=base, control=spec.name)
-            canonical_uri = _uri(noun, f'{spec.name}={value}', base=base, control=spec.name)
+            canonical_uri = _uri(noun, f'{spec.name}={value}', *_implied_pairs(entry, same), base=base,
+                                 control=spec.name)
             cases.append(_parity_case(noun, f'?{entry.name}= answers as ?{spec.name}=', legacy_uri, canonical_uri))
             cases.append(_text_parity_case(f'?{entry.name}= renders as ?{spec.name}=', legacy_uri, canonical_uri))
     for key in _rows(noun):
@@ -1698,7 +1720,12 @@ def _join_cases(noun):
         if not values:
             continue
         first = values[0]
-        keyed = _uri(noun, f'{spec.name}={first}', base=base, control=spec.name)
+        entry = next((e for e in _named_entries(spec) if getattr(e, 'flag', None) == option
+                      and (getattr(e, 'codec', None) or getattr(e, 'sets', ()))), None)
+        # A legacy flag that translates (aggregate F is field=F, view=aggregate): its URI twin is the translation.
+        keyed_pairs = ([f'{k}={v}' for k, v in entry.translate(first).items() if v is not None] if entry is not None
+                       else [f'{spec.name}={first}'])
+        keyed = _uri(noun, *keyed_pairs, base=base, control=spec.name)
         cases.append(Case(f'?{spec.name}=A {option} A', _same_request(
             _run(keyed, option, first, '--format', 'json'), _run(keyed, '--format', 'json'), noun),
             f'`{keyed} {option} {first}` answers differently from the key alone'))
@@ -1708,7 +1735,10 @@ def _join_cases(noun):
         if spec.repeatable:
             cases += _combine_cases(noun, spec, option, values)
         else:
-            cases.append(_conflict_case(f'?{spec.name}=A {option} B', both, (option, f'{spec.name}={first}')))
+            second = dict(entry.translate(values[1])) if entry is not None else {}
+            named = next((pair for pair in keyed_pairs if second.get(pair.partition('=')[0]) != pair.partition('=')[2]),
+                         keyed_pairs[0]) if entry is not None else f'{spec.name}={first}'
+            cases.append(_conflict_case(f'?{spec.name}=A {option} B', both, (option, named)))
     return cases
 
 

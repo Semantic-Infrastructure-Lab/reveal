@@ -162,23 +162,62 @@ def _conflicting_spellings(spec: ParamSpec, present: list, spelled: Optional[Map
 
 
 def _normalize_aliases(declarations: Iterable[ParamSpec], supplied: Mapping[str, Any],
-                       spelled: Optional[Mapping[str, str]] = None) -> Dict[str, Any]:
+                       spelled: Optional[Mapping[str, str]] = None,
+                       implied_by: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
     """Every spelling of a control has one value owner; mixed spellings cannot hide precedence. A legacy
-    spelling's value is translated into the control's own (``rank=fan-in`` is ``sort=-fan-in``). A conflict names
-    each spelling as the request typed it: *spelled* maps a key to the flag that carried it (the subcommand form);
-    without it the key is what was typed (a URI key, an ``api.query`` keyword)."""
+    spelling's value is translated into the control's own (``rank=fan-in`` is ``sort=-fan-in``), and the controls a
+    legacy word ``sets`` join the request's own (``_join_set_controls``). A conflict names each spelling as the request
+    typed it: *spelled* maps a key to the flag that carried it (the subcommand form); without it the key is what was
+    typed (a URI key, an ``api.query`` keyword). *implied_by* collects, for each control a legacy word set, that word
+    (so a later conflict or a second answer names what was typed)."""
+    declarations = tuple(declarations)
     result = dict(peek_query_items(supplied))
+    given_as: Dict[str, str] = {}  # control -> the spelling the request gave it by
+    set_by: list = []
     for spec in declarations:
         present = [name for name in spec.spellings if name in result]
-        if not present:
-            continue
-        values = [spec.canonical_value(name, result.pop(name)) for name in present]
-        if spec.repeatable and len(values) > 1:  # an omitted spelling (None) adds no term
-            values = [value for value in values if value is not None] or [None]
-        if not _spellings_agree(spec, values):
-            raise ValueError(_conflicting_spellings(spec, present, spelled))
-        result[spec.name] = _accumulated(values) if spec.repeatable and len(values) > 1 else values[0]
+        if present:
+            set_by += _normalize_spellings(spec, present, result, spelled)
+            given_as[spec.name] = present[0]
+    _join_set_controls(declarations, result, set_by, given_as, spelled, implied_by)
     return result
+
+
+def _normalize_spellings(spec: ParamSpec, present: list, result: Dict[str, Any],
+                         spelled: Optional[Mapping[str, str]]) -> list:
+    """*spec*'s spellings in *result* as its one value; the (word, control, value) its legacy words set."""
+    raws = [(name, result.pop(name)) for name in present]
+    values = [spec.canonical_value(name, raw) for name, raw in raws]
+    if spec.repeatable and len(values) > 1:  # an omitted spelling (None) adds no term
+        values = [value for value in values if value is not None] or [None]
+    if not _spellings_agree(spec, values):
+        raise ValueError(_conflicting_spellings(spec, present, spelled))
+    result[spec.name] = _accumulated(values) if spec.repeatable and len(values) > 1 else values[0]
+    return [(name, control, value) for name, raw in raws for control, value in _set_controls(spec, name, raw)]
+
+
+def _set_controls(spec: ParamSpec, name: str, raw: Any) -> list:
+    """(control, value) for each control besides *spec* that *name*'s legacy word sets (``LegacySpelling.sets``)."""
+    entry = spec.legacy_entry(name)
+    if entry is None or not entry.sets or raw is None:
+        return []
+    return [(control, value) for control, value in entry.translate(raw).items() if control != spec.name]
+
+
+def _join_set_controls(declarations: tuple, result: Dict[str, Any], set_by: list, given_as: Dict[str, str],
+                       spelled: Optional[Mapping[str, str]], implied_by: Optional[Dict[str, str]]) -> None:
+    """The controls a legacy word sets join the request's own as one setting (COMMAND_MODEL "Conflicting values"): an
+    equal value is one, a different one is the Conflicting-values error naming both spellings as typed."""
+    owners = {spec.name: spec for spec in declarations}
+    for word, control, value in set_by:
+        given = result.get(control)
+        if given is not None and not _spellings_agree(owners[control], [given, value]):
+            present = [given_as.get(control) or (implied_by or {}).get(control) or control, word]
+            raise ValueError(_conflicting_spellings(owners[control], present, spelled))
+        result[control] = value
+        given_as.setdefault(control, word)
+        if implied_by is not None:
+            implied_by.setdefault(control, word)
 
 
 def rebind_legacy(declarations: Iterable[ParamSpec], params: QueryParams, spelled: Iterable[str], *,
@@ -458,7 +497,9 @@ def _prepare_uri_params(declarations: tuple[ParamSpec, ...], source: str) -> Que
     folded, shared = _prepare_expression_params(declarations, source, params, selectors, expression) \
         if expression else ((), ())
     _reject_unknown_keys(declarations, params, shared, expression)
-    prepared = QueryParams(_normalize_aliases(declarations, params))
+    implied_by: Dict[str, str] = {}
+    prepared = QueryParams(_normalize_aliases(declarations, params, implied_by=implied_by))
+    prepared._implied_by = implied_by
     prepared._aliases = {spec.name: spec.spellings[1:] for spec in declarations}
     prepared._folded = folded  # the bare field keys folded into where (a noun reading where reads them)
     prepared._selectors = selectors
@@ -555,6 +596,7 @@ def join_uri_and_flags(declarations: Iterable[ParamSpec], uri_params: QueryParam
     joined = QueryParams(dict(peek_query_items(uri_params)))
     for name in ('_aliases', '_folded', '_selectors'):
         setattr(joined, name, getattr(uri_params, name))
+    joined._implied_by = {**typed_params._implied_by, **uri_params._implied_by}
     joined._supplied_aliases = set(uri_params._supplied_aliases) | set(typed_params._supplied_aliases)
     joined._given = set(uri_params._given)
     joined._transport = 'uri'
@@ -572,7 +614,9 @@ def join_uri_and_flags(declarations: Iterable[ParamSpec], uri_params: QueryParam
         if spec.name in dict.keys(joined) and not spec.repeatable:  # a routing check, not a read
             key, raw = _uri_spelling(spec, uri_params)
             if not _same_scalar(spec, _decode_value(spec, dict.get(joined, spec.name)), value):
-                raise ValueError(flag_conflicts_with_uri_message(_typed_flag(spec, spelled), key, raw))
+                word = typed_params._implied_by.get(spec.name)
+                flag = (spelled or {}).get(word, f'--{word}') if word else _typed_flag(spec, spelled)
+                raise ValueError(flag_conflicts_with_uri_message(flag, key, raw))
             continue
         given = dict.get(joined, spec.name)
         joined[spec.name] = _accumulated([given, prepared]) if spec.repeatable and given is not None else prepared
@@ -585,8 +629,10 @@ def join_uri_and_flags(declarations: Iterable[ParamSpec], uri_params: QueryParam
 
 def _prepare_typed_params(declarations: tuple, source: Mapping[str, Any],
                           spelled: Optional[Mapping[str, str]]) -> QueryParams:
-    supplied = _normalize_aliases(declarations, source, spelled)
+    implied_by: Dict[str, str] = {}
+    supplied = _normalize_aliases(declarations, source, spelled, implied_by)
     params = QueryParams()
+    params._implied_by = implied_by  # control -> the legacy word that set it (a join names the word's flag)
     params._aliases = {spec.name: spec.spellings[1:] for spec in declarations}
     params._supplied_aliases = {alias for spec in declarations for alias in spec.spellings[1:] if alias in source}
     for spec in declarations:
@@ -676,7 +722,8 @@ def reject_two_answers(declarations: Iterable[ParamSpec], params: Mapping[str, A
     operations = [spec for spec in declarations if spec.role == 'operation']
     supplied = dict(peek_query_items(params))
     spelled = set(spelled) | set(getattr(params, '_supplied_aliases', set()))  # the URI's, and the CLI's flags
-    picked = [next((name for name in spec.spellings[1:] if name in spelled), spec.name)  # as the caller spelled it
+    set_by = getattr(params, '_implied_by', {})  # a control a legacy word set is named by that word
+    picked = [next((name for name in spec.spellings[1:] if name in spelled), set_by.get(spec.name, spec.name))
               for spec in operations if spec.name in supplied and _selects(spec, supplied[spec.name])]
     if len(picked) > 1:
         raise RequestValidationError(f'{picked[0]} and {picked[1]} select different answers: one answer per request; '
@@ -911,7 +958,9 @@ def apply_declared_overrides(declarations: Iterable[ParamSpec], params: QueryPar
     if overrides is not None:
         if not isinstance(overrides, Mapping):
             raise TypeError('Declared parameter overrides must be a mapping')
-        supplied = _normalize_aliases(declarations, overrides)
+        implied_by: Dict[str, str] = {}
+        supplied = _normalize_aliases(declarations, overrides, implied_by=implied_by)
+        params._implied_by = {**params._implied_by, **implied_by}
         names = {spec.name for spec in declarations if not spec.flag_only}
         unknown = [key for key in supplied if key not in names]
         if unknown:
@@ -1028,10 +1077,11 @@ class _LegacyFlagAction(ScalarOnceAction):
 
 
 def _separate_legacy_flags(spec: ParamSpec) -> list:
-    """The legacy entries whose old flag needs an argument of its own: no value, or a translation (the shared
-    argument stores what it is given under the control's name)."""
+    """The legacy entries whose old flag needs an argument of its own: no value, a translation (the shared argument
+    stores what it is given under the control's name), or other controls it sets."""
     return [entry for entry in spec.legacy if entry.flag and entry.value is None and not entry.first
-            and (entry.flag_value is not None or (spec.repeatable and entry.codec is not None))]
+            and (entry.flag_value is not None or bool(entry.sets)
+                 or (spec.repeatable and entry.codec is not None))]
 
 
 def legacy_flag_dests(spec: ParamSpec) -> Dict[str, str]:

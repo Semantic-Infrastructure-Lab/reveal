@@ -120,6 +120,7 @@ class QueryParams(Dict[str, Any]):
         self._selectors: Dict[str, str] = {}
         self._supplied_aliases: set[str] = set()
         self._folded: Tuple[str, ...] = ()  # bare field keys the binder folded into where
+        self._implied_by: Dict[str, str] = {}  # control -> the legacy word that set it (LegacySpelling.sets)
         self._source_query: Optional[str] = None
         # The declared controls the request gave a value (an omitted typed flag arrives as None, an API override of
         # None selects the default): what the applicability check judges (COMMAND_MODEL "Applicability", BACK-2656).
@@ -386,12 +387,21 @@ class LegacySpelling:
     # ``--scan-limit N``, BACK-2616). The binder applies it once the request's sources are joined (``rebind_legacy``).
     rebinds: Tuple[Tuple[str, str], ...] = ()
     rebinds_when: Optional[Callable[[Mapping[str, Any]], bool]] = None
+    # The other canonical controls the legacy word stands for, with fixed values, beside its owner's own value (Markdown
+    # ``aggregate=F`` is an entry on ``field`` setting ``view=aggregate``; an element view's flag sets a view and a kind).
+    # The binder joins them with the request's own values as one setting (``_normalize_aliases``); an old flag with sets
+    # keeps an argument of its own. Empty: the word binds its owner only.
+    sets: Tuple[Tuple[str, Any], ...] = ()
 
     def translate(self, raw: Any) -> Dict[str, Any]:
-        """The canonical controls the legacy value stands for."""
+        """The canonical controls the legacy value stands for: its owner's value, then the controls it sets. A word that
+        states no value (None or empty) sets nothing."""
         if self.first:
             return {self.owner: self.name}
-        return {self.owner: raw if self.codec is None else self.codec(raw)}
+        controls = {self.owner: raw if self.codec is None else self.codec(raw)}
+        if controls[self.owner] not in (None, ''):
+            controls.update(self.sets)
+        return controls
 
 
 # The shared control names (COMMAND_MODEL "Shared control names", BACK-2654 rule 7): one name per idea on every noun.
