@@ -658,7 +658,7 @@ RUN_SOURCES = frozenset({'AGENT_HELP.md', 'QUICK_START.md', 'WHY_REVEAL.md', '..
 TUTORIAL_COMMANDS = {
     'README.md --frontmatter': 'shows the text-mode note that frontmatter data needs --format json',
     'README.md --frontmatter --code': 'shows the text-mode note that frontmatter data needs --format json',
-    'git://. --limit 10000': 'the guide\'s own bad example (scan everything, filter later)',
+    'git . --limit 10000':'the guide\'s own bad example (scan everything, filter later)',
     'claude://session/infernal-earth-0118/message/334': 'index into a long real session; the fixture has 8',
     'project:// --check --select P001,P002': 'rule codes of the tutorial\'s made-up project adapter',
 }
