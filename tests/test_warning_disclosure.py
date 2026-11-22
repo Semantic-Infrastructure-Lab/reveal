@@ -90,8 +90,11 @@ def test_ast_complexity_query_discloses_unweighted_metric(tmp_path):
     codes = [w.get('type') for w in as_json.get('meta', {}).get('warnings', [])]
     assert 'complexity_is_unweighted' in codes, as_json.get('meta')
 
+    # A standing caveat: text points to its JSON home in one line (BACK-2599, BACK-2613 Q9).
     text = _run(tmp_path, 'ast://.?complexity>1').stdout
-    assert 'nesting depth' in text
+    assert 'Rules: --format json (meta.warnings)' in text.splitlines()
+    assert 'nesting depth' not in text
+    assert any('nesting depth' in w.get('message', '') for w in as_json['meta']['warnings'])
 
     unfiltered = json.loads(
         _run(tmp_path, 'ast://.?type=function', '--format', 'json').stdout

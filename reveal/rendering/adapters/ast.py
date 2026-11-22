@@ -4,7 +4,7 @@
 import re
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, cast
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 from reveal.reveal_types import ASTElement
 from reveal.utils import print_json_result
@@ -25,6 +25,9 @@ _KNOWN_FILTER_KEYS = {'type', 'kind', 'method', 'name', 'complexity', 'size', 'l
 # The keys the hint teaches: legacy spellings print their own replaced-by note, so the list names their replacements
 # (type is kind; calls/callee_of are the calls noun; depth is nesting_depth) and never the old words (BACK-2654).
 _TAUGHT_FILTER_KEYS = sorted((_KNOWN_FILTER_KEYS - {'type', 'calls', 'callee_of', 'depth'}) | {'kind'})
+# Caveats true of every answer they appear on (any complexity filter, any row in a below-tier1 language): text prints
+# them as one pointer line, request-specific warnings stay in the warning block (BACK-2599, BACK-2613 Q9).
+_STANDING_RULE_TYPES = frozenset({'complexity_is_unweighted', 'degraded_language_conformance'})
 
 
 def _render_meta_warnings(data: Dict[str, Any]) -> None:
@@ -33,7 +36,14 @@ def _render_meta_warnings(data: Dict[str, Any]) -> None:
     the text renderer never called this, the exact 'JSON honest, text drops
     caveats' defect BACK-1261/1262 fixed everywhere else that same session."""
     from reveal.utils.warning_render import render_meta_warnings
-    render_meta_warnings(data)
+    render_meta_warnings(data, skip_types=_STANDING_RULE_TYPES)
+
+
+def _print_rule_pointer(data: Dict[str, Any]) -> None:
+    """The standing caveats as the one Rules pointer line; their full text stays in JSON meta.warnings (BACK-2599)."""
+    from reveal.utils.warning_render import rule_text_lines
+    for line in rule_text_lines(data, fields=(), standing_types=_STANDING_RULE_TYPES):
+        print(line)
 
 
 def render_ast_structure(data: Dict[str, Any], output_format: str) -> None:
@@ -81,6 +91,7 @@ def render_ast_structure(data: Dict[str, Any], output_format: str) -> None:
     # truncation line (BACK-1059).
     displayed_results = len(results)
 
+    _print_rule_pointer(data)
     print(f"AST Query: {data.get('path', '.')}")
     if query != 'none':
         print(f"Filter: {query}")
@@ -107,34 +118,52 @@ def render_ast_structure(data: Dict[str, Any], output_format: str) -> None:
         _render_meta_warnings(data)
         return
 
-    # Group by file
-    by_file: Dict[str, List[Dict[str, Any]]] = {}
+    _render_rows(results)
+    _render_meta_warnings(data)
+
+
+def _file_runs(results: List[Dict[str, Any]]) -> Optional[List[Tuple[str, List[Dict[str, Any]]]]]:
+    """The rows as consecutive per-file runs in the answer's order, or None when a file's rows are not consecutive
+    (rows sorted across files)."""
+    runs: List[Tuple[str, List[Dict[str, Any]]]] = []
     for result in results:
         file_path = result.get('file', '')
-        if file_path not in by_file:
-            by_file[file_path] = []
-        by_file[file_path].append(result)
+        if runs and runs[-1][0] == file_path:
+            runs[-1][1].append(result)
+        elif any(seen == file_path for seen, _ in runs):
+            return None
+        else:
+            runs.append((file_path, [result]))
+    return runs
 
-    # Render grouped results
-    for file_path, elements in sorted(by_file.items()):
+
+def _render_rows(results: List[Dict[str, Any]]) -> None:
+    """Rows in the answer's order (B9): grouped under a File heading while each file's rows are consecutive; rows
+    sorted across files print one per line with their file, never regrouped against the sort."""
+    runs = _file_runs(results)
+    if runs is None:
+        for elem in results:
+            _render_ast_element(cast(ASTElement, elem), with_file=True)
+        print()
+        return
+    for file_path, elements in runs:
         print(f"File: {file_path}")
         for elem in elements:
             _render_ast_element(cast(ASTElement, elem))
         print()
 
-    _render_meta_warnings(data)
 
-
-def _render_ast_element(elem: ASTElement) -> None:
-    """Render a single AST element line."""
+def _render_ast_element(elem: ASTElement, *, with_file: bool = False) -> None:
+    """Render a single AST element line; *with_file* names its file on the line (rows sorted across files)."""
     name = elem.get('name', '')
     line = elem.get('line', 0)
     line_count = elem.get('line_count', 0)
     complexity = elem.get('complexity')
+    where = f"{elem.get('file', '')}:{line}" if with_file else f":{line:>4}"
     if complexity:
-        print(f"  :{line:>4}  {name} [{lines_label(line_count)}, complexity: {complexity}]")
+        print(f"  {where}  {name} [{lines_label(line_count)}, complexity: {complexity}]")
     else:
-        print(f"  :{line:>4}  {name} [{lines_label(line_count)}]")
+        print(f"  {where}  {name} [{lines_label(line_count)}]")
 
     calls = elem.get('calls', [])
     called_by = elem.get('called_by', [])
