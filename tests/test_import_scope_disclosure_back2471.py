@@ -41,7 +41,13 @@ def test_partial_ruby_coverage_rule_matches_unknown_edge_behavior(tmp_path, mode
     assert 'under every &lazy value' not in rule['text']
     text = _run_reveal_direct(uri)
     assert text.returncode == 0
-    assert rule['text'] in text.stdout
+    # The text points at the counting rule and keeps this scan's partial Ruby coverage visible (BACK-2685);
+    # the full rule sentence is the JSON's and --detail full's.
+    assert 'Rules: --format json (edge_rule.text); --detail for full text' in text.stdout
+    assert 'Import scope is unknown for 1 edge(s) in ruby' in text.stdout
+    assert rule['text'] not in text.stdout
+    full = _run_reveal_direct(uri + '&detail=full')
+    assert full.returncode == 0 and rule['text'] in full.stdout
 
 
 def test_fully_classified_sibling_has_no_unknown_scope_warning(tmp_path):

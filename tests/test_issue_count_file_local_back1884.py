@@ -289,9 +289,14 @@ def test_the_text_footer_names_the_rule_and_the_rule_set(tmp_path, args):
     root = project(tmp_path)
     out = run(*[a.format(root=root) for a in args]).stdout
     meta = issue_count_meta(json.loads(run(*[a.format(root=root) for a in args], '--format', 'json').stdout))
-    line, = [row for row in out.splitlines() if COUNTING_RULE in row]
-    assert meta['rule_set_id'] in line and f"{meta['rule_count']} rules" in line
-    assert 'local_check_issues' in line
+    assert_states_the_rule(meta)  # the JSON states the rule, its field, rule count and rule set
+    if args[0] == 'hotspots':  # the retired hotspots twin still prints the full footer (BACK-2685 left it)
+        line, = [row for row in out.splitlines() if COUNTING_RULE in row]
+        assert meta['rule_set_id'] in line and f"{meta['rule_count']} rules" in line
+        assert 'local_check_issues' in line
+    else:  # metrics text points at the JSON field that states the rule (BACK-2685)
+        assert 'Rules: --format json (meta.issue_count.rule)' in out.splitlines()
+        assert COUNTING_RULE not in out
 
 
 def test_the_field_is_renamed_in_every_stats_view(tmp_path):
