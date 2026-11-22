@@ -8,7 +8,6 @@ prints the replaced-by note from the RETIREMENTS table until the cut (D5).
 
 import os
 from dataclasses import replace
-from datetime import datetime
 from pathlib import Path
 from typing import Callable, Dict, Any, List, Optional, cast, Tuple
 from reveal.reveal_types import CONTRACT_VERSION
@@ -29,6 +28,7 @@ from ...utils.query_parser import (
 from ...utils.query_binding import (bind_declared_params, boolean_value, given_controls, legacy_switch, switch_value,
                                    unread_by_data_warning)
 from ...utils.gitignore import respect_gitignore_param
+from ...utils.time_window import bound_start, time_window_param
 from ...utils.path_utils import (TestLayout, failure_of, failure_records, provenance_for_display_path,
                                  to_relative_display)
 from ...utils.results import (PARSE_RECOVERED, AnalysisCompleteness, lost_evidence, ResultBuilder, note_truncation,
@@ -121,18 +121,6 @@ def _text(name: str) -> Callable[[Any], str]:
     return convert
 
 
-def _iso_date(name: str) -> Callable[[Any], str]:
-    """A churn-window start: an ISO date (or timestamp) in the form the churn walk parses (BACK-2621).
-    A value it cannot parse was a churn_unavailable warning and exit 0; it is an invalid request."""
-    def convert(value: Any) -> str:
-        text = _text(name)(value)
-        try:
-            datetime.fromisoformat(text)
-        except ValueError:
-            raise ParamValueError(f'{name} must be an ISO date (YYYY-MM-DD), got {text!r}') from None
-        return text
-    return convert
-
 
 def _detail(value: Any) -> str:
     if value not in DETAIL_LEVELS:
@@ -201,9 +189,12 @@ _CHURN = ParamSpec('churn', 'boolean', 'Fold commit-touch counts into the hotspo
                    cli=CliBinding(('--churn',), metavar='on|off'),
                    legacy=(LegacySpelling('no_churn', codec=legacy_switch('no_churn', 'off', 'on'),
                                           flag='--no-churn', flag_value=True),), answers=_RANKINGS)
-_SINCE = ParamSpec('since', 'string', 'Bound the churn walk to commits on/after this ISO date (default: full history). Only affects churn scoring, not the file list itself.',
-                   None, _iso_date('since'), ('view=hotspots&since=2026-01-01',), role='analysis',
-                   cli=CliBinding(('--since',), metavar='DATE'), answers=_RANKINGS, requires=_CHURN_ON)
+# The one time-window grammar (COMMAND_MODEL "Time window", BACK-2728): an invalid bound was a churn_unavailable warning
+# and exit 0 until BACK-2621; the walk starts at the bound's first instant (a period's first day, today's date).
+_SINCE = time_window_param('since', 'Bound the churn walk to commits on/after this date, from its start (default: full '
+                           'history); only affects churn scoring, not the file list itself',
+                           examples=('view=hotspots&since=2026-01-01',), role='analysis', metavar='DATE',
+                           answers=_RANKINGS, requires=_CHURN_ON)
 _MERGES = ParamSpec('merges', 'boolean', 'Count merge commits in the churn tally: on (default) or off', None,
                     switch_value, ('view=hotspots&merges=off',), role='analysis',
                     cli=CliBinding(('--merges',), metavar='on|off'),
@@ -818,6 +809,7 @@ class MetricsAdapter(ResourceAdapter):
                 return None
 
             since = self.query_params.get('since')
+            since = bound_start(since) if since else None  # the churn walk needs an instant
             # merges=off, or legacy no_merges: the churn cache key keeps its no_merges meaning.
             no_merges = _MERGES.read(self.query_params) is False  # legacy no_merges binds as merges=off
 
