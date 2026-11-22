@@ -32,11 +32,10 @@ reveal markdown docs/ --backlinks guide.md
 | `sort` | Frontmatter field; prefix `-` for descending |
 | `limit` | Answer rows; `0` = no cap, every row (it used to return an empty page) |
 | `offset` | Answer rows skipped after sorting |
-| `aggregate` | Legacy field selector; use `view=aggregate&field=FIELD` |
 | `lint-fields` | Required frontmatter fields for `view=lint` |
 
-The older selectors `link-graph` and `lint` are replaced by `view=links` and `view=lint`: they answer the same with a
-note naming the view.
+The older selectors `link-graph`, `lint` and `aggregate=FIELD` are replaced by `view=links`, `view=lint` and
+`view=aggregate&field=FIELD`: they answer the same with a note naming the replacement.
 
 Each control is read by the answers it applies to: the listing reads `where`, `match`, `columns`, `explain`,
 `sort`, `limit` and `offset`; `view=aggregate` reads `field`, `where` and `match`; lint reads `lint-fields`; the link
