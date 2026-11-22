@@ -329,7 +329,7 @@ reveal ssl://example.com              # Overview
 reveal ssl://example.com --check      # Health check
 
 # Query markdown by front matter
-reveal 'markdown://?category=guide'
+reveal markdown --where category=guide
 ```
 
 **Batch processing:**

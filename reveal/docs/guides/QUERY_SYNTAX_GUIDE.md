@@ -19,7 +19,7 @@ Complete reference for the unified query syntax that works consistently across a
 reveal 'json://data.json?age>25'
 
 # Multiple filters (AND)
-reveal 'markdown://docs/?status=draft&priority=high'
+reveal markdown docs/ --where status=draft --where priority=high
 
 # Sort and limit results
 reveal git . --view history --where author=John --sort=-date --limit 10
@@ -228,20 +228,20 @@ reveal 'json://data.json?role=admin&sort=-age&limit=10'
 
 **Status filtering**:
 ```bash
-reveal 'markdown://docs/?status=draft'              # Draft documents
-reveal 'markdown://docs/?status!=archived'          # Not archived
+reveal markdown docs/ --where status=draft              # Draft documents
+reveal markdown docs/ --where 'status!=archived'          # Not archived
 ```
 
 **Tag filtering**:
 ```bash
-reveal 'markdown://docs/?tags~=python'              # Tagged "python" (any case)
-reveal 'markdown://docs/?tags~=api&status=complete' # Python APIs, complete
+reveal markdown docs/ --where 'tags~=python'              # Tagged "python" (any case)
+reveal markdown docs/ --where 'tags~=api' --where status=complete # Python APIs, complete
 ```
 
 **Date filtering**:
 ```bash
-reveal 'markdown://docs/?created=2026-01-01..2026-12-31'   # Created in 2026
-reveal 'markdown://docs/?updated=2026-01-01..2026-02-28'   # January-February 2026
+reveal markdown docs/ --where created=2026-01-01..2026-12-31   # Created in 2026
+reveal markdown docs/ --where updated=2026-01-01..2026-02-28   # January-February 2026
 ```
 
 Frontmatter dates compare as ISO strings: `created>2026-01-01` and a range with full `YYYY-MM-DD`
@@ -250,7 +250,7 @@ bounds both work. A short bound such as `2026-02` excludes every February date
 
 **Priority and sorting**:
 ```bash
-reveal 'markdown://docs/?priority>=5&limit=10'
+reveal markdown docs/ --where 'priority>=5' --limit 10
 ```
 
 markdown:// filters on any frontmatter key but sorts only on the fields it puts in each result
@@ -259,14 +259,14 @@ leaves the results unsorted with a warning.
 
 **Body text search** (markdown-specific):
 ```bash
-reveal 'markdown://docs/?match=nginx'                     # Body mentions "nginx"
-reveal 'markdown://docs/?match=nginx&match=ssl'   # Body mentions both (AND)
-reveal 'markdown://docs/?type=guide&match=nginx&limit=5'  # Combine with frontmatter + limit
+reveal markdown docs/ --match nginx                     # Body mentions "nginx"
+reveal markdown docs/ --match nginx --match ssl   # Body mentions both (AND)
+reveal markdown docs/ --where type=guide --match nginx --limit 5  # Combine with frontmatter + limit
 ```
 
 **Field existence** (markdown-specific):
 ```bash
-reveal 'markdown://docs/?!published'                # No published date
+reveal markdown docs/ --where '!published'                # No published date
 ```
 
 ---
@@ -508,7 +508,7 @@ Combine filters with `&` - all must match:
 reveal 'json://data.json?role=admin&age>30'
 
 # Markdown: High-priority Python docs
-reveal 'markdown://docs/?tags~=python&priority>=5&status=draft'
+reveal markdown docs/ --where 'tags~=python' --where 'priority>=5' --where status=draft
 
 # Stats: Large, complex files
 reveal 'metrics://src/?lines>200&complexity>10'
@@ -671,16 +671,16 @@ reveal 'ast://src/?kind=function&lines>100&sort=-lines'
 
 ```bash
 # Unfinished high-priority docs
-reveal 'markdown://docs/?status=draft&priority>=5'
+reveal markdown docs/ --where status=draft --where 'priority>=5'
 
 # Stale documentation
-reveal 'markdown://docs/?updated<2025-01-01'
+reveal markdown docs/ --where 'updated<2025-01-01'
 
 # Python API documentation
-reveal 'markdown://docs/?tags~=python&tags~=api&status=complete'
+reveal markdown docs/ --where 'tags~=python' --where 'tags~=api' --where status=complete
 
 # Missing publication dates
-reveal 'markdown://docs/?!published&status=complete'
+reveal markdown docs/ --where '!published' --where status=complete
 ```
 
 ---

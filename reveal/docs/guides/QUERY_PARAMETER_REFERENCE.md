@@ -18,7 +18,7 @@ Query parameters allow filtering, formatting, and modifying adapter behavior usi
 | **imports://** | `unused`, `circular`, `violations`, `importers`, `sort`, `limit`, `entrypoints`, `components`, `external`, `detail`, `lazy`, `scope`, `tests`, `root`, `scan-limit`, `format` (retired, with a note: `rank`, `top`, `verbose`, `max_files`) | `imports://.?unused` |
 | **git://** | `view`, `where` (fields `author`, `email`, `message`, `hash`, `date`, `timestamp`, `content`), `detail`, `merges`, `element`, `bucket`, `ignore`, `context`, `since`, `until`, `ref`, `sort`, `limit`, `scan-limit`, `offset` (retired, with a note: `type`, `no_merges`, `raw`) | `reveal git://file.py --view history` |
 | **json://** | `view` (`value`, `schema`, `flatten`, `type`, `keys`, `length`), `where` (field filters), `detail`, `sort`, `limit`, `offset` (retired, with a note: the first bare words `schema`, `flatten`, `gron`, `type`, `keys`, `length`) | `json://data.json?view=schema` |
-| **markdown://** | field filters (frontmatter), `aggregate`, `body-contains`, `sort`, `limit`, `offset` | `markdown://docs/?status=draft` |
+| **markdown://** | `where` (front-matter fields), `match`, `view` (`list`, `links`, `aggregate`, `lint`), `field`, `backlinks`, `columns`, `lint-fields`, `explain`, `sort`, `limit`, `offset` (retired, with a note: `body-contains`, `fields`, `link-graph`, `lint`, `aggregate`) | `markdown://docs/?status=draft` |
 | **metrics://** | `view` (`hotspots`, `provenance`), `where` (field filters), `code-only`, `churn`, `merges`, `since`, `tests`, `detail`, `exclude`, `sort`, `limit`, `offset` (retired, with a note: `hotspots`, `top`, `min_lines`, `max_lines`, `min_complexity`, `max_complexity`, `min_functions`, `no_merges`, `summary_only`) | `metrics://.?view=hotspots` |
 | **ast://** | `kind`, `where` (fields `name`, `complexity`, `lines`, `nesting_depth`, `decorator`, `param_type`, `return_type`, `has_annotations`, `callers`, `kind`), `view` (`dict-heatmap`, `dict-schemas`), `reveal-type`, `builtins`, `sort`, `limit`, `offset` (noted legacy words: `type`, `depth`, `show`; retired, with a note: `calls`, `callee_of`, `show=calls`) | `reveal ast src --where 'complexity>10'` |
 | **calls://** | `callers`, `callees`, `detail`, `rank`, `top`, `depth`, `format`, `builtins`, `modules`, `external` (retired, with a note: `uncalled`, `target`, `root`) | `calls://src?callers=fn` |
@@ -251,28 +251,28 @@ Same as **json://**, except that `=` and wildcards are case-sensitive - markdown
 
 **Examples**:
 ```bash
-reveal 'markdown://docs/?status=draft'              # Find drafts
-reveal 'markdown://docs/?tags~=python'               # Documents tagged with python
-reveal 'markdown://docs/?!published'                 # Unpublished documents
-reveal 'markdown://docs/?created=2026-01-01..2026-12-31'   # Created in 2026
-reveal 'markdown://docs/?priority=high&status=draft' # High-priority drafts
+reveal markdown docs/ --where status=draft              # Find drafts
+reveal markdown docs/ --where 'tags~=python'               # Documents tagged with python
+reveal markdown docs/ --where '!published'                 # Unpublished documents
+reveal markdown docs/ --where created=2026-01-01..2026-12-31   # Created in 2026
+reveal markdown docs/ --where priority=high --where status=draft # High-priority drafts
 ```
 
 **Wildcard Search**:
 ```bash
-reveal 'markdown://docs/?title=*API*'    # Titles containing "API" (case-insensitive)
+reveal markdown docs/ --where 'title=*API*'    # Titles containing "API" (case-insensitive)
 ```
 
 **Body Text Search** (markdown-specific, not frontmatter):
 ```bash
-reveal 'markdown://docs/?match=nginx'                    # Body mentions "nginx"
-reveal 'markdown://docs/?match=nginx&match=ssl'  # Both terms (AND)
+reveal markdown docs/ --match nginx                    # Body mentions "nginx"
+reveal markdown docs/ --match nginx --match ssl  # Both terms (AND)
 ```
-`body-contains=` is case-insensitive substring match. Multiple values are AND'd. Combines with frontmatter filters and result control (`sort=`, `limit=`) — this is why it's spelled `body-contains=` rather than `search=`: unlike `claude://`/`codex://`/`xlsx://`/`help://search`'s `?search=`, it's a structured filter, not a standalone free-text search. See [Search vs. Filter](#search-vs-filter-two-different-conventions-on-purpose) above.
+`--match` is case-insensitive substring match. Repeated terms are AND'd. Combines with frontmatter filters and result control (`--sort`, `--limit`) — this is why it's spelled `match` rather than `search=` (the older `body-contains=` answers as `--match` with a note): unlike `claude://`/`codex://`/`xlsx://`/`help://search`'s `?search=`, it's a structured filter, not a standalone free-text search. See [Search vs. Filter](#search-vs-filter-two-different-conventions-on-purpose) above.
 
 **Extra columns** (markdown-specific):
 ```bash
-reveal 'markdown://primitives/?type=framework&columns=book,cohort'  # Append book= cohort= inline per result
+reveal markdown primitives/ --where type=framework --columns book,cohort  # Append book= cohort= inline per result
 ```
 `fields=f1,f2` appends comma-separated frontmatter values as `field=value` on each result row. Fields absent from a file are silently omitted.
 
@@ -746,16 +746,16 @@ matches the docs verbatim). `codex://` spells this search `match` now
 (`reveal codex://sessions/ --match TEXT`, repeat it to AND terms); its `?search=` is
 a deprecated spelling that works until 1.0 with a note.
 
-**`field~=value` (and `body-contains=`) — structured field filtering.** "Does
+**`field~=value` (and markdown's `match`) — structured field filtering.** "Does
 *this specific field* contain this substring?" AND-composable with other
-filters in the same query — `type=guide&body-contains=nginx`,
+filters in the same query — `--where type=guide --match nginx`,
 `name~=auth&complexity>10`. Used by `ast://`, `git://`, `json://`, and
-`markdown://` (whose `body-contains=` is this family, not the `?search=`
+`markdown` (whose `match` is this family, not the `?search=`
 family above, despite the name similarity — it combines with frontmatter
 filters and ranks results, which `?search=` adapters don't do).
 
 **If you're unsure which an adapter uses:** `?search=` takes scoping options only;
-`~=`/`body-contains=` combine with any filter. `reveal 'help://<scheme>'` documents
+`~=`/`match` combine with any filter. `reveal 'help://<scheme>'` documents
 which one a given adapter supports.
 
 ---
@@ -766,7 +766,7 @@ Multiple query parameters are combined with `&`:
 
 ```bash
 reveal git . --view history --where 'author~=john' --where 'message~=fix'
-reveal 'markdown://docs/?status=draft&priority=high'
+reveal markdown docs/ --where status=draft --where priority=high
 reveal 'imports://.?circular&detail=full'
 ```
 
@@ -825,7 +825,7 @@ reveal help://schemas/imports --format json | jq '.query_params'
 
 3. **Combine complementary filters** - Use multiple params for precision
    ```bash
-   reveal 'markdown://docs/?status=draft&tags~=python&!published'
+   reveal markdown docs/ --where status=draft --where 'tags~=python' --where '!published'
    ```
 
 4. **Check adapter schema** for available params

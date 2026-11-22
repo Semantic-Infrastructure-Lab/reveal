@@ -31,7 +31,7 @@ reveal 'ast://src/?complexity>10&sort=-complexity'
 reveal 'calls://src/?callers=validate_token&depth=3'
 reveal ssl://api.example.com
 reveal 'mysql://prod/?type=replication'
-reveal 'markdown://docs/?view=aggregate&field=type'
+reveal markdown docs/ --view aggregate --field type
 ```
 
 Same syntax. Same operators. Same output format. Whether you're querying code, certificates, databases, or docs — the mental model doesn't change. New capabilities don't require new syntax; they drop in as new adapters.
@@ -173,19 +173,19 @@ Documentation isn't text files — it's a graph. Reveal treats it that way.
 
 ```bash
 # What document types exist across the knowledge base?
-reveal 'markdown://docs/?view=aggregate&field=type'
+reveal markdown docs/ --view aggregate --field type
 
 # Find all docs tagged with a topic
-reveal 'markdown://docs/?beth_topics~=authentication'
+reveal markdown docs/ --where 'beth_topics~=authentication'
 
 # Which docs link to auth.md?
-reveal 'markdown://docs/?view=links' | grep 'auth.md'
+reveal markdown docs/ --view links | grep 'auth.md'
 
 # Find isolated docs (no links in or out)
-reveal 'markdown://docs/?view=links' | grep -A 20 'Isolated'
+reveal markdown docs/ --view links | grep -A 20 'Isolated'
 
 # Full-text search combining with frontmatter filters
-reveal 'markdown://docs/?match=retry&type=procedure'
+reveal markdown docs/ --where type=procedure --match retry
 ```
 
 **What you get:** Bidirectional link graphs, taxonomy frequency tables, full-text search combined with structured metadata filtering. Knowledge graph functionality in a code tool.
@@ -316,7 +316,7 @@ reveal git src/auth.py --view blame --element validate_token
 
 6. **`reveal pack --since <branch> --budget N`** — PR-aware codebase snapshots. Changed files boosted to priority tier 0; remaining budget fills with entry points and complexity leaders. Built for agents, not retrofitted.
 
-7. **`markdown://docs/?view=links`** — bidirectional doc link analysis with orphan detection. Rare in any tool category.
+7. **`reveal markdown docs/ --view links`** — bidirectional doc link analysis with orphan detection. Rare in any tool category.
 
 8. **`?depth=N` transitive call graphs** — callers-of-callers up to 5 levels. Impact radius before a refactor, not just immediate callers.
 

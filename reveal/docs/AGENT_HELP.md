@@ -54,7 +54,7 @@ Guides >200 lines show the first section by default (progressive disclosure). Ap
 | What a function calls, level by level | `reveal 'calls://src/?callees=my_fn&depth=2'` |
 | A function's inputs, side effects, exits | `reveal src/app.py my_fn --boundary` (or `--effects`, `--exits`) |
 | Files importing FILE | `reveal imports DIR --importers FILE` |
-| Documents linking to FILE | `reveal 'markdown://DIR/?backlinks=FILE'` |
+| Documents linking to FILE | `reveal markdown DIR/ --backlinks FILE` |
 | Abstract interfaces / contracts | `reveal contracts DIR` |
 | Unused or circular imports | `reveal 'imports://src/?unused'` / `?circular` |
 | HTTP routes | `reveal surface src/ --kind http` |
@@ -2436,13 +2436,13 @@ reveal doc.md --grep 'search-term'
 reveal doc.md --grep 'EX-12h' -i      # case-insensitive; works for hyphenated IDs, version strings, etc.
 
 # Search across a directory of markdown files — hits with body content (not just frontmatter)
-reveal 'markdown://docs/?match=nginx'
+reveal markdown docs/ --match nginx
 
 # Combine body search with frontmatter filter and sort
-reveal 'markdown://docs/?type=guide&match=nginx&sort=-modified'
+reveal markdown docs/ --where type=guide --match nginx --sort=-modified
 
 # Multiple body-contains terms are AND'd (all must appear)
-reveal 'markdown://docs/?match=auth&match=token'
+reveal markdown docs/ --match auth --match token
 
 # Navigate related documents (from front matter)
 reveal doc.md --related

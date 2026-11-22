@@ -9,12 +9,11 @@ help_category: feature_guides
 
 ## Directory queries
 
-`reveal markdown PATH` and `markdown://PATH` share declared controls and the same
-existing document operations:
+`reveal markdown PATH` takes the controls as flags; `markdown://PATH` names the same directory and takes the
+same flags, with equal JSON and exit codes:
 
 ```bash
 reveal markdown docs/ --where 'status=draft' --match retry --columns author,date
-reveal 'markdown://docs/?where=status%3Ddraft&match=retry&columns=author,date'
 reveal markdown docs/ --view links
 reveal markdown docs/ --view aggregate --field status
 reveal markdown docs/ --backlinks guide.md
@@ -100,10 +99,10 @@ reveal README.md --links --format json
 | **Front Matter Extraction** | `reveal doc.md --frontmatter --format json` | **Extract YAML metadata (requires JSON)** |
 | Broken Link Detection | `reveal doc.md --links` | **Find broken internal links** |
 | Progressive Disclosure | `reveal doc.md --head 5` | First 5 headings |
-| Cross-File Link Graph | `reveal 'markdown://docs/?view=links'` | Whole-tree forward links, backlinks, orphans |
-| Single-Doc Backlinks | `reveal 'markdown://docs/?backlinks=file.md'` | Who links to this doc, before you rename it |
-| Ranked Body Search | `reveal 'markdown://docs/?match=x&explain'` | Multi-doc search, best match first, with a score breakdown |
-| Frontmatter Lint Queue | `reveal 'markdown://docs/?view=lint'` | Malformed YAML / missing frontmatter across a tree |
+| Cross-File Link Graph | `reveal markdown docs/ --view links` | Whole-tree forward links, backlinks, orphans |
+| Single-Doc Backlinks | `reveal markdown docs/ --backlinks file.md` | Who links to this doc, before you rename it |
+| Ranked Body Search | `reveal markdown docs/ --match x --explain` | Multi-doc search, best match first, with a score breakdown |
+| Frontmatter Lint Queue | `reveal markdown docs/ --view lint` | Malformed YAML / missing frontmatter across a tree |
 
 ## The Problem This Solves
 
@@ -513,12 +512,12 @@ reveal README.md --frontmatter
 this, not a fallback:
 
 ```bash
-reveal 'markdown://docs/?view=aggregate&field=tags'          # frequency table of tag values across all docs
-reveal 'markdown://docs/?tags=tutorial'           # find docs by tag/category/any field
-reveal 'markdown://docs/?columns=author,date'      # extra columns per matched file
+reveal markdown docs/ --view aggregate --field tags          # frequency table of tag values across all docs
+reveal markdown docs/ --where tags=tutorial           # find docs by tag/category/any field
+reveal markdown docs/ --columns author,date      # extra columns per matched file
 ```
 
-See the "CLI Flags" section below (`?body-contains=`, `?fields=`) or
+See the "CLI Flags" section below (`--match`, `--columns`) or
 `reveal help://schemas/markdown` for the full query syntax. The "Advanced Examples" below cover
 the rare case where you need per-file JSON (e.g. `.raw` frontmatter text) that `markdown://`
 doesn't expose.
@@ -559,30 +558,30 @@ Use `markdown://` — a single query, no shell loop, no `jq`:
 
 ```bash
 # Count tag frequency across all docs
-reveal 'markdown://docs/?view=aggregate&field=tags'
+reveal markdown docs/ --view aggregate --field tags
 
 # Find all unique authors
-reveal 'markdown://docs/?view=aggregate&field=author'
+reveal markdown docs/ --view aggregate --field author
 
 # Validate required fields are present (per file, via missing-field filter)
-reveal 'markdown://docs/?!title'    # docs missing a title field
+reveal markdown docs/ --where '!title'    # docs missing a title field
 ```
 
 #### Find Documents by Metadata
 
 ```bash
 # Find all tutorial documents
-reveal 'markdown://docs/?tags=tutorial'
+reveal markdown docs/ --where tags=tutorial
 
 # Find documents by category
-reveal 'markdown://docs/?category=api'
+reveal markdown docs/ --where category=api
 ```
 
 #### Real-World Integration Example
 
 ```bash
 # Extract tags/topics for indexing — topic index in one call
-reveal 'markdown://docs/?view=aggregate&field=tags'
+reveal markdown docs/ --view aggregate --field tags
 ```
 
 This pattern works well for building topic indexes, documentation search, and content categorization.
@@ -1054,32 +1053,33 @@ These flags apply specifically to markdown files:
 | `--related-limit N` | Max files to traverse for `--related` (default: 100) |
 | `--section NAME` | Extract section by heading name |
 
-For adapter-specific flags via URI params: `reveal 'markdown:///path/?type=guide'`
+For directory queries with flags: `reveal markdown /path/ --where type=guide`
 
-### Body Text Search (`?body-contains=`)
+### Body Text Search (`--match`)
 
 Search file body content (text after frontmatter) rather than frontmatter fields:
 
 ```bash
 # Find docs mentioning "nginx" in the body
-reveal 'markdown://docs/?match=nginx'
+reveal markdown docs/ --match nginx
 
 # AND — both terms must appear
-reveal 'markdown://docs/?match=nginx&match=ssl'
+reveal markdown docs/ --match nginx --match ssl
 
 # Combine with frontmatter filter + limit
-reveal 'markdown://docs/?type=guide&match=nginx&limit=10'
+reveal markdown docs/ --where type=guide --match nginx --limit 10
 ```
 
 - Case-insensitive substring match
-- Multiple `body-contains=` params are AND'd (all must appear)
+- Repeated `--match` terms are AND'd (all must appear)
 - Unicode lowercase matching is supported (for example, `CAFÉ` matches `café`).
   This does not normalize composed/decomposed accents or equate `Straße` with `STRASSE`.
 - LF, CRLF and CR line endings share the body reader's `\n` view, including multiline queries.
 - Files without frontmatter are also matched
-- Combines with all frontmatter filters and result control (`sort=`, `limit=`, `offset=`)
-- `sort=FIELD` puts a file whose field is `null` or missing last, ascending or descending (`sort=-status`
-  lists the files with no status at the end, in path order); a list field sorts by its first element
+- Combines with all frontmatter filters and result control (`--sort`, `--limit`, `--offset`)
+- `--sort FIELD` reads a row field or the document's front matter and puts a file whose field is `null` or missing
+  last, ascending or descending (`--sort=-status` lists the files with no status at the end, in path order); a list
+  field sorts by its first element
 
 Direct ordinary body searches exit `0` when complete, `2` for an invalid resource
 or control, and `3` when required source or requested output is lost. Missing or
@@ -1095,25 +1095,27 @@ content read; the earlier whole-file prefilter is separate, so this is not a fil
 snapshot. See the [output contract](../development/OUTPUT_CONTRACT.md#declared-execution-policy)
 for the exact counts and Python API behavior.
 
-Active `aggregate=FIELD` queries also use this execution policy, with or without
+Active `--view aggregate --field FIELD` queries also use this execution policy, with or without
 body filters, and include the same `analysis` counts. Unreadable sources never
 count as matched files or missing fields. Readable files with absent, malformed
 or non-mapping frontmatter retain their existing missing-field meaning. List
 values count each item, including duplicates; frequency totals can therefore
-exceed matched file totals. Partial frequencies remain available with diagnostics.
+exceed matched file totals. Partial frequencies remain available with diagnostics. A field no scanned document's
+front matter has carries the `unknown_filter_field` warning (a likely typo), exit `0`.
 
 Backlinks, link-graph, lint and ordinary listings now carry the same source-decision
-counts and direct-invocation execution policy. Legacy selectors retain their precedence;
-new `view=` selectors reject contradictory mode controls. Element/check operations,
+counts and direct-invocation execution policy. One request selects one answer: two different selections (`--view
+links --backlinks a.md`) exit `2` naming both, and a legacy selector that agrees with `--view` is one setting.
+Element/check operations,
 stdin and mixed batches retain their separately qualified transport policy.
 
-### Extra Frontmatter Columns (`columns=`, legacy `fields=`)
+### Extra Frontmatter Columns (`--columns`, legacy `fields=`)
 
 Add arbitrary frontmatter fields as inline columns in listing output:
 
 ```bash
 # Show book and cohort for each matched primitive
-reveal 'markdown://primitives/?type=framework&columns=book,cohort'
+reveal markdown primitives/ --where type=framework --columns book,cohort
 
 # Output:
 # Matched: 3 of 47 files
@@ -1126,7 +1128,7 @@ reveal 'markdown://primitives/?type=framework&columns=book,cohort'
 - List-valued fields are rendered as `field=v1,v2`
 - Combines with all filters and result control
 
-### Cross-File Link Graph (`?link-graph`, `?backlinks=`)
+### Cross-File Link Graph (`--view links`, `--backlinks`)
 
 Graph and backlink queries report directory discovery failures as
 `analysis_incomplete` warnings in JSON, text and grep output. Counts describe
@@ -1141,59 +1143,61 @@ Two related but distinct queries over the tree's `[text](path)` link structure:
 
 ```bash
 # Whole-tree bidirectional graph: forward links, backlinks, orphans
-reveal 'markdown://docs/?view=links'
+reveal markdown docs/ --view links
 
 # Single doc: who links to it, before you rename/restructure it
-reveal 'markdown://docs/?backlinks=auth.md'
+reveal markdown docs/ --backlinks auth.md
 ```
 
-- `?link-graph` builds and returns the full graph for every markdown file
+- `--view links` builds and returns the full graph for every markdown file
   under the queried directory — use it to survey overall doc connectivity or
   find orphans: `orphans` lists every doc nothing links to, `isolated` the ones that also
-  link nowhere. An entry doc such as the root `README.md` is an orphan by construction.
-- `?backlinks=path` returns just the one node you asked about — cheaper when
+  link nowhere (the text prints one count per word and a `Rules:` pointer to the definitions in JSON
+  `_meta.known_limits`). An entry doc such as the root `README.md` is an orphan by construction.
+- `--backlinks DOC` returns just the one node you asked about — cheaper when
   you only need "who references this doc" as a pre-edit staleness check.
   Accepts either a path relative to the queried directory or a bare filename
   (resolved by basename if unambiguous; flagged as `ambiguous` with
-  `candidates` listed otherwise).
+  `candidates` listed otherwise). A doc that is not in the tree exits `2` naming it and the tree searched.
 - Both are a live regex parse of `[text](path)` link syntax — no persisted
   index, so results always reflect the current filesystem state.
 
-### Ranked Body Search (`?body-contains=`, `?explain`)
+### Ranked Body Search (`--match`, `--explain`)
 
-`?body-contains=` results sort best-first by relevance, not file order:
+`--match` results sort best-first by relevance, not file order:
 
 ```bash
 # Multi-term AND search, ranked best-first
-reveal 'markdown://docs/?match=auth&match=token'
+reveal markdown docs/ --match auth --match token
 
 # Same, with a per-term score breakdown
-reveal 'markdown://docs/?match=auth&match=token&explain'
+reveal markdown docs/ --match auth --match token --explain
 ```
 
 - `relevance_score` combines term frequency with a heading-proximity boost
   (a term appearing in a heading counts extra) — simpler than Beth's full
   phrase/authority ranking model, but enough to stop common terms from
   flooding results in file-listing order.
-- `?explain` adds `relevance_explain` (`term_counts`, `heading_hits`) to each
-  result so you can see why one doc outranked another.
-- An explicit `sort=` still overrides ranking when you want plain
+- `--explain` adds `relevance_explain` (`term_counts`, `heading_hits`) to each
+  result so you can see why one doc outranked another. It needs `--match` (alone it exits `2`).
+- The text answer points to this ranking rule with one `Rules:` line (JSON `_meta.known_limits`).
+- An explicit `--sort` still overrides ranking when you want plain
   alphabetical/recency order instead.
 
-### Frontmatter Maintenance Queue (`?lint`, `?lint-fields=`)
+### Frontmatter Maintenance Queue (`--view lint`, `--lint-fields`)
 
 A corpus-wide frontmatter health check, one list instead of one-file-at-a-time:
 
 ```bash
 # Malformed YAML and files with no frontmatter at all
-reveal 'markdown://docs/?view=lint'
+reveal markdown docs/ --view lint
 
 # Same, also flagging files missing required fields
-reveal 'markdown://docs/?view=lint&lint-fields=title,type'
+reveal markdown docs/ --view lint --lint-fields title,type
 ```
 
 - Three issue types: `no_frontmatter` (file has none), `malformed_yaml`
-  (a `---` block that fails to parse), and — only when `lint-fields=` is
+  (a `---` block that fails to parse), and — only when `--lint-fields` is
   given — `missing_fields` (frontmatter parses fine but lacks a named field).
 - A clean corpus reports zero issues rather than an empty ambiguous list.
 - Mirrors the maintenance-queue shape of Beth's `quality frontmatter-lint`,

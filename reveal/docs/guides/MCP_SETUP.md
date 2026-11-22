@@ -363,7 +363,7 @@ reveal_query("codex://sessions/?match=authentication")
 reveal_query("git://.?message~=fix")
 
 # Markdown docs — full-text + metadata filter
-reveal_query("markdown://docs/?match=retry&type=procedure")
+reveal_run(["markdown", "docs/", "--where", "type=procedure", "--match", "retry"])
 
 # SQLite database introspection
 reveal_query("sqlite:///path/to/app.db")

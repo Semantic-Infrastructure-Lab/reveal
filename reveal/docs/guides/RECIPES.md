@@ -93,11 +93,11 @@ target and joined to functions that cross runtime boundaries.
 
 ```bash
 reveal help://relationships
-reveal 'markdown://docs/?view=links'
+reveal markdown docs/ --view links
 ```
 
 **Why this matters:** `help://relationships` shows the adapter ecosystem and
-power pairs; `markdown://?view=links` turns docs into a bidirectional graph with
+power pairs; `reveal markdown DIR --view links` turns docs into a bidirectional graph with
 orphan detection.
 
 ### Session archaeology
@@ -660,42 +660,42 @@ find docs -name '*.md' -exec reveal {} --validate-schema mkdocs \;
 
 ```bash
 # Find all docs on a topic
-reveal 'markdown://docs/?topics=authentication'
+reveal markdown docs/ --where topics=authentication
 
 # Find incomplete docs
-reveal 'markdown://docs/?status=draft'
+reveal markdown docs/ --where status=draft
 
 # Find docs with specific tag
-reveal 'markdown://?tags=python'
+reveal markdown --where tags=python
 
 # Find docs missing metadata
-reveal 'markdown://?!topics'
+reveal markdown --where '!topics'
 ```
 
 ### Search doc body text
 
 ```bash
 # Find docs containing a keyword in the body (not just frontmatter)
-reveal 'markdown://docs/?match=deployment'
+reveal markdown docs/ --match deployment
 
 # AND logic: both terms must appear
-reveal 'markdown://docs/?match=authentication&match=oauth'
+reveal markdown docs/ --match authentication --match oauth
 
 # Combine with frontmatter filter: docs about auth that mention oauth
-reveal 'markdown://docs/?topics=authentication&match=oauth'
+reveal markdown docs/ --where topics=authentication --match oauth
 ```
 
 ### Count values across a field
 
 ```bash
 # See frequency of each value for a frontmatter field
-reveal 'markdown://docs/?view=aggregate&field=type'
+reveal markdown docs/ --view aggregate --field type
 
 # Count by topic tag (list fields are expanded per item)
-reveal 'markdown://docs/?view=aggregate&field=beth_topics'
+reveal markdown docs/ --view aggregate --field beth_topics
 
 # Count by status
-reveal 'markdown://docs/?view=aggregate&field=status'
+reveal markdown docs/ --view aggregate --field status
 ```
 
 **Output:** Sorted frequency table. Great for understanding your doc taxonomy.
@@ -704,28 +704,28 @@ reveal 'markdown://docs/?view=aggregate&field=status'
 
 ```bash
 # Which docs link to which? (forward edges + backlinks)
-reveal 'markdown://docs/?view=links'
+reveal markdown docs/ --view links
 
 # Grep-friendly tab-separated edges for scripting
-reveal 'markdown://docs/?view=links' --format=grep
+reveal markdown docs/ --view links --format=grep
 
 # Pipe to see which docs have the most backlinks
-reveal 'markdown://docs/?view=links' --format=grep | cut -f2 | sort | uniq -c | sort -rn
+reveal markdown docs/ --view links --format=grep | cut -f2 | sort | uniq -c | sort -rn
 ```
 
 **Output:** Per-file: links-to list, linked-by count. Plus orphans (docs nothing links to) and isolated files (no links in or out).
 
 ### Pre-edit staleness check for one doc
 
-About to rename or restructure a single doc? `?link-graph` builds the whole
-tree's graph; `?backlinks=` returns just the one node you asked about.
+About to rename or restructure a single doc? `--view links` builds the whole
+tree's graph; `--backlinks DOC` returns just the one node you asked about (a doc not in the tree exits 2).
 
 ```bash
 # Who references auth.md before I rename it?
-reveal 'markdown://docs/?backlinks=auth.md'
+reveal markdown docs/ --backlinks auth.md
 
 # Bare filename resolves by basename if the path is ambiguous, it says so
-reveal 'markdown://docs/?backlinks=guides/auth.md'
+reveal markdown docs/ --backlinks guides/auth.md
 ```
 
 **Output:** `linked_by` (who points at this doc) and `links_to` (what this doc
@@ -734,14 +734,14 @@ inbound links.
 
 ### Rank multi-doc body search
 
-`?body-contains=` results sort best-first by relevance instead of file order:
+`--match` results sort best-first by relevance instead of file order:
 
 ```bash
 # Multi-term AND search, ranked best-first
-reveal 'markdown://docs/?match=auth&match=token'
+reveal markdown docs/ --match auth --match token
 
 # Same, with a per-term score breakdown (term_counts, heading_hits)
-reveal 'markdown://docs/?match=auth&match=token&explain'
+reveal markdown docs/ --match auth --match token --explain
 ```
 
 **Output:** `relevance_score` (term frequency + heading-proximity boost) on
@@ -752,10 +752,10 @@ when you want plain alphabetical/recency order.
 
 ```bash
 # Malformed YAML and files with no frontmatter at all
-reveal 'markdown://docs/?view=lint'
+reveal markdown docs/ --view lint
 
 # Same, also flagging files missing required fields
-reveal 'markdown://docs/?view=lint&lint-fields=title,type'
+reveal markdown docs/ --view lint --lint-fields title,type
 ```
 
 **Output:** One list of `no_frontmatter`/`malformed_yaml`/`missing_fields`
@@ -1700,8 +1700,8 @@ reveal 'calls://src/?callees=fn'         # What does fn call? (cross-file forwar
 reveal 'calls://src/?sort=-callers'       # Most-called functions (coupling metrics)
 reveal 'claude://?match=term'           # Search session history for keyword
 reveal 'claude://files/path/to/file.py'  # Sessions that touched this file
-reveal 'markdown://docs/?view=links'     # Cross-file doc link graph
-reveal 'markdown://docs/?view=aggregate&field=type' # Frontmatter field frequency table
+reveal markdown docs/ --view links     # Cross-file doc link graph
+reveal markdown docs/ --view aggregate --field type # Frontmatter field frequency table
 ```
 
 ### Inspection commands

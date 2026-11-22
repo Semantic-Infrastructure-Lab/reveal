@@ -220,7 +220,7 @@ reveal 'ast://file.py?name~=auth' --format json | jq -r '.results[].file' | sort
 |---------|-------------|-------|
 | `ast://` | ✅ Rich filtering | Reference implementation |
 | `json://` | ✅ Rich filtering | Field filters, flatten, schema |
-| `markdown://` | ✅ Frontmatter filtering | `?status=draft`, `?body-contains=X` |
+| `markdown://` | ✅ Frontmatter filtering | `?status=draft`, `?match=X` |
 | `metrics://` | ✅ Metric filtering | `?view=hotspots`, `?avg_complexity>=10` (`stats://` is a deprecated alias: it still answers, with a note) |
 | `git://` | ✅ Commit filtering | `?author=`, `?since=`, `?type=` |
 | `calls://` | ✅ Call graph | `?callers=fn`, `?top=10` |

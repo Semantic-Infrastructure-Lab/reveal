@@ -6,7 +6,7 @@ category: reference
 
 Every user-facing doc, one line each. The same material is browsable from the CLI:
 `reveal help://` lists every help topic and adapter live, and
-`reveal 'markdown://reveal/docs/?view=links'` shows how these files link to each other.
+`reveal markdown reveal/docs/ --view links` shows how these files link to each other.
 Line counts and file totals are deliberately not listed here; they drift.
 
 ## Start here

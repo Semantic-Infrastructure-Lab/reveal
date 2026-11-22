@@ -293,9 +293,9 @@ That makes Reveal useful not only for inspection, but for deciding **where effor
 Reveal is not only for code. It is also good for documentation systems with frontmatter, internal links, and large markdown corpora.
 
 ```bash
-reveal 'markdown://docs/?view=aggregate&field=type'
-reveal 'markdown://docs/?view=links'
-reveal 'markdown://docs/?match=retry&type=procedure'
+reveal markdown docs/ --view aggregate --field type
+reveal markdown docs/ --view links
+reveal markdown docs/ --where type=procedure --match retry
 reveal check docs/ --select L
 reveal check docs/ --select F
 ```
@@ -604,7 +604,7 @@ Start with the workflow that matches your job:
 | Estimate refactor blast radius | `reveal 'calls://src/?callers=func'` and `reveal 'imports://path/to/module.py?importers'` |
 | Prepare AI context | `reveal pack src/ --since main --budget 8000 --content` |
 | Discover Reveal capabilities | `reveal help://` or `reveal help://schemas` |
-| Investigate docs | `reveal 'markdown://docs/?view=links'` |
+| Investigate docs | `reveal markdown docs/ --view links` |
 | Check infra health | `reveal health ssl://site domain://site` |
 | Explore workbook internals | `reveal xlsx /file.xlsx --powerpivot schema` |
 | Audit Claude sessions | `reveal claude://sessions/` |
