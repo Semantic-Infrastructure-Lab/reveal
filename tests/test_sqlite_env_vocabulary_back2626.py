@@ -226,16 +226,21 @@ def _corrupt(path):
     connection.close()
 
 
-def test_sqlite_health_keeps_the_codes_check_had(db, tmp_path):
-    """BACK-2753 decides the health codes; until then --view health answers as --check did: 1 on a foreign-key
-    violation, 2 on a failed integrity check, on the subcommand and the URI; --fail-on none reports the violation with 0."""
+def test_sqlite_health_gates_on_findings(db, tmp_path):
+    """D6 (ruling on BACK-2626 step 3, settling BACK-2753): a failed integrity check is a finding like a foreign-key
+    violation, so --view health exits 1 under its default findings gate (--check exited 2 and the declared path called
+    the answer an invalid request: the API raised, MCP said error); --fail-on none reports either with 0."""
+    from reveal.mcp_server import reveal_run
     _corrupt(tmp_path / 'bad.db')
     for argv in (['sqlite', 'bad.db', '--view', 'health'], ['sqlite://bad.db', '--view', 'health'],
                  ['sqlite://bad.db', '--check']):
         run, doc = _json(*argv)
-        assert run.returncode == 2, (argv, run.stderr)
-        assert (doc['type'], doc['integrity'], doc['status']) == ('sqlite_health', False, 'failure')
+        assert run.returncode == 1, (argv, run.stderr)
+        assert (doc['type'], doc['integrity'], doc['status'], doc['exit_code']) == ('sqlite_health', False, 'failure', 1)
         assert len(doc['detections']) == 2
+    assert _json('sqlite', 'bad.db', '--view', 'health', '--fail-on', 'none')[0].returncode == 0
+    assert api.query('sqlite', 'bad.db', view='health')['integrity'] is False  # an answer, not an invalid request
+    assert json.loads(reveal_run(['sqlite://bad.db', '--view', 'health', '--format', 'json']))['status'] == 'failure'
     run, doc = _json('sqlite', 'app.db', '--view', 'health', '--fail-on', 'none')
     assert run.returncode == 0 and doc['foreign_key_violations'] == 1
     text = _run_reveal_direct('sqlite', 'app.db', '--view', 'health')  # the text answer, not the JSON document
