@@ -645,10 +645,19 @@ def given_controls(params: Mapping[str, Any]) -> set:
 def runtime_controls(declarations: Iterable[ParamSpec], params: Mapping[str, Any]) -> QueryParams:
     """The controls a bound request gives, as a noun's readers see them: an omitted control (None) is absent, and so is
     a legacy presence flag given off (a typed False restores omission: the controls whose codec is
-    ``legacy_presence_value``, Claude's and Codex's URI flags). Walking *params* here reads none of them."""
+    ``legacy_presence_value``, Claude's URI flags). Walking *params* here reads none of them. Reading a control here
+    reads every spelling the request gave it, as on *params*: its legacy words (``filter`` for ``where``) and the bare
+    field keys the binder folded into the where expression (``?session~=x``)."""
+    declarations = tuple(declarations)
     presence = {spec.name for spec in declarations if spec.convert is legacy_presence_value}
-    return QueryParams({key: value for key, value in peek_query_items(params)
-                        if value is not None and not (key in presence and value is False)})
+    runtime = QueryParams({key: value for key, value in peek_query_items(params)
+                           if value is not None and not (key in presence and value is False)})
+    runtime._aliases = dict(getattr(params, '_aliases', {}))
+    folded = tuple(getattr(params, '_folded', ()))
+    expression = next((spec.name for spec in declarations if spec.role == 'filter-expression'), None)
+    if folded and expression is not None:
+        runtime._aliases[expression] = (*runtime._aliases.get(expression, ()), *folded)
+    return runtime
 
 
 def _reads(spec: ParamSpec, facets: tuple) -> bool:

@@ -51,3 +51,18 @@ def test_codex_and_claude_requests_with_a_flag_given_off_answer_as_omitted():
     claude_off = bind_declared_params(CLAUDE_SPECS, {'tokens': False}, transport='typed')
     resource, runtime = translate_request(None, claude_off, 'session/demo')
     assert (resource, dict(runtime.peek_items())) == ('session/demo', {})
+
+
+def test_reading_a_control_reads_every_spelling_the_request_gave_it():
+    """Reading ``where`` from the runtime controls reads its legacy word (Claude ``filter``) and a bare field key the
+    binder folded into it (``?session~=x``), as reading it from the bound request does, so the unused-input ledger
+    never names a spelling the answer applied. Claude's translate_request kept this; Codex's ``filter`` needs it too
+    (BACK-2618), so the binder owns it."""
+    for query, spellings in (('filter=demo', {'where', 'filter'}), ('session~=demo', {'where', 'session'})):
+        bound = bind_declared_params(CLAUDE_SPECS, query, transport='uri')
+        runtime = runtime_controls(CLAUDE_SPECS, bound)
+        runtime._reads = set()
+        assert runtime.get('where') == ['session~=demo']
+        assert spellings <= runtime._reads, (query, runtime._reads)
+    plain = runtime_controls(CLAUDE_SPECS, {'where': ['session~=demo']})  # a plain mapping has no spellings to carry
+    assert plain._aliases == {}
