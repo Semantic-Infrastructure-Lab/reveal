@@ -1079,8 +1079,8 @@ class _LegacyFlagAction(ScalarOnceAction):
 
 
 def is_legacy_flag_action(action: argparse.Action) -> bool:
-    """Whether *action* is an old flag a declaration generates (``_LegacyFlagAction``): a help digest names only the
-    flags it teaches (BACK-2627)."""
+    """Whether *action* is an old flag a declaration generates (``_LegacyFlagAction``, or a legacy entry's flag with an
+    argument of its own beside its control's): a help digest names only the flags it teaches (BACK-2627, BACK-2755)."""
     return bool(getattr(action, 'legacy_flag', False))
 
 
@@ -1118,6 +1118,18 @@ def _add_legacy_flag_arguments(parser, spec) -> None:
         parser.add_argument(entry.flag, dest=entry.name, default=argparse.SUPPRESS, action=_LegacyFlagAction,
                             entry=entry, repeatable=spec.repeatable, help=f'Legacy {entry.flag}: {spec.name}',
                             **_legacy_flag_arity(entry))
+
+
+def _add_legacy_rider_arguments(parser, spec: ParamSpec, options: Dict[str, Any], separate: set) -> None:
+    """A legacy entry's old flag that stores the control's own value (``--type`` for ``--kind``, ``--body-contains`` for
+    ``--match``): an argument of its own beside the control's, with the same dest and options and the control's one
+    conflict box (``ScalarOnceAction``'s ``seen``), so ``--kind A --type B`` still exits 2 naming both and a repeatable
+    control still accumulates; marked an old flag (``is_legacy_flag_action``), so a help can hide it alone (BACK-2755)."""
+    for flag in (flag for flag in spec.flags if flag not in spec.cli.flags and flag not in separate):
+        if spec.cli.exclusive:
+            raise ValueError(f'{spec.name}: the old flag {flag} of an exclusive control needs its own declaration')
+        rider = parser.add_argument(flag, **{**options, 'required': False, 'help': f'Legacy {flag}: {spec.name}'})
+        rider.legacy_flag = True
 
 
 def convert_flag_only(specs: Iterable[ParamSpec], args: Any) -> None:
@@ -1196,7 +1208,8 @@ def add_declared_arguments(parser: argparse.ArgumentParser, specs: Iterable[Para
             if cli.exclusive not in groups:
                 groups[cli.exclusive] = parser.add_mutually_exclusive_group()
             owner = groups[cli.exclusive]
-        owner.add_argument(*(flag for flag in spec.flags if flag not in separate), **options)
+        owner.add_argument(*(flag for flag in cli.flags if flag not in separate), **options)
+        _add_legacy_rider_arguments(parser, spec, options, separate)
         _add_legacy_flag_arguments(parser, spec)
 
 

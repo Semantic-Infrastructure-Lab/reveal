@@ -9,7 +9,7 @@ by ``--help-all``; it is only left out of the digest. Groups with no generated l
 import argparse
 
 from reveal.cli.parser import create_argument_parser
-from reveal.utils.query_binding import _LegacyFlagAction
+from reveal.utils.query_binding import is_legacy_flag_action
 
 
 def _groups(full_help):
@@ -29,7 +29,7 @@ def test_code_analysis_digest_names_the_canonical_flags():
 
 def test_no_digest_names_a_generated_legacy_flag():
     legacy = {action.option_strings[0] for group in _groups(True).values() for action in group._group_actions
-              if isinstance(action, _LegacyFlagAction)}
+              if is_legacy_flag_action(action)}
     assert {'--boundary', '--exits', '--flow', '--effects'} <= legacy  # the scan is not empty
     for title, group in _groups(False).items():
         if 'help-all to expand' not in (group.description or ''):
@@ -51,5 +51,5 @@ def test_legacy_flags_still_parse_and_are_counted_in_the_digest_remainder():
     full = _groups(True)['Code analysis']
     listed = [a for a in full._group_actions if a.option_strings and a.help is not argparse.SUPPRESS]
     shown, _, rest = _digest('Code analysis').partition(', +')
-    canonical = [a for a in listed if not isinstance(a, _LegacyFlagAction)]
+    canonical = [a for a in listed if not is_legacy_flag_action(a)]
     assert int(rest.split(' ')[0]) == len(canonical) - len(shown.split(', '))
