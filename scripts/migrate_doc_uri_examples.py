@@ -5,8 +5,9 @@ A documented command whose first word is a retiring URI request (an analysis-onl
 string; BACK-2716) is rewritten as the executable canonical request rendered from the bound request by the request
 note's renderers in ``reveal.cli.routing.canonical``: ``reveal NOUN TARGET --flags`` (``render_request``) where the
 noun declares a subcommand and the target is a plain path, the resource URI followed by flags (``render_uri_request``)
-where the URI carries an address (a JSON key path, ``@ref``, a session; D1, D20). Nothing here parses a URI or finds an
-example on its own:
+where the URI carries an address (a JSON key path, ``@ref``, a session; D1, D20). "Plain path" is read from the noun's
+declarations, never a table here (``plain_path``), and kept only when the subcommand rendering round-trips. Nothing here
+parses a URI or finds an example on its own:
 
   examples   ``scripts/doc_examples.py``, the executable-docs gate's extractor (fenced bash/sh/shell blocks and embedded
              Markdown tables) and its ``retiring_uri_index`` check (the ``.github/doc_uri_requests_baseline.json``
@@ -16,7 +17,8 @@ example on its own:
              reported with the binder's own error;
   rendering  ``render_request`` / ``render_uri_request`` (form ``cli``), with the request's typed ``--format``/
              ``--output`` kept as the note keeps it (``presentation=False``); a subcommand rendering the noun parser does
-             not read back with the URI's resource keeps the resource form, counted;
+             not read back with the URI's resource keeps the resource form, counted; a replacement that spells a
+             word with a RETIREMENTS row (a flag, a flag value, a control) is refused (``retiring_words``);
   context    ``scripts/check_retired_names.py`` ``REPLACED_BY_CONTEXT``: a command line that says its spelling is
              deprecated (an inline ``# deprecated`` comment) is left, as prose naming a retired spelling is.
 
@@ -24,7 +26,7 @@ Only the URI word changes: words before it, flags after it (BACK-2673: flags aft
 pipes and comments stay as written. An example is left, with the reason counted, when the doc shows it failing, it names
 its spelling as deprecated, it is not one line of the file, a control it gives has no flag (``UnrenderableRequest``),
 the binder rejects it, a flag after the URI gives a control the URI gives too, the rendered line does not parse with
-the noun's parser, or its scheme says no request note (a retired twin with its own ``scheme:`` row, or a noun with no
+the noun's parser, the replacement would spell a word that itself retires, or its scheme says no request note (a retired twin with its own ``scheme:`` row, or a noun with no
 declared subcommand yet). Prose is never edited: inline backtick commands and other URI mentions outside executable
 blocks are counted as ``prose`` for the report only.
 
@@ -71,6 +73,7 @@ UNRENDERABLE = 'no canonical form'  # + the renderer's reason
 BINDER_REJECTS = 'the binder rejects the request'  # + the binder's message
 BOTH_SPELL = 'a flag after the URI gives a control the URI gives too'
 DOES_NOT_PARSE = 'the rendered line does not parse with the noun parser'  # + the parser's message
+RETIRING_REPLACEMENT = 'the replacement spells a word that itself retires'  # + the RETIREMENTS keys
 EMBEDDED = 'an embedded Markdown table cell: by hand'
 COPY_LEFT = 'a copy of this line elsewhere in the file is left (lines are rewritten by text)'
 SEVERAL_COMMANDS = 'another reveal command follows on the line (the extractor reads the first): by hand'
@@ -138,15 +141,36 @@ def _typed_presentation(words: Sequence[str]) -> bool:
 
 
 def plain_path(bound: Bound) -> bool:
-    """Whether the URI's resource is a plain path: the noun's resource is a filesystem path (``RESOURCE_SPEC.filesystem``)
-    and its declared ``resource_path`` hook, the part a filesystem preflight resolves, is the whole resource. A JSON key
-    path (``data.json/users``), a ref (``.@main``) or a session names an address a path cannot."""
-    if not bound.adapter.RESOURCE_SPEC.filesystem:
+    """Whether the URI's resource is a plain path, from the noun's declarations (no per-noun table): its subcommand's
+    positional is a path (``RESOURCE_SPEC.name``; Claude's and Codex's is a ``resource``: sessions, a session id, a named
+    resource), the resource holds none of the address marks the noun declares (``RESOURCE_SPEC.address``: git's
+    ``app.py@main``), and the declared ``resource_path`` hook, the part a path preflight resolves, is the whole resource
+    (a JSON key path ``data.json/users``, Calls' ``path:name``). A noun need not walk the filesystem: git's paths name
+    files in a repository (``filesystem=False``) and are plain paths all the same."""
+    spec = bound.adapter.RESOURCE_SPEC
+    if spec.name != 'path' or any(mark in bound.resource for mark in spec.address):
         return False
     resolve = getattr(bound.adapter, 'resource_path', None)
     if not callable(resolve) or not bound.resource:
         return True
     return Path(os.path.expanduser(resolve(bound.resource))) == Path(os.path.expanduser(bound.resource))
+
+
+def retiring_words(bound: Bound) -> List[str]:
+    """The RETIREMENTS keys the rendered replacement would spell: for each control it gives, its flag
+    (``flag:NOUN.--FLAG``), its control (``param:NOUN.NAME``) and each value (``value:NOUN.NAME=VALUE``). A replacement
+    that names a spelling which itself retires (git ``?type=log`` rendered ``--view log``) would teach the next retired
+    word, so it is never written (manager, step 6)."""
+    from reveal.cli.invocation import RETIREMENTS
+    from reveal.cli.routing.canonical import _flag_value, _given_flags, _unread
+    keys: List[str] = []
+    for spec, flag in _given_flags(bound.parser, bound.adapter, bound.params):
+        value = _flag_value(spec, _unread(bound.params, spec.name))
+        values = value if isinstance(value, (list, tuple)) else [value]
+        candidates = [f'flag:{bound.scheme}.{flag}', f'param:{bound.scheme}.{spec.name}',
+                      *(f'value:{bound.scheme}.{spec.name}={item}' for item in values)]
+        keys += [key for key in candidates if key in RETIREMENTS and key not in keys]
+    return keys
 
 
 def _parses(bound: Bound, rendered: str, subcommand: bool, other_words: Sequence[str]) -> object:
@@ -173,6 +197,9 @@ def render(uri: str, other_words: Sequence[str]) -> Tuple[str, str, bool]:
     both = sorted(flagged & set(controls))
     if both:
         raise _Left(f'{BOTH_SPELL} ({", ".join(both)})')
+    retiring = retiring_words(bound)
+    if retiring:
+        raise _Left(f'{RETIRING_REPLACEMENT}: {", ".join(retiring)}')
     keywords = dict(parser=bound.parser, adapter=bound.adapter, walk_policy=bound.walk_policy,
                     presentation=not _typed_presentation(other_words))
     analysis_only = getattr(bound.adapter, 'ANALYSIS_ONLY', False)
