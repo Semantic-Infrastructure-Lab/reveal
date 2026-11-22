@@ -1077,11 +1077,11 @@ def _owned_by_parser(parser, spec: ParamSpec) -> bool:
     the control's (the typed source reads the dest). An owned flag storing another destination would hand the control
     another control's value: a declaration error."""
     cli = spec.cli
-    owned = [parser._option_string_actions.get(flag) for flag in cli.flags] if cli is not None else []
-    if not owned or any(action is None for action in owned):
+    if cli is None or not all(flag in parser._option_string_actions for flag in cli.flags):
         return False
     dest = cli.dest or spec.name
-    for flag, action in zip(cli.flags, owned):
+    for flag in cli.flags:
+        action = parser._option_string_actions[flag]
         if action.dest != dest:
             raise ValueError(f'{spec.name}: {flag} is owned by the parser\'s {action.dest!r} argument, not {dest!r}')
     return True
