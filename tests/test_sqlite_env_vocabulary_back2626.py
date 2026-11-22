@@ -212,3 +212,47 @@ def test_sqlite_health_of_an_unreadable_database_is_incomplete_exit_3(db, tmp_pa
         assert _run_reveal_direct('sqlite://locked.db').returncode == 3  # control: the plain read already exits 3
     finally:
         locked.chmod(0o600)
+
+
+def _corrupt(path):
+    """A database whose index no longer matches its table: PRAGMA integrity_check reports each row, no read raises."""
+    connection = sqlite3.connect(path)
+    connection.executescript("CREATE TABLE t(a INTEGER, b INTEGER); CREATE INDEX i ON t(a);"
+                             "INSERT INTO t VALUES (1, 10), (2, 20);")
+    connection.commit()
+    connection.executescript("PRAGMA writable_schema=ON; UPDATE sqlite_master SET sql='CREATE INDEX i ON t(b)' "
+                             "WHERE name='i'; PRAGMA writable_schema=OFF;")
+    connection.commit()
+    connection.close()
+
+
+def test_sqlite_health_keeps_the_codes_check_had(db, tmp_path):
+    """BACK-2753 decides the health codes; until then --view health answers as --check did: 1 on a foreign-key
+    violation, 2 on a failed integrity check, on the subcommand and the URI; --fail-on none reports the violation with 0."""
+    _corrupt(tmp_path / 'bad.db')
+    for argv in (['sqlite', 'bad.db', '--view', 'health'], ['sqlite://bad.db', '--view', 'health'],
+                 ['sqlite://bad.db', '--check']):
+        run, doc = _json(*argv)
+        assert run.returncode == 2, (argv, run.stderr)
+        assert (doc['type'], doc['integrity'], doc['status']) == ('sqlite_health', False, 'failure')
+        assert len(doc['detections']) == 2
+    run, doc = _json('sqlite', 'app.db', '--view', 'health', '--fail-on', 'none')
+    assert run.returncode == 0 and doc['foreign_key_violations'] == 1
+    text = _run_reveal_direct('sqlite', 'app.db', '--view', 'health')  # the text answer, not the JSON document
+    assert text.returncode == 1 and text.stdout.startswith('app.db: integrity ok') and 'foreign_key_check' in text.stdout
+    assert _run_reveal_direct('sqlite://app.db').returncode == 0  # control: the overview has no findings to gate
+
+
+def test_check_of_a_sqlite_uri_names_its_health_view(db):
+    """reveal check is for paths; on a sqlite:// URI it recommended the deprecated --check, now the declared view. A
+    noun with no such control keeps the old hint (negative control)."""
+    run = _run_reveal_direct('check', 'sqlite://app.db')
+    assert run.returncode == 2 and 'Did you mean: reveal sqlite://app.db --view health' in run.stderr
+    run = _run_reveal_direct('check', 'json://data.json')
+    assert run.returncode == 2 and 'Did you mean: reveal json://data.json --check' in run.stderr
+
+
+def test_an_empty_sqlite_uri_names_the_missing_database(db):
+    """B12: it named the Python class (SQLiteAdapter('sqlite:///path/to/db.db')); now the request's missing part."""
+    run = _run_reveal_direct('sqlite://')
+    assert run.returncode == 2 and 'SQLiteAdapter' not in run.stderr and 'resource is required' in run.stderr
