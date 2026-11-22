@@ -112,6 +112,18 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 - `ast` `--where` on the retired `calls` and `callee_of` fields (`--where 'calls=main'`) and `--show calls` now print their replaced-by note on every form, the subcommand included, pointing at `reveal calls PATH --callers NAME` (BACK-2613).
 
+- `ast` `--view` takes `dict-heatmap` or `dict-schemas`; any other value, an empty one included, exits 2 naming the two, where it answered the default listing. `show=` is its legacy word, with a note, and `--view calls` is retired to `reveal calls`. `--where`, `--kind`, `--sort`, `--limit`, `--offset`, `--builtins` and the legacy `--head`/`--tail`/`--range` beside `--view` or `--reveal-type` now exit 2 naming the answer that reads them, as do `--view` and `--reveal-type` together (BACK-2613).
+
+- `ast` `--reveal-type NAME` exits 2 naming what it searched when no analyzed Python file has the variable (`variable 'x' has no occurrence in src (12 Python file(s) searched)`), where it answered "0 occurrence(s) found"; a tree with no Python files still answers (BACK-2613).
+
+- An `ast` option given with no value (`ast://src?limit`, `?kind`, `?sort`, `?view`, `?reveal_type`) exits 2, where it bound `1` or `True`; an invalid filter value in an `ast://` query raises `RequestValidationError` from `reveal.api.query` (BACK-2613).
+
+- `ast` `kind` and `nesting_depth` are the where fields: `--where type=...` and `--where 'depth>N'` answer as before with a note naming them, and the query echo reads `kind==function` (BACK-2613).
+
+- `ast` text prints its two standing caveats (complexity is unweighted McCabe; a language below tier1-verified conformance) as one `Rules: --format json (meta.warnings)` line; their full text stays in JSON. Rows print in the answer's order: with `--sort` across files each row names its file instead of being regrouped by file, and unsorted groups follow the listing's order (BACK-2613).
+
+- `help://ast`, `help://schemas/ast`, the next steps of the dict views and `--reveal-type`, the W-CAP-1 Python-only warning and the AST guide teach `reveal ast PATH --flags` (`reveal ast src --where 'complexity>10' --sort=-complexity --limit 10`) instead of an `ast://` query string (BACK-2613).
+
 ## [0.135.0] - 2026-11-18
 
 Read "Behavior changes" first. Every declared noun now takes one vocabulary of options on its subcommand, its URI and `reveal.api.query` (`--limit/--offset`, `--sort`, `--where`, `--match`, `--detail`, `--view`, switches as `on|off`); old spellings still answer with a note until 1.0, and an unknown key, flag or field now exits 2 instead of being ignored. Configuration that cannot be used fails the request instead of answering from the defaults. A file read only through parser recovery is one `parse_recovered` warning on every noun, `check` included, and the answer is incomplete (exit 3). MCP, `--stdin` and the Python API now answer exactly as the CLI does.
