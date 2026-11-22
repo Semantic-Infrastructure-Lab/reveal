@@ -29,6 +29,7 @@ class _QuerySources:
     lost: List[Path] = field(default_factory=list)
     analyzed: int = 0
     failed: set[Path] = field(default_factory=set)
+    front_matter: Dict[int, Optional[Dict[str, Any]]] = field(default_factory=dict)  # id(item) -> its front matter
 
 
 def _prefilter_unreadable(candidates) -> List[Tuple[str, str]]:
@@ -80,6 +81,7 @@ def _collect_query_sources(all_files: List[Path], filters: list,
             collected.seen_fields.update(frontmatter)
         if item is not None:
             collected.items.append(item)
+            collected.front_matter[id(item)] = frontmatter  # --sort reads a front-matter field the row does not show
     return collected
 
 
@@ -124,11 +126,7 @@ def get_structure(
     if body_contains and not sort_field:
         sort_field = 'relevance_score'
         sort_descending = True
-    sorted_results = results.apply_sorting(
-        matched_results,
-        sort_field,
-        sort_descending
-    )
+    sorted_results = results.apply_sorting(matched_results, sort_field, sort_descending, collected.front_matter)
     controlled_results = results.apply_pagination(
         sorted_results,
         result_control.offset,
@@ -150,7 +148,10 @@ def get_structure(
     # Add truncation warning if needed
     displayed = len(controlled_results)
     results.add_truncation_warning(response, displayed, total_matches)
-    note_warning(response, unknown_sort_field_warning(result_control.sort_field, matched_results))
+    note_warning(response, unknown_sort_field_warning(
+        result_control.sort_field, matched_results,
+        lambda item, name: results.sort_value(item, name, collected.front_matter.get(id(item))),
+        sortable=results.sortable_fields(matched_results, collected.seen_fields)))
     note_warning(response, worker_lost_warning(
         collected.lost, "they were not searched, so matches may be missing", base_path))  # BACK-1754
     note_warning(response, files.unreadable_warning(

@@ -74,23 +74,32 @@ def build_result_item(
     return result
 
 
-def sort_value(item: Dict[str, Any], sort_field: str) -> Any:
-    """The value an item sorts by: the field, a list by its first element, None when null or missing.
+def sort_value(item: Dict[str, Any], sort_field: str, frontmatter: Optional[Dict[str, Any]] = None) -> Any:
+    """The value an item sorts by: the row's field (path, modified, relevance_score, a shown front-matter key), else the
+    document's front-matter field; a list by its first element, None when null or missing.
 
     Args:
         item: Result item dict
         sort_field: Field name to sort by
+        frontmatter: The document's front matter (the row shows only some of its keys)
 
     Returns:
         The sort value, or None (sorts last)
     """
-    value = item.get(sort_field)
+    value = item[sort_field] if sort_field in item else (frontmatter or {}).get(sort_field)
     if isinstance(value, list):
         return str(value[0]) if value else ''
     return value
 
 
-def apply_sorting(results: List[Dict[str, Any]], sort_field: str, sort_descending: bool) -> List[Dict[str, Any]]:
+def sortable_fields(items: List[Dict[str, Any]], front_matter_keys: set) -> set:
+    """The fields an unknown ``--sort`` suggests: the rows' scalar fields and every front-matter key scanned."""
+    return {key for item in items[:200] for key, value in item.items()
+            if isinstance(value, (int, float, str)) and not key.startswith('_')} | set(front_matter_keys)
+
+
+def apply_sorting(results: List[Dict[str, Any]], sort_field: str, sort_descending: bool,
+                  front_matter: Optional[Dict[int, Optional[Dict[str, Any]]]] = None) -> List[Dict[str, Any]]:
     """Apply sorting to results. Null and missing values go last in either direction, in
     their source order, as on json:// and ast:// (BACK-2298).
 
@@ -98,6 +107,7 @@ def apply_sorting(results: List[Dict[str, Any]], sort_field: str, sort_descendin
         results: List of result items
         sort_field: Field name to sort by (or None)
         sort_descending: Whether to sort descending
+        front_matter: Each row's document front matter by ``id(row)``, for a field the row does not show
 
     Returns:
         Sorted list of results
@@ -106,7 +116,7 @@ def apply_sorting(results: List[Dict[str, Any]], sort_field: str, sort_descendin
         return results
 
     def value(item: Dict[str, Any]) -> Any:
-        return sort_value(item, sort_field)
+        return sort_value(item, sort_field, (front_matter or {}).get(id(item)))
 
     try:
         return sort_nulls_last(results, value, sort_descending)
