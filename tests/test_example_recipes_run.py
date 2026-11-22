@@ -169,10 +169,12 @@ def _enrich_recipe_tree(root):
         '---\ntitle: Fixture\ntype: guide\n---\n# Proj\n'
         'nginx deploy auth token\n\nSee [auth](auth.md) and [app](app.py).\n', encoding='utf-8')
     (root / 'proj' / 'auth.md').write_text('# Auth\nAuthentication token guide.\n', encoding='utf-8')
-    # The markdown schema examples filter on topics, tags and status: a positive matching fixture for them, so they
-    # answer rows rather than the unknown-field typo warning (BACK-2654 note #14).
+    # The markdown schema examples filter on topics, tags and status and aggregate beth_topics: a positive matching
+    # fixture for them, so they answer rows rather than the unknown-field typo warning (BACK-2654 note #14; an aggregate
+    # field gets the same warning since BACK-2614).
     (root / 'proj' / 'notes.md').write_text(
-        '---\ntitle: Notes\ntopics: [reveal]\ntags: [python]\nstatus: active\n---\n# Notes\n', encoding='utf-8')
+        '---\ntitle: Notes\ntopics: [reveal]\nbeth_topics: [reveal, docs]\ntags: [python]\nstatus: active\n---\n'
+        '# Notes\n', encoding='utf-8')
 
 
 def _pipeline(query):
