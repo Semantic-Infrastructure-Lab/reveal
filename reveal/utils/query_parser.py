@@ -495,8 +495,11 @@ class ParamSpec:
     @property
     def retired_values(self) -> Tuple[Any, ...]:
         """Values the control retired but answers until the cut: its value-keyed legacy entries (AST ``view=calls``).
-        Accepted beside ``choices``; a request that gives one has no canonical form."""
-        return tuple(dict.fromkeys(entry.value for entry in self.legacy if entry.value is not None))
+        Accepted beside ``choices``; a request that gives one has no canonical form. An entry with a codec is not one:
+        its value answers as the canonical value the codec names (git ``view=log`` is ``history``), which the binder
+        binds (``canonical_value``)."""
+        return tuple(dict.fromkeys(entry.value for entry in self.legacy
+                                   if entry.value is not None and entry.codec is None))
 
     @property
     def legacy_words(self) -> Tuple[str, ...]:
@@ -518,13 +521,20 @@ class ParamSpec:
                      and spelling in (entry.name, entry.flag)), None)
 
     def canonical_value(self, spelling: str, value: Any) -> Any:
-        """*value* as this control's own: a legacy spelling's translation, otherwise unchanged."""
+        """*value* as this control's own: a legacy spelling's translation, then a retired value's canonical value (a
+        value-keyed entry with a codec, BACK-2616), otherwise unchanged."""
         entry = self.legacy_entry(spelling)
-        if entry is None or value is None:
+        if value is None:
             return value
         if self.repeatable and isinstance(value, list):  # each repeat of a repeatable control's legacy word
-            return [entry.translate(item)[self.name] for item in value]
-        return entry.translate(value)[self.name]
+            return [self._translated_value(item if entry is None else entry.translate(item)[self.name]) for item in value]
+        return self._translated_value(value if entry is None else entry.translate(value)[self.name])
+
+    def _translated_value(self, value: Any) -> Any:
+        """The canonical value a translated retired value answers as (``view=log`` is ``history``), else *value*."""
+        entry = next((entry for entry in self.legacy if entry.value is not None and entry.codec is not None
+                      and isinstance(value, str) and value == entry.value), None)
+        return value if entry is None else entry.codec(value)
 
     @property
     def flags(self) -> Tuple[str, ...]:
