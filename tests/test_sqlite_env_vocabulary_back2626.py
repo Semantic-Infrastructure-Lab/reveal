@@ -261,3 +261,102 @@ def test_an_empty_sqlite_uri_names_the_missing_database(db):
     """B12: it named the Python class (SQLiteAdapter('sqlite:///path/to/db.db')); now the request's missing part."""
     run = _run_reveal_direct('sqlite://')
     assert run.returncode == 2 and 'SQLiteAdapter' not in run.stderr and 'resource is required' in run.stderr
+
+
+# --- env under its declarations (BACK-2626; Scott's BACK-2752 ruling: show_secrets is removed) ----------------------
+# Red until the declarations land: reveal env is generated from them, env takes no control, so an undeclared keyword or
+# key is an invalid request, and show_secrets is refused naming the redaction rule on every API form.
+
+REMOVED = ('show_secrets', 'redacted on every output', 'removed')
+
+
+@pytest.mark.parametrize('sub, uri', [([], 'env://'), ([PLAIN], f'env://{PLAIN}'), ([TOKEN], f'env://{TOKEN}')])
+def test_env_subcommand_answers_as_the_resource_uri(variables, sub, uri):
+    """reveal env [NAME] is env://[NAME]: the same JSON, text and exit (D20); env was a URI-only noun."""
+    sub_run, sub_doc = _json('env', *sub)
+    uri_run, uri_doc = _json(uri)
+    assert (sub_run.returncode, uri_run.returncode) == (0, 0), sub_run.stderr
+    assert _answer(sub_doc) == _answer(uri_doc)
+    sub_text, uri_text = _run_reveal_direct('env', *sub), _run_reveal_direct(uri)
+    assert (sub_text.returncode, sub_text.stdout) == (uri_text.returncode, uri_text.stdout)
+    assert 'fixture-secret-value' not in sub_run.stdout + sub_text.stdout
+
+
+@pytest.mark.parametrize('argv', [['env', MISSING], [f'env://{MISSING}']])
+def test_env_variable_not_set_exits_2_naming_it(variables, argv):
+    """Rule 9 on both transports: a variable that is not set is an invalid request naming it, with a JSON document."""
+    run, doc = _json(*argv)
+    assert run.returncode == 2, run.stderr
+    assert MISSING in run.stderr
+    assert [e['message'] for e in doc['meta']['errors'] if MISSING in e['message']], doc
+
+
+def test_env_typed_api_refuses_show_secrets_naming_the_redaction_rule(variables):
+    """Scott 2026-11-22 (BACK-2752): show_secrets returned sensitive values unredacted through api.query; it is removed,
+    so every API form refuses it as an undeclared keyword whose message says secrets are redacted on every output and
+    the control was removed (the generic list of supported controls would hide that)."""
+    from reveal.errors import UnsupportedOverrideError
+    for args, keywords in (
+            (('env://',), {}), (('env://',), {'element_name': TOKEN}), ((f'env://{TOKEN}',), {}),
+            (('env', TOKEN), {})):
+        with pytest.raises(UnsupportedOverrideError) as raised:
+            api.query(*args, show_secrets=True, **keywords)
+        message = str(raised.value)
+        assert all(word in message for word in REMOVED), (args, message)
+        assert 'fixture-secret-value' not in message
+
+
+def test_env_show_secrets_uri_key_is_refused_naming_the_redaction_rule(variables):
+    """The URI key never disclosed anything (it was read as a variable name, B3), but it names the removed control on
+    the CLI, MCP and the API alike."""
+    from reveal.mcp_server import reveal_run
+    run = _run_reveal_direct('env://?show_secrets=1', '--format', 'json')
+    assert run.returncode == 2 and all(word in run.stderr for word in REMOVED), run.stderr
+    assert all(word in reveal_run(['env://?show_secrets=1']) for word in REMOVED)
+    with pytest.raises(RequestValidationError, match='redacted on every output'):
+        api.query('env://?show_secrets=1')
+
+
+def test_env_listing_redacts_without_the_removed_control(variables):
+    """Negative control: the listing and the variable redact the secret on the API, with no keyword."""
+    listed = {v['name']: v for rows in api.query('env://')['categories'].values() for v in rows}
+    assert (listed[TOKEN]['value'], listed[PLAIN]['value']) == ('***', 'fixture-plain-value')
+    variable = api.query(f'env://{TOKEN}')
+    assert (variable['value'], variable['raw_value']) == ('***', None)
+
+
+def test_env_typed_api_binds_no_control(variables):
+    """env declares no control: an undeclared keyword raises, with the shared message (BACK-2214 class: it was dropped
+    silently); the noun form answers as the URI form."""
+    from reveal.errors import UnsupportedOverrideError
+    with pytest.raises(UnsupportedOverrideError, match="unsupported control 'bogus_kw'; supported controls"):
+        api.query('env://', bogus_kw=1)
+    assert _answer(api.query('env', PLAIN)) == _answer(api.query(f'env://{PLAIN}'))
+
+
+@pytest.mark.parametrize('argv, word', [
+    (['env://?bogus=1'], 'bogus'), (['env://?limit=1'], 'limit'), (['env://', '--limit', '1'], '--limit'),
+    (['env://', '--head', '1'], '--head'), (['env', '--sort', 'name'], '--sort')])
+def test_env_controls_it_never_read_exit_2(variables, argv, word):
+    """Unsupported controls (rule 3) and flags after the URI (rule 23): env reads none, so each exits 2 naming the
+    word; they printed a no-effect note with exit 0 (?bogus=1 was read as a variable named '?bogus=1', B3)."""
+    run = _run_reveal_direct(*argv)
+    assert run.returncode == 2, run.stderr
+    assert f"unsupported control '{word}'" in run.stderr
+
+
+def test_env_check_is_an_inert_legacy_flag(variables):
+    """--check/--lint never changed an env answer: they answer as without them, with the replaced-by note (BACK-2708)."""
+    run, doc = _json(f'env://{PLAIN}', '--check')
+    assert run.returncode == 0 and doc['value'] == 'fixture-plain-value'
+    notes = [w['message'] for w in doc['meta']['warnings'] if w.get('field') == 'flag:env.--check']
+    assert notes and 'reveal check' in notes[0]
+
+
+def test_env_positional_element_beside_the_uri_is_refused(variables):
+    """Q5: the guide teaches only env://NAME, so env:// NAME is refused naming the resource forms (BACK-2526 seam)."""
+    run, doc = _json('env://', PLAIN)
+    assert run.returncode == 2
+    assert f"takes no positional element ('{PLAIN}')" in run.stderr
+    assert 'env://' in run.stderr and 'reveal env' in run.stderr
+    assert _json(f'env://{PLAIN}')[0].returncode == 0  # control: the resource form answers
