@@ -183,20 +183,24 @@ def surface_text(report: Dict[str, Any], top: Optional[int] = None) -> str:
     elif 'by_dir' in report:
         lines.extend(_by_dir(report['by_dir'], top, cuts.get('by_dir')))
     else:
-        for key, label in _SURFACE_LABELS.items():
-            entries = surfaces.get(key, [])
-            if not entries:
-                continue
-            shown = entries[:top] if top is not None else entries
-            cut = cuts.get(f'surfaces.{key}')
-            count = cut if cut is not None else len(entries)
-            lines.append(f"{label} ({count}):")
-            lines.extend(text for text in (_entry(key, e) for e in shown) if text is not None)
-            if len(entries) > len(shown):  # the legacy --top: a text-only cut the answer does not record
-                lines.append(f"  … {len(entries) - len(shown)} more (omit --top to see all)")
-            lines.append('')
-        lines.extend([_TAXONOMY_NOTE, ''])
+        lines.extend(_category_lines(surfaces, top, cuts))
     return '\n'.join(lines) + '\n'
+
+
+def _category_lines(surfaces: Dict[str, List[Dict[str, Any]]], top: Optional[int], cuts: Dict[str, int]) -> List[str]:
+    """Each category's heading (its uncut count) and the entries shown, then the taxonomy note."""
+    lines: List[str] = []
+    for key, label in _SURFACE_LABELS.items():
+        entries = surfaces.get(key, [])
+        if not entries:
+            continue
+        shown = entries[:top] if top is not None else entries
+        lines.append(f"{label} ({cuts.get(f'surfaces.{key}', len(entries))}):")
+        lines.extend(text for text in (_entry(key, e) for e in shown) if text is not None)
+        if len(entries) > len(shown):  # the legacy --top: a text-only cut the answer does not record
+            lines.append(f"  … {len(entries) - len(shown)} more (omit --top to see all)")
+        lines.append('')
+    return [*lines, _TAXONOMY_NOTE, '']
 
 
 class SurfaceRenderer(BaseRenderer):
