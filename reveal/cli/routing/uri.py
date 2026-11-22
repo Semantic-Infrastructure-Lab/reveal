@@ -62,6 +62,10 @@ class Answer:
     request_error: Optional[RequestValidationError] = field(default=None, repr=False)
     private_diagnostic: Optional[str] = field(default=None, repr=False)
 
+    def __post_init__(self) -> None:
+        if self.request_error is not None:
+            self.request_error = _detached(self.request_error)
+
     def emit(self, **options: Any) -> None:
         # The open invocation log keeps the last answer (one, so a long --stdin run holds no list of results), and a
         # host running the CLI's own dispatch (MCP reveal_run) maps the CLI's outcome facts instead of deciding one
@@ -70,6 +74,20 @@ class Answer:
         if log is not None:
             log.last_answer = self
         self.printer(self, **options)
+
+
+def _detached(error: RequestValidationError) -> RequestValidationError:
+    """*error* without its traceback, context or cause: the same class, message and attributes (what api.query raises),
+    holding no frame, since a frame between the raise and the router can reference the Answer that keeps the error, a
+    cycle that outlives the request (BACK-2674). A copy, so the caller's exception keeps its traceback."""
+    import copy
+    try:
+        kept = copy.copy(error)
+    except Exception:  # boundary-ok: broad-except -- an exception whose constructor rejects its own args: strip in place
+        kept = error
+    kept.__traceback__ = None
+    kept.__context__ = kept.__cause__ = None
+    return kept
 
 
 class _Answered(Exception):
@@ -85,7 +103,9 @@ class _Answered(Exception):
         self.exception = exception
         self.execution_facts = execution_facts
         self.test_layout_failure = test_layout_failure
-        self.request_error = request_error
+        # Detached here, not only on the Answer: the router's frame that builds the Answer would otherwise hold the
+        # raised error, whose traceback reaches that frame back through f_back (BACK-2674).
+        self.request_error = _detached(request_error) if request_error is not None else None
 
 
 class UriUsageError(Exception):

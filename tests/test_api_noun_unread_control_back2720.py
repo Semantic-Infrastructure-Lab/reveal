@@ -72,7 +72,8 @@ def test_an_invalid_answer_keeps_a_validation_error_beside_exception():
     adapter = declared_adapter_class('metrics')
     unread = UnreadControlError("control 'top' is not read by this answer")
     kept = _invalid_answer(adapter, 'metrics', '.', str(unread), Namespace(format='json'), error=unread)
-    assert kept.request_error is unread and kept.exception is None   # MCP's internal-failure slot stays empty
+    assert type(kept.request_error) is UnreadControlError and str(kept.request_error) == str(unread)
+    assert kept.exception is None   # MCP's internal-failure slot stays empty
     assert kept.public_diagnostic == str(unread)
     other = _invalid_answer(adapter, 'metrics', '.', 'Path not found: x', Namespace(format='json'),
                             error=FileNotFoundError('x'))
