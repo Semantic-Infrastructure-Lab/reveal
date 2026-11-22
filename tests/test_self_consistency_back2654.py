@@ -567,7 +567,8 @@ def _legacy_key(declarations, key, scheme):
     """The retired row *key* spells on a noun with *declarations*, or None: a declared legacy entry, a standalone
     legacy control with its RETIREMENTS row, or the generated bare shared-name family."""
     from reveal.cli.invocation import generated_retirements
-    if any(entry.name == key for spec in declarations for entry in getattr(spec, 'legacy', ())):
+    # A value-keyed entry (git view=log) retires a value, not its key: binding view itself is canonical.
+    if any(entry.name == key and entry.value is None for spec in declarations for entry in getattr(spec, 'legacy', ())):
         return f'param:{scheme}.{key}'
     row = f'param:{scheme}.{key}'
     return row if row in RETIREMENTS or row in generated_retirements() else None
