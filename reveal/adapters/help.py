@@ -276,8 +276,8 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
         'task': 'runtime',
         'description': 'Runtime environment — env vars, reveal install state',
         'recipes': [
-            {'goal': 'All environment variables', 'query': 'reveal env://', 'description': 'Full env dump grouped by category (System, Python, Node, Application, Custom); sensitive values redacted', 'output_type': 'environment'},
-            {'goal': 'Filter env by prefix', 'query': "reveal env:// --format=grep | grep '^env://DB_'", 'description': 'Show only DB_* variables, one env://NAME:value line each (env:// takes no query params)', 'output_type': 'environment'},
+            {'goal': 'All environment variables', 'query': 'reveal env', 'description': 'Full env dump grouped by category (System, Python, Node, Application, Custom); sensitive values redacted', 'output_type': 'environment'},
+            {'goal': 'Filter env by prefix', 'query': "reveal env --format=grep | grep '^env://DB_'", 'description': 'Show only DB_* variables, one env://NAME:value line each (env takes no options)', 'output_type': 'environment'},
             {'goal': 'Reveal install info', 'query': 'reveal reveal://', 'description': 'Registered analyzers, adapters, rules', 'output_type': 'reveal_structure'},
         ]
     },
@@ -1574,7 +1574,7 @@ class HelpAdapter(ResourceAdapter):
         {'want': 'inspect a SQLite database or Excel workbook',
          'use': 'sqlite:// / xlsx://', 'example': "reveal sqlite:///path/to/app.db"},
         {'want': 'inspect environment variables',
-         'use': 'env://', 'example': "reveal env://"},
+         'use': 'env://', 'example': "reveal env"},
         {'want': 'search prior Claude sessions by topic or project',
          'use': 'claude://', 'example': "reveal 'claude://sessions/?search=auth-refactor' --format=json"},
         {'want': 'review a session as prompt/answer pairs, not raw messages',

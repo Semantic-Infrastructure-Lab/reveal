@@ -1684,19 +1684,19 @@ reveal dev inspect-config                      # Show effective .reveal.yaml res
 
 ---
 
-### Task: "Inspect environment variables (env://)"
+### Task: "Inspect environment variables (env)"
 
 **Pattern:**
 ```bash
-reveal env://                              # All env vars, auto-categorized (System / Python / Node / Application / Custom)
-reveal env://PATH                          # Get a specific variable
-reveal env:// --format=json                # Machine-readable, for scripts
-reveal env:// --format=grep                # Pipeable: one env://NAME:value line per variable
+reveal env                                 # All env vars, auto-categorized (System / Python / Node / Application / Custom)
+reveal env PATH                            # Get a specific variable (env://PATH names the same resource)
+reveal env --format=json                   # Machine-readable, for scripts
+reveal env --format=grep                   # Pipeable: one env://NAME:value line per variable
 ```
 
-**What's auto-categorized:** System (PATH, HOME, SHELL, USER), Python (PYTHON*, VIRTUAL*, PYTHONPATH), Node (NODE*, NPM*, NVM*), Application (APP_*, DATABASE_*, REDIS_*, API_*), Custom (everything else). Sensitive values (passwords, tokens, API keys) are auto-redacted.
+**What's auto-categorized:** System (PATH, HOME, SHELL, USER), Python (PYTHON*, VIRTUAL*, PYTHONPATH), Node (NODE*, NPM*, NVM*), Application (APP_*, DATABASE_*, REDIS_*, API_*), Custom (everything else). Sensitive values (passwords, tokens, API keys) are redacted as `***` on every output (text, JSON, the Python API, MCP); no option discloses them. A variable that is not set exits 2 naming it.
 
-**Discovery:** `reveal help://schemas/env --format=json` for the full param list.
+**Discovery:** `reveal env --help`; `reveal help://schemas/env --format=json` for the output types (env takes no options).
 
 **Use case:** Check which env vars an agent or shell sees without dumping a 200-line `env` and grepping. Combine with `reveal surface` to map *reads* in code against what's *set* in the environment.
 

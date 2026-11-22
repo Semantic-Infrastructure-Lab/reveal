@@ -70,10 +70,10 @@ The **env adapter** (`env://`) provides secure environment variable inspection w
 
 ### Example 1: List All Variables
 
-View all environment variables grouped by category:
+View all environment variables grouped by category (`env://` names the same resource):
 
 ```bash
-reveal env://
+reveal env
 ```
 
 **Output**:
@@ -103,10 +103,10 @@ Application (3):
 
 ### Example 2: Get Specific Variable
 
-Get value and metadata for a specific variable:
+Get value and metadata for a specific variable (`env://PATH` names the same resource):
 
 ```bash
-reveal env://PATH
+reveal env PATH
 ```
 
 **Output**:
@@ -122,7 +122,7 @@ Length: 28 characters
 Sensitive values are automatically redacted:
 
 ```bash
-reveal env://DATABASE_URL
+reveal env DATABASE_URL
 ```
 
 **Output**:
@@ -131,7 +131,7 @@ Environment Variable: DATABASE_URL
 Category: Application
 Value: ***
 Warning: Sensitive - This variable appears to contain sensitive data
-    Value is redacted — sensitive values are not accessible via CLI
+    Value is redacted on every output (text, JSON, the Python API, MCP)
 Length: 87 characters
 ```
 
@@ -140,7 +140,7 @@ Length: 87 characters
 Export as JSON for scripting:
 
 ```bash
-reveal env:// --format=json
+reveal env --format=json
 ```
 
 **Output**:
@@ -168,7 +168,7 @@ reveal env:// --format=json
 Use jq to filter specific categories:
 
 ```bash
-reveal env:// --format=json | jq '.categories.Python'
+reveal env --format=json | jq '.categories.Python'
 ```
 
 ### Example 6: List All Sensitive Variables
@@ -176,7 +176,7 @@ reveal env:// --format=json | jq '.categories.Python'
 Find all sensitive variables:
 
 ```bash
-reveal env:// --format=json | jq '[.categories[] | .[] | select(.sensitive==true)]'
+reveal env --format=json | jq '[.categories[] | .[] | select(.sensitive==true)]'
 ```
 
 ---
@@ -280,7 +280,7 @@ Environment adapter provides **current runtime environment**:
 
 ### 2. env_variable (Specific Variable)
 
-**When**: Querying `env://VARIABLE_NAME`
+**When**: Querying `reveal env VARIABLE_NAME` (or `env://VARIABLE_NAME`); a name that is not set exits 2
 
 **Structure**:
 ```json
@@ -304,7 +304,7 @@ Environment adapter provides **current runtime environment**:
 - `category` - Auto-detected category
 - `sensitive` - Boolean flag for sensitivity
 - `length` - Character count (useful even when redacted)
-- `raw_value` - Always `null` via CLI (security protection)
+- `raw_value` - Always `null`: no output discloses a value (text, JSON, the Python API, MCP)
 
 ---
 
@@ -412,7 +412,7 @@ whole `_`-delimited word, singular or plural (case-insensitive):
 
 ### Redaction Behavior
 
-**Default** (CLI usage):
+**Every output** (text, JSON, the Python API, MCP; no option discloses a value):
 - Sensitive values shown as `***`
 - Length still reported
 - Prevents accidental logging/exposure
@@ -428,7 +428,7 @@ Environment Variable: DATABASE_URL
 Category: Application
 Value: ***
 Warning: Sensitive - This variable appears to contain sensitive data
-    Value is redacted — sensitive values are not accessible via CLI
+    Value is redacted on every output (text, JSON, the Python API, MCP)
 Length: 87 characters
 ```
 

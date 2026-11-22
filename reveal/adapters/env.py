@@ -98,8 +98,8 @@ _SCHEMA_EXAMPLE_QUERIES = [
 _SCHEMA_NOTES = [
     'Sensitive values are auto-redacted: a name holding PASSWORD, PASSWD, PGPASSWORD, SECRET, TOKEN, KEY, CREDENTIAL, AUTH, PRIVATE, PASSPHRASE, DATABASE_URL, DSN, CONNECTION_STRING or CONNSTR as a whole _-delimited word (plural too, any case) or ending in _PWD, or a value that is a URL with user:password@ or carries a password=/pwd= parameter',
     'Redacted values shown as *** on every output (text, JSON, the Python API, MCP): no control discloses them',
-    'env:// groups all vars by category: System, Python, Node, Application, Custom',
-    'env://VAR_NAME returns the single variable with sensitivity classification',
+    'reveal env (env://) groups all vars by category: System, Python, Node, Application, Custom',
+    'reveal env VAR_NAME (env://VAR_NAME) returns the single variable with sensitivity classification; a name that is not set exits 2',
     '--format=json exposes per-variable sensitive flag for programmatic filtering',
 ]
 
@@ -253,9 +253,9 @@ class EnvAdapter(ResourceAdapter):
             },
             # Executable examples
             'try_now': [
-                "reveal env://",
-                "reveal env://PATH",
-                "reveal env://HOME",
+                "reveal env",
+                "reveal env PATH",
+                "reveal env --format=json",
             ],
             # Scenario-based workflow patterns
             'workflows': [
@@ -263,16 +263,16 @@ class EnvAdapter(ResourceAdapter):
                     'name': 'Audit Environment for Secrets',
                     'scenario': 'Need to check what sensitive data is exposed',
                     'steps': [
-                        "reveal env://                    # See all vars (sensitive redacted)",
-                        "reveal env:// --format=json | jq '[.categories[] | .[] | select(.sensitive==true)]'",
+                        "reveal env                       # See all vars (sensitive redacted)",
+                        "reveal env --format=json | jq '[.categories[] | .[] | select(.sensitive==true)]'",
                     ],
                 },
                 {
                     'name': 'Debug Python Environment',
                     'scenario': 'Python not finding packages or using wrong interpreter',
                     'steps': [
-                        "reveal env://VIRTUAL_ENV         # Is venv active?",
-                        "reveal env://PYTHONPATH          # Extra import paths?",
+                        "reveal env VIRTUAL_ENV           # Is venv active?",
+                        "reveal env PYTHONPATH            # Extra import paths?",
                     ],
                 },
             ],
@@ -280,12 +280,12 @@ class EnvAdapter(ResourceAdapter):
             'anti_patterns': [
                 {
                     'bad': "env | grep -i password",
-                    'good': "reveal env://",
+                    'good': "reveal env",
                     'why': "Automatically redacts sensitive values, prevents accidental exposure in logs",
                 },
                 {
                     'bad': "echo $DATABASE_URL",
-                    'good': "reveal env://DATABASE_URL",
+                    'good': "reveal env DATABASE_URL",
                     'why': "Redacts sensitive values, shows metadata (category, length)",
                 },
             ],
