@@ -53,11 +53,12 @@ def _answer_dict(answer: Any) -> Dict[str, Any]:
 
 
 def _invalid_request(answer: Any) -> Exception:
-    """Exit 2: the request's own validation error, else one with the CLI's message."""
+    """Exit 2: the request's own validation error (``UnreadControlError`` for an unread control, as the URI form raises;
+    BACK-2720), else one with the CLI's message."""
     from ...errors import RequestValidationError
-    exc: Optional[Exception] = answer.exception
-    if isinstance(exc, RequestValidationError):
-        return exc
+    for exc in (answer.exception, getattr(answer, 'request_error', None)):
+        if isinstance(exc, RequestValidationError):
+            return exc
     return RequestValidationError(answer.public_diagnostic or _answer_dict(answer).get('error') or 'invalid request')
 
 
