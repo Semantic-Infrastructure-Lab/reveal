@@ -1199,6 +1199,9 @@ def test_the_batch_invariant_bites(harness):
 # BACK-2599: opt-in rule budget; other nouns can register cases at this same owner.
 _RULE_BUDGET_CASES = {
     'calls': json.loads((Path(__file__).parent / 'fixtures' / 'calls_rule_text_back2599.json').read_text(encoding='utf-8')),
+    # BACK-2685: Imports, Metrics and Overview adopt the pointer; their cases name the rule fields and read the full
+    # sentences from the answer's own JSON (``detail_supported``: the view offers --detail full; ``full_text``: it asks).
+    **json.loads((Path(__file__).parent / 'fixtures' / 'rule_text_back2685.json').read_text(encoding='utf-8')),
 }
 _RULE_BUDGET_STANDING = frozenset({'analysis_limit', 'scope_limit', 'derived_signal',
                                  'implicit_exclusion', 'not_measured'})
@@ -1213,7 +1216,7 @@ def _rule_value(payload, path):
 
 
 def _assert_rule_pointer(text, payload, expected_fields, detail_supported):
-    lines = [line for line in text.splitlines() if line.startswith('Rules: ')]
+    lines = [line.strip() for line in text.splitlines() if line.strip().startswith('Rules: ')]
     assert len(lines) == 1, f'expected exactly one Rules: pointer, got {len(lines)}'
     pointer = lines[0]
     fields = tuple(pointer.partition('(')[2].partition(')')[0].split(', '))
@@ -1232,7 +1235,23 @@ def test_rule_budget_pointer_names_existing_json_fields(harness, noun, case):
     text_code, text, _ = harness.run_raw(uri)
     assert code == text_code == expected['exit']
     fields = tuple(expected['fields']) + (('meta.warnings',) if expected['standing'] else ())
-    _assert_rule_pointer(text, payload, fields, 'callees=' in uri)
+    _assert_rule_pointer(text, payload, fields, expected.get('detail_supported', 'callees=' in uri))
+
+
+_RULE_BUDGET_RETROFIT = [(noun, case) for noun in ('imports', 'metrics', 'overview') for case in _RULE_BUDGET_CASES[noun]]
+
+
+@pytest.mark.parametrize('noun,case', _RULE_BUDGET_RETROFIT)
+def test_rule_budget_retrofit_text_points_and_json_keeps_the_rule(harness, noun, case):
+    """BACK-2685: the text names where the rule is; the JSON still carries every full sentence, which the default
+    text no longer repeats and --detail full prints."""
+    expected = _RULE_BUDGET_CASES[noun][case]
+    _, payload, _ = harness.run(expected['uri'])
+    _, text, _ = harness.run_raw(expected['uri'])
+    sentences = [_rule_value(payload, path) for path in expected['fields']]
+    assert all(isinstance(s, str) and len(s) > 20 for s in sentences), sentences
+    for sentence in sentences:
+        assert (sentence in text) == bool(expected.get('full_text')), f'{case}: full rule in text: {sentence[:60]}'
 
 
 @pytest.mark.parametrize('case', ['callers', 'not-found', 'callees', 'walk', 'rank', 'uncalled', 'modules'])

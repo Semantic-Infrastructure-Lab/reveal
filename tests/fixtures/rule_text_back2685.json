@@ -1,0 +1,111 @@
+{
+  "imports": {
+    "summary": {
+      "uri": "imports://proj",
+      "exit": 0,
+      "fields": [
+        "edge_rule.text"
+      ],
+      "standing": [],
+      "detail_supported": false
+    },
+    "importers": {
+      "uri": "imports://proj?importers",
+      "exit": 0,
+      "fields": [
+        "edge_rule.text"
+      ],
+      "standing": [],
+      "detail_supported": true
+    },
+    "importers-detail": {
+      "uri": "imports://proj?importers&detail=full",
+      "exit": 0,
+      "fields": [
+        "edge_rule.text"
+      ],
+      "standing": [],
+      "detail_supported": true,
+      "full_text": true
+    },
+    "circular": {
+      "uri": "imports://proj?circular",
+      "exit": 0,
+      "fields": [
+        "edge_rule.text"
+      ],
+      "standing": [],
+      "detail_supported": true
+    },
+    "entrypoints": {
+      "uri": "imports://proj?entrypoints",
+      "exit": 0,
+      "fields": [
+        "edge_rule.text"
+      ],
+      "standing": [],
+      "detail_supported": false
+    },
+    "components": {
+      "uri": "imports://proj?components",
+      "exit": 0,
+      "fields": [
+        "edge_rule.text"
+      ],
+      "standing": [],
+      "detail_supported": false
+    },
+    "fan-in": {
+      "uri": "imports://proj?sort=-fan-in",
+      "exit": 0,
+      "fields": [
+        "edge_rule.text"
+      ],
+      "standing": [],
+      "detail_supported": false
+    }
+  },
+  "metrics": {
+    "summary": {
+      "uri": "metrics://proj",
+      "exit": 0,
+      "fields": [
+        "meta.issue_count.rule"
+      ],
+      "standing": [],
+      "detail_supported": false
+    },
+    "file": {
+      "uri": "metrics://proj/app.py",
+      "exit": 0,
+      "fields": [
+        "meta.issue_count.rule"
+      ],
+      "standing": [],
+      "detail_supported": false
+    },
+    "hotspots": {
+      "uri": "metrics://proj?view=hotspots",
+      "exit": 0,
+      "fields": [
+        "meta.issue_count.rule"
+      ],
+      "standing": [],
+      "detail_supported": false
+    }
+  },
+  "overview": {
+    "overview": {
+      "uri": "overview://proj",
+      "exit": 0,
+      "standing": [],
+      "detail_supported": false,
+      "fields": [
+        "scope.counting_rule",
+        "map.rules.edge_rule.text",
+        "map.rules.edge_rule_sections.entry_points.text",
+        "map.rules.edge_rule_sections.cycles.text"
+      ]
+    }
+  }
+}
