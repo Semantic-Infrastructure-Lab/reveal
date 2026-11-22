@@ -89,8 +89,9 @@ def read_body_outcome(path: Path, *, content: Optional[str] = None) -> Tuple[str
         try:
             content = path.read_text(encoding='utf-8')
         except (OSError, UnicodeDecodeError) as e:
-            logger.warning(f"Failed to read {path}, treating body as empty: {e}")
-            return '', failure_of(e).cause
+            cause = failure_of(e).cause  # returned and disclosed (unreadable_files), not printed again (BACK-2614 B10)
+            logger.debug("Failed to read %s, treating body as empty: %s", to_posix(path), cause)
+            return '', cause
 
     if not content.startswith('---'):
         return content, None
@@ -140,8 +141,9 @@ def extract_internal_links_outcome(path: Path, base_path: Path) -> Tuple[List[st
     try:
         content = path.read_text(encoding='utf-8')
     except (OSError, UnicodeDecodeError) as e:
-        logger.warning(f"Failed to read {path}, reporting no internal links: {e}")
-        return [], failure_of(e).cause
+        cause = failure_of(e).cause  # returned and disclosed (unreadable_files), not printed again (BACK-2614 B10)
+        logger.debug("Failed to read %s, reporting no internal links: %s", to_posix(path), cause)
+        return [], cause
 
     # [text](url) — grab the URL portion
     pattern = re.compile(r'\[([^\]]*)\]\(([^)\s]+)[^)]*\)')
