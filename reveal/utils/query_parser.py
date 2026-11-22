@@ -532,9 +532,12 @@ class ParamSpec:
 
     def _translated_value(self, value: Any) -> Any:
         """The canonical value a translated retired value answers as (``view=log`` is ``history``), else *value*."""
-        entry = next((entry for entry in self.legacy if entry.value is not None and entry.codec is not None
-                      and isinstance(value, str) and value == entry.value), None)
-        return value if entry is None else entry.codec(value)
+        if not isinstance(value, str):
+            return value
+        for entry in self.legacy:
+            if entry.value == value and entry.codec is not None:
+                return entry.codec(value)
+        return value
 
     @property
     def flags(self) -> Tuple[str, ...]:
