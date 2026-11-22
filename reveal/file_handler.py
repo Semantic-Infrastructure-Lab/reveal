@@ -465,19 +465,20 @@ def _validate_nav_request(analyzer, handler, args) -> None:
     """Reject only declared unsupported analysis and invalid structural depth."""
     from .capabilities import CONFORMANCE_STRUCTURE_ONLY, VARFLOW_NOT_APPLICABLE, get_capability
     from .errors import NavRequestValidationError
+    from .utils.path_utils import to_posix
 
     capability = get_capability(analyzer)
     if capability is not None and capability.conformance_level == CONFORMANCE_STRUCTURE_ONLY:
         raise NavRequestValidationError(
             f'Code navigation analysis is unavailable for {capability.language} (structure-only). '
-            f'Use `reveal {analyzer.path}` to inspect file structure.'
+            f'Use `reveal {to_posix(analyzer.path)}` to inspect file structure.'
         )
     if capability is not None and capability.varflow == VARFLOW_NOT_APPLICABLE:
         # A data or document format has no functions to analyze: decline as structure-only does (BACK-2627 X15),
         # where Markdown/JSON/YAML/TOML/GraphQL/Protobuf answered an empty or invented view with exit 0.
         raise NavRequestValidationError(
             f'Code navigation analysis does not apply to {capability.language} files (not code). '
-            f'Use `reveal {analyzer.path}` to inspect file structure.'
+            f'Use `reveal {to_posix(analyzer.path)}` to inspect file structure.'
         )
     if handler in (_nav_outline, _nav_flow, _nav_branchmap, _nav_loopmap, _nav_fanout):
         depth = getattr(args, 'depth', None)

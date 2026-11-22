@@ -716,3 +716,21 @@ def test_invalid_path_read_slices_exit_2_like_the_nouns(copies, argv):
 def test_sibling_valid_path_read_slices_answer(copies):
     for argv in (['--range', '1-2'], ['--head', '2'], ['--tail', '2']):  # --range counts outline items
         assert run(copies['python'], *argv).returncode == 0, argv
+
+
+def test_decline_messages_spell_the_path_with_forward_slashes(monkeypatch):
+    """The structure-only and not-code declines name the file as reveal spells paths everywhere (to_posix), so a
+    Windows backslash path reads the same as the other nav diagnostics. Red control: a backslash spelling."""
+    from reveal import file_handler
+    from reveal.capabilities import get_capability_for_extension
+    from reveal.errors import NavRequestValidationError
+
+    class Analyzer:
+        path = 'docs\\guide.md'
+
+    for extension in ('.md', '.sql'):
+        capability = get_capability_for_extension(extension)
+        monkeypatch.setattr('reveal.capabilities.get_capability', lambda analyzer, found=capability: found)
+        with pytest.raises(NavRequestValidationError) as raised:
+            file_handler._validate_nav_request(Analyzer(), None, object())
+        assert '`reveal docs/guide.md`' in str(raised.value), str(raised.value)
