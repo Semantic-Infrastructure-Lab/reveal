@@ -113,5 +113,5 @@ def validate_request(params: QueryParams, args=None) -> None:
     values = dict(peek_query_items(params))
     # Which answers read where, match, field and the rest is their declaration's (BACK-2656).
     if selected_view(params) == 'aggregate' and not values.get('field'):
-        raise ValueError('aggregate view requires field')
+        raise ValueError('--view aggregate requires --field FIELD, the front-matter field to count')
     filter_state(params)
