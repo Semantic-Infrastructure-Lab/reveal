@@ -7,6 +7,9 @@ beside their ``ParamSpec`` declarations, so a declaration's codec, default and n
 reader used; only ``matches`` and ``full`` went through ``ParamSpec.read``. The history handler took the query and
 read nothing. Now every control an answer applies is read through its declaration (the binder's normalized value),
 and the history handler takes no query.
+
+Since the vocabulary step (BACK-2618) ``filter``, ``full`` and ``last``/``tokens``/``goal`` are legacy words of
+``where``, ``detail`` and ``view``: a legacy word is read through the declaration of the control it spells.
 """
 import inspect
 
@@ -44,8 +47,15 @@ def declared_reads(monkeypatch):
     return seen
 
 
+# The declaration each legacy word is read through (its canonical control).
+CANONICAL = {'filter': 'where', 'full': 'detail', 'last': 'view', 'tokens': 'view', 'goal': 'view'}
+
 # (resource, typed controls, the answer's type)
 APPLIED = [
+    ('sessions/', {'match': 'auth'}, 'codex_content_search'),
+    ('sessions/', {'where': 'session~=auth', 'since': '2020-01-01'}, 'codex_session_list'),
+    (S, {'view': 'tokens'}, 'codex_tokens'),
+    (f'{S}/exchanges', {'detail': 'full'}, 'codex_exchanges'),
     ('sessions/', {'search': 'auth'}, 'codex_content_search'),
     ('sessions/', {'search': 'auth', 'matches': 1, 'since': '2020-01-01', 'until': 'today'}, 'codex_content_search'),
     ('sessions/', {'filter': 'auth'}, 'codex_session_list'),
@@ -62,13 +72,14 @@ APPLIED = [
 def test_every_applied_control_is_read_through_its_declaration(codex, declared_reads, resource, controls, kind):
     result = api.query(f'codex://{resource}', **controls)
     assert result['type'] == kind, result.get('error')
-    assert set(controls) <= declared_reads, f'read outside their declarations: {sorted(set(controls) - declared_reads)}'
+    names = {CANONICAL.get(name, name) for name in controls}
+    assert names <= declared_reads, f'read outside their declarations: {sorted(names - declared_reads)}'
 
 
 @pytest.mark.parametrize('query,kind', [('last', 'codex_messages'), ('tokens', 'codex_tokens'), ('goal', 'codex_goal')])
 def test_a_uri_presence_flag_is_read_through_its_declaration(codex, declared_reads, query, kind):
     assert api.query(f'codex://{S}?{query}')['type'] == kind
-    assert query in declared_reads
+    assert CANONICAL[query] in declared_reads
 
 
 def test_the_config_key_selects_the_masked_value(codex):

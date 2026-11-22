@@ -172,14 +172,15 @@ def test_goal_metadata_cannot_hide_transcript_source_loss(codex, monkeypatch):
     assert json.loads(result.stdout)['meta']['rollout_analysis']['failed_records'] == 1
 
 
-def test_goal_selector_has_no_false_unused_warning_and_preserves_legacy_priority(codex):
+def test_goal_selector_has_no_false_unused_warning_and_conflicts_with_last(codex):
     selected = _run_reveal_in(codex.parent, 'codex://' + DOC_SESSION_ID + '?goal', '--format', 'json')
     assert selected.returncode == 0
     assert 'has no effect' not in selected.stderr
-    # last still selects the messages over goal; goal is then a control that answer does not read (BACK-2656).
+    # last and goal are two spellings of one view (BACK-2618, ruling Q4): different views exit 2 naming both (last
+    # selected the messages over goal before, and goal was then a control that answer did not read, BACK-2656).
     overridden = _run_reveal_in(codex.parent, 'codex://' + DOC_SESSION_ID + '?last&goal', '--format', 'json')
     assert overridden.returncode == 2
-    assert "control 'goal' is not read by this answer (codex_messages" in overridden.stderr
+    assert 'last' in overridden.stderr and 'goal' in overridden.stderr
 
 
 def test_goal_fixture_releases_windows_sharing_lock(codex, monkeypatch):

@@ -245,7 +245,7 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
             {'goal': 'Prompt/answer pairs for a session', 'query': 'reveal claude://session/my-session/exchanges', 'description': 'Each human prompt paired with the assistant\'s final answer, skipping thinking-only and tool-only turns in between', 'output_type': 'claude_exchanges'},
             {'goal': 'Codex session overview', 'query': 'reveal codex://SESSION-ID', 'description': 'Turns, tools, tokens, duration for a Codex CLI session', 'output_type': 'codex_session_overview'},
             {'goal': 'Filter Codex sessions by title', 'query': "reveal 'codex://sessions/?filter=validate_token'", 'description': 'Metadata filter by title or first message (SQLite index, no JSONL scan)', 'output_type': 'codex_session_list'},
-            {'goal': 'Full-text search across Codex content', 'query': "reveal 'codex://sessions/?search=authentication'", 'description': 'Scan JSONL event files for a term', 'output_type': 'codex_content_search'},
+            {'goal': 'Full-text search across Codex content', 'query': "reveal 'codex://sessions/?match=authentication'", 'description': 'Scan JSONL event files for a term', 'output_type': 'codex_content_search'},
         ]
     },
     'history': {

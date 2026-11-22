@@ -35,26 +35,35 @@ Python callers can override declared controls at the existing query owner:
 
 ```python
 from reveal.api import query
-answer = query("codex://sessions?search=authentication", matches=0)
+answer = query("codex", "sessions", match="authentication", matches=0)
 ```
 
-Overrides apply after original-input validation; strings remain literal, `None`
-restores omission, and typed `False` disables a legacy presence flag. URI presence
-semantics remain unchanged (`?last=false` still selects the last agent message).
-`matches=0` keeps every snippet per matching session; it does not cap session input.
-`full=False` or `full=None` restores bounded exchange text while JSON retains the
-complete strings. `reveal codex [RESOURCE]` takes the same controls as flags, with the same answer and exit as
-the URI; the vocabulary migration remains open. Direct transcript
-URI execution, optional goals and SQLite catalog reads are qualified below;
-memory and workspace resource policies remain separate.
+Overrides apply after original-input validation; strings remain literal and `None`
+restores omission. `matches=0` keeps every snippet per matching session; it does not cap
+session input. `detail="normal"` or `detail=None` restores bounded exchange text while JSON
+retains the complete strings. `reveal codex [RESOURCE]` takes the same controls as flags, with
+the same answer and exit as the URI. Direct transcript URI execution, optional goals and SQLite
+catalog reads are qualified below; memory and workspace resource policies remain separate.
 
 Each control is read by the answers that use it, and a control on another answer is refused
-before any session is read, naming where it is read. The catalog reads `filter` (the session
-list) and `search` (the content search); `matches` is the search's; `since` and `until` bound a
-filtered or searched catalog, so on the bare list they exit 2 asking for `filter` or `search`.
-`key` is config's, `full` the exchanges'. `last`, `tokens` and `goal` select a session's last
-message, token breakdown or goal: given with one another, the first of them (in that order)
-selects the answer and the others are refused; off (`last=False`) they select nothing.
+before any session is read, naming where it is read. The catalog reads `--where 'session~=TEXT'`
+(the session list: a case-insensitive substring of the title or first user message; terms AND)
+and `--match TEXT` (the content search: repeated terms AND per session); `--matches` is the
+search's; `--since` and `--until` bound a filtered or searched catalog, so on the bare list they
+exit 2 asking for one. `--key` is config's, `--detail full` the exchanges'. `--view NAME` selects a
+session's answer: the path's views (`messages`, `tools`, `errors`, `shell`, `workflow`,
+`timeline`, `digest`, `exchanges`; `codex://<UUID>/tools` is `codex://<UUID> --view tools`) and
+`last`, `tokens` and `goal` (the last agent message, the token rows, the goal). A path view
+beside a different `--view` is two answers and exits 2 naming both; the same view given both
+ways is one.
+
+Deprecated spellings work until 1.0, each with a note naming its replacement:
+
+- `?filter=TEXT` is deprecated: `--where 'session~=TEXT'` answers the same.
+- `?full` is deprecated: `--detail full` answers the same.
+- `?last`, `?tokens` and `?goal` are deprecated: `--view last`, `--view tokens` and `--view goal` answer the same.
+- A deprecated `?last=false` (or `0`, or any other false or malformed value) exits 2; it used to select the answer.
+- `?search=TEXT` is deprecated: `--match TEXT` finds the same sessions, but echoes its JSON `query` as a list.
 
 
 ```bash
@@ -62,13 +71,13 @@ selects the answer and the others are refused; off (`last=False`) they select no
 reveal 'codex://'
 
 # Find sessions by title/first-message (SQLite metadata, fast)
-reveal 'codex://sessions/?filter=auth-refactor'
+reveal codex://sessions/ --where 'session~=auth-refactor'
 
 # Full-text search across all session content
-reveal 'codex://sessions/?search=authentication'
+reveal codex://sessions/ --match authentication
 
 # Full-text search scoped to a date range
-reveal 'codex://sessions/?search=authentication&since=2026-07-01'
+reveal codex://sessions/ --match authentication --since 2026-07-01
 
 # Session overview (turns, tools, tokens, duration)
 reveal 'codex://019e5cc5'
@@ -80,16 +89,16 @@ reveal 'codex://019e5cc5/digest'
 reveal 'codex://019e5cc5/exchanges'
 
 # Last agent message — fastest session recovery
-reveal 'codex://019e5cc5?last'
+reveal codex://019e5cc5 --view last
 
 # Single raw JSONL record by index (negative indexing supported)
 reveal 'codex://019e5cc5/message/-1'
 
 # Per-turn token breakdown
-reveal 'codex://019e5cc5?tokens'
+reveal codex://019e5cc5 --view tokens
 
 # Thread goal (objective + token budget)
-reveal 'codex://019e5cc5?goal'
+reveal codex://019e5cc5 --view goal
 
 # Conversation turns (user + agent messages)
 reveal 'codex://019e5cc5/messages'
@@ -133,27 +142,27 @@ reveal 'codex://memories/pipeline'
 |-----|----------------|
 | `codex://` | All user sessions from SQLite, newest first |
 | `codex://sessions/` | Same as bare `codex://` |
-| `codex://sessions/?filter=<term>` | Filter by title or first message (SQLite metadata, fast, no JSONL scan) |
-| `codex://sessions/?search=<term>` | Full-text JSONL search across all sessions |
-| `codex://sessions/?search=<term>&since=<date>` | Full-text search scoped to sessions updated on/after `<date>` (ISO 8601 or `today`) |
-| `codex://sessions/?search=<term>&since=<date>&until=<date>` | Full-text search scoped to a date range |
-| `codex://sessions/?search=<term>&matches=<n>` | Snippets kept per session (default 3, `0` keeps all); a cut is reported as a truncation naming `?matches=N` |
-| `codex://sessions/?filter=<term>&since=<date>&until=<date>` | Metadata filter, same date scoping |
+| `codex://sessions/ --where 'session~=<term>'` | Filter by title or first message (SQLite metadata, fast, no JSONL scan); repeated terms AND |
+| `codex://sessions/ --match <term>` | Full-text JSONL search across all sessions; repeated terms AND per session |
+| `codex://sessions/ --match <term> --since <date>` | Full-text search scoped to sessions updated on/after `<date>` (ISO 8601 or `today`) |
+| `codex://sessions/ --match <term> --since <date> --until <date>` | Full-text search scoped to a date range |
+| `codex://sessions/ --match <term> --matches <n>` | Snippets kept per session (default 3, `0` keeps all); a cut is reported as a truncation naming `?matches=N` |
+| `codex://sessions/ --where 'session~=<term>' --since <date> --until <date>` | Metadata filter, same date scoping |
 
-> **Renamed**: `?search=` used to mean the SQLite metadata match and `?content=` the full-text scan. They're now `?filter=` (metadata) and `?search=` (content) — matching `claude://`'s established meaning, where `?search=` always means "search the content." The old names are not aliased; using them surfaces via reveal's unknown-query-param warning.
+> **Renamed**: `?search=` used to mean the SQLite metadata match and `?content=` the full-text scan. They're now `?filter=` (metadata) and `?search=` (content) — matching `claude://`'s established meaning, where `?search=` always means "search the content." The old names are not aliased; using them exits 2 as unknown controls. Since then `?filter=` became `--where 'session~=TEXT'` and `?search=` `--match TEXT` (both deprecated, working until 1.0 with a note).
 
 ### Session Analysis
 
 | URI | What it returns |
 |-----|----------------|
 | `codex://<UUID>` | Overview: turns, tool calls, tokens, duration, git state |
-| `codex://<UUID>?last` | Last agent message only — fast recovery pattern |
-| `codex://<UUID>?tokens` | Per-turn token breakdown (input/output/cached/reasoning) |
-| `codex://<UUID>?goal` | Thread goal from `goals_1.sqlite` (objective, status, token budget) |
+| `codex://<UUID> --view last` | Last agent message only — fast recovery pattern |
+| `codex://<UUID> --view tokens` | Per-turn token breakdown (input/output/cached/reasoning) |
+| `codex://<UUID> --view goal` | Thread goal from `goals_1.sqlite` (objective, status, token budget) |
 | `codex://<UUID>/messages` | All user and agent turns in order |
 | `codex://<UUID>/digest` | Composed readable view: overview + prompts + agent narrative in one call |
 | `codex://<UUID>/exchanges` | Each user prompt paired with the agent's final reply before the next prompt |
-| `codex://<UUID>/exchanges?full` | Complete paired prompts and answers in text output |
+| `codex://<UUID>/exchanges --detail full` | Complete paired prompts and answers in text output |
 | `codex://<UUID>/message/<n>` | Single raw JSONL record by 0-based index (negative indexing supported, e.g. `-1` = last) |
 | `codex://<UUID>/tools` | Paired `function_call` + `function_call_output` events |
 | `codex://<UUID>/shell` | `exec_command_end` events: command, exit code, output |
@@ -161,7 +170,7 @@ reveal 'codex://memories/pipeline'
 | `codex://<UUID>/workflow` | Tool calls + shell commands interleaved chronologically |
 | `codex://<UUID>/timeline` | All events in session order with brief summaries |
 
-Exchange text previews show at most 300 characters per prompt and 600 per answer, with a `?full` hint when cut. Add `?full` or `?full=true` to show complete paired text; `?full=false` keeps the compact preview. JSON always contains complete prompt and answer strings. `--limit N`/`--offset N` page the exchanges, like every list answer's rows (`--limit 0` keeps them all); the legacy `--head`, `--tail` and `--range` still slice them with a note naming their replacement, and `--max-items` still limits them. None of them expands text.
+Exchange text previews show at most 300 characters per prompt and 600 per answer, with a `--detail full` hint when cut. Add `--detail full` to show complete paired text; `--detail normal` (the default) keeps the compact preview. JSON always contains complete prompt and answer strings. `--limit N`/`--offset N` page the exchanges, like every list answer's rows (`--limit 0` keeps them all); the legacy `--head`, `--tail` and `--range` still slice them with a note naming their replacement, and `--max-items` still limits them. None of them expands text.
 
 **UUID prefix**: A unique prefix of 7+ hex characters works instead of the full UUID: `reveal 'codex://019e5cc5'` resolves to the matching session. A prefix several sessions share exits 2 with `Ambiguous session prefix ...: matches <ids>; use more characters`; the first UUID group (8 characters) is usually enough.
 
@@ -253,10 +262,10 @@ Current rollouts can also carry `token_usage_record`, `inter_agent_communication
 
 ## Token Analysis
 
-Codex emits `token_count` events after each API request with a delta (`last_token_usage`) and running total (`total_token_usage`). The `?tokens` route gives the per-request breakdown: one row per `token_count` event (one model API call), so its "turn" count is far higher than the overview's user/agent turn count:
+Codex emits `token_count` events after each API request with a delta (`last_token_usage`) and running total (`total_token_usage`). The `--view tokens` answer gives the per-request breakdown: one row per `token_count` event (one model API call), so its "turn" count is far higher than the overview's user/agent turn count:
 
 ```bash
-reveal 'codex://01a161bb?tokens'
+reveal codex://01a161bb --view tokens
 # Codex Token Usage: 131 turn(s)  |  running total: 19,055,254
 #
 #   TURN  TIMESTAMP               INPUT   CACHED   OUTPUT   REASON    TOTAL
@@ -303,7 +312,7 @@ An `exec` tool call is a script that can run several commands. Rollouts without 
 Codex supports `/goal` slash commands that set a per-thread objective and optional token budget in `~/.codex/goals_1.sqlite`. Most sessions have no goal set.
 
 ```bash
-reveal 'codex://019e5cc5?goal'
+reveal codex://019e5cc5 --view goal
 # Codex Goal: 019e5cc5
 #
 #   Objective:  Refactor the authentication module
@@ -368,7 +377,7 @@ limit large stores. Snippet limits and total match counts keep their existing
 meaning.
 
 ```bash
-reveal 'codex://sessions/?search=authentication'
+reveal codex://sessions/ --match authentication
 # Codex Content Search: 3 session(s) matching 'authentication'
 #
 #   019e5cc5  2026-05-25  [gpt-5.5]  lets find all past sessions...
@@ -376,10 +385,10 @@ reveal 'codex://sessions/?search=authentication'
 #     [AGENT] 2026-05-25 01:36:01  I'll look at the auth middleware first...
 ```
 
-This is a full-file scan — use `?filter=` first for fast SQLite metadata filtering, or add `&since=<date>` (optionally `&until=<date>`) to narrow the corpus before scanning:
+This is a full-file scan — use `--where 'session~=TEXT'` first for fast SQLite metadata filtering, or add `--since <date>` (optionally `--until <date>`) to narrow the corpus before scanning:
 
 ```bash
-reveal 'codex://sessions/?search=authentication&since=2026-07-01'
+reveal codex://sessions/ --match authentication --since 2026-07-01
 ```
 
 ---
@@ -485,7 +494,7 @@ checked through display cuts and presentation. Content search also measures its 
 
 ## Content Search Outcomes
 
-`codex://sessions?search=TEXT` uses the same measured SQLite catalog and shared
+`codex://sessions --match TEXT` uses the same measured SQLite catalog and shared
 JSONL object reader as direct transcript views. Date bounds select the rollout
 corpus before records are read. `meta.content_analysis` records every selected
 session source, nonblank/object/failed record counts, decoding repairs, consumed

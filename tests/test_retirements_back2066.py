@@ -347,6 +347,13 @@ PRODUCTION_CASES = {
     'param:claude.last': lambda f: ['claude://session/my-session?last'],
     'param:claude.full': lambda f: ['claude://session/my-session/exchanges?full'],
     'param:claude.raw': lambda f: ['claude://session/my-session/messages?raw'],
+    # Codex's legacy words (BACK-2618), on codex_session_fixture.DOC_SESSION_ID and its catalog
+    'param:codex.filter': lambda f: ['codex://sessions/?filter=auth'],
+    'param:codex.search': lambda f: ['codex://sessions/?search=auth'],
+    'param:codex.full': lambda f: ['codex://019e5cc5-0000-7000-8000-000000000001/exchanges?full'],
+    'param:codex.last': lambda f: ['codex://019e5cc5-0000-7000-8000-000000000001?last'],
+    'param:codex.tokens': lambda f: ['codex://019e5cc5-0000-7000-8000-000000000001?tokens'],
+    'param:codex.goal': lambda f: ['codex://019e5cc5-0000-7000-8000-000000000001?goal'],
     'param:ast.calls': lambda f: [f'ast://{f}?calls=auth_gate'],
     # BACK-2654: different-word aliases became legacy entries with rows.
     'param:ast.type': lambda f: [f'ast://{f}?type=function'],

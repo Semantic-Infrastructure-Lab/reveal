@@ -145,7 +145,7 @@ def test_repeated_catalog_refreshes_failed_and_repaired_sources(codex):
 def test_metadata_selection_receipt_cannot_change_after_read(codex, monkeypatch):
     from reveal.adapters.codex.adapter import CodexAdapter
     def corrupt(self, result, args):
-        result['filter'] = 'unapplied filter'
+        result['where'] = ['session~=unapplied filter']  # legacy filter's echo is where's (BACK-2618)
         return result
     monkeypatch.setattr(CodexAdapter, 'post_process', corrupt)
     result = _run_reveal_in(codex.parent, 'codex://sessions?filter=auth-refactor', '--format', 'json')

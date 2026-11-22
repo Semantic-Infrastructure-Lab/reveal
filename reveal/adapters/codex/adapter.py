@@ -10,16 +10,18 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from reveal.reveal_types import CONTRACT_VERSION
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
+from ...errors import RequestValidationError
 from .renderer import CodexRenderer
 from ...utils.jsonl_records import TranscriptRecords
 from ...utils.results import note_warning
 from ...utils.query_parser import ResourceSpec, param_schema
 from .paging import page_result
-from .params import PARAM_SPECS, FILTER, GOAL, KEY, LAST, SEARCH, SINCE, TOKENS, UNTIL, _MATCHES, _FULL, bind_query
+from ...utils.match_terms import match_terms
+from .params import PARAM_SPECS, DETAIL, KEY, MATCH, SEARCH, SINCE, UNTIL, VIEW, WHERE, _MATCHES, bind_query
 from .lookup import SessionLookup, attach_lookup_evidence
 from .catalog import CATALOG_PATHS
-from .qualification import (RESULT_VARIANTS, SESSION_ID_RE, VIEW_TYPES, selected_type, index_request_error,
-                            validate_resource, named_type)
+from .qualification import (RESULT_VARIANTS, SESSION_ID_RE, VIEW_TYPES, selected_type, selection_error,
+                            session_view, index_request_error, validate_resource, named_type)
 from .rollout import ROLLOUT_RULE, unavailable_rollout
 from .handlers.sessions import (
     list_sessions as _h_list_sessions,
@@ -164,6 +166,11 @@ class CodexAdapter(ResourceAdapter):
         # Unknown keys never reach here (the binder rejects them, rule 3), and a control the selected answer does not
         # read (full outside /exchanges) is refused before construction by its declaration (rule 20, BACK-2656).
         self.query_params = bind_query(query, params)
+        # A path and a selector that pick different answers (codex://UUID/tools --view messages) are refused here, as
+        # every invalid request is at construction (ruling Q3).
+        conflict = selection_error(resource, self.query_params)
+        if conflict is not None:
+            raise RequestValidationError(conflict)
 
     # ------------------------------------------------------------------
     # Helpers
@@ -188,11 +195,6 @@ class CodexAdapter(ResourceAdapter):
         if self._is_uuid(candidate):
             return candidate
         return None
-
-    def _session_sub_path(self) -> str:
-        """Return the sub-path after UUID/, e.g. 'messages', 'tools', ''."""
-        parts = self.resource.split('/', 1)
-        return parts[1] if len(parts) > 1 else ''
 
     # ------------------------------------------------------------------
     # SQLite helpers
@@ -289,15 +291,17 @@ class CodexAdapter(ResourceAdapter):
         return self._session_answer(self.resource.partition('/')[0])
 
     def _catalog_result(self) -> Dict[str, Any]:
-        search = SEARCH.read(self.query_params)
-        filter_term = FILTER.read(self.query_params)
-        if search or filter_term:
+        search = SEARCH.read(self.query_params)  # the legacy word answers with its own string query (ruling Q1)
+        terms = [term for term in match_terms(MATCH.read(self.query_params)) if term]
+        where = WHERE.read(self.query_params) or []
+        if search or terms or where:
             since = SINCE.read(self.query_params) or ''
             until = UNTIL.read(self.query_params) or ''
-        if search:
-            return _h_search_sessions(self.CODEX_DB, search, _MATCHES.read(self.query_params), since=since, until=until)
-        if filter_term:
-            return _h_filter_sessions(self.CODEX_DB, filter_term, since=since, until=until)
+        if search or terms:
+            return _h_search_sessions(self.CODEX_DB, search or terms, _MATCHES.read(self.query_params),
+                                      since=since, until=until)
+        if where:
+            return _h_filter_sessions(self.CODEX_DB, where, since=since, until=until)
         return _h_list_sessions(self.CODEX_DB)
 
     def _session_answer(self, session_id: str) -> Dict[str, Any]:
@@ -324,9 +328,11 @@ class CodexAdapter(ResourceAdapter):
         self._lookup_error_message = base['error']
         return base
 
-    def _goal_selected(self) -> bool:
-        return (selected_type(self.resource, self.query_params) == 'codex_goal'
-                and bool(GOAL.read(self.query_params)))
+    def _session_view(self) -> str:
+        """The session view this request selects: the path's or --view's (legacy ?last, ?tokens, ?goal), read through
+        its declaration."""
+        VIEW.read(self.query_params)
+        return session_view(self.resource, self.query_params)
 
     def _handle_session(self, session_id: str) -> Dict[str, Any]:
         """Handle codex://<UUID>[/sub] requests."""
@@ -334,7 +340,8 @@ class CodexAdapter(ResourceAdapter):
         if session_row is None:
             return self._lookup_failure_result(session_id, candidates)
 
-        if self._goal_selected():
+        view = self._session_view()
+        if view == 'goal':  # the goal reads its own database, before any rollout
             return self._result_goal(session_row)
 
         self._rollout_analysis = None
@@ -343,32 +350,11 @@ class CodexAdapter(ResourceAdapter):
         if jsonl_path:
             records = self._load_records(jsonl_path)
 
-        sub = self._session_sub_path()
-
-        # ?last / ?tokens / ?goal → query-param routes
-        if LAST.read(self.query_params):
-            return self._result_last(records, session_row)
-        if TOKENS.read(self.query_params):
-            return self._result_tokens(records, session_row)
-
-        if sub == 'messages':
-            return self._result_messages(records, session_row)
-        if sub == 'tools':
-            return self._result_tools(records, session_row)
-        if sub == 'errors':
-            return self._result_errors(records, session_row)
-        if sub == 'shell':
-            return self._result_shell(records, session_row)
-        if sub == 'workflow':
-            return self._result_workflow(records, session_row)
-        if sub == 'timeline':
-            return self._result_timeline(records, session_row)
-        if sub == 'digest':
-            return self._result_digest(records, session_row)
-        if sub == 'exchanges':
-            return self._result_exchanges(records, session_row)
-        if sub.startswith('message/'):
-            return self._result_message(records, session_row, sub[len('message/'):])
+        if view.startswith('message/'):
+            return self._result_message(records, session_row, view[len('message/'):])
+        handler = self._VIEW_RESULTS.get(view)
+        if handler is not None:
+            return handler(self, records, session_row)
 
         # Default: overview
         return self._result_overview(records, session_row)
@@ -493,7 +479,7 @@ class CodexAdapter(ResourceAdapter):
         exchanges = _analysis_get_exchanges(records)
         b['exchange_count'] = len(exchanges)
         b['exchanges'] = exchanges
-        b['full'] = _FULL.read(self.query_params)
+        b['full'] = DETAIL.read(self.query_params) == 'full'  # legacy ?full is --detail full: the echo stays
         return b
 
     def _result_message(self, records: List[Dict[str, Any]], session_row: Dict[str, Any], index_str: str) -> Dict[str, Any]:
@@ -510,6 +496,13 @@ class CodexAdapter(ResourceAdapter):
             return b
         b.update(entry)
         return b
+
+    # The answer each session view names (params.PATH_VIEWS and QUERY_VIEWS); the overview is the default, and goal
+    # reads its own database before any rollout (_handle_session).
+    _VIEW_RESULTS: Dict[str, Callable[..., Dict[str, Any]]] = {
+        'last': _result_last, 'tokens': _result_tokens, 'messages': _result_messages,
+        'tools': _result_tools, 'errors': _result_errors, 'shell': _result_shell, 'workflow': _result_workflow,
+        'timeline': _result_timeline, 'digest': _result_digest, 'exchanges': _result_exchanges}
 
     def _result_goal(self, session_row: Dict[str, Any]) -> Dict[str, Any]:
         thread_id = session_row.get('id', '')
@@ -592,8 +585,8 @@ class CodexAdapter(ResourceAdapter):
             'example_queries': [
                 {'uri': 'codex://', 'description': 'List all sessions (newest first)', 'output_type': 'codex_session_list'},
                 {'uri': 'codex://sessions/?filter=auth-refactor', 'description': 'Find sessions by title/first-message substring (SQLite metadata, fast)', 'output_type': 'codex_session_list'},
-                {'uri': 'codex://sessions/?search=authentication', 'description': 'Full-text search across all session JSONL files', 'output_type': 'codex_content_search'},
-                {'uri': 'codex://sessions/?search=authentication&since=2026-07-01', 'description': 'Full-text search scoped to sessions updated since a date', 'output_type': 'codex_content_search'},
+                {'uri': 'codex://sessions/?match=authentication', 'description': 'Full-text search across all session JSONL files', 'output_type': 'codex_content_search'},
+                {'uri': 'codex://sessions/?match=authentication&since=2026-07-01', 'description': 'Full-text search scoped to sessions updated since a date', 'output_type': 'codex_content_search'},
                 {'uri': 'codex://019e5cc5', 'description': 'Session overview: turns, tool calls, tokens, duration', 'output_type': 'codex_session_overview'},
                 {'uri': 'codex://019e5cc5?last', 'description': 'Last agent message only — fast recovery pattern', 'output_type': 'codex_messages'},
                 {'uri': 'codex://019e5cc5/tools', 'description': 'Each tool call paired with its output', 'output_type': 'codex_tools'},
@@ -654,8 +647,8 @@ class CodexAdapter(ResourceAdapter):
                 {'uri': 'codex://', 'description': 'List all sessions (newest first)'},
                 {'uri': 'codex://sessions/?filter=auth-refactor', 'description': 'Find sessions by title/first-message substring (SQLite metadata, fast)'},
                 {'uri': 'codex://sessions/?filter=auth-refactor&since=2026-07-01', 'description': 'Metadata filter scoped to sessions updated since a date'},
-                {'uri': 'codex://sessions/?search=authentication', 'description': 'Full-text search across all session JSONL files'},
-                {'uri': 'codex://sessions/?search=authentication&since=2026-07-01', 'description': 'Full-text search scoped to sessions updated since a date'},
+                {'uri': 'codex://sessions/?match=authentication', 'description': 'Full-text search across all session JSONL files'},
+                {'uri': 'codex://sessions/?match=authentication&since=2026-07-01', 'description': 'Full-text search scoped to sessions updated since a date'},
                 {'uri': 'codex://019e5cc5', 'description': 'Session overview: turns, tool calls, tokens, duration'},
                 {'uri': 'codex://019e5cc5?last', 'description': 'Last agent message only — fast recovery pattern'},
                 {'uri': 'codex://019e5cc5?tokens', 'description': 'Per-request token breakdown (input/output/cached/reasoning)'},

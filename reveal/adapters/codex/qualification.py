@@ -12,7 +12,8 @@ from ...utils.query_binding import runtime_controls
 from ...utils.query_parser import peek_query_items
 from ...utils.results import (AnalysisCompleteness, FailureCause, failure_execution_facts,
                               result_execution_facts)
-from .params import PARAM_SPECS, SELECTING_FLAGS, bind_query
+from ...utils.match_terms import match_terms
+from .params import PARAM_SPECS, PATH_VIEWS, SESSION_VIEWS, bind_query
 from .info import execution_facts as info_facts, answer_requirement_error as info_error
 from .history import execution_facts as history_facts, answer_requirement_error as history_error
 from .configuration import execution_facts as config_facts, answer_requirement_error as config_error
@@ -39,9 +40,7 @@ RESOURCE_OWNERS: Dict[str, Tuple[Callable[..., Any], Callable[..., Any]]] = {
        for kind in ('codex_memories', 'codex_rules', 'codex_skills', 'codex_skill', 'codex_plugins', 'codex_plugin')},
 }
 
-VIEW_TYPES = {'': 'codex_session_overview', 'messages': 'codex_messages', 'tools': 'codex_tools',
-              'errors': 'codex_errors', 'shell': 'codex_shell', 'workflow': 'codex_workflow',
-              'timeline': 'codex_timeline', 'digest': 'codex_digest', 'exchanges': 'codex_exchanges'}
+VIEW_TYPES = {'': 'codex_session_overview', **PATH_VIEWS}  # the session views a path names
 CONTAINERS: Dict[str, Dict[str, Any]] = {'codex_session_overview': {}, 'codex_messages': {'messages': list},
               'codex_tools': {'tools': list}, 'codex_errors': {'errors': list},
               'codex_shell': {'shell_calls': list}, 'codex_tokens': {'token_turns': list},
@@ -110,18 +109,54 @@ def validate_resource(resource):
         raise MissingResourceError(f'Unsupported Codex session view: {resource}; views: {_VIEWS}')
 
 
+def _given(params):
+    return dict(peek_query_items(runtime_controls(PARAM_SPECS, params)))  # the bound controls, none counted as read
+
+
+def selection_error(resource, params):
+    """Why the path and an answer selector pick different answers, or None (ruling Q3; COMMAND_MODEL "Applicability": a
+    path that selects an answer is an answer, and "One answer per request"). ``--view`` (legacy ``?last``, ``?tokens``,
+    ``?goal``) selects a session view, so beside the catalog, a named resource or a different path view it is a second
+    answer; the same view given both ways is one selection. The legacy ``search`` selects the content search, so beside
+    any resource but the catalog it is a second answer. The router validates this at construction (an invalid request,
+    exit 2); prediction never raises. A refusal names the control, whatever spelling carried it (as applicability's
+    does): ``view=last`` for ``?last`` too."""
+    given = _given(params)
+    view = given.get('view')
+    named = named_type(resource)
+    catalog = named is None and (resource in CATALOG_PATHS or resource.startswith('sessions/'))
+    sub = '' if named is not None or catalog else resource.partition('/')[2]
+    if view is not None and (named is not None or catalog or (sub and sub != view)):
+        selected = f"the resource's view {sub}" if sub else 'the resource'
+        return (f'view={view} and {selected} (codex://{resource}) select different answers: one answer per request; '
+                'give one')
+    if 'search' in given and not catalog:
+        return (f'search selects the content search and the resource (codex://{resource}) selects another answer: '
+                'one answer per request; search reads the session catalog (codex://sessions)')
+    return None
+
+
+def session_view(resource: str, params: Any) -> str:
+    """The view a session request selects: the path's (``''`` is the overview, ``message/N`` a record), else
+    ``--view``'s (legacy ``?last``/``?tokens``/``?goal`` included). A path view beside a different ``--view`` is
+    ``selection_error``'s; prediction keeps the path's."""
+    sub = resource.partition('/')[2]
+    view = _given(params).get('view')
+    if sub or view is None:
+        return sub
+    return '' if view == 'overview' else str(view)
+
+
 def selected_type(resource, params):
     named = named_type(resource)
     if named is not None:
         return named
-    given = dict(peek_query_items(runtime_controls(PARAM_SPECS, params)))  # the bound controls, none counted as read
     if resource in CATALOG_PATHS or resource.startswith('sessions/'):  # the router's catalog dispatch
-        return 'codex_content_search' if given.get('search') else 'codex_session_list'
-    for spec in SELECTING_FLAGS:  # a session selector given picks its answer over the path's view
-        if spec.name in given:
-            return spec.answers[0]
-    sub = resource.partition('/')[2]
-    return 'codex_message' if sub.startswith('message/') else VIEW_TYPES.get(sub, 'codex_session_overview')
+        given = _given(params)
+        terms = [term for term in match_terms(given.get('match')) if term]
+        return 'codex_content_search' if given.get('search') or terms else 'codex_session_list'
+    view = session_view(resource, params)
+    return 'codex_message' if view.startswith('message/') else SESSION_VIEWS.get(view, 'codex_session_overview')
 
 
 def uri_result_type(resource):

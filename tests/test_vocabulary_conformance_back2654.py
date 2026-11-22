@@ -114,8 +114,8 @@ TARGETS = {'claude': 'sessions', 'codex': 'sessions', 'json': 'proj/data.json'}
 # the legacy-word probes (1b, 6, 16) send its spellings there, so they compare answers rather than two rejections.
 CONTROL_TARGETS = {('claude', 'tail'): 'session/my-session', ('git', 'detail'): 'proj/app.py',
                    # Codex: the resource whose answer reads the control (BACK-2656; the catalog reads few of them)
-                   ('codex', 'key'): 'config', ('codex', 'full'): '019e5cc5-0000-7000-8000-000000000001/exchanges',
-                   **{('codex', flag): '019e5cc5-0000-7000-8000-000000000001' for flag in ('last', 'tokens', 'goal')}}
+                   ('codex', 'key'): 'config', ('codex', 'detail'): '019e5cc5-0000-7000-8000-000000000001/exchanges',
+                   ('codex', 'view'): '019e5cc5-0000-7000-8000-000000000001'}
 # The answer a probe of a control's spelling selects when the default one does not read the control (rule 20,
 # BACK-2656: there it is refused, which is applicability's subject, not the spelling's): (subcommand argv, URI query).
 CONTROL_BASES = {('calls', 'kind'): (['--uncalled'], '?uncalled'), ('calls', 'external'): (['--modules'], '?modules'),
@@ -124,8 +124,9 @@ CONTROL_BASES = {('calls', 'kind'): (['--uncalled'], '?uncalled'), ('calls', 'ex
                  ('imports', 'detail'): (['--circular'], '?circular'),
                  ('git', 'detail'): (['--view', 'blame'], '?view=blame'),
                  ('patches', 'where'): (['--view', 'pressure'], '?view=pressure'),
-                 ('codex', 'matches'): (['--search', 'auth'], '?search=auth'),
-                 **{('codex', bound): (['--filter', 'auth'], '?filter=auth') for bound in ('since', 'until')}}
+                 ('codex', 'matches'): (['--match', 'auth'], '?match=auth'),
+                 **{('codex', bound): (['--where', 'session~=auth'], '?where=session~=auth')
+                    for bound in ('since', 'until')}}
 
 # The shared controls (rule 7: the one declared list, query_parser.SHARED_CONTROL_NAMES), each probed with a value a
 # supporting noun would accept. Left out: view (the deferred row, D18). Not shared controls: format/output (global
@@ -142,24 +143,24 @@ SHARED_CONTROLS = {name: _PROBE_VALUES[name] for name in SHARED_CONTROL_NAMES if
 _NO_ALIAS = 'declares no aliased control: there is no alias and name to give twice'
 _NO_LEGACY = 'no note-stage RETIREMENTS row spells this noun: there is no legacy spelling to note'
 EXEMPT = {
-    **{(noun, '1b'): _NO_ALIAS for noun in ('architecture', 'codex', 'deps', 'json',
+    **{(noun, '1b'): _NO_ALIAS for noun in ('architecture', 'deps', 'json',
                                             'overview', 'surface', 'trace')},
-    **{(noun, '2'): _NO_LEGACY for noun in ('codex', 'surface')},
+    **{(noun, '2'): _NO_LEGACY for noun in ('surface',)},
     **{(noun, '1d'): 'declares no repeatable control with an alias'
-       for noun in NOUNS if noun not in ('ast', 'claude', 'markdown', 'metrics', 'patches', 'stats')},
+       for noun in NOUNS if noun not in ('ast', 'claude', 'codex', 'markdown', 'metrics', 'patches', 'stats')},
     **{(noun, '5'): 'no note-stage param: row whose replacement is a control of this noun' for noun in (
-        'codex', 'surface', 'trace')},
+        'surface', 'trace')},
     **{(noun, '6'): 'declares no alias: nothing to note or keep note-free' for noun in (
-        'architecture', 'codex', 'deps', 'json', 'overview', 'surface', 'trace')},
+        'architecture', 'deps', 'json', 'overview', 'surface', 'trace')},
     **{(noun, '8a'): 'no where expression: a bare key is never read as a field'
-       for noun in ('architecture', 'calls', 'codex', 'contracts', 'deps', 'hotspots', 'imports', 'overview',
+       for noun in ('architecture', 'calls', 'contracts', 'deps', 'hotspots', 'imports', 'overview',
                     'pack', 'surface', 'testability', 'trace')},
     **{(noun, '8b'): 'declares no where control: there are no field filters' for noun in (
-        'architecture', 'calls', 'codex', 'contracts', 'deps', 'hotspots', 'imports', 'overview', 'pack', 'surface', 'testability', 'trace')},
+        'architecture', 'calls', 'contracts', 'deps', 'hotspots', 'imports', 'overview', 'pack', 'surface', 'testability', 'trace')},
     **{(noun, '16'): 'no legacy word and no standalone legacy parameter: nothing to translate or mark' for noun in (
-        'codex', 'surface', 'trace')},
+        'surface', 'trace')},
     **{(noun, '17'): 'one control at most selects the answer: no two selections to give' for noun in (
-        'architecture', 'codex', 'contracts', 'deps', 'hotspots', 'overview', 'pack', 'surface', 'testability',
+        'architecture', 'contracts', 'deps', 'hotspots', 'overview', 'pack', 'surface', 'testability',
         'trace')},
     **{(noun, '24'): 'a retired twin: its own scheme: row of RETIREMENTS is its note, not the request note'
        for noun in ('architecture', 'deps', 'hotspots', 'testability', 'trace')},
@@ -194,6 +195,8 @@ STANDALONE_WORDS = {
                                          'twenty resources where match answers a search or exits 2 (rule 20, BACK-2656)'),
     ('json', 'data-only'): ('modifier', 'not identical to --view flatten --detail raw: the same lines as a bare JSON array '
                                         'with no envelope; it shapes the flatten answer, selects none (BACK-2725)'),
+    ('codex', 'search'): ('operation', 'not identical to match: the same sessions, snippets and text, but its JSON query '
+                                       'stays the string given where match echoes a list of terms (ruling Q1, BACK-2618)'),
 }
 # Hand-written checks a rule would otherwise generate, each kept by a ruling and owned by the named package.
 # CUT_READINESS: zero recorded exceptions at the cut.
@@ -1150,6 +1153,7 @@ def probe_bare_shared_keys(noun):
 FIELD_SAMPLES = {
     'ast': ('proj', [('name', '=', 'serve'), ('lines', '>', '3')]),
     'claude': ('sessions', [('session', '~=', 'session')]),
+    'codex': ('sessions', [('session', '~=', 'auth')]),
     'git': ('proj', [('author', '=', 'Fixture')]),
     'json': ('proj/rows.json', [('name', '=', 'a'), ('n', '>', '1')]),
     'markdown': ('proj', [('title', '=', 'Guide'), ('n', '>', '1')]),
@@ -1328,7 +1332,7 @@ APPLICABILITY_VALUES = {
     ('calls', 'callers'): 'serve', ('calls', 'callees'): 'serve', ('calls', 'root'): 'serve',
     ('imports', 'importers'): 'app.py', ('overview', 'against'): 'HEAD', ('architecture', 'against'): 'HEAD',
     ('claude', 'search'): 'x', ('claude', 'tail'): '2', ('claude', 'tools'): 'Bash', ('claude', 'match'): 'x',
-    ('codex', 'search'): 'auth', ('codex', 'filter'): 'auth', ('codex', 'key'): 'model',
+    ('codex', 'search'): 'auth', ('codex', 'match'): 'auth', ('codex', 'key'): 'model',
     ('git', 'sort'): 'date', ('git', 'ref'): 'HEAD', ('git', 'element'): 'serve', ('git', 'bucket'): 'day',
     ('markdown', 'sort'): 'title', ('markdown', 'match'): 'Body', ('metrics', 'sort'): 'lines',
     ('patches', 'target'): 'serve', ('pack', 'since'): 'HEAD', ('pack', 'budget'): '2000',

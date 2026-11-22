@@ -69,13 +69,18 @@ class TestCodexAdapterInit:
         sid = a._session_id_from_resource()
         assert sid == _SESSION_UUID
 
-    def test_session_sub_path(self):
+    def test_session_view(self):
         a = CodexAdapter(f'{_SESSION_UUID}/tools')
-        assert a._session_sub_path() == 'tools'
+        assert a._session_view() == 'tools'
 
-    def test_session_sub_path_bare(self):
+    def test_session_view_bare(self):
         a = CodexAdapter(_SESSION_UUID)
-        assert a._session_sub_path() == ''
+        assert a._session_view() == ''
+
+    def test_session_view_flag(self):
+        """--view names the same views as the path (BACK-2618, ruling Q3); legacy ?last is --view last."""
+        assert CodexAdapter(_SESSION_UUID, 'view=tools')._session_view() == 'tools'
+        assert CodexAdapter(_SESSION_UUID, 'last')._session_view() == 'last'
 
 
 # ---------------------------------------------------------------------------

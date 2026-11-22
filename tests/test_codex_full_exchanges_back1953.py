@@ -49,12 +49,12 @@ def test_default_and_explicit_false_keep_bounded_actionable_previews(session, qu
     result = run(session + ('?' + query if query else ''))
     assert result.returncode == 0, result.stderr
     assert 'PROMPT_END' not in result.stdout and 'ANSWER_END' not in result.stdout
-    assert 'more chars' in result.stdout and '?full' in result.stdout
+    assert 'more chars' in result.stdout and '--detail full' in result.stdout
     lines = result.stdout.splitlines()
     assert f'Q: {PROMPT[:300]}' in lines
     assert f'A: {ANSWER[:600]}' in lines
-    assert f'... ({len(PROMPT) - 300} more chars, use ?full for complete text)' in result.stdout
-    assert f'... ({len(ANSWER) - 600} more chars, use ?full for complete text)' in result.stdout
+    assert f'... ({len(PROMPT) - 300} more chars, use --detail full for complete text)' in result.stdout
+    assert f'... ({len(ANSWER) - 600} more chars, use --detail full for complete text)' in result.stdout
     assert 'second question' in result.stdout and 'second answer' in result.stdout
     assert '[no agent reply found before the next prompt]' in result.stdout
 
@@ -138,7 +138,7 @@ def test_registered_sdk_preserves_full_text_and_json_pairing(session, tmp_path):
         assert PROMPT in _text(result) and ANSWER in _text(result)
         result = await client.call_tool('reveal_query', {'uri': session + '?full=false'})
         assert not result.is_error, _text(result)
-        assert 'ANSWER_END' not in _text(result) and '?full' in _text(result)
+        assert 'ANSWER_END' not in _text(result) and '--detail full' in _text(result)
         result = await client.call_tool('reveal_query', {
             'uri': session + '?full=false', 'provenance': True})
         assert not result.is_error, _text(result)
@@ -153,31 +153,35 @@ def test_registered_sdk_preserves_full_text_and_json_pairing(session, tmp_path):
 @pytest.mark.parametrize('entry', ['api', 'cli'])
 def test_full_is_refused_when_selected_mode_does_not_use_it(session, view, entry):
     """BACK-2656: full is the paired exchanges' control (COMMAND_MODEL "Applicability"); on another answer the request
-    is refused before the adapter is built, on every transport, no longer answered with Codex's own warning."""
+    is refused before the adapter is built, on every transport, no longer answered with Codex's own warning. Since
+    BACK-2618 full is detail's legacy word, so the refusal names detail (full's note names the old spelling)."""
     from reveal.errors import RequestValidationError
     resource = 'sessions' if view == 'sessions' else f'{SESSION_UUID}/{view}'
     uri = f'codex://{resource}?full'
     if entry == 'cli':
         result = run(uri)
         assert result.returncode == 2, result.stderr
-        assert "control 'full' is not read by this answer" in result.stderr
+        assert "control 'detail' is not read by this answer" in result.stderr
     else:
-        with pytest.raises(RequestValidationError, match="control 'full' is not read by this answer"):
+        with pytest.raises(RequestValidationError, match="control 'detail' is not read by this answer"):
             api.query(uri)
 
 
 @pytest.mark.parametrize('override', ['last', 'tokens', 'goal'])
 def test_query_route_override_refuses_full(session, override):
-    """last, tokens and goal select another answer than the exchanges, which full is read by."""
+    """last, tokens and goal select another answer than the exchanges, which full is read by; beside the exchanges
+    path itself they are a second answer (ruling Q3, BACK-2618)."""
     from reveal.errors import RequestValidationError
-    with pytest.raises(RequestValidationError, match="control 'full' is not read by this answer"):
+    with pytest.raises(RequestValidationError, match="control 'detail' is not read by this answer"):
+        api.query(f"{session.replace('/exchanges', '')}?full&{override}")
+    with pytest.raises(RequestValidationError, match=f"{override} and the resource's view exchanges"):
         api.query(f'{session}?full&{override}')
 
 
 def test_non_exchange_json_refuses_full_once(session):
     result = run(session.replace('/exchanges', '/messages') + '?full', '--format', 'json')
     assert result.returncode == 2, result.stderr
-    assert result.stderr.count("control 'full' is not read by this answer") == 1
+    assert result.stderr.count("control 'detail' is not read by this answer") == 1
 
 
 @pytest.fixture

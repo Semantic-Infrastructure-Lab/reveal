@@ -356,8 +356,8 @@ reveal_query("claude://sessions/?match=validate_token")
 reveal_query("claude://sessions/?match=auth&since=2026-03-01")
 
 # Search OpenAI Codex CLI sessions
-reveal_query("codex://sessions/?filter=validate_token")
-reveal_query("codex://sessions/?search=authentication")
+reveal_query("codex://sessions/?where=session~=validate_token")
+reveal_query("codex://sessions/?match=authentication")
 
 # Git history — commits mentioning a keyword
 reveal_query("git://.?message~=fix")

@@ -44,11 +44,17 @@ def test_every_builtin_uses_canonical_initialization():
     assert legacy == []
 
 
+# A query on the session resource (codex://UUID/messages): Claude's last=2 is its tail; Codex's ?last selects another
+# view than the path's, two answers since BACK-2618 (ruling Q3), and ?last=2 is a malformed presence, so Codex names the
+# path's view again (one selection).
+_SESSION_QUERY = {'claude': 'last=2', 'codex': 'view=messages'}
+
+
 @pytest.mark.parametrize('kind', ['bare', 'query-only', 'session', 'session-query'])
 def test_real_session_resources_construct_once_without_legacy_warning(session_adapter, monkeypatch, kind):
     scheme, adapter, session = session_adapter
     expected_resource = '.' if kind in ('bare', 'query-only') else session
-    query = 'search=auth' if kind == 'query-only' else 'last=2' if kind == 'session-query' else None
+    query = 'search=auth' if kind == 'query-only' else _SESSION_QUERY[scheme] if kind == 'session-query' else None
     resource = '' if kind in ('bare', 'query-only') else session
     if query is not None:
         resource += '?' + query
@@ -68,7 +74,8 @@ def test_real_session_resources_construct_once_without_legacy_warning(session_ad
     assert result.resource == expected_resource and result.query == query
     assert result.query_params == ({'search': 'auth'} if kind == 'query-only'
                                    # claude's last binds as tail, its other spelling (BACK-2654 note #9)
-                                   else ({'tail': 2} if scheme == 'claude' else {'last': True}) if kind == 'session-query'
+                                   else ({'tail': 2} if scheme == 'claude' else {'view': 'messages'})
+                                   if kind == 'session-query'
                                    else {})
     assert not [notice for notice in caught if issubclass(notice.category, DeprecationWarning)]
     if scheme == 'claude':
@@ -80,7 +87,7 @@ def test_real_session_resources_construct_once_without_legacy_warning(session_ad
         assert result.CODEX_DB.is_file()
         if kind.startswith('session'):
             assert result._session_id_from_resource() == SESSION_UUID
-            assert result._session_sub_path() == 'messages'
+            assert result._session_view() == 'messages'
 
 
 @pytest.mark.parametrize('kind', ['bare', 'query-only', 'session', 'session-query'])
@@ -89,7 +96,7 @@ def test_real_factory_answers_match_direct_construction(session_adapter, kind):
 
     scheme, adapter, session = session_adapter
     path = '.' if kind in ('bare', 'query-only') else session
-    params = 'search=auth' if kind == 'query-only' else 'last=2' if kind == 'session-query' else None
+    params = 'search=auth' if kind == 'query-only' else _SESSION_QUERY[scheme] if kind == 'session-query' else None
     resource = '' if kind in ('bare', 'query-only') else session
     uri = f'{scheme}://{resource}' + (f'?{params}' if params else '')
     expected = adapter(path, params).get_structure()

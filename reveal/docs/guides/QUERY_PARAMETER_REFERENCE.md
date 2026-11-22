@@ -23,7 +23,7 @@ Query parameters allow filtering, formatting, and modifying adapter behavior usi
 | **ast://** | `kind`, `where` (fields `name`, `complexity`, `lines`, `nesting_depth`, `decorator`, `param_type`, `return_type`, `has_annotations`, `callers`, `kind`), `view` (`dict-heatmap`, `dict-schemas`), `reveal-type`, `builtins`, `sort`, `limit`, `offset` (noted legacy words: `type`, `depth`, `show`; retired, with a note: `calls`, `callee_of`, `show=calls`) | `reveal ast src --where 'complexity>10'` |
 | **calls://** | `callers`, `callees`, `detail`, `rank`, `top`, `depth`, `format`, `builtins`, `modules`, `external` (retired, with a note: `uncalled`, `target`, `root`) | `calls://src?callers=fn` |
 | **claude://** | `view`, `detail`, `errors`, `tools`, `match`, `where`, `sort`, `offset`, `limit`, `tokens` | `claude://session/NAME?detail=summary` |
-| **codex://** | `search`, `filter`, `since`, `until` | `codex://sessions/?search=auth-refactor` |
+| **codex://** | `where` (`session~=TEXT`), `match`, `matches`, `since`, `until`, `view`, `detail`, `key`, `limit`, `offset` (retired, with a note: `filter`, `search`, `full`, `last`, `tokens`, `goal`) | `codex://sessions/?match=auth-refactor` |
 | **depends://** (retired, with a note: use `imports://?importers`) | `top`, `format` | `depends://src?top=10` |
 | **xlsx://** | `sheet`, `range`, `search`, `format`, `limit`, `formulas`, `powerpivot`, `powerquery`, `names`, `connections` | `xlsx://model.xlsx?sheet=Sales` |
 | **help://** | `search`, `top` (only on `help://search`; `top` caps hits, default 20, `0` = all) | `help://search?search=find callers&top=50` |

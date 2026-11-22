@@ -2688,10 +2688,10 @@ reveal 'codex://'
 reveal 'codex://sessions/?filter=auth-refactor'
 
 # Full-text search across all session JSONL content
-reveal 'codex://sessions/?search=authentication'
+reveal 'codex://sessions/?match=authentication'
 
 # Full-text search scoped to a date range
-reveal 'codex://sessions/?search=authentication&since=2026-07-01'
+reveal 'codex://sessions/?match=authentication&since=2026-07-01'
 ```
 
 **Session analysis:**

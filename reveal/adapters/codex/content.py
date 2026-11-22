@@ -10,23 +10,31 @@ from .rollout import ROLLOUT_RULE, unavailable_rollout, rollout_lost
 CONTENT_RULE = 'Required catalog rows after date scope; consume every nonblank JSONL record before message substring matching and per-session snippet caps; object decoding does not validate every event payload'
 
 
-def scan_rollout(row, term, cap, snippet_of):
+def scan_rollout(row, terms, cap, snippet_of):
+    """The snippets of one session's rollout: *snippet_of(record, terms)* gives a message's snippet and the terms it
+    holds. The session matches only when every term is held by some message (terms AND per session, rule 19); one term
+    is the search it always was."""
     raw = row.get('rollout_path')
     if not isinstance(raw, str) or not raw or '\x00' in raw:
         return [], 0, {**unavailable_rollout(raw), 'session_id': row['id']}
     read = TranscriptRecords(Path(raw), replace_decode=True, opener=open)
     snippets: list[dict[str, Any]] = []
     found = 0
+    held: set[str] = set()
     try:
         for record in read.records():
-            snippet = snippet_of(record, term)
-            if snippet:
+            match = snippet_of(record, terms)
+            if match:
+                snippet, record_terms = match
+                held.update(record_terms)
                 found += 1
                 if cap <= 0 or len(snippets) < cap:
                     snippets.append(snippet)
     except (OSError, UnicodeDecodeError):
         pass  # The shared reader retains the consumed prefix and precise failure.
     proof = {**read.receipt(), 'opened': read.opened, 'count_rule': ROLLOUT_RULE, 'session_id': row['id']}
+    if not held.issuperset(terms):
+        return [], 0, proof
     return snippets, found, proof
 
 

@@ -1,47 +1,107 @@
-"""Existing Codex query controls, bound before SQLite and JSONL session reads."""
-from ...utils.query_binding import (bind_declared_params, boolean_value, legacy_presence_value, runtime_controls,
-                                    string_value)
-from ...utils.query_parser import (CliBinding, ParamSpec, legacy_check, legacy_slices, nonnegative_display_limit,
-                                   whole_number)
+"""Codex query controls, bound before SQLite and JSONL session reads."""
+from dataclasses import replace
 
-# The answers each control is read by (COMMAND_MODEL "Applicability", BACK-2656): the path selects most answers
-# (qualification.selected_type); search selects the content search and last/tokens/goal a session's last message, token
-# breakdown or goal (Q5: they keep their roles and name the answer they select). since/until bound a filtered or
-# searched catalog only, so they also require one of the two.
+from ...utils.query_binding import (bind_declared_params, boolean_value, legacy_switch, runtime_controls,
+                                    string_value)
+from ...utils.query_parser import (CliBinding, LegacySpelling, ParamSpec, ParamValueError, legacy_check,
+                                   legacy_slices, nonnegative_display_limit, where_param, whole_number)
+
+# The answers each control is read by (COMMAND_MODEL "Applicability", BACK-2656): the path or --view selects most
+# answers (qualification.selected_type); search and match select the content search. The selectors search and view
+# (role='operation') are judged against the path instead (qualification.selection_error). since/until bound a filtered
+# or searched catalog only, so they also require one of the three.
 _LIST, _SEARCH = 'codex_session_list', 'codex_content_search'
-_MATCHES = ParamSpec('matches', 'integer', 'Snippets kept per session by ?search= (0 = all)',
-                     3, whole_number, ('codex://sessions/?search=auth&matches=10', 'codex://sessions/?search=auth&matches=0'),
+# A session's answers by the view that names them (rulings Q3, Q4): the path's views (codex://UUID/tools), and the last
+# agent message, token rows and goal that only the legacy ?last/?tokens/?goal selected. Each is --view NAME; the
+# resource keeps its path, and a path view with a different --view is two answers (qualification.session_view).
+PATH_VIEWS = {'messages': 'codex_messages', 'tools': 'codex_tools', 'errors': 'codex_errors', 'shell': 'codex_shell',
+              'workflow': 'codex_workflow', 'timeline': 'codex_timeline', 'digest': 'codex_digest',
+              'exchanges': 'codex_exchanges'}
+QUERY_VIEWS = {'last': 'codex_messages', 'tokens': 'codex_tokens', 'goal': 'codex_goal'}
+SESSION_VIEWS = {'overview': 'codex_session_overview', **PATH_VIEWS, **QUERY_VIEWS}
+
+_MATCHES = ParamSpec('matches', 'integer', 'Snippets kept per session by a content search (0 = all)',
+                     3, whole_number, ('codex://sessions/?match=auth&matches=10',
+                                       'codex://sessions/?match=auth&matches=0'),
                      minimum=0, zero_policy='all', answers=(_SEARCH,), cli=CliBinding(('--matches',)))
-_FULL = ParamSpec('full', 'boolean',
-                  'For /exchanges: show complete prompts and answers in text output; JSON already contains full text',
-                  False, boolean_value, ('codex://019e5cc5/exchanges?full', 'codex://019e5cc5/exchanges?full=false'),
-                  answers=('codex_exchanges',), cli=CliBinding(('--full',), action='store_true'))
-_BOUNDS = (_LIST, _SEARCH)
-_STRINGS = {  # name -> (description, the answers that read it, the controls it requires)
-    'filter': ('Metadata filter by title/first-message substring in the SQLite session index; not content search',
-               (_LIST,), ()),
-    'search': ('Full-text search across session JSONL user_message and agent_message payloads', (_SEARCH,), ()),
-    'since': ('Lower-bound date on session updated_at (ISO 8601 or today); filtered/search views only', _BOUNDS,
-              ('filter|search',)),
-    'until': ('Upper-bound date on session updated_at (ISO 8601); filtered/search views only', _BOUNDS,
-              ('filter|search',)),
-    'key': ('Dot-path config key lookup, applied after secret masking', ('codex_config',), ()),
-}
-_FLAGS = {
-    'last': ('Last agent message in the selected session; not session-list pagination', 'codex_messages'),
-    'tokens': ('Per-request token breakdown, one row per API call', 'codex_tokens'),
-    'goal': ('Selected thread goal objective and token budget from goals_1.sqlite', 'codex_goal'),
-}
-FILTER, SEARCH, SINCE, UNTIL, KEY = (
-    ParamSpec(name, 'string', description, None, string_value, answers=answers, requires=requires,
+
+
+def _session_substring(value):
+    """Legacy ``filter=TEXT`` is ``where=session~=TEXT`` (ruling Q2, the Claude precedent): the same case-insensitive
+    substring of the title or first user message."""
+    return f'session~={string_value(value)}'
+
+
+def _session_terms(value):
+    """Codex's where terms: ``session~=TEXT`` only (the closed field ``session``). A term with no text selects no filter,
+    as an empty ``filter`` never did (the empty-term decision is parked for every noun)."""
+    terms = [value] if isinstance(value, str) else value
+    if not isinstance(terms, (list, tuple)) or any(not isinstance(term, str) for term in terms):
+        raise ParamValueError('where requires session~=TEXT expressions')
+    for term in terms:
+        field, operator, _text = term.partition('~=')
+        if term and (field.strip() != 'session' or not operator):
+            raise ParamValueError('where supports session~=TEXT: a case-insensitive substring of the title or first '
+                                  'user message')
+    return [term for term in terms if term.partition('~=')[2]]
+
+
+def _terms(value):
+    """Match terms: one string, or every repeat of a repeated match (rule 19), each a string."""
+    return [string_value(item) for item in value] if isinstance(value, (list, tuple)) else [string_value(value)]
+
+
+def _view_word(name):
+    """Legacy ``?NAME`` (``last``, ``tokens``, ``goal``) is ``view=NAME`` (ruling Q4): bare, empty or a true spelling
+    selects it, and the old ``--NAME`` flag too; a typed False restores omission (BACK-2701). A false or malformed value
+    used to select the answer as well; it now exits 2 naming the view (D18: unsupported spellings reject now)."""
+    def codec(value):
+        if value is False:
+            return None
+        if value is True or value == '':
+            return name
+        try:
+            selects = boolean_value(value)
+        except ValueError:
+            selects = False
+        if selects:
+            return name
+        raise ParamValueError(f'{name}={value!r} does not select an answer: use --view {name}')
+    return codec
+
+
+SEARCH = ParamSpec('search', 'string',
+                   'Deprecated compatibility control; full-text search across session JSONL user_message and '
+                   'agent_message payloads (its JSON query is the string given)', None, string_value,
+                   role='operation', cli=CliBinding(('--search',)))
+# match is read by the content search it selects, not beside a legacy search (that answer reads search's own term).
+MATCH = ParamSpec('match', 'array', 'Match text in session content (user and agent messages) on the catalog; repeat '
+                  'to require every term in each session', None, _terms, uri_codec='percent', repeatable=True,
+                  cli=CliBinding(('--match',)), answers=(f'{_SEARCH}+default',))
+WHERE = replace(where_param('Session predicates, ANDed: session~=TEXT, a case-insensitive substring of the title or '
+                            'first user message in the SQLite session index (not content search). A bare URI key with '
+                            'its operator (?session~=TEXT) is the same filter',
+                            legacy=(LegacySpelling('filter', codec=_session_substring, flag='--filter'),),
+                            convert=_session_terms, default=None, fields=('session',)), answers=(_LIST,))
+_BOUNDS, _BOUNDED_BY = (_LIST, _SEARCH), ('where|search|match',)
+SINCE, UNTIL = (
+    ParamSpec(name, 'string', description, None, string_value, answers=_BOUNDS, requires=_BOUNDED_BY,
               cli=CliBinding((f'--{name}',)))
-    for name, (description, answers, requires) in _STRINGS.items())
-# The selectors a session's answer is picked by, in the order the router honours them: each names the one answer it
-# selects (``answers``), which the predictor reads.
-SELECTING_FLAGS = LAST, TOKENS, GOAL = tuple(
-    ParamSpec(name, 'flag', description, None, legacy_presence_value, answers=(selects,),
-              cli=CliBinding((f'--{name}',), action='store_true'))
-    for name, (description, selects) in _FLAGS.items())
+    for name, description in (
+        ('since', 'Lower-bound date on session updated_at (ISO 8601 or today); filtered/search views only'),
+        ('until', 'Upper-bound date on session updated_at (ISO 8601); filtered/search views only')))
+KEY = ParamSpec('key', 'string', 'Dot-path config key lookup, applied after secret masking', None, string_value,
+                answers=('codex_config',), cli=CliBinding(('--key',)))
+VIEW = ParamSpec('view', 'string', 'A session answer: ' + ', '.join(SESSION_VIEWS) + '; a path view (/tools) is '
+                 'the same selection', None, string_value, choices=tuple(SESSION_VIEWS),
+                 role='operation', cli=CliBinding(('--view',)),
+                 legacy=tuple(LegacySpelling(name, codec=_view_word(name), flag=f'--{name}', flag_value=True)
+                              for name in QUERY_VIEWS))
+DETAIL = ParamSpec('detail', 'string', 'For /exchanges: full shows complete prompts and answers in text output (JSON '
+                   'already contains full text); normal shows previews', None, string_value, choices=('normal', 'full'),
+                   cli=CliBinding(('--detail',)), answers=('codex_exchanges',),
+                   legacy=(LegacySpelling('full', codec=legacy_switch('full', 'full', 'normal'), flag='--full',
+                                          flag_value=True),))
 # The answers that hold a list of rows (CodexAdapter.BUDGET_LIST_FIELD): the shared --limit/--offset page them, and the
 # legacy --head/--tail/--range slice them (ruling Q6; COMMAND_MODEL Caps: --limit 0 is uncapped).
 PAGE_FIELDS = {
@@ -59,7 +119,7 @@ OFFSET = ParamSpec('offset', 'integer', 'Answer rows of a list answer skipped be
                    cli=CliBinding(('--offset',)), answers=_PAGED)
 # --head/--tail/--range slice the rows of every list answer today, after the URI or on the subcommand: flag-only legacy
 # modifiers until the cut (their notes are the flag:codex.<flag> rows); --check/--lint never changed an answer.
-PARAM_SPECS = (FILTER, SEARCH, SINCE, UNTIL, KEY, *SELECTING_FLAGS, _MATCHES, _FULL, LIMIT, OFFSET,
+PARAM_SPECS = (WHERE, SEARCH, MATCH, SINCE, UNTIL, KEY, VIEW, DETAIL, _MATCHES, LIMIT, OFFSET,
                *legacy_slices(head=_PAGED, tail=_PAGED, range=_PAGED), legacy_check())
 
 

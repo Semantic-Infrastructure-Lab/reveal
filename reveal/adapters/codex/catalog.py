@@ -95,7 +95,7 @@ def answer_requirement_error(adapter, result, prior_facts):
         return 'Codex catalog answer changed its database source identity'
     if result.get('meta', {}).get('session_catalog') != expected['meta']['session_catalog']:
         return 'Codex catalog answer changed its acquisition decisions'
-    for key in ('error', 'filter', 'since', 'until'):
+    for key in ('error', 'where', 'since', 'until'):
         if (key in result) != (key in expected) or result.get(key) != expected.get(key):
             return 'Codex catalog answer changed its source diagnostic or selection receipt'
     rows, total = result.get('sessions'), result.get('total')

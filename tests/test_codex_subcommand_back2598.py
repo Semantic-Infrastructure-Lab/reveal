@@ -42,18 +42,20 @@ def _answer(doc):
     return doc
 
 
-# (subcommand argv after `codex`, the same request as a URI)
+# (subcommand argv after `codex`, the same request as a URI), in the canonical spelling (the legacy words and their
+# old flags answer as these: tests/test_codex_vocabulary_back2618.py)
 PAIRS = [
     ([], 'codex://'),
     (['sessions'], 'codex://sessions'),
-    (['sessions', '--search', 'auth', '--matches', '1'], 'codex://sessions/?search=auth&matches=1'),
-    (['sessions', '--filter', 'auth', '--since', '2020-01-01', '--until', 'today'],
-     'codex://sessions/?filter=auth&since=2020-01-01&until=today'),
+    (['sessions', '--match', 'auth', '--matches', '1'], 'codex://sessions/?match=auth&matches=1'),
+    (['sessions', '--where', 'session~=auth', '--since', '2020-01-01', '--until', 'today'],
+     'codex://sessions/?where=session~=auth&since=2020-01-01&until=today'),
     ([S], f'codex://{S}'),
-    ([S, '--last'], f'codex://{S}?last'),
-    ([S, '--tokens'], f'codex://{S}?tokens'),
-    ([S, '--goal'], f'codex://{S}?goal'),
-    ([f'{S}/exchanges', '--full'], f'codex://{S}/exchanges?full'),
+    ([S, '--view', 'last'], f'codex://{S}?view=last'),
+    ([S, '--view', 'tokens'], f'codex://{S}?view=tokens'),
+    ([S, '--view', 'goal'], f'codex://{S}?view=goal'),
+    ([S, '--view', 'tools'], f'codex://{S}/tools'),
+    ([f'{S}/exchanges', '--detail', 'full'], f'codex://{S}/exchanges?detail=full'),
     ([f'{S}/messages', '--limit', '2', '--offset', '1'], f'codex://{S}/messages?limit=2&offset=1'),
     (['config', '--key', 'model'], 'codex://config?key=model'),
     (['info'], 'codex://info'),
@@ -69,7 +71,7 @@ def test_the_subcommand_answers_as_the_uri(codex, argv, uri):
     assert _answer(cli_doc) == _answer(url_doc)
 
 
-@pytest.mark.parametrize('argv,uri', [PAIRS[2], PAIRS[5]], ids=['search', 'last'])
+@pytest.mark.parametrize('argv,uri', [PAIRS[2], PAIRS[5]], ids=['match', 'view last'])
 def test_text_output_matches(codex, argv, uri):
     from conftest import without_request_note_lines
     cli = _run_reveal_direct('codex', *argv)
@@ -79,8 +81,8 @@ def test_text_output_matches(codex, argv, uri):
 
 
 def test_the_typed_api_noun_form_answers_as_the_uri(codex):
-    noun = api.query('codex', 'sessions', search='auth', matches=1)
-    uri = api.query('codex://sessions/', search='auth', matches=1)
+    noun = api.query('codex', 'sessions', match='auth', matches=1)
+    uri = api.query('codex://sessions/', match='auth', matches=1)
     assert noun['type'] == 'codex_content_search'
     assert _answer(noun) == _answer(uri)
 
@@ -88,7 +90,7 @@ def test_the_typed_api_noun_form_answers_as_the_uri(codex):
 def test_mcp_runs_the_subcommand(codex):
     pytest.importorskip('mcp')
     from reveal import mcp_server
-    answer = json.loads(mcp_server.reveal_run(['codex', 'sessions', '--search', 'auth', '--format', 'json']))
+    answer = json.loads(mcp_server.reveal_run(['codex', 'sessions', '--match', 'auth', '--format', 'json']))
     assert answer['type'] == 'codex_content_search' and [row['id'] for row in answer['sessions']] == [S]
 
 

@@ -84,7 +84,7 @@ def _render_codex_exchanges(result: dict) -> None:
         print(f"[{ts}]" + ('  [rolled back -- the user undid this turn]' if ex.get('rolled_back') else ''))
         if not full and len(prompt) > 300:
             print(f"Q: {prompt[:300]}")
-            print(f"  ... ({len(prompt) - 300} more chars, use ?full for complete text)")
+            print(f"  ... ({len(prompt) - 300} more chars, use --detail full for complete text)")
         else:
             print(f"Q: {prompt}")
 
@@ -94,7 +94,7 @@ def _render_codex_exchanges(result: dict) -> None:
         else:
             if not full and len(answer) > 600:
                 print(f"A: {answer[:600]}")
-                print(f"  ... ({len(answer) - 600} more chars, use ?full for complete text)")
+                print(f"  ... ({len(answer) - 600} more chars, use --detail full for complete text)")
             else:
                 print(f"A: {answer}")
         print()

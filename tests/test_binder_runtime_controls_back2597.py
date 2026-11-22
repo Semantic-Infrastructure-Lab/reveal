@@ -17,19 +17,21 @@ def _presence(specs):
 
 
 def test_the_presence_flags_derive_from_the_declarations():
-    """The derived set is each noun's former hand table."""
-    assert _presence(CODEX_SPECS) == {'last', 'tokens', 'goal'}
+    """The derived set is each noun's former hand table. Codex's were last, tokens and goal; since BACK-2618 they are
+    legacy words of view (their codec selects the view, and a typed False is omitted), so Codex declares none."""
+    assert _presence(CODEX_SPECS) == set()
     assert _presence(CLAUDE_SPECS) == set(CLAUDE_PRESENCE)
 
 
 def test_none_and_a_presence_flag_given_off_are_absent():
-    bound = QueryParams({'last': False, 'tokens': True, 'search': None, 'filter': '', 'full': False, 'matches': 0})
-    assert dict(runtime_controls(CODEX_SPECS, bound).peek_items()) == {
-        'tokens': True, 'filter': '', 'full': False, 'matches': 0}  # a boolean's False and a zero stay given
+    bound = QueryParams({'tokens': False, 'summary': True, 'search': None, 'project': '', 'patches': False,
+                         'limit': 0})
+    assert dict(runtime_controls(CLAUDE_SPECS, bound).peek_items()) == {
+        'summary': True, 'project': '', 'patches': False, 'limit': 0}  # another codec's False and a zero stay given
 
 
 def test_a_plain_mapping_is_accepted():
-    assert dict(runtime_controls(CODEX_SPECS, {'goal': False, 'key': 'model'}).peek_items()) == {'key': 'model'}
+    assert dict(runtime_controls(CLAUDE_SPECS, {'tokens': False, 'key': 'model'}).peek_items()) == {'key': 'model'}
 
 
 def test_walking_the_bound_request_reads_none_of_its_controls():

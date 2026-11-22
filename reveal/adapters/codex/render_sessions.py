@@ -1,13 +1,14 @@
 """Session list and overview renderers for the Codex adapter."""
+from ...utils.match_terms import term_label
 
 
 def _render_codex_session_list(result: dict) -> None:
     total = result.get('total', 0)
     sessions = result.get('sessions', [])
-    filter_term = result.get('filter')
+    where = result.get('where')
     header = f"Codex Sessions: {total} total"
-    if filter_term:
-        header += f" | filter: {filter_term!r}"
+    if where:
+        header += f" | where: {' AND '.join(where)}"
     print(header)
     print()
     if not sessions:
@@ -27,7 +28,7 @@ def _render_codex_session_list(result: dict) -> None:
 def _render_codex_content_search(result: dict) -> None:
     sessions = result.get('sessions', [])
     total = result.get('total', len(sessions))
-    query = result.get('query', '')
+    query = term_label(result.get('query'))  # the legacy search's string, or --match's terms joined by AND
     print(f"Codex Content Search: {total} session(s) matching {query!r}")
     print()
     if not sessions:

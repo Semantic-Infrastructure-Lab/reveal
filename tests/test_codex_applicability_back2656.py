@@ -9,6 +9,11 @@ config's; ``full`` is the paired exchanges'. A control on another answer is an i
 message, on the URI, the URI with a flag and ``api.query``. Before, each answered: the ledger noted most of them,
 exit 0; Codex printed its own "Unknown query param 'full' ... ignored"; ``filter`` beside ``search`` was dropped with
 no word at all. The predictor named every resource a session overview; it now names the answer the path selects.
+
+Since the vocabulary step (BACK-2618, rulings Q1-Q4) ``filter`` is ``where``'s legacy word, ``full`` ``detail``'s, and
+``last``/``tokens``/``goal`` ``view``'s; a refusal names the control (its retirement note names the old spelling). The
+selectors ``view`` and the legacy ``search`` are operations, judged against the answer the path selects: beside another
+one they are two answers (exit 2 naming both), and the path wins the prediction.
 """
 import json
 
@@ -44,18 +49,14 @@ def _unread(doc):
 
 @pytest.mark.parametrize('argv,control,answer', [
     (('codex://?key=model',), 'key', 'codex_session_list, default'),                  # the ledger's note before
-    (('codex://?search=auth&filter=auth',), 'filter', 'codex_content_search, default'),  # silent before
+    (('codex://?search=auth&filter=auth',), 'where', 'codex_content_search, search'),  # silent before
     (('codex://?filter=auth&matches=1',), 'matches', 'codex_session_list, default'),
-    (('codex://?last',), 'last', 'codex_session_list, default'),
-    ((f'codex://{S}?search=auth',), 'search', 'codex_session_overview, default'),
-    ((f'codex://{S}/messages?full',), 'full', 'codex_messages, default'),             # its own warning before
-    ((f'codex://{S}/exchanges?full&last',), 'full', 'codex_messages, default'),       # last selects the messages
-    ((f'codex://{S}?last&tokens',), 'tokens', 'codex_messages, default'),
-    ((f'codex://{S}?tokens&goal',), 'goal', 'codex_tokens, default'),
+    ((f'codex://{S}/messages?full',), 'detail', 'codex_messages, default'),           # its own warning before
+    ((f'codex://{S}?last&full',), 'detail', 'codex_messages, view'),                  # last selects the messages
+    ((f'codex://{S}?view=tokens&match=x',), 'match', 'codex_tokens, view'),
     ((f'codex://{S}/tools?until=2030-01-01',), 'until', 'codex_tools, default'),
     (('codex://config?since=2020-01-01',), 'since', 'codex_config, default'),
     (('codex://info?key=model',), 'key', 'codex_info, default'),
-    (('codex://info?last',), 'last', 'codex_info, default'),
     ((f'codex://{S}/messages', '--since', '2020-01-01'), 'since', 'codex_messages, default'),  # URI and a flag
 ])
 def test_codex_refuses_a_control_its_answer_does_not_read(codex, argv, control, answer):
@@ -72,25 +73,31 @@ def test_codex_catalog_bounds_require_a_filter_or_a_search(codex, argv):
     the whole list before, with the ledger's note)."""
     run, _doc = _run(*argv)
     assert run.returncode == 2, (run.returncode, run.stderr)
-    assert 'requires filter or search' in run.stderr, run.stderr
+    assert 'requires where or search or match' in run.stderr, run.stderr
 
 
-@pytest.mark.parametrize('resource,answer', [('memories', 'codex_memories'), ('memories/pipeline',
-                                                                         'codex_memories_pipeline'),
-                                             ('rules', 'codex_rules'), ('skills', 'codex_skills'),
-                                             ('plugins', 'codex_plugins')])
-def test_codex_refuses_a_flag_on_a_named_resource_that_selects_its_own_answer(codex, resource, answer):
-    """A named resource answers itself whatever last says (predicted a session's messages before, so last went unread
-    with the ledger's note). The refusal is an invalid request, exit 2, like every applicability refusal, although
-    these resources have no execution facts on the generic route (which exits 1 for its other construction errors)."""
-    run, _doc = _run(f'codex://{resource}?last')
+@pytest.mark.parametrize('argv,names', [
+    (('codex://?last',), ('last', 'codex://)')),
+    ((f'codex://{S}?search=auth',), ('search', f'codex://{S}')),
+    ((f'codex://{S}/exchanges?full&last',), ('last', 'exchanges')),
+    ((f'codex://{S}?last&tokens',), ('last', 'tokens')),
+    ((f'codex://{S}?tokens&goal',), ('tokens', 'goal')),
+    (('codex://info?last',), ('last', 'codex://info')),
+    *(((f'codex://{resource}?last',), ('last', f'codex://{resource}'))
+      for resource in ('memories', 'memories/pipeline', 'rules', 'skills', 'plugins')),
+])
+def test_codex_refuses_two_answer_selections(codex, argv, names):
+    """A selector beside a path, or another selector, that picks another answer (ruling Q3): exit 2 naming both. A
+    named resource answers itself, so last there selected nothing before but was unread with the ledger's note (exit 0);
+    these resources have no execution facts on the generic route, yet the refusal is an invalid request, exit 2."""
+    run, _doc = _run(*argv)
     assert run.returncode == 2, (run.returncode, run.stderr)
-    assert f"control 'last' is not read by this answer ({answer}, default" in run.stderr, run.stderr
+    assert all(name in run.stderr for name in names), run.stderr
 
 
 def test_codex_api_refuses_the_same_request(codex):
     from reveal import api
-    with pytest.raises(RequestValidationError, match=r"control 'full' is not read by this answer \(codex_messages"):
+    with pytest.raises(RequestValidationError, match=r"control 'detail' is not read by this answer \(codex_messages"):
         api.query(f'codex://{S}/messages', full=True)
 
 
@@ -103,7 +110,10 @@ def test_codex_api_refuses_the_same_request(codex):
     f'codex://{S}?last',
     f'codex://{S}?tokens',
     f'codex://{S}?goal',
-    f'codex://{S}/tools?last',  # last selects the last message on any session resource
+    f'codex://{S}?view=tools',
+    f'codex://{S}/tools?view=tools',  # the path's view named again is one selection
+    'codex://sessions?match=auth&since=2020-01-01',
+    'codex://sessions?where=session~=auth',
     'codex://config?key=model',
     'json://rows.json?limit=1',  # a sibling noun's reading answer, unchanged
 ])
@@ -117,7 +127,9 @@ def test_codex_answers_where_its_controls_are_read(codex, uri):
 @pytest.mark.parametrize('resource,query,expected', [
     ('.', '', 'codex_session_list'), ('sessions', 'search=auth', 'codex_content_search'),
     (S, '', 'codex_session_overview'), (f'{S}/tools', '', 'codex_tools'), (f'{S}/exchanges', '', 'codex_exchanges'),
-    (f'{S}/message/0', '', 'codex_message'), (S, 'last', 'codex_messages'), (f'{S}/tools', 'tokens', 'codex_tokens'),
+    (f'{S}/message/0', '', 'codex_message'), (S, 'last', 'codex_messages'), (S, 'tokens', 'codex_tokens'),
+    (f'{S}/tools', 'tokens', 'codex_tools'),  # two selections: refused at construction, the path names the prediction
+    (S, 'view=tools', 'codex_tools'), ('sessions', 'match=auth', 'codex_content_search'),
     (S, 'goal', 'codex_goal'), ('config', '', 'codex_config'), ('info', '', 'codex_info'),
     ('memories', '', 'codex_memories'), ('memories/pipeline', '', 'codex_memories_pipeline'),
     ('rules', '', 'codex_rules'), ('skills', '', 'codex_skills'), ('plugins', '', 'codex_plugins'),

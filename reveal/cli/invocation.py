@@ -506,6 +506,18 @@ RETIREMENTS: Dict[str, Retirement] = {
         '--detail full on a supported expanding view; unsupported views reject', standalone=True),
     'param:claude.raw': Retirement('claude ?raw',
         '--view messages or --view prompts with --detail raw; canonical raw also expands the text display', standalone=True),
+    # Codex vocabulary (BACK-2618, rulings Q1-Q4): filter, full and last/tokens/goal answer exactly as their
+    # replacements; search answers as --match except that its JSON query stays a string (match echoes a list of terms),
+    # so it is a standalone legacy operation until the cut. Each old flag of the codex subcommand is the same spelling.
+    'param:codex.filter': Retirement('codex ?filter=TEXT (--filter TEXT)',
+                                     "--where 'session~=TEXT', the same title or first-message substring"),
+    'param:codex.search': Retirement('codex ?search=TEXT (--search TEXT)',
+                                     '--match TEXT, the same content search, whose JSON query is a list of terms; '
+                                     'repeated terms AND per session', standalone=True),
+    'param:codex.full': Retirement('codex ?full (--full)', '--detail full'),
+    'param:codex.last': Retirement('codex ?last (--last)', '--view last'),
+    'param:codex.tokens': Retirement('codex ?tokens (--tokens)', '--view tokens'),
+    'param:codex.goal': Retirement('codex ?goal (--goal)', '--view goal'),
     'param:ast.calls': Retirement('ast://?calls=', "reveal calls <path> --callers NAME, or --grep 'PATTERN' for a pattern", standalone=True),
     # Different words for one control are legacy spellings with a note (COMMAND_MODEL "Different words", BACK-2654);
     # Git type is D18-deferred and stays note-free. AST show is --view (D20, BACK-2613).
