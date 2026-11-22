@@ -143,4 +143,4 @@ def test_registered_schema_preserves_positional_fields_and_adds_typed_controls()
 
 def test_registered_effects_rejects_directory_as_authored_request_error(project):
     answer = _sdk({**_arguments(project, {}), 'path': str(project.parent)})
-    assert answer.is_error and 'code file' in _text(answer)
+    assert answer.is_error and 'element views read one file' in _text(answer)  # the resource refusal (BACK-2627 E13)

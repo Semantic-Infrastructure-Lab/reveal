@@ -12,9 +12,10 @@ spelling, and a later ``view=vars`` is an added choice.
 """
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Tuple
 
-from .errors import RequestValidationError
+from .errors import NavRequestValidationError, RequestValidationError
 from .utils.query_binding import (bind_prepared_params, bind_resource_path, boolean_value, prepare_declared_params,
                                   reject_two_answers, reject_unread_controls, string_value)
 from .utils.query_parser import CliBinding, LegacySpelling, ParamSpec, ParamValueError, ResourceSpec, line_range, \
@@ -59,10 +60,17 @@ def _word(stands_for: str) -> Callable[[Any], Optional[str]]:
     return codec
 
 
+def parse_flow_selectors(value: str) -> Tuple[str, ...]:
+    """The legacy ``--flow=SEL`` value: a nonempty comma union of if, loop and try, each once, in the order given."""
+    parts = tuple(part.strip() for part in value.split(','))
+    if any(part not in FLOW_KINDS for part in parts):
+        raise ValueError('flow selectors must be nonempty comma-separated if, loop or try values')
+    return tuple(dict.fromkeys(parts))
+
+
 def _flow_selection(raw: Any) -> Optional[Tuple[str, ...]]:
     """Legacy ``--flow[=SEL]`` as kinds: bare (the flag's ``()``, or presence True) is every kind, so no ``--kind``;
     ``SEL`` is a comma union of if, loop and try (``parse_flow_selectors``'s rule). Off is not given."""
-    from .cli.invocation import parse_flow_selectors  # noqa: I006 -- deferred: cli imports this module
     items = raw if isinstance(raw, list) else [raw]
     if all(item is False or item is None for item in items):
         return None
@@ -103,6 +111,16 @@ def hop_depth(value: Any) -> int:
     if not 1 <= hops <= 5:
         raise ParamValueError(f'depth must be 1..5 graph hops with --transitive, got {value!r}')
     return hops
+
+
+def nesting_depth(value: Any) -> int:
+    """``--nesting-depth``: structural depth, a positive integer. A legacy structural flag's ``--depth`` binds here, so
+    the refusal names both spellings."""
+    depth = whole_number(value)
+    if depth < 1:
+        raise ParamValueError(f'nesting-depth (--depth on a legacy structural flag) must be a positive integer, '
+                              f'got {value!r}')
+    return depth
 
 
 def legacy_hop_depth(value: Any) -> int:
@@ -164,7 +182,7 @@ LEGACY_DEPTH = ParamSpec('legacy-depth', 'integer', 'Legacy: the transitive --de
                                                     'clamped to 1..5', None, legacy_hop_depth,
                          answers=('view=boundary', 'view=effects'), requires=('transitive=true',))
 NESTING_DEPTH = ParamSpec('nesting-depth', 'integer', 'Structural depth of the flow view and of --in-loops (default 3)',
-                          3, whole_number, minimum=1, cli=CliBinding(('--nesting-depth',), metavar='N'),
+                          3, nesting_depth, minimum=1, cli=CliBinding(('--nesting-depth',), metavar='N'),
                           answers=('view=flow', 'view=effects'), requires=('view=flow|in-loops=true',))
 RANGE = ParamSpec('range', 'string', 'Lines START-END of the element (1-indexed; START- is open-ended)', None,
                   line_range, cli=CliBinding(('--range',)), answers=_SELECTED_LINES,
@@ -302,21 +320,30 @@ def bind_element_request(source: Mapping[str, Any], spelled: Optional[Mapping[st
     ``declared.typed_source``) and MCP ``reveal_nav`` (a typed source it builds). None when the source gives no element
     control. Otherwise: the path must be a file (a directory refuses every element view, X2/E13), the controls bind
     through the declarations (legacy flags translated, conflicting values, one answer per request) and each given
-    control must be read by the selected answer or meet what it requires (Applicability, D10). Every refusal is a
-    RequestValidationError (exit 2) naming what the request gave. *element* None is the whole file (flat mode)."""
+    control must be read by the selected answer or meet what it requires (Applicability, D10). Every refusal is the
+    navigation owner's NavRequestValidationError (an invalid request, exit 2) naming what the request gave. *element* None is the whole file (flat mode)."""
     if not element_request_given(source):
         return None
+    # An omitted control (None) or a switch given off (False) is not given, whichever caller built the source (the
+    # CLI's generated flags omit them; a library namespace or MCP may carry them).
+    source = {key: value for key, value in source.items() if _given(value)}
     try:
-        bind_resource_path(ELEMENT_RESOURCE, path, transport='typed')
-    except RequestValidationError as exc:
-        raise RequestValidationError(f'{exc}; {_ONE_FILE}') from exc
-    try:
-        params = prepare_declared_params(ELEMENT_VIEW_SPECS, source, 'typed', spelled=spelled)
-        params = bind_prepared_params(ELEMENT_VIEW_SPECS, params, transport='typed')
-    except RequestValidationError:
+        return _bound(source, spelled, path, element)
+    except NavRequestValidationError:
         raise
-    except ValueError as exc:  # a conflicting spelling or a legacy value the codec rejects: the same invalid request
-        raise RequestValidationError(str(exc)) from exc
+    except ValueError as exc:  # the binder's refusals, a conflicting spelling, a legacy value a codec rejects
+        raise NavRequestValidationError(str(exc)) from exc
+
+
+def _bound(source: Mapping[str, Any], spelled: Optional[Mapping[str, str]], path: str,
+           element: Optional[str]) -> ElementRequest:
+    try:  # a missing path is the source read's failure to report (NavSourceFailure), not a kind refusal
+        bind_resource_path(ELEMENT_RESOURCE, path, transport='typed', validate_kind=Path(path).exists())
+    except RequestValidationError as exc:
+        raise NavRequestValidationError(f'{exc}; {_ONE_FILE}') from exc
+    params = prepare_declared_params(ELEMENT_VIEW_SPECS, source, 'typed', spelled=spelled)
+    params = bind_prepared_params(ELEMENT_VIEW_SPECS, params, transport='typed')
+    params._spelled = dict(spelled or {})  # key -> the flag that carried it, for a diagnostic naming what was typed
     reject_two_answers(ELEMENT_VIEW_SPECS, params)
     reject_unread_controls(ELEMENT_VIEW_SPECS, params, lambda: ELEMENT_ANSWER)
     return _request(params, path, element)

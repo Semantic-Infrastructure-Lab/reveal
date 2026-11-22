@@ -530,95 +530,19 @@ def _add_base_path_option(parser):
                         help='Point claude:// at a different Claude install — pass the projects dir and all paths (history, config, plans) derive from it (e.g., --base-path /mnt/wsl/.claude/projects)')
 
 
-def _flow_selectors(value: str) -> tuple[str, ...]:
-    from .invocation import parse_flow_selectors
-    try:
-        return parse_flow_selectors(value)
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError(str(exc)) from None
-
-
 def _add_code_analysis_options(parser: argparse.ArgumentParser) -> None:
-    """Add element-scoped deep analysis flags (nav flags).
-
-    All flags in this group require a named element or :LINE range as the
-    second positional argument. Start with --flow or --boundary; add
-    --format json for machine-readable output.
-    """
-    parser.add_argument('--flow', nargs='?', const=(), type=_flow_selectors, metavar='SELECTORS',
-                        help='Recognized code skeleton; optional if,loop,try union in source order. '
-                             'Use target-first bare flow or equals-form selectors: '
-                             'reveal file.py work --flow; reveal file.py work --flow=if,loop')
+    """The element views' flags, generated from their declarations (``nav_params.ELEMENT_VIEW_SPECS``, BACK-2627 X1):
+    ``--view`` and its modifiers, the standalone legacy operations and every old flag. They need a named element or a
+    :LINE range as the second positional, or answer for the whole file. The main parser keeps its own ``--depth``,
+    ``--range``, ``--head``, ``--tail``, ``--name``, ``--grep``, ``--type`` and ``--sort`` (other path-read answers read
+    them), so it must own them before this runs; ``--outline`` stays the file and Markdown outline."""
+    from ..nav_params import ELEMENT_VIEW_SPECS  # noqa: I006
+    from ..utils.query_binding import add_declared_arguments
     parser.add_argument('--outline', action='store_true',
                         help='File-level hierarchy or Markdown section headings. '
-                             'Code-element outline is deprecated; use --flow. '
-                             'Example: reveal file.py --outline; reveal file.py myfunc --flow')
-    parser.add_argument('--scope', action='store_true',
-                        help='Show ancestor scope chain for a line (use with :LINE syntax, e.g., reveal file.py :123 --scope)')
-    parser.add_argument('--around', nargs='?', const=20, type=int, metavar='N',
-                        help='Show ±N lines centered on a target line with a pointer '
-                             '(e.g., reveal file.py :123 --around  or  reveal file.py :123 --around 10; default N=20)')
-    parser.add_argument('--boundary', action='store_true',
-                        help='Show boundary contract: INPUTS (undefined reads), ENVIRONMENT (superglobal reads), and EFFECTS (classified calls) '
-                             '(e.g., reveal file.php processOrder --boundary  or  reveal file.py myfunc --boundary)')
-    parser.add_argument('--effects', action='store_true',
-                        help='Classified effects; use --in-loops for loop groups or --state for persistent writes')
-    parser.add_argument('--in-loops', action='store_true',
-                        help='With --effects: retain each loop and its classified effects; structural --depth defaults to 3')
-    parser.add_argument('--state', action='store_true',
-                        help='With --effects: detected persistent/shared writes')
-    parser.add_argument('--sideeffects', action='store_true',
-                        help='Deprecated; replaced by --effects. Show classified side effects (db/http/cache/log/file/sleep/hard_stop) in a function or line range '
-                             '(e.g., reveal file.php :477-531 --sideeffects  or  reveal file.py myfunc --sideeffects)')
-    parser.add_argument('--transitive', action='store_true',
-                        help='With --effects (ordinary), legacy --sideeffects or --boundary: follow calls into project-local helper functions (blast-radius/'
-                             'agentic-exposure read) instead of only the entry function\'s own body; combine with --depth to '
-                             'control how many hops (default 2, max 5) '
-                             '(e.g., reveal file.py handle_request --sideeffects --transitive --depth 3)')
-    parser.add_argument('--loopmap', action='store_true',
-                        help='Deprecated; replaced by --flow=loop (recognized loop skeleton)')
-    parser.add_argument('--fanout', action='store_true',
-                        help='Deprecated; replaced by --effects --in-loops. Show each loop paired with its classified side effects (db/http/cache/log/file calls inside it) — '
-                             'for N+1 query checks, per-item HTTP calls, and retry-safety review '
-                             '(e.g., reveal file.py process_batch --fanout  or  reveal file.php :100-500 --fanout --format=json)')
-    parser.add_argument('--statewrites', action='store_true',
-                        help='Deprecated; replaced by --effects --state. Show detected shared-state writes (module globals may be missed): field writes (self.x=, $obj->x=, this.x=) plus '
-                             'cache/db/file/env/session writes — a mutation surface --outputs (local vars) and '
-                             '--sideeffects (calls only) both miss '
-                             '(e.g., reveal file.py process_order --statewrites  or  reveal file.php :1-800 --statewrites)')
-    parser.add_argument('--varflow', type=str, metavar='VAR',
-                        help='Trace reads/writes of a variable within a function or flat file '
-                             '(e.g., reveal file.py myfunc --varflow result  or  reveal file.php :1-2000 --varflow "$errormsg")')
-    parser.add_argument('--keys', type=str, metavar='VAR',
-                        help='Show which keys/properties of a dict/object/array variable are read, written, or used '
-                             'in a condition — the dynamic-shape surface --varflow collapses into generic READ lines '
-                             '(e.g., reveal file.py normalize --keys config  or  reveal file.php :1-500 --keys \'$row\')')
-    parser.add_argument('--cross-calls', action='store_true',
-                        help='Follow a variable across call boundaries within the same module (use with --varflow, '
-                             'e.g., reveal file.py myfunc --varflow result --cross-calls)')
-    parser.add_argument('--narrow', type=str, metavar='VAR',
-                        help='Show how a variable\'s type narrows through control-flow branches, '
-                             'starting from its annotation (e.g., reveal file.py myfunc --narrow x)')
-    parser.add_argument('--callsites', '--calls', dest='calls', nargs='?', const='FULL', type=str, metavar='START-END',
-                        help='Show call sites in a line range (e.g., reveal file.py myfunc --callsites 89-120). '
-                             '--calls is deprecated; use --callsites.')
-    parser.add_argument('--inputs', '--deps', dest='deps', action='store_true',
-                        help='Show candidate inputs to a line range (may include builtins/local bindings; review before extracting params) '
-                             '(e.g., reveal file.py myfunc --inputs). --deps is deprecated; use --inputs.')
-    parser.add_argument('--outputs', '--mutations', '--writes', dest='mutations', action='store_true',
-                        help='Show read-after-write hazards: variables written in a range and read after (potential return values). '
-                             '(e.g., reveal file.py :20-30 --outputs). --mutations and --writes are deprecated; use --outputs.')
-    parser.add_argument('--returns', action='store_true',
-                        help='Deprecated; replaced by --exits (static exit sites and recorded gates)')
-    parser.add_argument('--ifmap', action='store_true',
-                        help='Deprecated; replaced by --flow=if (including switch/case)')
-    parser.add_argument('--catchmap', action='store_true',
-                        help='Deprecated; replaced by --flow=try (including handlers/finally)')
-    parser.add_argument('--exits', action='store_true',
-                        help='List static exit sites and their recorded syntactic gates in a selection '
-                             '(e.g., reveal file.php :657-2200 --exits  or  reveal file.py myfunc --exits)')
-    parser.add_argument('--flowto', action='store_true',
-                        help='Deprecated; replaced by --exits for static sites; the reachability verdict is retired')
+                             'Code-element outline is deprecated; use --view flow. '
+                             'Example: reveal file.py --outline; reveal file.py myfunc --view flow')
+    add_declared_arguments(parser, ELEMENT_VIEW_SPECS, None)
 
 
 def _add_markdown_options(parser: argparse.ArgumentParser) -> None:
@@ -866,13 +790,13 @@ def create_argument_parser(
     # ── Code analysis ─────────────────────────────────────────────────────────
     g_analysis = parser.add_argument_group(
         'Code analysis  [element-scoped — use with a named function or :LINE range]\n'
-        '  Start with --flow or --boundary. Add --format json for structured output.\n'
+        '  Start with --view flow or --view boundary. Add --format json for structured output.\n'
         '  Full guide: reveal help://nav')
-    _add_code_analysis_options(g_analysis)
 
     # ── Display ───────────────────────────────────────────────────────────────
     g_display = parser.add_argument_group('Display  [global — tree depth, filtering, layout]')
     _add_display_options(g_display)
+    _add_code_analysis_options(g_analysis)  # after --depth exists: the element declarations reuse the parser's own
 
     # ── Type-aware output ─────────────────────────────────────────────────────
     g_typed = parser.add_argument_group('Type-aware output  [file-specific — --typed, Python containment]')
@@ -928,8 +852,6 @@ def validate_navigation_args(args):
         NavRequestValidationError: If an element view names an empty variable
     """
     from ..errors import NavRequestValidationError
-    from .invocation import normalize_effects_request
-    normalize_effects_request(args)
 
     # Given and empty is not absent: `--varflow ''` used to drop the view and print the element's source.
     for option in ('varflow', 'keys', 'narrow'):

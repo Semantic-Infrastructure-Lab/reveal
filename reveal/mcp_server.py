@@ -555,15 +555,11 @@ def reveal_element(path: str, element: str) -> str:
     return body
 
 
-# Nav flags that take no value (boolean), derived from nav_handlers._NAV_DISPATCH
-# (BACK-457) — new boolean nav flags are genuinely automatically supported now,
-# not just documented as such: this set can no longer drift from the dispatch
-# table it's describing.
+# Nav flags that take no value (boolean), derived from the element declarations (nav_params; BACK-457, BACK-2627):
+# this set cannot drift from what the binder accepts.
 from .nav_handlers import NAV_BOOLEAN_FLAG_NAMES as _NAV_BOOLEAN_FLAGS  # noqa: I006
 
-# Nav flags that require a variable-name flag_value, mapped to an example name
-# for the error message. Collapses what used to be three near-identical
-# copy-pasted elif branches (BACK-457).
+# Nav flags that require a variable-name flag_value, mapped to an example name for the error message (BACK-457).
 _NAV_VAR_NAME_FLAGS = {
     'varflow': 'result',
     'keys': 'config',
@@ -571,31 +567,79 @@ _NAV_VAR_NAME_FLAGS = {
 }
 
 
-def _nav_effects_controls(flag, flag_value, mode, transitive, depth):
-    """Adapt typed controls to the same request the CLI validates."""
-    from .cli.invocation import normalize_effects_request
-
-    if flag != 'effects':
-        if mode is not None or transitive is not False or depth is not None:
-            raise NavRequestValidationError('mode, transitive and depth controls apply only to flag=effects.')
-        return None, None
+def _nav_effects_controls(controls: dict, flag_value, mode, transitive, depth) -> None:
+    """The typed effects controls as the element declarations' own (a switch enters only when on: a typed False is not
+    given): the binder then applies D10's rules, as on the CLI."""
     if flag_value:
         raise NavRequestValidationError('effects does not accept flag_value; use typed mode, transitive and depth controls.')
-    args = _default_args(effects=True, transitive=transitive, depth=depth)
-    request = normalize_effects_request(args, mode=mode)
-    assert request is not None
-    args.in_loops, args.state = request.mode == 'loops', request.mode == 'state'
-    return args, request
+    if type(transitive) is not bool:  # a direct call skips the SDK's strict types
+        raise NavRequestValidationError('effects --transitive must be a boolean.')
+    if depth is not None and type(depth) is not int:
+        raise NavRequestValidationError('effects --depth must be an integer, not a boolean or other value.')
+    if not isinstance(mode, (str, type(None))) or mode not in (None, 'ordinary', 'loops', 'state'):
+        raise NavRequestValidationError('effects mode must be ordinary, loops or state.')
+    if mode in ('loops', 'state'):
+        controls['in-loops' if mode == 'loops' else 'state'] = True
+    if transitive:
+        controls['transitive'] = True
+    if depth is not None:  # structural with loops (D10: positive, default 3), else graph hops (1..5)
+        controls['nesting-depth' if mode == 'loops' else 'depth'] = depth
 
 
-def _nav_invocation(path, element, flag, flag_value, request):
+def _nav_controls(flag, flag_value, mode, transitive, depth) -> dict:
+    """reveal_nav's flag as the element declarations' controls (``nav_params``): a view name selects ``view``, an old
+    word is its legacy key, an operation its own control. Raises NavRequestValidationError for a request the tool
+    shape itself cannot carry; the binder judges the rest."""
+    from .nav_params import ELEMENT_VIEWS, ELEMENT_VIEW_SPECS, parse_flow_selectors
+    from .utils.query_binding import legacy_flag_dests
+
+    if flag != 'effects' and (mode is not None or transitive is not False or depth is not None):
+        raise NavRequestValidationError('mode, transitive and depth controls apply only to flag=effects.')
+    if flag in ELEMENT_VIEWS:
+        controls: dict = {'view': flag}
+        if flag == 'flow' and flag_value:
+            try:
+                controls['kind'] = list(parse_flow_selectors(flag_value))
+            except ValueError as exc:
+                raise NavRequestValidationError(str(exc)) from None
+        if flag == 'effects':
+            _nav_effects_controls(controls, flag_value, mode, transitive, depth)
+        return controls
+    if flag in _NAV_BOOLEAN_FLAGS:
+        if flag == 'outline' or any(flag in legacy_flag_dests(spec) for spec in ELEMENT_VIEW_SPECS):
+            return {flag: True}  # its own legacy key (the contextual outline included)
+        return {next(spec.name for spec in ELEMENT_VIEW_SPECS if flag in spec.spellings): True}
+    if flag in _NAV_VAR_NAME_FLAGS:
+        if not flag_value:
+            raise NavRequestValidationError(
+                f"{flag} requires flag_value (variable name, e.g. '{_NAV_VAR_NAME_FLAGS[flag]}')")
+        return {flag: flag_value}
+    if flag in ('callsites', 'calls'):
+        return {'callsites': flag_value or 'FULL'}
+    if flag == 'around':
+        try:
+            return {'around': int(flag_value) if flag_value else 20}
+        except ValueError:
+            raise NavRequestValidationError(f"around requires an integer flag_value, got '{flag_value}'") from None
+    valid = sorted(_NAV_BOOLEAN_FLAGS | set(_NAV_VAR_NAME_FLAGS) | {'callsites', 'calls', 'around', 'flow'})
+    raise NavRequestValidationError(f"unknown nav flag '{flag}'. Valid flags: {valid}")
+
+
+def _nav_invocation(path, element, flag, flag_value, controls):
     """The CLI equivalent of the controls actually supplied to reveal_nav."""
     from .cli.invocation import Invocation
 
     option = '--' + flag
-    if flag_value and flag not in _NAV_BOOLEAN_FLAGS:
+    if flag_value and flag not in _NAV_BOOLEAN_FLAGS and flag != 'effects':
         option += '=' + flag_value
-    options = request.tokens() if request is not None else [option]
+    options = [option]
+    if flag == 'effects':
+        options = ['--effects', *(['--in-loops'] if controls.get('in-loops') else []),
+                   *(['--state'] if controls.get('state') else []),
+                   *(['--transitive'] if controls.get('transitive') else [])]
+        for name in ('depth', 'nesting-depth'):
+            if name in controls:
+                options += ['--depth', str(controls[name])]
     return Invocation.parse(['reveal', *options, '--', path, element])
 
 
@@ -631,50 +675,28 @@ def reveal_nav(path: str, element: str, flag: str, flag_value: str = '', *,
     Example:
         reveal_nav('app.py', 'process_order', 'boundary')
     """
-    from .file_handler import handle_file  # noqa: I006
+    from .file_handler import element_request_of, handle_file  # noqa: I006
     from .cli.invocation import RetiredSpellingError, invocation_scope, retirement_note
+    from .nav_params import ELEMENT_VIEWS
 
     try:
-        effects_args, request = _nav_effects_controls(flag, flag_value, mode, transitive, depth)
+        controls = _nav_controls(flag, flag_value, mode, transitive, depth)
     except NavRequestValidationError as exc:
         return _tool_failure(str(exc))
-    if effects_args is not None:
-        args = effects_args
-    elif flag == 'flow':
-        from .cli.invocation import parse_flow_selectors
-        try:
-            selectors = parse_flow_selectors(flag_value) if flag_value else ()
-        except ValueError as exc:
-            return _tool_failure(str(exc))
-        args = _default_args(flow=selectors)
-    elif flag in _NAV_BOOLEAN_FLAGS:
-        args = _default_args(**{flag: True})
-    elif flag in _NAV_VAR_NAME_FLAGS:
-        if not flag_value:
-            example = _NAV_VAR_NAME_FLAGS[flag]
-            return _tool_failure(f"{flag} requires flag_value (variable name, e.g. '{example}')")
-        args = _default_args(**{flag: flag_value})
-    elif flag in ('callsites', 'calls'):
-        args = _default_args(calls=flag_value or 'FULL')
-    elif flag == 'around':
-        try:
-            n = int(flag_value) if flag_value else 20
-        except ValueError:
-            return _tool_failure(f"around requires an integer flag_value, got '{flag_value}'")
-        args = _default_args(around=n)
-    else:
-        valid = sorted(_NAV_BOOLEAN_FLAGS | set(_NAV_VAR_NAME_FLAGS) | {'callsites', 'calls', 'around', 'flow'})
-        return _tool_failure(f"unknown nav flag '{flag}'. Valid flags: {valid}")
-
+    args = _default_args(**controls)
     # This tool promises text; REVEAL_FORMAT controls CLI defaults only.
     args.format = 'text'
-    invocation = _nav_invocation(path, element, flag, flag_value, request)
+    invocation = _nav_invocation(path, element, flag, flag_value, controls)
     with _capture_lock, invocation_scope(invocation, retirements_to_stderr=False, form='mcp'):
         try:
-            retirement_note('flag:--' + flag)
+            request = element_request_of(path, element, args)  # the one binder, as the CLI route binds
+            if flag not in ELEMENT_VIEWS:  # the view names' replacement (--view) is not spellable on this tool
+                retirement_note('flag:--' + flag)
         except RetiredSpellingError as exc:
             return _tool_failure(str(exc))
-        return _run_and_capture(handle_file, path, element, False, 'text', args)
+        except NavRequestValidationError as exc:
+            return _tool_failure(str(exc))
+        return _run_and_capture(handle_file, path, element, False, 'text', args, element_request=request)
 
 
 @mcp_tool(annotations=_OPEN_WORLD_READONLY, title='Reveal: URI Query')

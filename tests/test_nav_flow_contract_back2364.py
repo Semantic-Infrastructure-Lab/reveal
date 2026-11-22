@@ -5,7 +5,6 @@ reviewed grammar node names. They are not captured output or an accuracy oracle
 for arbitrary programs. Known omissions are recorded separately from the source
 exit inventory; preserving them does not make them correct.
 """
-from argparse import Namespace
 from contextlib import redirect_stdout
 from io import StringIO
 import json
@@ -16,8 +15,9 @@ import pytest
 from conftest import _run_reveal_direct
 
 from reveal.file_handler import _resolve_func_node
+from reveal.nav_params import ElementRequest
 from reveal.nav_handlers import (
-    _NavCtx, _nav_outline, _nav_branchmap, _nav_loopmap, _nav_exits,
+    _NavCtx, _nav_flow, _nav_exits,
 )
 from reveal.registry import get_analyzer
 from test_conformance_matrix import EXPECTED, LANGUAGES, _sample_path
@@ -176,7 +176,7 @@ def _expected(language, depth=3, bounds=None, keywords=None):
             and (keywords is None or row[1] in keywords)]
 
 
-def _context(language, depth, bounds=None):
+def _context(language, depth, bounds=None, kind=()):
     if language == 'tsx':
         path = Path(__file__).parent / 'fixtures' / 'smoke' / 'tsx' / 'sample.tsx'
         element = 'processOrder'
@@ -185,8 +185,9 @@ def _context(language, depth, bounds=None):
         element = EXPECTED[language]['entry_function']
     analyzer = get_analyzer(str(path))(str(path))
     node, start, end = _resolve_func_node(analyzer, element)
-    args = Namespace(range=bounds, ifmap=False)
-    return _NavCtx(node, element, analyzer, True, args, start, end, depth, analyzer._get_node_text)
+    # The bound flow request (BACK-2627): the selectors are --kind, the structural depth --nesting-depth.
+    request = ElementRequest(path=str(path), element=element, view='flow', kind=kind, nesting_depth=depth, range=bounds)
+    return _NavCtx(node, element, analyzer, True, request, start, end, depth, analyzer._get_node_text)
 
 
 def _answer(ctx, handler):
@@ -199,7 +200,7 @@ def _answer(ctx, handler):
 @pytest.mark.parametrize('language', sorted(ROWS))
 @pytest.mark.parametrize('depth', [1, 3, 8])
 def test_full_named_skeleton_records(language, depth):
-    assert _answer(_context(language, depth), _nav_outline) == _expected(language, depth)
+    assert _answer(_context(language, depth), _nav_flow) == _expected(language, depth)
 
 
 def test_fixture_language_set_is_complete():
@@ -213,10 +214,8 @@ def test_fixture_language_set_is_complete():
     ('loopmap', {'FOR', 'WHILE', 'LOOP', 'DO'}),
 ])
 def test_selectors_keep_full_records_and_order(language, flag, keywords):
-    ctx = _context(language, 3)
-    ctx.args.ifmap = flag == 'ifmap'
-    handler = _nav_loopmap if flag == 'loopmap' else _nav_branchmap
-    assert _answer(ctx, handler) == _expected(language, keywords=keywords)
+    ctx = _context(language, 3, kind=({'ifmap': 'if', 'catchmap': 'try', 'loopmap': 'loop'}[flag],))
+    assert _answer(ctx, _nav_flow) == _expected(language, keywords=keywords)
 
 
 @pytest.mark.parametrize('language', sorted(ROWS))
@@ -224,7 +223,7 @@ def test_selectors_keep_full_records_and_order(language, flag, keywords):
 def test_range_selects_start_lines_without_clipping_spans(language, offset):
     first = ROWS[language][0][3] + offset
     bounds = (first, first)
-    assert _answer(_context(language, 3, bounds), _nav_outline) == _expected(language, bounds=bounds)
+    assert _answer(_context(language, 3, bounds), _nav_flow) == _expected(language, bounds=bounds)
 
 
 @pytest.mark.parametrize('language', sorted(ROWS))
@@ -245,9 +244,7 @@ KNOWN_OMISSIONS = [('cpp', {20}), ('rust', {14, 19})] + (
 @pytest.mark.parametrize('language,missing_lines', KNOWN_OMISSIONS)
 def test_known_skeleton_omissions_are_exits_in_sibling_view(language, missing_lines):
     """Qualification records a disagreement; it does not bless missing exits."""
-    ctx = _context(language, 3)
-    ctx.args.flowto = False
-    exits = _answer(ctx, _nav_exits)
+    exits = _answer(_context(language, 3), _nav_exits)
     assert missing_lines <= {record['line'] for record in exits}
     assert missing_lines.isdisjoint(
         record['line_start'] for record in _expected(language) if record['is_exit']
@@ -258,5 +255,5 @@ def test_known_skeleton_omissions_are_exits_in_sibling_view(language, missing_li
 @pytest.mark.xfail(strict=True, raises=AssertionError,
                    reason='BACK-2364: skeleton omits source exits recognized by sibling view')
 def test_source_exit_sites_should_also_appear_in_skeleton(language, missing_lines):
-    records = _answer(_context(language, 3), _nav_outline)
+    records = _answer(_context(language, 3), _nav_flow)
     assert missing_lines <= {record['line_start'] for record in records if record['is_exit']}

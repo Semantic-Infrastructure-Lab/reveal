@@ -9,7 +9,7 @@ from reveal.core.treesitter_compat import _zero_arg, ts_parse, tree_root
 from reveal.core import node_children
 from tree_sitter_language_pack import get_parser
 from test_nav_flow_contract_back2364 import ROWS, _context, _answer
-from reveal.nav_handlers import _nav_outline
+from reveal.nav_handlers import _nav_flow
 
 pytestmark = pytest.mark.conformance
 
@@ -27,7 +27,7 @@ def _python_outline(source, depth):
 def test_depth_one_retains_all_logical_peer_records(language):
     expected = [dict(zip(('type', 'keyword', 'label', 'line_start', 'line_end', 'depth', 'is_exit'), row))
                 for row in ROWS[language] if row[5] == 1]
-    assert _answer(_context(language, 1), _nav_outline) == expected
+    assert _answer(_context(language, 1), _nav_flow) == expected
 
 
 @pytest.mark.parametrize('depth,expected', [

@@ -77,18 +77,17 @@ def test_unknown_measurement_is_not_a_structure_only_denial(python_file, monkeyp
     assert json.loads(result.stdout)['findings'] == []
 
 
-def test_depth_is_not_validated_for_an_analysis_that_does_not_use_it(python_file):
-    result = _run_reveal_direct(python_file, 'work', '--exits', '--depth', '0', '--format', 'json')
-    assert result.returncode == 0, result.stderr
-    assert json.loads(result.stdout)['findings'] == []
+def test_depth_on_an_analysis_that_does_not_read_it_is_refused(python_file):
+    """BACK-2627 E7: --exits reads no depth, so --depth beside it is an invalid request naming it (it was ignored)."""
+    result = _run_reveal_direct(python_file, 'work', '--exits', '--depth', '2', '--format', 'json')
+    assert result.returncode == 2 and 'depth' in result.stderr and 'not read by this answer' in result.stderr
 
 
-def test_depth_validation_follows_the_selected_handler(python_file):
-    # --exits wins over loopmap in dispatch order.
-    result = _run_reveal_direct(python_file, 'work', '--exits', '--loopmap', '--depth', '0',
-                                '--format', 'json')
-    assert result.returncode == 0, result.stderr
-    assert json.loads(result.stdout)['meta']['flag'] == 'exits'
+def test_two_views_are_refused_naming_both(python_file):
+    """BACK-2627 E6/D2: --exits and --loopmap are two values of the one view control (exits won by dispatch order)."""
+    result = _run_reveal_direct(python_file, 'work', '--exits', '--loopmap', '--depth', '0', '--format', 'json')
+    assert result.returncode == 2
+    assert 'conflicting spellings' in result.stderr and '--exits' in result.stderr and '--loopmap' in result.stderr
 
 
 def test_default_structural_depth_is_still_three(python_file):

@@ -84,25 +84,21 @@ from .nav_handlers import (  # noqa: F401
     _parse_line_range,
     _nav_json,
     _NavCtx,
-    _nav_outline,
     _nav_flow,
     _nav_varflow,
     _nav_narrow,
     _nav_calls,
-    _nav_branchmap,
     _nav_exits,
     _nav_deps,
     _nav_mutations,
     _nav_sideeffects,
-    _nav_loopmap,
     _nav_fanout,
     _nav_statewrites,
     _nav_keys,
-    _nav_returns,
     _nav_boundary,
     _nav_scope,
     _nav_around,
-    _NAV_DISPATCH,
+    ELEMENT_HANDLERS,
 )
 from reveal.utils.lines import split_lines
 
@@ -188,45 +184,26 @@ def _build_file_cli_overrides(args: Optional['Namespace']) -> dict:
     return cli_overrides
 
 
-def _has_nav_flag(args) -> bool:
-    """Return True if any sub-function progressive disclosure flag is set."""
-    # scope and around are handled before _NAV_DISPATCH in _dispatch_nav
-    return (
-        getattr(args, 'scope', False)
-        or getattr(args, 'around', None) is not None
-        or any(check(args) for _, check, _ in _NAV_DISPATCH)
-    )
-
-
-def _effects_args(args, path, show_meta=False):
-    """Forward a validated effects request through the existing navigation destinations."""
-    from copy import copy
-    from .cli.invocation import normalize_effects_request
-    from .errors import NavRequestValidationError
-
+def element_request_of(path: str, element: Optional[str], args, *, before_binding=None):
+    """The element request *args* give for *path* (``nav_params.bind_element_request``), or None. The one reading of the
+    element declarations off a namespace (``declared.typed_source``): the file route binds through it at its entry, and
+    a library caller of ``handle_file`` that passes a namespace only binds here. The code-element ``--outline`` is its
+    legacy view word only for an element of a non-Markdown file (its ``target:nav.outline`` row). *before_binding* runs
+    once the request is known to be an element request (the route's path and unsupported-control checks)."""
+    from .cli.routing.declared import typed_source
+    from .cli.routing.ledger import peek
+    from .nav_params import ELEMENT_VIEW_SPECS, bind_element_request, element_request_given
+    from .registry import get_markdown_extensions
     if args is None:
-        return args
-    request = normalize_effects_request(
-        args, show_meta=show_meta,
-        is_directory=getattr(args, 'effects', False) and Path(path).is_dir(),
-    )
-    if request is None:
-        return args
-    if _has_nav_flag(args):
-        raise NavRequestValidationError('--effects cannot combine with another navigation analysis flag.')
-    forwarded = copy(args)
-    setattr(forwarded, request.destination, True)
-    return forwarded
-
-
-def _flat_nav_selected(args) -> bool:
-    """The existing flat-file modes; bare flow is selected by presence."""
-    flags = (
-        'varflow', 'narrow', 'calls', 'ifmap', 'catchmap', 'exits', 'flowto',
-        'inputs', 'outputs', 'deps', 'mutations', 'writes', 'sideeffects', 'loopmap', 'fanout',
-        'statewrites', 'keys', 'returns', 'boundary',
-    )
-    return getattr(args, 'flow', None) is not None or any(getattr(args, flag, None) for flag in flags)
+        return None
+    source, spelled = typed_source(ELEMENT_VIEW_SPECS, args)
+    if peek(args, 'outline') and element and Path(path).suffix.lower() not in get_markdown_extensions():
+        source['outline'], spelled['outline'] = True, '--outline'
+    if not element_request_given(source):
+        return None
+    if before_binding is not None:
+        before_binding()
+    return bind_element_request(source, spelled, path=path, element=element)
 
 
 def _resolve_func_node(analyzer, element: str):
@@ -283,45 +260,22 @@ def _resolve_func_node(analyzer, element: str):
     return func_node, func_start, func_end
 
 
-def _note_nav_retirements() -> None:
-    """Read old spellings from the invocation before aliases lose their identity."""
-    from .cli.invocation import RETIREMENTS, current_invocation, retired_flag_key, retirement_note
-
-    invocation = current_invocation()
-    for token in invocation.argv if invocation is not None else ():
-        if token == '--':
-            break
-        option = token.partition('=')[0]
-        if not option.startswith('--'):
-            continue
-        key = retired_flag_key(option)
-        if (key is not None and RETIREMENTS[key].replacement.split()[0].partition('=')[0]
-                in {'--inputs', '--outputs', '--callsites', '--flow', '--exits', '--effects'}):
-            retirement_note(key)
-
-
-def _dispatch_nav(analyzer, element: str, output_format: str, args) -> None:
-    """Route to a nav handler based on the active flag.
+def _dispatch_nav(analyzer, element: str, output_format: str, args, request=None) -> None:
+    """Answer the bound element request (*request*, or the one *args* give) with its handler.
 
     Requires a TreeSitterAnalyzer with a parsed tree.  Exits with an error
     message if the file type is not tree-sitter analysable.
     """
     from .treesitter import TreeSitterAnalyzer  # noqa: I006
-    _note_nav_retirements()
-
-    # A markdown section has no control flow; its outline is its headings.
-    from .display.element import _is_markdown, extract_element  # noqa: I006
-    if getattr(args, 'outline', False) and _is_markdown(analyzer):
-        extract_element(analyzer, element, output_format, section_outline=True,
-                        depth=getattr(args, 'depth', None))
-        return
-
-    handler = next((handler for _, check, handler in _NAV_DISPATCH if check(args)), None)
+    if request is None:
+        request = element_request_of(analyzer.path, element, args)
+    line_view = request.operation in ('scope', 'around')
+    handler = ELEMENT_HANDLERS.get(request.answer)
     # Every element view renders text and JSON only; grep and typed used to print the text answer (BACK-2627 E12).
     from .cli.routing.formats import DEFAULT_OUTPUT_FORMATS, require_supported_format
     require_supported_format(args, DEFAULT_OUTPUT_FORMATS, 'element views')
     output_format = getattr(args, 'format', output_format)
-    if not (getattr(args, 'scope', False) or getattr(args, 'around', None) is not None):
+    if not line_view:
         _validate_nav_request(analyzer, handler, args)
 
     if not isinstance(analyzer, TreeSitterAnalyzer) or not analyzer.tree:
@@ -336,16 +290,16 @@ def _dispatch_nav(analyzer, element: str, output_format: str, args) -> None:
     as_json = output_format == 'json'
 
     # --scope and --around operate on a line reference, not a func node.
-    if getattr(args, 'scope', False):
+    if request.operation == 'scope':
         _nav_scope(analyzer, element, as_json)
         return
-    if getattr(args, 'around', None) is not None:
-        _nav_around(analyzer, element, as_json, args.around)
+    if request.operation == 'around':
+        _nav_around(analyzer, element, as_json, request.value)
         return
 
     func_node, func_start, func_end = _resolve_func_node(analyzer, element)
-    _require_selected_lines(analyzer, element, args)
-    if handler is _nav_outline:
+    _require_selected_lines(analyzer, element, request)
+    if 'outline' in getattr(request.params, '_spelled', {}):  # the code-element --outline, once its element resolves
         from .cli.invocation import retirement_note
         retirement_note('target:nav.outline')
     ctx = _NavCtx(
@@ -353,10 +307,10 @@ def _dispatch_nav(analyzer, element: str, output_format: str, args) -> None:
         element=element,
         analyzer=analyzer,
         as_json=as_json,
-        args=args,
+        request=request,
         func_start=func_start,
         func_end=func_end,
-        depth=getattr(args, 'depth', 3) or 3,
+        depth=request.nesting_depth,
         get_text=analyzer._get_node_text,
     )
 
@@ -384,7 +338,7 @@ def _note_untested_tier(analyzer) -> None:
     record_warning({'type': 'navigation_warning', 'code': 'navigation_untested', 'message': message})
 
 
-def _require_selected_lines(analyzer, element: str, args) -> None:
+def _require_selected_lines(analyzer, element: str, request) -> None:
     """Plan rule 9 for lines (X14): a line element, ``--range`` or ``--callsites`` range that selects no line of the
     file, or a reversed line element, is an invalid request naming what it searched, not an empty answer (E3)."""
     from .display.element import _parse_element_syntax  # noqa: I006
@@ -401,9 +355,9 @@ def _require_selected_lines(analyzer, element: str, args) -> None:
             raise NavRequestValidationError(
                 f'line range {element} is reversed: give :START-END with START <= END.')
         selections.append((element, start))
-    if isinstance(getattr(args, 'range', None), tuple):
-        selections.append((f'--range {args.range[0]}-{args.range[1] or ""}', args.range[0]))
-    lines = callsites_lines(getattr(args, 'calls', None))
+    if request.range is not None:
+        selections.append((f'--range {request.range[0]}-{request.range[1] or ""}', request.range[0]))
+    lines = callsites_lines(request.value) if request.operation == 'callsites' else None
     if lines is not None:
         selections.append((f'--callsites {lines[0]}-{lines[1] or ""}', lines[0]))
     for spelling, start in selections:
@@ -428,7 +382,7 @@ def _run_nav_handler(handler, ctx) -> None:
         # valid and the required analysis failed; say so instead of printing a traceback.
         from .utils.path_utils import to_posix
         diagnostic = (
-            f'Error: {_requested_nav_flag(ctx.args)} could not analyze {ctx.element!r} in '
+            f'Error: {_requested_nav_flag(ctx.request)} could not analyze {ctx.element!r} in '
             f'{to_posix(ctx.analyzer.path)}: its code is nested deeper than the analysis can follow '
             "(the interpreter's recursion limit).\n"
             '  No answer is printed because it would be incomplete.'
@@ -436,29 +390,23 @@ def _run_nav_handler(handler, ctx) -> None:
         _fail_nav(3, FailureCause.ANALYSIS, diagnostic)
 
 
-def _requested_nav_flag(args) -> str:
-    """The element flag as the user spelled it, for a diagnostic (BACK-2529).
+def _requested_nav_flag(request) -> str:
+    """The element flag as the request spelled it, for a diagnostic (BACK-2529): the flag that carried the selected
+    operation or view (the binder's record), else its canonical spelling."""
+    params = request.params
+    spelled = getattr(params, '_spelled', None) or {}
+    implied = getattr(params, '_implied_by', None) or {}
+    name = request.operation or 'view'
+    word = implied.get(name) or next((alias for alias in getattr(params, '_supplied_aliases', ())
+                                      if alias in _spellings_of(name)), None)
+    if word:
+        return spelled.get(word, f'--{word}')
+    return f'--{name}' if request.operation else f'--view {request.view}'
 
-    Aliases share a destination (--inputs sets ``deps``), so the typed spelling comes from the
-    invocation; a caller with no argv (MCP) falls back to the parsed destination."""
-    from .cli.invocation import current_invocation
-    from .nav_handlers import NAV_BOOLEAN_FLAG_NAMES
-    names = NAV_BOOLEAN_FLAG_NAMES | {'flow', 'varflow', 'narrow', 'calls', 'keys'}
-    invocation = current_invocation()
-    for token in invocation.argv if invocation is not None else ():
-        if token == '--':
-            break
-        option = token.partition('=')[0]
-        # The spelling typed, matched exactly: a long option is spelled in full (BACK-2705).
-        if option.startswith('--') and option[2:] in names:
-            return option
-    for name in ('flow', 'varflow', 'narrow', 'calls', 'keys'):
-        if getattr(args, name, None) is not None and getattr(args, name, None) is not False:
-            return f'--{name}'
-    for name in sorted(NAV_BOOLEAN_FLAG_NAMES):
-        if getattr(args, name, False):
-            return f'--{name}'
-    return 'the element flag'
+
+def _spellings_of(name: str) -> tuple:
+    from .nav_params import ELEMENT_VIEW_SPECS
+    return next((spec.spellings for spec in ELEMENT_VIEW_SPECS if spec.name == name), ())
 
 
 def _validate_nav_request(analyzer, handler, args) -> None:
@@ -480,10 +428,6 @@ def _validate_nav_request(analyzer, handler, args) -> None:
             f'Code navigation analysis does not apply to {capability.language} files (not code). '
             f'Use `reveal {to_posix(analyzer.path)}` to inspect file structure.'
         )
-    if handler in (_nav_outline, _nav_flow, _nav_branchmap, _nav_loopmap, _nav_fanout):
-        depth = getattr(args, 'depth', None)
-        if depth is not None and (type(depth) is not int or depth < 1):
-            raise NavRequestValidationError('--depth must be a positive integer for structural navigation.')
 
 
 def _resolve_element(analyzer, element: str):
@@ -517,12 +461,6 @@ def _find_element_node(analyzer, element: str):
     return resolution.node if resolution is not None else None
 
 
-def _reject_effects_special_view(args, spelling):
-    from .cli.invocation import normalize_effects_request
-
-    normalize_effects_request(args, preempting=spelling)
-
-
 def _dispatch_special_flags(analyzer, path: str, output_format: str, args, config) -> bool:
     """Handle flags that short-circuit normal file analysis.
 
@@ -531,42 +469,34 @@ def _dispatch_special_flags(analyzer, path: str, output_format: str, args, confi
     continue.
     """
     if getattr(args, 'extract', None):
-        _reject_effects_special_view(args, '--extract')
         _nginx_flag_handler('_handle_extract_option')(analyzer, args.extract.lower(), args=args)
         return True
 
     if getattr(args, 'check_acl', False):
-        _reject_effects_special_view(args, '--check-acl')
         _nginx_flag_handler('_handle_check_acl')(analyzer)
         return True
 
     if getattr(args, 'validate_nginx_acme', False):
-        _reject_effects_special_view(args, '--validate-nginx-acme')
         _nginx_flag_handler('_handle_validate_nginx_acme')(analyzer, args)
         return True
 
     if getattr(args, 'global_audit', False):
-        _reject_effects_special_view(args, '--global-audit')
         _nginx_flag_handler('_handle_global_audit')(analyzer, args)
         return True
 
     if getattr(args, 'check_conflicts', False):
-        _reject_effects_special_view(args, '--check-conflicts')
         _nginx_flag_handler('_handle_check_conflicts')(analyzer)
         return True
 
     if getattr(args, 'cpanel_certs', False):
-        _reject_effects_special_view(args, '--cpanel-certs')
         _nginx_flag_handler('_handle_cpanel_certs')(analyzer, args=args)
         return True
 
     if getattr(args, 'diagnose', False):
-        _reject_effects_special_view(args, '--diagnose')
         _nginx_flag_handler('_handle_diagnose')(analyzer, log_path=getattr(args, 'log_path', None))
         return True
 
     if getattr(args, 'validate_schema', None):
-        _reject_effects_special_view(args, '--validate-schema')
         from .checks import run_schema_validation  # noqa: I006 — circular avoidance
         run_schema_validation(analyzer, path, args.validate_schema, output_format, args)
         return True
@@ -575,7 +505,7 @@ def _dispatch_special_flags(analyzer, path: str, output_format: str, args, confi
 
 
 def handle_file(path: str, element: Optional[str], show_meta: bool,
-                output_format: str, args: Optional['Namespace'] = None) -> None:
+                output_format: str, args: Optional['Namespace'] = None, *, element_request=None) -> None:
     """Handle file analysis.
 
     Args:
@@ -584,14 +514,16 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
         show_meta: Whether to show metadata only
         output_format: Output format ('text', 'json', 'grep')
         args: Full argument namespace (for filter options)
+        element_request: The bound element request (the file route binds it at its entry); a caller that passes only
+            a namespace has it bound here (``element_request_of``).
     """
     from .display import show_structure, show_metadata, extract_element  # noqa: I006 — circular avoidance
     from .config import RevealConfig  # noqa: I006 — circular avoidance
 
-    args = _effects_args(args, path, show_meta)
+    request = element_request if element_request is not None else element_request_of(path, element, args)
 
     allow_fallback = getattr(args, 'fallback', None) is not False if args else True
-    analyzer = _get_analyzer_or_exit(path, allow_fallback, nav_source=_has_nav_flag(args))
+    analyzer = _get_analyzer_or_exit(path, allow_fallback, nav_source=request is not None)
 
     cli_overrides = _build_file_cli_overrides(args)
     config = RevealConfig.get(
@@ -600,33 +532,34 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
     )
 
     if show_meta:
+        if request is not None:  # D3/U1 at the library entry: --meta is a control no element view reads
+            from .errors import NavRequestValidationError
+            from .nav_params import ELEMENT_VIEW_SPECS
+            from .utils.query_binding import unsupported_controls_message
+            raise NavRequestValidationError(unsupported_controls_message(ELEMENT_VIEW_SPECS, ['--meta']))
         show_metadata(analyzer, output_format, config=config)
         return
 
     if args and _dispatch_special_flags(analyzer, path, output_format, args, config):
         return
 
-    if args and not element:
+    if request is not None and not element:
         # --scope and --around require a line reference: the one check says so, exit 2 (BACK-2627 E9).
-        from .nav_handlers import _single_line_ref
-        for flag, given in (('--scope', getattr(args, 'scope', False)),
-                            ('--around', getattr(args, 'around', None) is not None)):
-            if given:
-                _single_line_ref(element, flag)
-        # Flat-file flags: synthesize a full-file element so _dispatch_nav can
-        # fall back to root_node.  Note: --outline is intentionally absent here.
-        # `reveal file.py --outline` (no element) is handled downstream by
-        # show_structure, which renders a top-level structural outline.  Adding
-        # --outline here would route it through _dispatch_nav on root_node instead,
-        # producing a different (lower-level) output and breaking existing behaviour.
-        if _flat_nav_selected(args):
-            total = len(split_lines(analyzer.content))
-            element = f':1-{total}'
+        if request.operation in ('scope', 'around'):
+            from .nav_handlers import _single_line_ref
+            _single_line_ref(element, f'--{request.operation}')
+        # The whole-file (flat) element view: a full-file line element, so _dispatch_nav falls back to root_node.
+        # `reveal file.py --outline` (no element) is no element request: show_structure renders the file outline.
+        element = f':1-{len(split_lines(analyzer.content))}'
 
     if element:
-        # Sub-function nav flags take priority over normal element extraction
-        if args and _has_nav_flag(args):
-            _dispatch_nav(analyzer, element, output_format, args)
+        if request is not None:
+            _dispatch_nav(analyzer, element, output_format, args, request)
+            return
+        # A Markdown section has no control flow; its outline is its headings.
+        from .display.element import _is_markdown  # noqa: I006
+        if args is not None and getattr(args, 'outline', False) and _is_markdown(analyzer):
+            extract_element(analyzer, element, output_format, section_outline=True, depth=getattr(args, 'depth', None))
             return
         cut = tuple(getattr(args, flag, None) if args else None for flag in ('head', 'tail', 'range'))
         extract_element(analyzer, element, output_format, config=config, cut=cut)

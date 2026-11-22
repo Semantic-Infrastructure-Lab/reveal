@@ -46,7 +46,8 @@ def test_actual_navigation_avoids_unrelated_option_parser_rebuilds(
     _parser_defaults()
     _option_names()
     observed = _count_builds(monkeypatch)
-    result = _run_reveal_direct(path, 'work', flag, '--format', 'json', '--depth', '3')
+    depth = ['--depth', '3'] if canonical == 'flow' else []  # exits reads no depth (BACK-2627 E7)
+    result = _run_reveal_direct(path, 'work', flag, '--format', 'json', *depth)
     assert result.returncode == 0, result.stderr
     answer = json.loads(result.stdout)
     assert answer['meta']['flag'] == canonical

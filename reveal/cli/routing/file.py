@@ -546,8 +546,9 @@ def _flag_usage(dest: str, spelling: str) -> str:
     return spelling
 
 
-def _handle_file_path(path: Path, element_from_path: Optional[str], args: 'Namespace') -> None:
-    """Route a resolved file path — to ast query if convenience flags set, else normal handler."""
+def _handle_file_path(path: Path, element_from_path: Optional[str], args: 'Namespace', request=None) -> None:
+    """Route a resolved file path — to ast query if convenience flags set, else normal handler. *request*: the bound
+    element request (``_element_request``); binding refused a grep or query flag beside it (one answer per request)."""
     if getattr(args, 'grep', None):
         if getattr(args, 'name', None):
             print(f"Note: --name '{args.name}' ignored when --grep is used (--grep searches all text, --name filters structural output)", file=sys.stderr)
@@ -573,7 +574,7 @@ def _handle_file_path(path: Path, element_from_path: Optional[str], args: 'Names
             print("Learn more: reveal help://ux", file=sys.stderr)
             sys.exit(1)
     reject_unhonored_also_json(args, 'the file view')
-    handle_file(str(path), element, args.meta, args.format, args)
+    handle_file(str(path), element, args.meta, args.format, args, element_request=request)
 
 
 def _run_check_with_ledger(args: 'Namespace') -> None:
@@ -604,15 +605,72 @@ def _run_check_with_ledger(args: 'Namespace') -> None:
             ledger.report()
 
 
-def _validate_effects_file_view(args, *, is_directory=False):
-    """Reject declared element-less views that would preempt a new effects request."""
-    if not getattr(args, 'effects', False):
-        return
-    from ..invocation import normalize_effects_request
+# The main-parser inputs every element view reads beside the global options and the element declarations (the S3b-1
+# measurement, BACK-2627 D3/U1): the fallback grammar switch, the walk policy the transitive views apply, and --stdin,
+# whose batch routes each piped path here (an element view answers per line; BACK-2707 owns the batch).
+_ELEMENT_READS = frozenset({'fallback', 'respect_gitignore', 'stdin'})
 
-    selected = _given_flags(args, ELEMENT_LESS_FLAGS)
-    normalize_effects_request(args, is_directory=is_directory,
-                              preempting=selected[0][1] if selected else None)
+
+def _reject_unsupported_element_controls(args: 'Namespace') -> None:
+    """D3/U1: an element request takes the global options, its own declarations and the measured reads; any other
+    main-parser control it gives is an unsupported control (D18), exit 2, with the one shared message."""
+    from ...nav_params import ELEMENT_VIEW_SPECS
+    from ...errors import NavRequestValidationError
+    from ...utils.query_binding import legacy_flag_dests, unsupported_controls_message
+    from ..parser import _build_global_options_parser
+    accepted = {action.dest for action in _build_global_options_parser(main_modes=False)._actions} | _ELEMENT_READS
+    accepted |= {'path', 'element', 'outline'} | {dest for spec in ELEMENT_VIEW_SPECS
+                                                  for dest in ((spec.cli.dest if spec.cli else None) or spec.name,
+                                                               *legacy_flag_dests(spec))}
+    defaults = _parser_defaults()
+    given = [typed_spelling(dest, '--' + dest.replace('_', '-')) for dest, value in vars(args).items()
+             if dest in defaults and dest not in accepted and value not in (None, defaults[dest])]
+    if given:
+        raise NavRequestValidationError(unsupported_controls_message(ELEMENT_VIEW_SPECS, given))
+
+
+def _note_element_retirements() -> None:
+    """Each old element flag the request typed notes its RETIREMENTS row once, in the order typed; the set is the
+    declarations' legacy flags (no hand list). The code-element ``--outline`` notes its target row once its element
+    resolves (``file_handler._dispatch_nav``)."""
+    from ...nav_params import ELEMENT_VIEW_SPECS
+    from ..invocation import current_invocation, retired_flag_key, retirement_note
+    legacy = {entry.flag for spec in ELEMENT_VIEW_SPECS for entry in spec.legacy if entry.flag}
+    invocation = current_invocation()
+    for token in invocation.argv if invocation is not None else ():
+        if token == '--':
+            break
+        option = token.partition('=')[0]
+        key = retired_flag_key(option) if option in legacy else None
+        if key is not None:
+            retirement_note(key)
+
+
+def _element_request(path_str: str, args: 'Namespace'):
+    """The bound element request of a path read (``nav_params.bind_element_request``), or None when the request gives no
+    element control. Runs at the file route's entry, before the flag ledger and the directory branch: a directory
+    refuses every element view, and every refusal is an invalid request (exit 2) naming what was given."""
+    from ...file_handler import element_request_of
+    path, element_from_path = _parse_file_line_syntax(path_str)
+    element = element_from_path or getattr(args, 'element', None)
+    request = element_request_of(str(path), element, args,
+                                 before_binding=lambda: _reject_unsupported_element_controls(args))
+    if request is not None:  # an invalid value refuses before the path is looked at, as argparse's types did
+        _validate_path_exists(path, path_str, element)
+        _note_element_retirements()
+    return request
+
+
+def _mark_element_controls(args: 'Namespace', request) -> None:
+    """The element answer applies every control it bound: the ledger counts them read (the handlers read the request,
+    not the namespace)."""
+    from ...nav_params import ELEMENT_VIEW_SPECS
+    from ...utils.query_binding import legacy_flag_dests
+    if request is None:
+        return
+    dests = {dest for spec in ELEMENT_VIEW_SPECS
+             for dest in ((spec.cli.dest if spec.cli else None) or spec.name, *legacy_flag_dests(spec))}
+    mark(args, *(dest for dest in dests if peek(args, dest) is not None), *(('outline',) if peek(args, 'outline') else ()))
 
 
 # The flags that turn the file view into a whole-file answer: an ast:// query or a text search.
@@ -649,7 +707,7 @@ def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
         path_str: Path string to file or directory
         args: Parsed arguments
     """
-    _validate_effects_file_view(args)
+    request = _element_request(path_str, args)
 
     if getattr(args, 'check', False):
         _run_check_with_ledger(args)
@@ -666,8 +724,6 @@ def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
     path, element_from_path = _parse_file_line_syntax(path_str)
     _validate_path_exists(path, path_str, getattr(args, 'element', None))
 
-    _validate_effects_file_view(args, is_directory=path.is_dir())
-
     if not path.is_dir() and not path.is_file():
         print(f"Error: {path_str} is neither file nor directory", file=sys.stderr)
         sys.exit(1)
@@ -680,6 +736,7 @@ def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
     if ledger_of(args) is None and isinstance(args, Namespace):
         ledger = FlagLedger(args, view='a directory listing' if path.is_dir() else 'the file view')
         args = ledger.track(args)
+        _mark_element_controls(args, request)
     try:
         with ledger.dispatching('') if ledger is not None else nullcontext():
             if path.is_dir():
@@ -689,7 +746,7 @@ def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
                 with exclusion_scope(*dispatch_scope(str(path), peek(args, 'exclude'))):
                     _handle_directory_path(path, args)
             else:
-                _handle_file_path(path, element_from_path, args)
+                _handle_file_path(path, element_from_path, args, request)
         if ledger is not None:
             ledger.complete = True
     finally:

@@ -367,15 +367,18 @@ RETIREMENTS: Dict[str, Retirement] = {
     'flag:--mutations': Retirement('--mutations', '--outputs'),
     'flag:--writes': Retirement('--writes', '--outputs'),
     'flag:--calls': Retirement('--calls', '--callsites'),
-    'target:nav.outline': Retirement('code-element --outline', '--flow; file and Markdown outlines remain --outline'),
-    'flag:--ifmap': Retirement('--ifmap', '--flow=if'),
-    'flag:--loopmap': Retirement('--loopmap', '--flow=loop'),
-    'flag:--catchmap': Retirement('--catchmap', '--flow=try'),
-    'flag:--returns': Retirement('--returns', '--exits'),
-    'flag:--sideeffects': Retirement('--sideeffects', '--effects'),
-    'flag:--fanout': Retirement('--fanout', '--effects --in-loops'),
-    'flag:--statewrites': Retirement('--statewrites', '--effects --state'),
-    'flag:--flowto': Retirement('--flowto', '--exits for static exit sites; the former reachability verdict is retired'),
+    # The element views (BACK-2627, D20): one --view; structural depth is --nesting-depth (COMMAND_MODEL Depth row).
+    'target:nav.outline': Retirement('code-element --outline', '--view flow (its --depth is --nesting-depth); '
+                                                               'file and Markdown outlines remain --outline'),
+    'flag:--ifmap': Retirement('--ifmap', '--view flow --kind if (its --depth is --nesting-depth)'),
+    'flag:--loopmap': Retirement('--loopmap', '--view flow --kind loop (its --depth is --nesting-depth)'),
+    'flag:--catchmap': Retirement('--catchmap', '--view flow --kind try (its --depth is --nesting-depth)'),
+    'flag:--returns': Retirement('--returns', '--view exits'),
+    'flag:--sideeffects': Retirement('--sideeffects', '--view effects'),
+    'flag:--fanout': Retirement('--fanout', '--view effects --in-loops (its --depth is --nesting-depth)'),
+    'flag:--statewrites': Retirement('--statewrites', '--view effects --state'),
+    'flag:--flowto': Retirement('--flowto', '--view exits for static exit sites; the former reachability verdict is '
+                                            'retired'),
     'flag:--search': Retirement('--search', '--name PATTERN (regex)'),
     # One row for the file route's --check and its --lint alias.
     'flag:--check': Retirement('file --check/--lint', 'reveal check <path>'),
@@ -635,88 +638,19 @@ class RetiredSpellingError(Exception):
         self.entry = entry
 
 
-def parse_flow_selectors(value: str) -> tuple[str, ...]:
-    """Validate an explicit navigation selector; bare flow is represented by ()."""
-    parts = tuple(part.strip() for part in value.split(','))
-    if any(part not in {'if', 'loop', 'try'} for part in parts):
-        raise ValueError('flow selectors must be nonempty comma-separated if, loop or try values')
-    return tuple(dict.fromkeys(parts))
+def effects_requested(args) -> bool:
+    """Whether a parsed path request asks for the effects view by a D10 spelling (``--effects``, ``--view effects``)."""
+    return bool(getattr(args, 'effects', False)) or getattr(args, 'view', None) == 'effects'
 
 
-@dataclass(frozen=True)
-class EffectsRequest:
-    """An exclusive effects mode, retaining explicit controls for host provenance."""
-    mode: str
-    transitive: bool
-    depth: Optional[int]
-
-    @property
-    def destination(self) -> str:
-        return {'ordinary': 'sideeffects', 'loops': 'fanout', 'state': 'statewrites'}[self.mode]
-
-    def tokens(self) -> list[str]:
-        tokens = ['--effects']
-        if self.mode != 'ordinary':
-            tokens.append('--in-loops' if self.mode == 'loops' else '--state')
-        if self.transitive:
-            tokens.append('--transitive')
-        if self.depth is not None:
-            tokens.extend(['--depth', str(self.depth)])
-        return tokens
-
-
-def normalize_effects_request(args, *, mode: Optional[str] = None, show_meta: bool = False,
-                              is_directory: bool = False, preempting: Optional[str] = None) -> Optional[EffectsRequest]:
-    """Validate the new request only; legacy navigation keeps its existing policy."""
+def refuse_effects_beside(args, spelling: str) -> None:
+    """D10's effects target rule, kept as it was (BACK-2627 R5): the effects view answers one code file, so a special
+    mode that preempts the file route (``--stdin``, ``--rules``, ...) beside it is an invalid request, exit 2. The other
+    D10 rules (exclusive modes, depth, slices, other views) come from the element declarations."""
     from ..errors import NavRequestValidationError
 
-    effects = getattr(args, 'effects', False)
-    loops, state = getattr(args, 'in_loops', False), getattr(args, 'state', False)
-    if not effects:
-        if loops or state or mode is not None:
-            raise NavRequestValidationError('--in-loops and --state require --effects.')
-        return None
-    _validate_effects_view(args, show_meta, is_directory, preempting)
-    if loops and state:
-        raise NavRequestValidationError('--in-loops and --state are exclusive effects modes.')
-    if mode is not None and mode not in ('ordinary', 'loops', 'state'):
-        raise NavRequestValidationError('effects mode must be ordinary, loops or state.')
-    selected = mode or ('loops' if loops else 'state' if state else 'ordinary')
-    transitive, depth = getattr(args, 'transitive', False), getattr(args, 'depth', None)
-    _validate_effects_controls(selected, transitive, depth)
-    return EffectsRequest(selected, transitive, depth)
-
-
-def _validate_effects_view(args, show_meta: bool, is_directory: bool, preempting: Optional[str]) -> None:
-    """New effects requests cannot select another view or silently discard a cut."""
-    from ..errors import NavRequestValidationError
-
-    if preempting is not None:
-        raise NavRequestValidationError(f'--effects cannot combine with the {preempting} view.')
-    if is_directory:
-        raise NavRequestValidationError('--effects requires a code file and optional element or inclusive range, not a directory.')
-    if show_meta or getattr(args, 'meta', False) or getattr(args, 'check', False):
-        raise NavRequestValidationError('--effects cannot combine with --meta or --check views.')
-    if any(getattr(args, flag, None) is not None for flag in ('head', 'tail')):
-        raise NavRequestValidationError('--effects does not use --head or --tail; select inclusive lines with --range.')
-    if any(getattr(args, flag, None) for flag in ('grep', 'name', 'sort', 'type')):
-        raise NavRequestValidationError('--effects cannot combine with grep or structural-query views.')
-
-
-def _validate_effects_controls(selected: str, transitive: bool, depth: Optional[int]) -> None:
-    from ..errors import NavRequestValidationError
-
-    if type(transitive) is not bool:
-        raise NavRequestValidationError('effects --transitive must be a boolean.')
-    if depth is not None and type(depth) is not int:
-        raise NavRequestValidationError('effects --depth must be an integer, not a boolean or other value.')
-    if transitive and selected != 'ordinary':
-        raise NavRequestValidationError('--transitive is only defined for ordinary --effects.')
-    if depth is not None:
-        if selected == 'state' or selected == 'ordinary' and not transitive:
-            raise NavRequestValidationError('--depth is unused for this effects mode.')
-        if depth < 1 or transitive and depth > 5:
-            raise NavRequestValidationError('--depth must be 1..5 for transitive effects, or positive for --in-loops.')
+    if effects_requested(args):
+        raise NavRequestValidationError(f'--effects cannot combine with the {spelling} view.')
 
 
 def retired_flag_key(option: str) -> Optional[str]:

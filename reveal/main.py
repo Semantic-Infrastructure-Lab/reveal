@@ -450,9 +450,8 @@ def _handle_special_modes(args: Any) -> bool:
     for dest, handler in _SPECIAL_MODES:
         if not getattr(args, dest, None):
             continue
-        if getattr(args, 'effects', False):
-            from .cli.invocation import normalize_effects_request
-            normalize_effects_request(args, preempting='--' + dest.replace('_', '-'))
+        from .cli.invocation import refuse_effects_beside
+        refuse_effects_beside(args, '--' + dest.replace('_', '-'))
         if getattr(args, 'fail_on', None) is not None:
             print('Error: --fail-on is not supported by discovery, stdin or special modes.', file=sys.stderr)
             sys.exit(2)
@@ -528,8 +527,10 @@ def _check_ghost_flags(invocation: Invocation) -> None:
 
 
 def _validate_effects_cli_target(args: Namespace) -> None:
-    """New effects modes name one code file through the file-navigation route."""
-    if not getattr(args, 'effects', False):
+    """D10's effects target rule, kept as it was (BACK-2627 R5): the effects view names one code file through the
+    file-navigation route, so a URI or batch-list target is an invalid request."""
+    from .cli.invocation import effects_requested
+    if not effects_requested(args):
         return
     target = getattr(args, 'path', None)
     if not target or '://' in target or target.startswith('@'):

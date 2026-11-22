@@ -58,7 +58,7 @@ def test_contextual_outline_error_stage_preserves_other_outline_domains(source, 
     monkeypatch.setitem(RETIREMENTS, key, replace(RETIREMENTS[key], stage='error'))
     rejected = _run_reveal_direct(source, 'work', '--outline')
     assert rejected.returncode == 2
-    assert '--flow' in rejected.stderr
+    assert '--view flow' in rejected.stderr  # its replacement since BACK-2627
     assert rejected.stdout == ''
     assert _run_reveal_direct(source, '--outline').returncode == 0
     doc = tmp_path / 'guide.md'
@@ -138,7 +138,7 @@ mcp_server.main()
         rejected = await session.call_tool('reveal_nav', {
             'path': str(source), 'element': 'work', 'flag': 'outline'})
         assert rejected.is_error
-        assert '--flow' in _text(rejected)
+        assert '--view flow' in _text(rejected)  # its replacement since BACK-2627
         assert 'code-element --outline' in _text(rejected)
         live = await session.call_tool('reveal_nav', {
             'path': str(doc), 'element': 'Setup', 'flag': 'outline'})

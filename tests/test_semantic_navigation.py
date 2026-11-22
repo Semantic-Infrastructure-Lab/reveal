@@ -323,12 +323,11 @@ class TestRangeWithNavFlags(unittest.TestCase):
 
     def _make_args(self, **kwargs):
         import argparse
-        defaults = dict(
-            scope=False, around=None, outline=False, varflow=None, calls=None,
-            ifmap=False, catchmap=False, exits=False, flowto=False,
-            deps=False, mutations=False, depth=3, range=None,
-        )
-        defaults.update(kwargs)
+        # The element declarations' destinations (BACK-2627): --inputs/--deps store `inputs`, --outputs/--mutations
+        # store `outputs`; an omitted flag is absent or off, and --depth is read only where a view reads it.
+        renamed = {'deps': 'inputs', 'mutations': 'outputs', 'calls': 'callsites'}
+        defaults = dict(scope=False, around=None, outline=False, varflow=None, depth=None, range=None)
+        defaults.update({renamed.get(key, key): value for key, value in kwargs.items()})
         return argparse.Namespace(**defaults)
 
     def _nav_file(self):
@@ -418,14 +417,11 @@ class TestNavJsonOutput(unittest.TestCase):
 
     def _make_args(self, **kwargs):
         import argparse
-        defaults = dict(
-            scope=False, around=None, outline=False, varflow=None, calls=None,
-            ifmap=False, catchmap=False, exits=False, flowto=False,
-            deps=False, mutations=False, sideeffects=False, loopmap=False,
-            fanout=False, statewrites=False, keys=None, returns=False,
-            boundary=False, depth=3, range=None,
-        )
-        defaults.update(kwargs)
+        # The element declarations' destinations (BACK-2627): --inputs/--deps store `inputs`, --outputs/--mutations
+        # `outputs`, --callsites/--calls `callsites`; --depth is read only where a view reads it.
+        renamed = {'deps': 'inputs', 'mutations': 'outputs', 'calls': 'callsites'}
+        defaults = dict(scope=False, around=None, outline=False, varflow=None, keys=None, depth=None, range=None)
+        defaults.update({renamed.get(key, key): value for key, value in kwargs.items()})
         return argparse.Namespace(**defaults)
 
     def _run(self, element, flag_kwargs):

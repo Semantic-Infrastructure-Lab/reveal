@@ -110,7 +110,7 @@ def test_no_analyzer_is_explicitly_outside_this_adoption(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize('flags', [{'effects': True}, {'sideeffects': True}, {'boundary': True},
                                   {'inputs': True}, {'flow': ()}, {'varflow': 'value'},
-                                  {'calls': 'FULL'}, {'scope': True}, {'around': 1}])
+                                  {'callsites': 'FULL'}, {'scope': True}, {'around': 1}])
 def test_handle_file_adopts_existing_nav_predicate_without_mutating_args(tmp_path, monkeypatch, flags):
     import errno
     from reveal.cli.defaults import _default_args

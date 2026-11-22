@@ -105,16 +105,18 @@ def test_transitive_preserves_sources_and_breadth_order(project, depth):
     assert all('file' not in row for row in data['findings'] if row['hop'] == 0)
 
 
+# Since BACK-2627 the element declarations refuse these with the binder's messages, naming the controls (D2: no
+# per-noun wording): a modifier the answer does not read, a requirement unmet, two values of the one view control.
 @pytest.mark.parametrize('flags,diagnostic', [
-    (('--in-loops',), '--effects'), (('--state',), '--effects'),
-    (('--effects', '--in-loops', '--state'), 'exclusive'),
-    (('--effects', '--in-loops', '--transitive'), '--transitive'),
-    (('--effects', '--state', '--transitive'), '--transitive'),
-    (('--effects', '--depth', '1'), '--depth'),
-    (('--effects', '--state', '--depth', '1'), '--depth'),
-    *((('--effects', '--transitive', '--depth', value), '--depth') for value in ('0', '-1', '6', '1.5')),
-    *((('--effects', '--in-loops', '--depth', value), '--depth') for value in ('0', '-1')),
-    *((('--effects', flag), 'combine') for flag in ('--sideeffects', '--fanout', '--statewrites', '--boundary', '--flow')),
+    (('--in-loops',), 'effects'), (('--state',), 'effects'),
+    (('--effects', '--in-loops', '--state'), 'state'),
+    (('--effects', '--in-loops', '--transitive'), 'transitive'),
+    (('--effects', '--state', '--transitive'), 'transitive'),
+    (('--effects', '--depth', '1'), 'depth'),
+    (('--effects', '--state', '--depth', '1'), 'depth'),
+    *((('--effects', '--transitive', '--depth', value), 'depth') for value in ('0', '-1', '6', '1.5')),
+    *((('--effects', '--in-loops', '--depth', value), 'depth') for value in ('0', '-1')),
+    *((('--effects', flag), 'conflicting spellings') for flag in ('--boundary', '--flow')),
 ])
 def test_invalid_requests_are_usage_errors_before_analysis(project, flags, diagnostic):
     result = _run(project, 'entry', *flags, '--format', 'json')
@@ -129,7 +131,7 @@ def test_empty_is_success_and_legacy_names_report_one_correction(project, old, n
     result = _run(project, 'empty', old, '--format', 'json')
     notes = [w for w in json.loads(result.stdout)['meta']['warnings'] if w['type'] == 'retired_spelling']
     assert len(notes) == 1 and notes[0]['old'] == old
-    assert '--effects' in notes[0]['replacement']
+    assert '--view effects' in notes[0]['replacement']
     assert result.stderr.count('deprecated') == 0  # the JSON carries it (BACK-2659)
 
 
@@ -179,9 +181,9 @@ def test_new_effects_reject_preempting_or_unused_views(project, extra):
     result = _run(project, None, '--effects', *extra, '--format', 'json')
     assert result.returncode == 2, (result.stdout, result.stderr)
     assert result.stdout == ''
-    assert '--effects' in result.stderr
+    assert extra[0].lstrip('-') in result.stderr  # named by the declarations' refusal (BACK-2627 D3/U1)
     if extra[0] in ('--head', '--tail'):
-        assert '--range' in result.stderr
+        assert 'range' in result.stderr  # the controls this answer reads
 
 
 def test_new_effects_reject_directory_view_without_changing_legacy(project):
@@ -189,7 +191,7 @@ def test_new_effects_reject_directory_view_without_changing_legacy(project):
     assert rejected.returncode == 2, (rejected.stdout, rejected.stderr)
     assert rejected.stdout == '' and 'file' in rejected.stderr
     legacy = _run(project.parent, None, '--fanout', '--format', 'json')
-    assert legacy.returncode == 0
+    assert legacy.returncode == 2  # BACK-2627 E13: a directory refuses every element view
 
 
 def test_direct_handle_file_rejects_effects_when_show_meta_preempts(project):
@@ -197,7 +199,7 @@ def test_direct_handle_file_rejects_effects_when_show_meta_preempts(project):
     from reveal.errors import NavRequestValidationError
     from reveal.file_handler import handle_file
 
-    with pytest.raises(NavRequestValidationError, match='--effects'):
+    with pytest.raises(NavRequestValidationError, match='--meta'):
         handle_file(str(project), 'entry', True, 'json', _default_args(effects=True))
 
 
@@ -208,7 +210,7 @@ def test_new_effects_reject_nginx_views_that_preempt_analysis(tmp_path, extra):
     path.write_text('events {}\nhttp { server { listen 80; } }\n', encoding='utf-8')
     result = _run(path, None, '--effects', *extra)
     assert result.returncode == 2, (result.stdout, result.stderr)
-    assert result.stdout == '' and '--effects' in result.stderr
+    assert result.stdout == '' and extra[0] in result.stderr and 'unsupported control' in result.stderr
 
 
 def test_new_effects_reject_frontmatter_schema_view(tmp_path):
@@ -217,7 +219,7 @@ def test_new_effects_reject_frontmatter_schema_view(tmp_path):
     schema.write_text('{"name": "Example", "required_fields": ["title"]}', encoding='utf-8')
     result = _run(path, None, '--effects', '--validate-schema', str(schema), '--format', 'json')
     assert result.returncode == 2, (result.stdout, result.stderr)
-    assert result.stdout == '' and '--effects' in result.stderr
+    assert result.stdout == '' and '--validate-schema' in result.stderr
 
 
 @pytest.mark.parametrize('flag', ['--show-ast', '--capabilities', '--explain-file', '--decorator-stats'])

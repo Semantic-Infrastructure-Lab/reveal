@@ -1,8 +1,8 @@
 """Nav-flag handlers — implementations of --outline, --varflow, --calls, etc.
 
-This module owns the per-flag handler functions and the _NAV_DISPATCH table.
+This module owns the per-view handler functions and the ELEMENT_HANDLERS lookup.
 file_handler.py orchestrates: it parses the file, builds a _NavCtx, then
-delegates to the handler matched by _NAV_DISPATCH.
+delegates to the handler of the bound request's answer (ELEMENT_HANDLERS).
 
 Imports from adapters.ast.nav are deferred inside each handler to avoid the
 cli/adapters circular import at module-load time (see file_handler.py header).
@@ -28,13 +28,10 @@ _IF_KEYWORDS: frozenset = frozenset({'IF', 'ELIF', 'ELSE', 'UNLESS', 'SWITCH', '
 _CATCH_KEYWORDS: frozenset = frozenset({'TRY', 'CATCH', 'EXCEPT', 'FINALLY'})
 
 
-def _resolve_range(args, func_start: int, func_end: int):
-    """Return (from_line, to_line) for a nav flag, respecting --range if present.
-
-    ``args.range`` may be a pre-parsed (start, end) tuple (set by
-    validate_navigation_args) or None when --range was not supplied.
-    """
-    range_arg = getattr(args, 'range', None)
+def _resolve_range(request, func_start: int, func_end: int):
+    """Return (from_line, to_line) for an element view, respecting the request's bound ``--range`` (a (start, end)
+    pair, or None when it was not given)."""
+    range_arg = request.range
     if range_arg:
         return _parse_line_range(range_arg, func_start, func_end)
     return func_start, func_end
@@ -148,10 +145,10 @@ class _NavCtx:
     element: str
     analyzer: Any
     as_json: bool
-    args: Any
+    request: Any  # the bound nav_params.ElementRequest
     func_start: int
     func_end: int
-    depth: int
+    depth: int  # the structural (nesting) depth of the flow and loops views
     get_text: Callable
 
 
@@ -169,7 +166,7 @@ def _emit_depth_navigation(ctx: _NavCtx, flag: str, from_line: int, to_line: int
     result = {'meta': {'depth': ctx.depth, 'depth_limited': limited,
                        'structure_scope': structure_scope}}
     if flag == 'flow':
-        result['meta']['flow_selectors'] = list(ctx.args.flow)
+        result['meta']['flow_selectors'] = list(ctx.request.kind)
     if limited:
         note_warning(result, {
             'type': 'depth_limited', 'field': 'findings', 'cause': 'max_depth',
@@ -186,20 +183,15 @@ def _emit_depth_navigation(ctx: _NavCtx, flag: str, from_line: int, to_line: int
         render_meta_warnings(result)
 
 
-def _nav_outline(ctx: _NavCtx) -> None:
-    ctx.args.flow = ()
-    _nav_flow(ctx)
-
-
 def _nav_flow(ctx: _NavCtx) -> None:
     from .adapters.ast.nav import OutlineDepth, element_outline, render_outline, LOOP_KEYWORDS
 
-    from_line, to_line = _resolve_range(ctx.args, ctx.func_start, ctx.func_end)
+    from_line, to_line = _resolve_range(ctx.request, ctx.func_start, ctx.func_end)
     evidence = OutlineDepth()
     items = element_outline(ctx.func_node, ctx.get_text, max_depth=ctx.depth,
                             depth_evidence=evidence)
     projections = {'if': _IF_KEYWORDS, 'loop': LOOP_KEYWORDS, 'try': _CATCH_KEYWORDS}
-    selectors = ctx.args.flow
+    selectors = ctx.request.kind
     keywords = frozenset().union(*(projections[name] for name in selectors))
     items = [item for item in items
              if from_line <= item['line_start'] <= to_line
@@ -213,10 +205,10 @@ def _nav_varflow(ctx: _NavCtx) -> None:
     from .adapters.ast.nav import (  # noqa: I006
         var_flow, render_var_flow, cross_var_flow, render_cross_var_flow,
     )
-    var_name = ctx.args.varflow
-    from_line, to_line = _resolve_range(ctx.args, ctx.func_start, ctx.func_end)
+    var_name = ctx.request.value
+    from_line, to_line = _resolve_range(ctx.request, ctx.func_start, ctx.func_end)
     trust_warning = _varflow_trust_warning(ctx.analyzer)
-    if getattr(ctx.args, 'cross_calls', False):
+    if ctx.request.cross_calls:
         _require_variable(ctx, var_name, from_line, to_line, '--varflow')
         frames = cross_var_flow(ctx.analyzer, ctx.func_node, var_name, from_line, to_line, ctx.get_text)
         if ctx.as_json:
@@ -250,8 +242,8 @@ def _nav_varflow(ctx: _NavCtx) -> None:
 
 def _nav_narrow(ctx: _NavCtx) -> None:
     from .adapters.ast.nav import collect_narrowing, render_narrowing  # noqa: I006
-    var_name = ctx.args.narrow
-    from_line, to_line = _resolve_range(ctx.args, ctx.func_start, ctx.func_end)
+    var_name = ctx.request.value
+    from_line, to_line = _resolve_range(ctx.request, ctx.func_start, ctx.func_end)
     _require_variable(ctx, var_name, from_line, to_line, '--narrow')
     events = collect_narrowing(ctx.func_node, var_name, ctx.get_text)
     if ctx.as_json:
@@ -277,19 +269,17 @@ def _implicit_nodes(ctx: _NavCtx) -> list:
 
 def _nav_calls(ctx: _NavCtx) -> None:
     from .adapters.ast.nav import range_calls, render_range_calls  # noqa: I006
-    # args.calls is 'FULL' (bare --callsites) or a range string (--callsites 89-120), validated by callsites_lines.
-    from_line, to_line = _parse_line_range(callsites_lines(ctx.args.calls), ctx.func_start, ctx.func_end)
+    # The value is 'FULL' (bare --callsites) or a range string (--callsites 89-120), validated by callsites_lines; bare,
+    # the request's --range selects the lines, as every line-reading view's does (X9, BACK-2627 F1).
+    lines = callsites_lines(ctx.request.value)
+    from_line, to_line = (_parse_line_range(lines, ctx.func_start, ctx.func_end) if lines is not None
+                          else _resolve_range(ctx.request, ctx.func_start, ctx.func_end))
     calls = range_calls(ctx.func_node, from_line, to_line, ctx.get_text,
                         implicit_nodes=_implicit_nodes(ctx), include_jsx=True)
     if ctx.as_json:
         _nav_json('callsites', ctx.analyzer.path, ctx.element, from_line, to_line, calls)
     else:
         print(render_range_calls(calls, from_line, to_line))
-
-
-def _nav_branchmap(ctx: _NavCtx) -> None:
-    ctx.args.flow = ('if',) if getattr(ctx.args, 'ifmap', False) else ('try',)
-    _nav_flow(ctx)
 
 
 def _emit_exit_navigation(ctx: _NavCtx, flag: str, from_line: int, to_line: int,
@@ -314,7 +304,7 @@ def _emit_exit_navigation(ctx: _NavCtx, flag: str, from_line: int, to_line: int,
 def _nav_exits(ctx: _NavCtx) -> None:
     from .adapters.ast.nav import collect_gate_chains, render_gate_chains  # noqa: I006
     from .adapters.ast.nav_exits import ExitOwnership
-    from_line, to_line = _resolve_range(ctx.args, ctx.func_start, ctx.func_end)
+    from_line, to_line = _resolve_range(ctx.request, ctx.func_start, ctx.func_end)
     ownership = ExitOwnership(getattr(ctx.analyzer, 'language', ''), ctx.func_node)
     exits = collect_gate_chains(ctx.func_node, from_line, to_line, ctx.get_text, ownership=ownership)
     _emit_exit_navigation(ctx, 'exits', from_line, to_line,
@@ -324,7 +314,7 @@ def _nav_exits(ctx: _NavCtx) -> None:
 
 def _nav_deps(ctx: _NavCtx) -> None:
     from .adapters.ast.nav import collect_deps, render_deps  # noqa: I006
-    from_line, to_line = _resolve_range(ctx.args, ctx.func_start, ctx.func_end)
+    from_line, to_line = _resolve_range(ctx.request, ctx.func_start, ctx.func_end)
     deps = collect_deps(ctx.func_node, from_line, to_line, ctx.get_text,
                         language=getattr(ctx.analyzer, 'language', None))
     if ctx.as_json:
@@ -341,7 +331,7 @@ def _nav_deps(ctx: _NavCtx) -> None:
 
 def _nav_mutations(ctx: _NavCtx) -> None:
     from .adapters.ast.nav import collect_mutations, render_mutations  # noqa: I006
-    from_line, to_line = _resolve_range(ctx.args, ctx.func_start, ctx.func_end)
+    from_line, to_line = _resolve_range(ctx.request, ctx.func_start, ctx.func_end)
     mutations = collect_mutations(ctx.func_node, from_line, to_line, ctx.get_text)
     if ctx.as_json:
         findings = [
@@ -361,16 +351,12 @@ def _nav_sideeffects(ctx: _NavCtx) -> None:
     from .adapters.ast.nav_effects import (  # noqa: I006
         EffectList, ambiguous_hops_note, skipped_files_note, _traversal_note,
     )
-    from_line, to_line = _resolve_range(ctx.args, ctx.func_start, ctx.func_end)
+    from_line, to_line = _resolve_range(ctx.request, ctx.func_start, ctx.func_end)
     language = getattr(ctx.analyzer, 'language', None)
-    transitive = getattr(ctx.args, 'transitive', False)
+    transitive = ctx.request.transitive
 
     if transitive:
-        # --depth is shared with directory-tree/markdown-outline depth; None
-        # here means "not explicitly set" so it falls back to a fixed default
-        # rather than inheriting _NavCtx.depth's unrelated default of 3.
-        raw_depth = getattr(ctx.args, 'depth', None)
-        depth = raw_depth if raw_depth else 2
+        depth = ctx.request.depth  # the hop budget in effect: strict, the legacy clamp, or the default 2
         effects = collect_effects_transitive(
             ctx.analyzer.path, ctx.element, ctx.func_node, from_line, to_line, ctx.get_text,
             language=language, depth=depth,
@@ -402,14 +388,9 @@ def _nav_sideeffects(ctx: _NavCtx) -> None:
         print(render_effects(effects, from_line, to_line))
 
 
-def _nav_loopmap(ctx: _NavCtx) -> None:
-    ctx.args.flow = ('loop',)
-    _nav_flow(ctx)
-
-
 def _nav_fanout(ctx: _NavCtx) -> None:
     from .adapters.ast.nav import OutlineDepth, collect_fanout, render_fanout  # noqa: I006
-    from_line, to_line = _resolve_range(ctx.args, ctx.func_start, ctx.func_end)
+    from_line, to_line = _resolve_range(ctx.request, ctx.func_start, ctx.func_end)
     evidence = OutlineDepth()
     loops = collect_fanout(
         ctx.func_node, from_line, to_line, ctx.get_text,
@@ -422,7 +403,7 @@ def _nav_fanout(ctx: _NavCtx) -> None:
 
 def _nav_statewrites(ctx: _NavCtx) -> None:
     from .adapters.ast.nav import collect_statewrites, render_statewrites  # noqa: I006
-    from_line, to_line = _resolve_range(ctx.args, ctx.func_start, ctx.func_end)
+    from_line, to_line = _resolve_range(ctx.request, ctx.func_start, ctx.func_end)
     writes = collect_statewrites(
         ctx.func_node, from_line, to_line, ctx.get_text,
         language=getattr(ctx.analyzer, 'language', None),
@@ -435,8 +416,8 @@ def _nav_statewrites(ctx: _NavCtx) -> None:
 
 def _nav_keys(ctx: _NavCtx) -> None:
     from .adapters.ast.nav import collect_keys, render_keys  # noqa: I006
-    var_name = ctx.args.keys
-    from_line, to_line = _resolve_range(ctx.args, ctx.func_start, ctx.func_end)
+    var_name = ctx.request.value
+    from_line, to_line = _resolve_range(ctx.request, ctx.func_start, ctx.func_end)
     _require_variable(ctx, var_name, from_line, to_line, '--keys')
     events = collect_keys(ctx.func_node, var_name, from_line, to_line, ctx.get_text)
     if ctx.as_json:
@@ -444,10 +425,6 @@ def _nav_keys(ctx: _NavCtx) -> None:
                   extra_meta={'var': var_name})
     else:
         print(render_keys(var_name, events, from_line, to_line))
-
-
-def _nav_returns(ctx: _NavCtx) -> None:
-    _nav_exits(ctx)
 
 
 def _boundary_effect_finding(effect: Dict[str, Any], transitive: bool) -> Dict[str, Any]:
@@ -474,18 +451,13 @@ def _nav_boundary(ctx: _NavCtx) -> None:
     from .adapters.ast.nav import (  # noqa: I006
         collect_boundary, collect_boundary_transitive, render_boundary, render_boundary_transitive,
     )
-    from_line, to_line = _resolve_range(ctx.args, ctx.func_start, ctx.func_end)
+    from_line, to_line = _resolve_range(ctx.request, ctx.func_start, ctx.func_end)
     language = getattr(ctx.analyzer, 'language', None)
-    transitive = getattr(ctx.args, 'transitive', False)
+    transitive = ctx.request.transitive
 
     if transitive:
-        # --depth is shared with directory-tree/markdown-outline depth; None
-        # here means "not explicitly set" so it falls back to a fixed default
-        # rather than inheriting _NavCtx.depth's unrelated default of 3.
-        from .adapters.ast.nav_effects import effective_transitive_depth  # noqa: I006
-        raw_depth = getattr(ctx.args, 'depth', None)
         # The depth the walk uses, stated as such in text and JSON (BACK-2627 E8): the legacy flag keeps its clamp.
-        depth = effective_transitive_depth(raw_depth if raw_depth else 2)
+        depth = ctx.request.depth
         boundary = collect_boundary_transitive(
             ctx.analyzer.path, ctx.element, ctx.func_node, from_line, to_line, ctx.get_text,
             language=language, depth=depth,
@@ -517,41 +489,28 @@ def _nav_boundary(ctx: _NavCtx) -> None:
         print(render_boundary(boundary, from_line, to_line))
 
 
-# Maps each nav flag (or flag pair) to its handler.  Adding a new nav flag:
-# 1 entry here + 1 new _nav_* function above.
-#
-# `bool_flags` lists the boolean (no-value) flag names an entry contributes —
-# empty for value flags (varflow/narrow/calls/keys), which mcp_server.py's
-# reveal_nav handles explicitly with their own flag_value validation.
-# NAV_BOOLEAN_FLAG_NAMES below derives from this so consumers (MCP) never
-# hand-maintain a second list that can drift out of sync (BACK-457).
-_NAV_DISPATCH: List[tuple] = [
-    # (bool_flags, check, handler)
-    (('outline',),                lambda a: getattr(a, 'outline', False),                                  _nav_outline),
-    ((),                         lambda a: getattr(a, 'flow', None) is not None,                          _nav_flow),
-    ((),                           lambda a: getattr(a, 'varflow', None),                                    _nav_varflow),
-    ((),                           lambda a: getattr(a, 'narrow', None),                                     _nav_narrow),
-    ((),                           lambda a: getattr(a, 'calls', None) is not None,                          _nav_calls),
-    (('ifmap', 'catchmap'),       lambda a: getattr(a, 'ifmap', False) or getattr(a, 'catchmap', False),    _nav_branchmap),
-    (('exits', 'flowto'),         lambda a: getattr(a, 'exits', False) or getattr(a, 'flowto', False),      _nav_exits),
-    (('inputs', 'deps'),          lambda a: getattr(a, 'deps', False) or getattr(a, 'inputs', False),       _nav_deps),
-    (('outputs', 'mutations', 'writes'), lambda a: getattr(a, 'mutations', False) or getattr(a, 'writes', False) or getattr(a, 'outputs', False), _nav_mutations),
-    (('sideeffects', 'effects'),            lambda a: getattr(a, 'sideeffects', False),                                _nav_sideeffects),
-    (('loopmap',),                lambda a: getattr(a, 'loopmap', False),                                    _nav_loopmap),
-    (('fanout',),                 lambda a: getattr(a, 'fanout', False),                                     _nav_fanout),
-    (('statewrites',),            lambda a: getattr(a, 'statewrites', False),                                _nav_statewrites),
-    ((),                           lambda a: getattr(a, 'keys', None),                                       _nav_keys),
-    (('returns',),                lambda a: getattr(a, 'returns', False),                                    _nav_returns),
-    (('boundary',),               lambda a: getattr(a, 'boundary', False),                                   _nav_boundary),
-]
+# Each element answer's handler, keyed by the bound request's ``ElementRequest.answer`` (the view, effects by its mode,
+# or the standalone operation). The declarations decide which answer a request selects (one answer per request), so
+# this is a lookup, not a precedence; --scope and --around answer on a line reference before it (_dispatch_nav).
+ELEMENT_HANDLERS: Dict[str, Callable[[_NavCtx], None]] = {
+    'boundary': _nav_boundary, 'flow': _nav_flow, 'exits': _nav_exits,
+    'effects:ordinary': _nav_sideeffects, 'effects:loops': _nav_fanout, 'effects:state': _nav_statewrites,
+    'inputs': _nav_deps, 'outputs': _nav_mutations, 'callsites': _nav_calls,
+    'varflow': _nav_varflow, 'keys': _nav_keys, 'narrow': _nav_narrow,
+}
 
-# Boolean nav flag names derived structurally from _NAV_DISPATCH — the set
-# mcp_server.py exposes as its no-value flags. `scope` is added separately
-# because it (like `around`) is dispatched before _NAV_DISPATCH runs, on a
-# line reference rather than a function node (see file_handler._dispatch_nav).
-NAV_BOOLEAN_FLAG_NAMES: frozenset = frozenset(
-    name for bool_flags, _, _ in _NAV_DISPATCH for name in bool_flags
-) | {'scope'}
+
+def _no_value_words() -> frozenset:
+    """The element words that take no value, from the declarations: the view's and flow's no-value legacy words, and
+    the switch operations with their legacy words (the names MCP ``reveal_nav`` takes without a flag_value)."""
+    from .nav_params import ELEMENT_VIEW_SPECS, KIND, VIEW
+    words = {entry.name for spec in (VIEW, KIND) for entry in spec.legacy if not entry.flag_optional}
+    words |= {word for spec in ELEMENT_VIEW_SPECS if spec.role == 'operation' and spec.type == 'boolean'
+              for word in (spec.name, *spec.legacy_words)}
+    return frozenset(words)
+
+
+NAV_BOOLEAN_FLAG_NAMES: frozenset = _no_value_words()
 
 
 def _single_line_ref(element: Optional[str], flag: str) -> int:
