@@ -19,6 +19,7 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 ### Behavior changes
 
 - `reveal sqlite DB[/TABLE]` is a subcommand answering as `sqlite://DB[/TABLE]`, and the integrity check is `--view health` (`--check` and `?check` still work, with a deprecation note). `--view health` gates on findings by default: a failed integrity check now exits 1 like a foreign-key violation (it exited 2), `--fail-on none` reports them with 0, and an unreadable database exits 3 (it exited 1 under `--check`). Query keys and flags sqlite never read (`?limit`, `--limit`, `--head`, `--lint`, `--only-failures`) exit 2 naming `view` instead of a note (BACK-2626, BACK-2753).
+- `reveal xlsx FILE` is a subcommand answering as `xlsx://FILE`, and its options are flags on both: `--sheet`, `--cells` (was `?range=`), `--match` (was `?search=`; repeat it to require every term in a row), `--limit`, `--formulas on|off`, `--powerpivot`, `--powerquery`, `--names`, `--connections` and `--format csv`. The query-string keys still work with a note until 1.0. `--limit 0` and `--all` give every row (0 meant the default 100), the search JSON's `pattern` is a list of terms, and two views, an unknown, unread or repeated key, a positional sheet or `--format csv` outside the sheet view exit 2 instead of a warning (BACK-2626).
 
 - Element views (`--boundary`, `--varflow`, `--keys`, `--narrow`, `--callsites`, `--flow`, `--exits`, `--effects`, ...) no longer answer an empty view, exit 0, for a request that matches nothing: a variable with no read or write in the selected lines, a line range or `--range`/`--callsites` range past the end of the file, a reversed line range, `--callsites abc`, an empty variable name and `--around -1` now exit 2 naming what was searched (BACK-2627).
 
@@ -130,6 +131,7 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
+- xlsx: `sheets_with_matches` counts the sheets of every match, not of the matches a `--limit` shows, and `reveal.api.query('xlsx', FILE, sheet=..., limit=...)` binds its keywords (they were dropped, so the overview answered) (BACK-2626).
 - `reveal.api.query('env://NAME')` answers that variable, as `reveal env://NAME --format json` does; it returned the whole environment listing. A variable that is not set raises `RequestValidationError`, where the CLI exits 2 (BACK-2626).
 
 - The once-a-day "Update available" notice now prints on stderr. It printed two lines on stdout in front of the answer, so `--format json` output did not parse on the day an older install learned of a new release (BACK-2738).
