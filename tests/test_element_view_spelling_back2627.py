@@ -1,0 +1,218 @@
+"""BACK-2627: the ``--view`` spelling of the element views (D20) -- RED until step S3 lands it.
+
+``reveal FILE ELEMENT --view boundary|effects|flow|exits`` answers exactly what today's flag answers (JSON apart from
+the retirement note, text stdout, exit), on every fixture language for a named element and a line range; the old flag
+keeps answering with one generated note naming its ``--view`` replacement (D5). Flow's selectors are ``--kind`` on the
+flow view, a selection that repeats and combines (X3); effects keeps D10's modifiers and strict validation (X4);
+boundary's transitive depth is strict on the new spelling while the legacy flag keeps its clamp (X10). The 13 existing
+element RETIREMENTS rows stop naming a replacement that itself retires. The vars, callsites and outputs homes wait on
+Scott (X5-X7): no new spelling is asserted for them here.
+"""
+import json
+import re
+from pathlib import PurePosixPath
+
+import pytest
+
+from conftest import _run_reveal_direct as run, without_retirement_notes
+from test_element_views_back2627 import LANGUAGES, copies, target  # noqa: F401  (copies is a fixture)
+
+pytestmark = pytest.mark.conformance
+
+# (new spelling, old spelling) of each view the switch moves; flat (no element) is left to the X2 ruling.
+VIEWS = {
+    'boundary': (['--view', 'boundary'], ['--boundary']),
+    'effects': (['--view', 'effects'], ['--effects']),
+    'flow': (['--view', 'flow'], ['--flow']),
+    'exits': (['--view', 'exits'], ['--exits']),
+}
+VARIANTS = {
+    'boundary-transitive': (['--view', 'boundary', '--transitive'], ['--boundary', '--transitive']),
+    'boundary-transitive-depth': (['--view', 'boundary', '--transitive', '--depth', '3'],
+                                  ['--boundary', '--transitive', '--depth', '3']),
+    'effects-loops': (['--view', 'effects', '--in-loops'], ['--effects', '--in-loops']),
+    'effects-loops-depth': (['--view', 'effects', '--in-loops', '--depth', '2'], ['--effects', '--in-loops', '--depth', '2']),
+    'effects-state': (['--view', 'effects', '--state'], ['--effects', '--state']),
+    'effects-transitive': (['--view', 'effects', '--transitive', '--depth', '1'], ['--effects', '--transitive', '--depth', '1']),
+    'flow-if': (['--view', 'flow', '--kind', 'if'], ['--flow=if']),
+    'flow-loop': (['--view', 'flow', '--kind', 'loop'], ['--flow=loop']),
+    'flow-try': (['--view', 'flow', '--kind', 'try'], ['--flow=try']),
+    'flow-if-try': (['--view', 'flow', '--kind', 'if', '--kind', 'try'], ['--flow=if,try']),
+    'flow-depth': (['--view', 'flow', '--depth', '1'], ['--flow', '--depth', '1']),
+}
+
+
+def _positionals(language, mode):
+    _, element, selected, _, _ = target(language)
+    return [element] if mode == 'named' else [':' + selected]
+
+
+def _notes(answer):
+    return [w for w in answer['meta'].get('warnings', []) if w.get('code') == 'retired_spelling']
+
+
+def assert_same_answer(path, positionals, new, old, view):
+    """The new spelling answers with no note; the old one answers the same JSON and text with one note naming
+    ``--view VIEW``; both exit alike."""
+    current = run(path, *positionals, *new, '--format', 'json')
+    assert current.returncode == 0, current.stderr[:400]
+    answer = json.loads(current.stdout)
+    assert answer['type'] == 'element_view' and not _notes(answer)
+    legacy = run(path, *positionals, *old, '--format', 'json')
+    assert legacy.returncode == current.returncode
+    legacy_answer = json.loads(legacy.stdout)
+    notes = _notes(legacy_answer)
+    assert len(notes) == 1 and f'--view {view}' in notes[0]['replacement'], notes
+    assert without_retirement_notes(legacy_answer) == answer
+    assert run(path, *positionals, *new).stdout == run(path, *positionals, *old).stdout
+
+
+@pytest.mark.parametrize('mode', ['named', 'range'])
+@pytest.mark.parametrize('view', list(VIEWS))
+@pytest.mark.parametrize('language', LANGUAGES)
+def test_view_answers_what_the_old_flag_answers(copies, language, view, mode):  # noqa: F811
+    new, old = VIEWS[view]
+    assert_same_answer(copies[language], _positionals(language, mode), new, old, view)
+
+
+@pytest.mark.parametrize('variant', list(VARIANTS))
+@pytest.mark.parametrize('language', ['python', 'typescript', 'go', 'ruby'])
+def test_view_modifiers_answer_what_the_old_modifiers_answer(copies, language, variant):  # noqa: F811
+    new, old = VARIANTS[variant]
+    element = target(language)[4] if variant.startswith(('effects-loops', 'effects-state', 'flow-loop')) else None
+    assert_same_answer(copies[language], [element or target(language)[1]], new, old, variant.split('-')[0])
+
+
+def test_view_answers_on_reveal_run_as_on_the_cli(copies):  # noqa: F811
+    pytest.importorskip('mcp')
+    from reveal.mcp_server import reveal_run
+    path, element = copies['python'], target('python')[1]
+    argv = [path, element, '--view', 'boundary', '--format', 'json']
+    cli = run(*argv)
+    assert cli.returncode == 0, cli.stderr[:400]
+    assert reveal_run(argv) == cli.stdout
+
+
+# -- X3: --kind on the flow view is a selection that repeats and combines -------------------------------------------
+
+def test_flow_kind_repeats_and_an_equal_repeat_is_one_term(copies):  # noqa: F811
+    path, element = copies['python'], target('python')[1]
+    once = run(path, element, '--view', 'flow', '--kind', 'try', '--format', 'json')
+    twice = run(path, element, '--view', 'flow', '--kind', 'try', '--kind', 'try', '--format', 'json')
+    assert once.returncode == twice.returncode == 0, once.stderr[:400]
+    assert json.loads(once.stdout) == json.loads(twice.stdout)
+
+
+@pytest.mark.parametrize('flags,name', [
+    pytest.param(['--view', 'boundary', '--kind', 'if'], 'kind', id='kind-on-boundary'),
+    pytest.param(['--view', 'boundary', '--in-loops'], 'in-loops', id='in-loops-on-boundary'),
+    pytest.param(['--view', 'exits', '--transitive'], 'transitive', id='transitive-on-exits'),
+    pytest.param(['--view', 'flow', '--kind', 'nosuch'], 'nosuch', id='unknown-kind'),
+])
+def test_a_modifier_the_view_does_not_read_exits_2_naming_it(copies, flags, name):  # noqa: F811
+    response = run(copies['python'], target('python')[1], *flags, '--format', 'json')
+    assert response.returncode == 2 and name in response.stdout + response.stderr
+    assert 'unrecognized arguments' not in response.stderr
+
+
+def test_unknown_view_exits_2_naming_the_element_views(copies):  # noqa: F811
+    response = run(copies['python'], target('python')[1], '--view', 'nosuch')
+    said = response.stdout + response.stderr
+    assert response.returncode == 2 and all(view in said for view in VIEWS), said[:400]
+
+
+def test_old_flag_and_view_together_are_one_answer_or_two(copies):  # noqa: F811
+    path, element = copies['python'], target('python')[1]
+    same = run(path, element, '--view', 'boundary', '--boundary', '--format', 'json')
+    assert same.returncode == 0, same.stderr[:400]  # one view, two spellings: equal values are one
+    other = run(path, element, '--view', 'exits', '--boundary', '--format', 'json')
+    assert other.returncode == 2 and 'one answer per request' in other.stdout + other.stderr
+
+
+# -- X4: effects keeps D10's strict validation on the new spelling -------------------------------------------------
+
+@pytest.mark.parametrize('flags', [['--depth', '2'], ['--in-loops', '--state'], ['--in-loops', '--transitive'],
+                                   ['--state', '--transitive'], ['--transitive', '--depth', '0'],
+                                   ['--transitive', '--depth', '6']], ids=lambda flags: ''.join(flags))
+def test_view_effects_validates_like_effects(copies, flags):  # noqa: F811
+    path, element = copies['python'], target('python')[1]
+    assert run(path, element, '--effects', *flags).returncode == 2  # the D10 rule on today's spelling
+    response = run(path, element, '--view', 'effects', *flags)
+    assert response.returncode == 2 and 'unrecognized arguments' not in response.stderr, response.stderr[:400]
+
+
+# -- X10, E8: boundary's transitive depth is strict on --view; the legacy flag keeps its clamp ----------------------
+
+@pytest.mark.parametrize('depth', ['0', '6', '-1'])
+def test_view_boundary_transitive_depth_is_strict(copies, depth):  # noqa: F811
+    path, element = copies['python'], target('python')[1]
+    assert run(path, element, '--boundary', '--transitive', '--depth', depth).returncode == 0  # legacy clamp stays
+    response = run(path, element, '--view', 'boundary', '--transitive', '--depth', depth)
+    assert response.returncode == 2 and 'depth' in response.stderr and 'unrecognized' not in response.stderr
+
+
+def test_view_boundary_transitive_states_its_depth_in_text_and_json(copies):  # noqa: F811
+    path, element = copies['python'], target('python')[1]
+    argv = [path, element, '--view', 'boundary', '--transitive', '--depth', '4']
+    assert 'depth=4' in run(*argv).stdout
+    response = run(*argv, '--format', 'json')
+    assert response.returncode == 0, response.stderr[:400]
+    assert [value for key, value in json.loads(response.stdout)['meta'].items() if 'depth' in key] == [4]
+
+
+# -- X2: the ast view and the path-read refusal stay ---------------------------------------------------------------
+
+def test_sibling_ast_view_still_binds_ast_and_a_directory_refuses_element_views(copies):  # noqa: F811
+    folder = PurePosixPath(copies['python']).parent.as_posix()
+    response = run(f'ast://{folder}', '--view', 'dict-heatmap', '--format', 'json')
+    assert response.returncode == 0, response.stderr[:400]
+    assert run(folder, '--view', 'boundary').returncode == 2
+    assert run(folder, '--name', 'process_order', '--view', 'boundary').returncode == 2
+
+
+# -- the 13 element RETIREMENTS rows name no replacement that itself retires ----------------------------------------
+
+ELEMENT_ROWS = ['flag:--deps', 'flag:--mutations', 'flag:--writes', 'flag:--calls', 'target:nav.outline',
+                'flag:--ifmap', 'flag:--loopmap', 'flag:--catchmap', 'flag:--returns', 'flag:--sideeffects',
+                'flag:--fanout', 'flag:--statewrites', 'flag:--flowto']
+# The rows whose view is ruled; deps/mutations/writes/calls wait on X6-X8.
+RULED_REPLACEMENTS = {
+    'target:nav.outline': '--view flow', 'flag:--ifmap': '--view flow --kind if',
+    'flag:--loopmap': '--view flow --kind loop', 'flag:--catchmap': '--view flow --kind try',
+    'flag:--returns': '--view exits', 'flag:--flowto': '--view exits', 'flag:--sideeffects': '--view effects',
+    'flag:--fanout': '--view effects --in-loops', 'flag:--statewrites': '--view effects --state',
+}
+NEW_ROWS = {'flag:--boundary': '--view boundary', 'flag:--effects': '--view effects', 'flag:--flow': '--view flow',
+            'flag:--exits': '--view exits'}
+
+
+def test_every_element_row_names_no_replacement_that_itself_retires():
+    from reveal.cli.invocation import RETIREMENTS
+    assert set(ELEMENT_ROWS) <= set(RETIREMENTS)
+    for key in ELEMENT_ROWS:
+        named = re.findall(r'(?<![\w-])--[a-z][\w-]*', RETIREMENTS[key].replacement)
+        assert not [flag for flag in named if f'flag:{flag}' in RETIREMENTS], (key, RETIREMENTS[key].replacement)
+
+
+@pytest.mark.parametrize('key', list(RULED_REPLACEMENTS))
+def test_ruled_element_rows_name_their_view(key):
+    from reveal.cli.invocation import RETIREMENTS
+    assert RETIREMENTS[key].replacement.startswith(RULED_REPLACEMENTS[key]), RETIREMENTS[key].replacement
+
+
+@pytest.mark.parametrize('key', list(NEW_ROWS))
+def test_the_four_view_flags_have_note_stage_rows(key):
+    from reveal.cli.invocation import RETIREMENTS
+    assert key in RETIREMENTS and RETIREMENTS[key].stage == 'note'
+    assert RETIREMENTS[key].replacement.startswith(NEW_ROWS[key]), RETIREMENTS[key].replacement
+
+
+@pytest.mark.parametrize('old,new', [(['--ifmap'], ['--view', 'flow', '--kind', 'if']),
+                                     (['--returns'], ['--view', 'exits']),
+                                     (['--fanout'], ['--view', 'effects', '--in-loops'])])
+def test_retired_flags_answer_what_their_named_view_answers(copies, old, new):  # noqa: F811
+    path, element = copies['python'], target('python')[1]
+    current = run(path, element, *new, '--format', 'json')
+    assert current.returncode == 0, current.stderr[:400]
+    legacy = json.loads(run(path, element, *old, '--format', 'json').stdout)
+    assert without_retirement_notes(legacy) == json.loads(current.stdout)
