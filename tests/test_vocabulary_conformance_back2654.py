@@ -46,6 +46,10 @@ control whatever its value type; 1b, 1d and 6 read every spelling (aliases and n
   20  applicability (BACK-2656): a declared control the selected answer does not read exits 2, on every answer: each
       operation selection, on each resource whose path selects an answer (ANSWER_TARGETS). An answer that reports the
       control unread (the ledger, a noun's own warning or a stderr note) does not conform; a refusal conforms.
+      Exempt in writing (Scott 2026-11-22, BACK-2744): the global presentation flags ``--max-items``,
+      ``--max-snippet-chars`` and ``--breadcrumbs`` (every spelling, ``APPLICABILITY_EXEMPT_GLOBALS``) apply on any
+      noun, so an answer with nothing to shape answers with the ledger's one-line unused note, exit 0, never exit 2;
+      ``test_an_exempt_presentation_global_is_applied_or_noted_never_refused`` holds it on every declared noun.
   14  defaults (Scott 2026-11-16): an environment or config value is a default, never a conflict: with
       ``REVEAL_FORMAT=json`` a request answers as ``--format json``, and ``--format text`` / ``--output text`` answer as
       with no default (no exit 2); on a noun that walks, ``REVEAL_IGNORE=P`` combines with ``--exclude Q`` (the answer
@@ -1411,6 +1415,18 @@ APPLICABILITY_VALUES = {
 # splits off before binding.
 _NOT_PROBED = ('where', 'respect_gitignore')
 
+# The global presentation flags are exempt from Applicability (Scott 2026-11-22, BACK-2744): they apply on any noun
+# (COMMAND_MODEL "Flags after a URI", "Caps"), so an answer with no list, snippet or breadcrumb to shape answers with the
+# ledger's one-line unused note, exit 0, never exit 2. Keyed by the main parser's dest, so every spelling of one is
+# exempt (--no-breadcrumbs and -q are --breadcrumbs off). They are the only ledger warnings a declared noun may print
+# without a wrong declaration; rule 20 and the ledger backstop judge declared controls, never these.
+APPLICABILITY_EXEMPT_GLOBALS = {
+    'max_items': 'Caps: an output budget of the page, which only an answer that pages a list reads',
+    'max_snippet_chars': 'Caps: an output budget of each snippet, which only an answer that prints snippets reads',
+    'breadcrumbs': 'Flags after a URI: the navigation hints after the answer, a presentation switch of any noun',
+}
+_EXEMPT_VALUES = {'max_items': '1', 'max_snippet_chars': '5', 'breadcrumbs': 'off'}
+
 
 def _applicability_value(noun, spec):
     return APPLICABILITY_VALUES.get((noun, spec.name)) or _selecting_value(spec)
@@ -2325,6 +2341,78 @@ def test_the_matchers_reject_the_answers_the_rules_replace():
     assert _conflict_case('x', rejected, ('--limit', 'limit=1')).ok
     assert _mentions(Run((), 0, '', 'Note: --verbose has no effect on ast:// queries\n'), '--verbose')
     assert not _mentions(Run((), 0, '', 'note: imports ?verbose (--verbose) is deprecated\n'), '--verbose')
+
+
+def _exempt_spellings():
+    """(dest, argv) for every spelling the main parser gives an exempt presentation global (BACK-2744)."""
+    return [(action.dest, [option] if action.nargs == 0 else [option, _EXEMPT_VALUES[action.dest]])
+            for action in create_argument_parser('0', full_help=True)._actions
+            if action.dest in APPLICABILITY_EXEMPT_GLOBALS for option in action.option_strings]
+
+
+def _unused_fields(run):
+    doc = json.loads(run.out) if run.out.strip().startswith('{') else {}
+    return {field for warning in (doc.get('meta') or {}).get('warnings') or []
+            if warning.get('code') == 'unused_flag' for field in warning.get('fields') or []}
+
+
+def _answer_without_unused(run, noun):
+    """The answer compared with its base request: the unused-input fact and the spelling's own retirement note aside."""
+    rc, doc = _flag_answer(run, noun)
+    meta = doc.get('meta') if isinstance(doc, dict) else None
+    if isinstance(meta, dict) and 'warnings' in meta:
+        warnings = [warning for warning in meta['warnings'] if warning.get('code') != 'unused_input']
+        doc = {**doc, 'meta': {**meta, 'warnings': warnings}}
+        if not warnings and set(meta) == {'warnings'}:
+            doc = {key: value for key, value in doc.items() if key != 'meta'}
+    return rc, doc
+
+
+def _applied_or_noted(run, base, noun, exempt):
+    """Whether *run* (the base request plus an exempt presentation global) answered as Applicability's exemption says:
+    the base request's exit, never 2; no unused-input fact but for the exempt spellings; noted unused, the answer is
+    the base's. Applied, the answer may differ (the page or snippet it shapes)."""
+    if run.rc != base.rc or run.rc == 2:
+        return False
+    unused = _unused_fields(run)
+    if not unused <= exempt:
+        return False
+    return not unused or _answer_without_unused(run, noun) == _answer_without_unused(base, noun)
+
+
+@pytest.mark.parametrize('noun', NOUNS)
+def test_an_exempt_presentation_global_is_applied_or_noted_never_refused(workspace, noun):
+    """BACK-2744: each spelling of each exempt global, on the subcommand and after the URI, answers with the base
+    request's exit (never 2), applied or with the ledger's unused note and an otherwise equal answer."""
+    exempt = {argv[0] for _dest, argv in _exempt_spellings()}
+    forms = {'URI': [_uri(noun)]}
+    if _sub(noun) is not None:
+        forms['subcommand'] = _sub(noun)
+    failing = []
+    for form, request in forms.items():
+        base = _run(*request, '--format', 'json')
+        for _dest, argv in _exempt_spellings():
+            run = _run(*request, *argv, '--format', 'json')
+            if not _applied_or_noted(run, base, noun, exempt):
+                failing.append(f'{form} {" ".join(argv)}: {run.brief()} (base exit {base.rc})')
+    assert not failing, '\n'.join(failing)
+
+
+def test_the_presentation_exemption_names_main_parser_flags_and_refuses_the_rest(workspace):
+    """The exemption's positive control: its dests are the main parser's, every one has a spelling, and the same
+    judgement refuses what is not exempt: a shared control the noun does not declare still exits 2 (rule 3), and an
+    unused-input fact naming any other flag is not the exemption's."""
+    assert {dest for dest, _argv in _exempt_spellings()} == set(APPLICABILITY_EXEMPT_GLOBALS)
+    exempt = {argv[0] for _dest, argv in _exempt_spellings()}
+    assert {'--max-items', '--max-snippet-chars', '--breadcrumbs', '--no-breadcrumbs', '-q'} <= exempt
+    base = _run(*_sub('imports'), '--format', 'json')
+    refused = _run(*_sub('imports'), '--match', 'x', '--format', 'json')
+    assert refused.rc == 2 and not _applied_or_noted(refused, base, 'imports', exempt), refused.brief()
+    noted = json.dumps({'meta': {'warnings': [{'code': 'unused_flag', 'fields': ['--depth'], 'message': 'x'}]}})
+    assert not _applied_or_noted(Run(('imports',), base.rc, noted, ''), base, 'imports', exempt)
+    shown = _run(*_sub('contracts'), '--max-items', '1', '--format', 'json')
+    assert _unused_fields(shown) == {'--max-items'} and _applied_or_noted(
+        shown, _run(*_sub('contracts'), '--format', 'json'), 'contracts', exempt), shown.brief()
 
 
 @pytest.mark.parametrize('rule', RULES)

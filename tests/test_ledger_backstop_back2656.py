@@ -10,6 +10,9 @@ predictor and the check agree. The matrix is built from the declarations and the
 
 Not judged here: ``where`` and the walk policy (``_NOT_PROBED``: rules 3 and 8 own the filter's fields), and whether a
 read control changes the answer (a read-but-not-applied drop the ledger cannot see; see the BACK-2656 Step 4 report).
+Nor the global presentation flags ``--max-items``, ``--max-snippet-chars`` and ``--breadcrumbs``: they are no declared
+control, and Applicability exempts them in writing (Scott 2026-11-22, BACK-2744), so the ledger's unused note for them is
+expected, exit 0 (``APPLICABILITY_EXEMPT_GLOBALS`` and its guard in the conformance test).
 """
 import pytest
 
