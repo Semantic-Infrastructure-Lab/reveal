@@ -25,7 +25,7 @@ The **codex://** adapter navigates and analyzes [OpenAI Codex CLI](https://githu
 - Tool call pairing (`function_call` + `function_call_output`)
 - Thread goal tracking (`goals_1.sqlite`) — objective, status, token budget
 - Memory pipeline status — Stage1/Stage2 consolidation from `stage1_outputs`
-- Install introspection (config with `?key=` drill-down, history, memories, rules, skills, plugins)
+- Install introspection (config with `--key` drill-down, history, memories, rules, skills, plugins)
 
 ---
 
@@ -57,7 +57,8 @@ session's answer: the path's views (`messages`, `tools`, `errors`, `shell`, `wor
 beside a different `--view` is two answers and exits 2 naming both; the same view given both
 ways is one.
 
-Deprecated spellings work until 1.0, each with a note naming its replacement:
+Deprecated spellings work until 1.0 in the URI, each with a note naming its replacement. They are not
+flags of `reveal codex`, which takes only the replacements:
 
 - `?filter=TEXT` is deprecated: `--where 'session~=TEXT'` answers the same.
 - `?full` is deprecated: `--detail full` answers the same.
@@ -122,7 +123,7 @@ reveal 'codex://019e5cc5/timeline'
 reveal 'codex://info'
 
 # Config value by dot-path (applied after secret masking)
-reveal 'codex://config?key=model'
+reveal codex://config --key model
 
 # Installed skills and plugins
 reveal 'codex://skills'
@@ -146,7 +147,7 @@ reveal 'codex://memories/pipeline'
 | `codex://sessions/ --match <term>` | Full-text JSONL search across all sessions; repeated terms AND per session |
 | `codex://sessions/ --match <term> --since <date>` | Full-text search scoped to sessions updated on/after `<date>` (ISO 8601 or `today`) |
 | `codex://sessions/ --match <term> --since <date> --until <date>` | Full-text search scoped to a date range |
-| `codex://sessions/ --match <term> --matches <n>` | Snippets kept per session (default 3, `0` keeps all); a cut is reported as a truncation naming `?matches=N` |
+| `codex://sessions/ --match <term> --matches <n>` | Snippets kept per session (default 3, `0` keeps all); a cut is reported as a truncation naming `--matches N` |
 | `codex://sessions/ --where 'session~=<term>' --since <date> --until <date>` | Metadata filter, same date scoping |
 
 > **Renamed**: `?search=` used to mean the SQLite metadata match and `?content=` the full-text scan. They're now `?filter=` (metadata) and `?search=` (content) — matching `claude://`'s established meaning, where `?search=` always means "search the content." The old names are not aliased; using them exits 2 as unknown controls. Since then `?filter=` became `--where 'session~=TEXT'` and `?search=` `--match TEXT` (both deprecated, working until 1.0 with a note).
@@ -183,7 +184,7 @@ Exchange text previews show at most 300 characters per prompt and 600 per answer
 | `codex://info` | Resolved paths, DB exists/size, session count |
 | `codex://history` | `~/.codex/history.jsonl` prompt history |
 | `codex://config` | `~/.codex/config.toml` with secrets masked |
-| `codex://config?key=<dotpath>` | A single config value by dot-path, e.g. `?key=model` — applied *after* secret masking, so a masked value can never be un-redacted this way |
+| `codex://config --key <dotpath>` | A single config value by dot-path, e.g. `--key model` — applied *after* secret masking, so a masked value can never be un-redacted this way |
 | `codex://memories` | `~/.codex/memories/` MEMORY.md and summaries |
 | `codex://memories/pipeline` | Stage1/Stage2 memory consolidation pipeline status |
 | `codex://rules` | `~/.codex/rules/*.rules` Starlark permission rules |
@@ -367,7 +368,8 @@ opened or queried exits **3**, keeping the counts read before the failure. The r
 
 ## Content Search
 
-`?search=<term>` scans all session JSONL files for a term in `user_message` and `agent_message` payloads:
+`--match <term>` scans all session JSONL files for a term in `user_message` and `agent_message` payloads (repeat
+it to require every term in a session):
 
 Matching uses decoded message text with Unicode lowercase comparisons. Literal
 UTF-8, JSON Unicode escapes, quotes and backslashes therefore produce the same
@@ -464,7 +466,7 @@ cuts and presentation. Every request refreshes source evidence.
 TOML loading and secret masking. The acquisition mechanism is shared with
 Claude's configuration readers; TOML parsing and masking retain their existing
 Codex owner. Healthy configuration, including empty documents and false/zero
-values, exits **0**. A missing file or absent `?key=` exits **2**; denied, malformed,
+values, exits **0**. A missing file or absent `--key` exits **2**; denied, malformed,
 undecodable or interrupted input and output loss exit **3**. A parsed document
 survives close failure after masking, with source disclosures.
 
@@ -479,7 +481,7 @@ TOML NaN and datetime values. Fresh reads refresh acquisition and key decisions.
 
 ## SQLite Catalog Outcomes
 
-Bare `codex://`, `codex://sessions` and metadata `?filter=` reads retain
+Bare `codex://`, `codex://sessions` and metadata `--where 'session~=TEXT'` reads retain
 `meta.session_catalog`: required-source presence, opening, observed rows,
 query completion and phased failures. Connections open read-only. Interrupted
 reads retain acquired rows, and metadata/date filtering follows acquisition.

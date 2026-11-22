@@ -740,7 +740,9 @@ match to. Matching precision varies by corpus size and is adapter-documented
 precision over a large transcript corpus you likely remember an exact phrase
 from; `help://search` does word-order-tolerant AND-of-terms matching, tuned
 for recall over a small curated doc corpus where an agent's phrasing rarely
-matches the docs verbatim).
+matches the docs verbatim). `codex://` spells this search `match` now
+(`reveal codex://sessions/ --match TEXT`, repeat it to AND terms); its `?search=` is
+a deprecated spelling that works until 1.0 with a note.
 
 **`field~=value` (and `body-contains=`) — structured field filtering.** "Does
 *this specific field* contain this substring?" AND-composable with other

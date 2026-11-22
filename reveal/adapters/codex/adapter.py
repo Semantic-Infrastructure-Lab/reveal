@@ -554,7 +554,7 @@ class CodexAdapter(ResourceAdapter):
         return {
             'adapter': 'codex',
             'description': 'OpenAI Codex CLI session analysis',
-            'uri_syntax': 'codex://[sessions[/?filter=term|?search=term] | <UUID>[/messages|tools|errors|shell|workflow|timeline|digest|exchanges|message/<n>][?last|?tokens|?goal] | info | history | config[?key=] | memories[/pipeline] | rules | skills[/<name>] | plugins[/<name>]]',
+            'uri_syntax': 'codex://[sessions | <UUID>[/messages|tools|errors|shell|workflow|timeline|digest|exchanges|message/<n>] | info | history | config | memories[/pipeline] | rules | skills[/<name>] | plugins[/<name>]] [--where session~=TEXT | --match TEXT] [--view NAME] [--detail full] [--key DOTPATH]',
             'output_types': [
                 {'type': 'codex_session_list', 'description': 'All sessions, newest first'},
                 {'type': 'codex_session_overview', 'description': 'Per-session summary: turns, tool calls, tokens, duration'},
@@ -584,26 +584,27 @@ class CodexAdapter(ResourceAdapter):
             'query_params': param_schema(PARAM_SPECS),
             'example_queries': [
                 {'uri': 'codex://', 'description': 'List all sessions (newest first)', 'output_type': 'codex_session_list'},
-                {'uri': 'codex://sessions/?filter=auth-refactor', 'description': 'Find sessions by title/first-message substring (SQLite metadata, fast)', 'output_type': 'codex_session_list'},
-                {'uri': 'codex://sessions/?match=authentication', 'description': 'Full-text search across all session JSONL files', 'output_type': 'codex_content_search'},
-                {'uri': 'codex://sessions/?match=authentication&since=2026-07-01', 'description': 'Full-text search scoped to sessions updated since a date', 'output_type': 'codex_content_search'},
+                {'uri': "codex://sessions/ --where 'session~=auth-refactor'", 'description': 'Find sessions by title/first-message substring (SQLite metadata, fast)', 'output_type': 'codex_session_list'},
+                {'uri': 'codex://sessions/ --match authentication', 'description': 'Full-text search across all session JSONL files', 'output_type': 'codex_content_search'},
+                {'uri': 'codex://sessions/ --match authentication --since 2026-07-01', 'description': 'Full-text search scoped to sessions updated since a date', 'output_type': 'codex_content_search'},
                 {'uri': 'codex://019e5cc5', 'description': 'Session overview: turns, tool calls, tokens, duration', 'output_type': 'codex_session_overview'},
-                {'uri': 'codex://019e5cc5?last', 'description': 'Last agent message only — fast recovery pattern', 'output_type': 'codex_messages'},
+                {'uri': 'codex://019e5cc5 --view last', 'description': 'Last agent message only — fast recovery pattern', 'output_type': 'codex_messages'},
                 {'uri': 'codex://019e5cc5/tools', 'description': 'Each tool call paired with its output', 'output_type': 'codex_tools'},
                 {'uri': 'codex://019e5cc5/digest', 'description': 'Composed readable view: overview + prompts + agent narrative — start here for "what happened in this session"', 'output_type': 'codex_digest'},
                 {'uri': 'codex://019e5cc5/exchanges', 'description': "Each user prompt paired with the agent's next reply", 'output_type': 'codex_exchanges'},
                 {'uri': 'codex://019e5cc5/message/-1', 'description': 'Last raw JSONL record (negative index)', 'output_type': 'codex_message'},
                 {'uri': 'codex://info', 'description': 'Install paths and DB stats', 'output_type': 'codex_info'},
-                {'uri': "codex://config?key=model", 'description': 'Extract a specific config value (dot-notation, applied after secret masking)', 'output_type': 'codex_config'},
+                {'uri': 'codex://config --key model', 'description': 'Extract a specific config value (dot-notation, applied after secret masking)', 'output_type': 'codex_config'},
                 {'uri': 'codex://skills', 'description': 'List all installed skill definitions', 'output_type': 'codex_skills'},
                 {'uri': 'codex://skills/openai-docs', 'description': 'Read a specific skill definition', 'output_type': 'codex_skill'},
                 {'uri': 'codex://plugins', 'description': 'List all installed plugins', 'output_type': 'codex_plugins'},
             ],
             'notes': [
                 'Reads OpenAI Codex CLI sessions from ~/.codex/ (SQLite session index + per-session JSONL).',
-                'Session UUIDs may be given by prefix; codex://sessions/ supports both metadata (?filter) and content (?search) filtering/search, scoped further by ?since/?until.',
+                "Session UUIDs may be given by prefix; codex://sessions/ supports both a metadata filter (--where 'session~=TEXT') and a content search (--match TEXT), scoped further by --since/--until.",
+                'reveal codex [RESOURCE] takes the same flags as the codex:// URI. The legacy words ?filter, ?search, ?full, ?last, ?tokens and ?goal still work until 1.0, each with a note naming its replacement.',
                 'codex://config masks secrets before display.',
-                'BACK-947: ?search= and ?content= were renamed to ?filter= and ?search= respectively to align with claude://\'s established meaning (search = content, filter = name/metadata match). The old names are not aliased — a query using them now surfaces via the unknown-query-param warning.',
+                'BACK-947: ?search= and ?content= were renamed to ?filter= and ?search= respectively to align with claude://\'s established meaning (search = content, filter = name/metadata match). The old names are not aliased: a query using them exits 2 as an unsupported control.',
             ],
         }
 
@@ -614,14 +615,14 @@ class CodexAdapter(ResourceAdapter):
             'description': 'Navigate and analyze OpenAI Codex CLI sessions — SQLite-backed session index + per-session JSONL analysis',
             'syntax': (
                 'codex://                                           # list all sessions\n'
-                'codex://sessions/?filter=<term>                   # metadata filter (SQLite, fast)\n'
-                'codex://sessions/?filter=<term>&since=<date>      # metadata filter scoped by date\n'
-                'codex://sessions/?search=<term>                   # JSONL content search\n'
-                'codex://sessions/?search=<term>&since=<date>      # content search scoped by date\n'
+                "codex://sessions/ --where 'session~=<term>'       # metadata filter (SQLite, fast)\n"
+                "codex://sessions/ --where 'session~=<term>' --since <date>  # metadata filter scoped by date\n"
+                'codex://sessions/ --match <term>                  # JSONL content search\n'
+                'codex://sessions/ --match <term> --since <date>   # content search scoped by date\n'
                 'codex://<UUID>                                     # session overview\n'
-                'codex://<UUID>?last                                # last agent message\n'
-                'codex://<UUID>?tokens                              # per-request token breakdown\n'
-                'codex://<UUID>?goal                                # thread goal (goals_1.sqlite)\n'
+                'codex://<UUID> --view last                         # last agent message\n'
+                'codex://<UUID> --view tokens                       # per-request token breakdown\n'
+                'codex://<UUID> --view goal                         # thread goal (goals_1.sqlite)\n'
                 'codex://<UUID>/messages                            # user + agent turns\n'
                 'codex://<UUID>/tools                               # tool calls paired with their outputs\n'
                 'codex://<UUID>/shell                               # shell commands + exit codes\n'
@@ -630,11 +631,12 @@ class CodexAdapter(ResourceAdapter):
                 'codex://<UUID>/timeline                            # all events in order\n'
                 'codex://<UUID>/digest                              # composed: overview + prompts + agent narrative\n'
                 'codex://<UUID>/exchanges                           # each prompt paired with the agent\'s next reply\n'
-                'codex://<UUID>/exchanges?full                      # complete paired prompts and answers\n'
+                'codex://<UUID>/exchanges --detail full             # complete paired prompts and answers\n'
                 'codex://<UUID>/message/<n>                         # raw JSONL record by index (0-based, negative OK)\n'
                 'codex://info                                       # install paths + DB stats\n'
                 'codex://history                                    # ~/.codex/history.jsonl\n'
                 'codex://config                                     # ~/.codex/config.toml (secrets masked)\n'
+                'codex://config --key <dotpath>                     # one config value, after masking\n'
                 'codex://memories                                   # ~/.codex/memories/\n'
                 'codex://memories/pipeline                          # Stage1/Stage2 memory pipeline status\n'
                 'codex://rules                                      # ~/.codex/rules/*.rules\n'
@@ -643,16 +645,27 @@ class CodexAdapter(ResourceAdapter):
                 'codex://plugins                                    # installed plugin manifests\n'
                 'codex://plugins/<name>                             # single plugin manifest'
             ),
+            'epilog': (
+                'Examples:\n'
+                "  reveal codex sessions --where 'session~=auth' --limit 10\n"
+                '  reveal codex sessions --match auth --since 2026-07-01\n'
+                '  reveal codex 019e5cc5 --view last\n'
+                '  reveal codex 019e5cc5/exchanges --detail full\n'
+                '  reveal codex config --key model\n'
+                'The URI takes the same flags; a session view is its path or --view NAME:\n'
+                '  reveal codex://019e5cc5 --view tools\n'
+                'Legacy ?filter, ?search, ?full, ?last, ?tokens and ?goal still work until 1.0, with a note.'
+            ),
             'examples': [
                 {'uri': 'codex://', 'description': 'List all sessions (newest first)'},
-                {'uri': 'codex://sessions/?filter=auth-refactor', 'description': 'Find sessions by title/first-message substring (SQLite metadata, fast)'},
-                {'uri': 'codex://sessions/?filter=auth-refactor&since=2026-07-01', 'description': 'Metadata filter scoped to sessions updated since a date'},
-                {'uri': 'codex://sessions/?match=authentication', 'description': 'Full-text search across all session JSONL files'},
-                {'uri': 'codex://sessions/?match=authentication&since=2026-07-01', 'description': 'Full-text search scoped to sessions updated since a date'},
+                {'uri': "codex://sessions/ --where 'session~=auth-refactor'", 'description': 'Find sessions by title/first-message substring (SQLite metadata, fast)'},
+                {'uri': "codex://sessions/ --where 'session~=auth-refactor' --since 2026-07-01", 'description': 'Metadata filter scoped to sessions updated since a date'},
+                {'uri': 'codex://sessions/ --match authentication', 'description': 'Full-text search across all session JSONL files'},
+                {'uri': 'codex://sessions/ --match authentication --since 2026-07-01', 'description': 'Full-text search scoped to sessions updated since a date'},
                 {'uri': 'codex://019e5cc5', 'description': 'Session overview: turns, tool calls, tokens, duration'},
-                {'uri': 'codex://019e5cc5?last', 'description': 'Last agent message only — fast recovery pattern'},
-                {'uri': 'codex://019e5cc5?tokens', 'description': 'Per-request token breakdown (input/output/cached/reasoning)'},
-                {'uri': 'codex://019e5cc5?goal', 'description': 'Thread goal objective + token budget (goals_1.sqlite)'},
+                {'uri': 'codex://019e5cc5 --view last', 'description': 'Last agent message only — fast recovery pattern'},
+                {'uri': 'codex://019e5cc5 --view tokens', 'description': 'Per-request token breakdown (input/output/cached/reasoning)'},
+                {'uri': 'codex://019e5cc5 --view goal', 'description': 'Thread goal objective + token budget (goals_1.sqlite)'},
                 {'uri': 'codex://019e5cc5/messages', 'description': 'All user and agent turns in order'},
                 {'uri': 'codex://019e5cc5/tools', 'description': 'Paired function_call + output events'},
                 {'uri': 'codex://019e5cc5/shell', 'description': 'Shell commands with exit codes and output'},
@@ -665,7 +678,7 @@ class CodexAdapter(ResourceAdapter):
                 {'uri': 'codex://info', 'description': 'Install paths and DB stats'},
                 {'uri': 'codex://history', 'description': 'Prompt history from ~/.codex/history.jsonl'},
                 {'uri': 'codex://config', 'description': 'Config TOML (secrets masked)'},
-                {'uri': "codex://config?key=model", 'description': 'Extract a specific config value (dot-notation, applied after masking)'},
+                {'uri': 'codex://config --key model', 'description': 'Extract a specific config value (dot-notation, applied after masking)'},
                 {'uri': 'codex://memories/pipeline', 'description': 'Stage1/Stage2 memory pipeline status'},
                 {'uri': 'codex://skills', 'description': 'List all installed skill definitions (~/.codex/skills/**/SKILL.md)'},
                 {'uri': 'codex://skills/openai-docs', 'description': 'Read a specific skill definition'},

@@ -2685,13 +2685,13 @@ The `codex://` adapter navigates and analyzes [OpenAI Codex CLI](https://github.
 reveal 'codex://'
 
 # Filter by title or first message (SQLite metadata, fast)
-reveal 'codex://sessions/?filter=auth-refactor'
+reveal codex://sessions/ --where 'session~=auth-refactor'
 
 # Full-text search across all session JSONL content
-reveal 'codex://sessions/?match=authentication'
+reveal codex://sessions/ --match authentication
 
 # Full-text search scoped to a date range
-reveal 'codex://sessions/?match=authentication&since=2026-07-01'
+reveal codex://sessions/ --match authentication --since 2026-07-01
 ```
 
 **Session analysis:**
@@ -2700,13 +2700,13 @@ reveal 'codex://sessions/?match=authentication&since=2026-07-01'
 reveal 'codex://019e5cc5'
 
 # Fast session recovery — last agent message only
-reveal 'codex://019e5cc5?last'
+reveal codex://019e5cc5 --view last
 
 # Per-turn token breakdown (input/cached/output/reasoning)
-reveal 'codex://019e5cc5?tokens'
+reveal codex://019e5cc5 --view tokens
 
 # Thread goal from goals_1.sqlite (objective + token budget)
-reveal 'codex://019e5cc5?goal'
+reveal codex://019e5cc5 --view goal
 
 # User + agent conversation turns
 reveal 'codex://019e5cc5/messages'
@@ -2748,7 +2748,7 @@ reveal 'codex://history'
 reveal 'codex://config'
 
 # A single config value by dot-path (applied AFTER secret masking)
-reveal 'codex://config?key=model'
+reveal codex://config --key model
 
 # ~/.codex/memories/ (MEMORY.md + session summaries)
 reveal 'codex://memories'
@@ -2824,7 +2824,7 @@ reveal 'codex://019e5cc5'
 reveal 'codex://019e5cc5/workflow'
 
 # 3. Check token cost
-reveal 'codex://019e5cc5?tokens'
+reveal codex://019e5cc5 --view tokens
 
 # 4. Drill into errors if something went wrong
 reveal 'codex://019e5cc5/errors'
