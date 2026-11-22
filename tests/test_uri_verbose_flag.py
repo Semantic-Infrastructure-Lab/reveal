@@ -61,7 +61,7 @@ def test_without_verbose_flag_nothing_changes():
     assert inject_query_flags('src?circular', 'imports', _args()) == 'src?circular'
 
 
-@pytest.mark.parametrize('scheme', ['env', 'nosuchscheme'])
+@pytest.mark.parametrize('scheme', ['reveal', 'nosuchscheme'])  # env is declared since BACK-2626 (no detail: refused)
 def test_adapters_without_declaration_untouched(scheme):
     assert inject_query_flags('src', scheme, _args(verbose=True)) == 'src'
 
