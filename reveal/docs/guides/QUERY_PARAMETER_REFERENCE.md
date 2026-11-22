@@ -672,7 +672,7 @@ mode, a limit that is not a whole number or an empty `--match`, exits 2 and name
 
 The following adapters use **element paths** for navigation — query params are not needed because the element path covers the use case:
 
-- **env://** - `env://VAR_NAME` (element = variable name)
+- **env://** - `reveal env VAR_NAME` or `env://VAR_NAME` (resource = variable name; env takes no control)
 - **sqlite://** - `sqlite://db.sqlite/table_name` (element = table)
 - **mysql://** - `mysql://host/element` (element = connections, innodb, errors, databases, etc.)
 - **reveal://** - `reveal://adapters` (element = topic)

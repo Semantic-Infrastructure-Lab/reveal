@@ -360,10 +360,10 @@ ssl://example.com --check      # Validation
 ```
 
 ### Element-Based Adapters
-**env://, help://** - Navigate via element names
+**help://** - Navigate via element names (env:// names its variable as its resource: `reveal env PATH`, `env://PATH`)
 
 ```bash
-env://PATH                     # Specific variable
+env://PATH                     # Specific variable (the resource)
 help://ast                     # Help topic
 ```
 
