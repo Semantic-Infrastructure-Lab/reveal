@@ -37,7 +37,8 @@ def test_a_control_whose_flag_the_parser_owns_is_not_generated_again():
     assert parser._option_string_actions['--depth'] is owner  # the path read's argument stays the owner
     assert parser.parse_args(['f', '--depth', '3']).depth == 3
     args = parser.parse_args(['f', '--nesting-depth', '2', '--view', 'b'])
-    assert (args.nesting_depth, args.view) == ('2', 'b')  # a generated argument stores what was typed; the binder converts
+    # a generated argument stores what was typed; the binder converts
+    assert (args.nesting_depth, args.view) == ('2', 'b')
     assert vars(parser.parse_args(['f', '--old-a']))['boundary'] == 'a'  # legacy flags are still generated
 
 

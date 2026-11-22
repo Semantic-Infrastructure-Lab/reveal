@@ -8,8 +8,8 @@ from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Union
 from urllib.parse import quote, unquote
 
 from ..errors import RequestValidationError, UnreadControlError, UnsupportedOverrideError
-from .query_parser import (SHARED_CONTROL_NAMES, LegacySpelling, ParamSpec, ParamValueError, QueryParams, ResourceSpec,
-                           mark_query_keys, parse_query_params, peek_query_items, query_key,
+from .query_parser import (SHARED_CONTROL_NAMES, CliBinding, LegacySpelling, ParamSpec, ParamValueError, QueryParams,
+                           ResourceSpec, mark_query_keys, parse_query_params, peek_query_items, query_key,
                            query_key_recorder, whole_number)
 
 
@@ -1087,6 +1087,25 @@ def _owned_by_parser(parser, spec: ParamSpec) -> bool:
     return True
 
 
+def _argument_options(spec: ParamSpec, cli: CliBinding) -> Dict[str, Any]:
+    """The argparse options of *spec*'s own argument: a setting typed twice is ScalarOnceAction's (one box shared by
+    the flags that spell it), a repeatable or switch control keeps its declared action."""
+    options: Dict[str, Any] = {'dest': cli.dest or spec.name, 'default': argparse.SUPPRESS,
+                               'required': cli.required, 'help': spec.description}
+    if spec.cli_action is not None:
+        options['action'] = spec.cli_action
+        return options
+    if cli.nargs != 0:
+        options.update(action=ScalarOnceAction, translate=spec.canonical_value, comparable=spec.validate, seen={})
+    if cli.nargs is not None:
+        options['nargs'] = cli.nargs
+        if cli.nargs == '?':
+            options['const'] = cli.const
+    if cli.metavar is not None:
+        options['metavar'] = cli.metavar
+    return options
+
+
 def add_declared_arguments(parser: argparse.ArgumentParser, specs: Iterable[ParamSpec],
                            resource: Optional[ResourceSpec]) -> None:
     """Generate local arguments; global presentation/exclusion owners remain unchanged. *resource* None: no positional
@@ -1104,23 +1123,7 @@ def add_declared_arguments(parser: argparse.ArgumentParser, specs: Iterable[Para
         if _owned_by_parser(parser, spec):
             _add_legacy_flag_arguments(parser, spec)
             continue
-        box: Dict[str, Any] = {}
-        options: Dict[str, Any] = {'dest': cli.dest or spec.name, 'default': argparse.SUPPRESS,
-                                   'required': cli.required, 'help': spec.description}
-        if spec.cli_action is not None:
-            options['action'] = spec.cli_action
-        else:
-            if cli.nargs != 0:
-                options['action'] = ScalarOnceAction
-                options['translate'] = spec.canonical_value
-                options['comparable'] = spec.validate
-                options['seen'] = box
-            if cli.nargs is not None:
-                options['nargs'] = cli.nargs
-                if cli.nargs == '?':
-                    options['const'] = cli.const
-            if cli.metavar is not None:
-                options['metavar'] = cli.metavar
+        options = _argument_options(spec, cli)
         separate = {entry.flag for entry in _separate_legacy_flags(spec)}
         owner = parser
         if cli.exclusive:
