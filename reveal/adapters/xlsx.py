@@ -845,6 +845,8 @@ class XlsxAdapter(ResourceAdapter):
             RequestValidationError (a ValueError): an unknown, unread, repeated or invalid control, or a resource that
                 is not a workbook
         """
+        if not isinstance(resource, str) or not resource:
+            raise RequestValidationError("xlsx requires a workbook path: reveal xlsx path/to/file.xlsx")
         if resource.startswith('xlsx://'):
             resource = resource[len('xlsx://'):]
         resource, _, embedded = resource.partition('?')
