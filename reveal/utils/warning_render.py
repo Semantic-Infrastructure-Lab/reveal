@@ -85,14 +85,18 @@ def render_meta_warnings(
         print(line)
 
 
-def _rule_field_values(result: Dict[str, Any], fields: tuple[str, ...]) -> Dict[str, str]:
-    rules: Dict[str, str] = {}
+def _rule_field_values(result: Dict[str, Any], fields: tuple[str, ...]) -> Dict[str, List[str]]:
+    """Each field that holds a rule, as its lines: a nonempty string, or a nonempty list of sentences (git ownership's
+    ``_meta.known_limits``)."""
+    rules: Dict[str, List[str]] = {}
     for path in fields:
         value: Any = result
         for key in path.split('.'):
             value = value.get(key) if isinstance(value, dict) else None
         if isinstance(value, str) and value:
-            rules[path] = value
+            rules[path] = [value]
+        elif isinstance(value, list) and value and all(isinstance(item, str) and item for item in value):
+            rules[path] = list(value)
     return rules
 
 
@@ -119,6 +123,6 @@ def rule_text_lines(
         pointer += '; --detail for full text'
     lines = [pointer]
     if detail:
-        lines.extend(rules.values())
+        lines.extend(text for texts in rules.values() for text in texts)
         lines.extend(f"⚠ {w['message']}" for w in caveats if w.get('message'))
     return lines
