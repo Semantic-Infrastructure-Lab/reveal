@@ -365,6 +365,11 @@ class ResourceSpec:
         return result
 
 
+def _spelling_variants(name: str) -> Tuple[str, ...]:
+    """*name* and, when it is hyphenated, its underscore spelling (COMMAND_MODEL "Key spelling")."""
+    return (name, name.replace('-', '_')) if '-' in name else (name,)
+
+
 @dataclass(frozen=True)
 class LegacySpelling:
     """A retired spelling of the control it is declared on (COMMAND_MODEL rule "Spellings", BACK-2654).
@@ -513,8 +518,10 @@ class ParamSpec:
 
     @property
     def legacy_words(self) -> Tuple[str, ...]:
-        """The legacy entries keyed by name alone: other words for this control."""
-        return tuple(entry.name for entry in self.legacy if entry.value is None and not entry.first)
+        """The legacy entries keyed by name alone: other words for this control. A hyphenated word is also spelled with
+        underscores, as a canonical key is (COMMAND_MODEL "Key spelling": ``body_contains`` is ``body-contains``)."""
+        return tuple(dict.fromkeys(spelling for entry in self.legacy if entry.value is None and not entry.first
+                                   for spelling in _spelling_variants(entry.name)))
 
     @property
     def spellings(self) -> Tuple[str, ...]:
@@ -528,7 +535,7 @@ class ParamSpec:
     def legacy_entry(self, spelling: str) -> Optional[LegacySpelling]:
         """The name-keyed legacy entry for *spelling* (or its old flag), or None."""
         return next((entry for entry in self.legacy if entry.value is None and not entry.first
-                     and spelling in (entry.name, entry.flag)), None)
+                     and (spelling in _spelling_variants(entry.name) or spelling == entry.flag)), None)
 
     def canonical_value(self, spelling: str, value: Any) -> Any:
         """*value* as this control's own: a legacy spelling's translation, then a retired value's canonical value (a
