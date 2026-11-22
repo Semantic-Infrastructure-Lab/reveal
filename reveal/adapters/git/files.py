@@ -198,6 +198,11 @@ def get_file_diff(
         raise ValueError(
             f"git:// diff timed out after {_GIT_DIFF_TIMEOUT_S}s running 'git diff' on {subpath}"
         ) from e
+    if result.returncode != 0:
+        # A diff that did not run has empty output, which read as "no changes" (BACK-2616 B7): it is a failure.
+        stderr, _ = _decode_blob(result.stderr or b'')
+        detail = split_lines(stderr.strip())
+        raise ValueError(f"git diff exited {result.returncode} on {subpath}" + (f": {detail[-1]}" if detail else ''))
     diff_text, decoding_loss = _decode_blob(result.stdout)
 
     if not diff_text:
@@ -205,6 +210,10 @@ def get_file_diff(
 
     if element:
         diff_text = _filter_diff_to_element(diff_text, element)
+        if diff_text.startswith('(no hunks') and not any(
+                _get_element_content_at_commit(repo, revision, subpath, element) is not None
+                for revision in [commit] + list(commit.parents[:1])):
+            raise RequestValidationError(_element_not_found(element, f'{subpath} at {ref} or its parent'))
 
     commit_info = {
         'hash': short_hash,
@@ -834,6 +843,9 @@ def _element_source_at_commit(repo, commit, filepath):
         entry = commit.tree[filepath]
     except KeyError:
         return None
+    if entry.type_str == 'tree':  # BACK-2690: a directory has no elements (it read a Tree as a blob, exit 3)
+        raise RequestValidationError(f"element names an element of a file: {filepath} is a directory "
+                                     f"(give a file's path: reveal git {filepath}/FILE --element NAME)")
     try:
         blob = cast('pygit2.Blob', repo[entry.id])
     except KeyError as exc:
@@ -845,6 +857,37 @@ def _element_source_at_commit(repo, commit, filepath):
     if not available or structure.get('_has_errors') or structure.get('error'):
         raise ValueError(f'Cannot resolve semantic elements from unavailable or recovered analysis: {filepath}')
     return normalize_newlines(content), structure
+
+
+def require_history_target(repo, ref: str, subpath: str, element: Optional[str], result: Dict[str, Any],
+                           filtered: bool) -> None:
+    """Plan rule 9 for a path's history (BACK-2616 Q8): an unfiltered history with no commit is an invalid request
+    naming what was searched when its target is not at the ref either (a path never in history, an element the file
+    never had). A deleted file or element keeps its history (the commits that added and removed it, BACK-2545), and a
+    filter that matches no commit is an empty answer, not an unknown target."""
+    if result.get('count') or result.get('total_matches') or filtered:
+        return
+    commit = resolve_commit(repo, ref)
+    if element:
+        if _get_element_content_at_commit(repo, commit, subpath, element) is None:
+            raise RequestValidationError(_element_not_found(element, f"{subpath} at {ref}, and no commit in its "
+                                                                     'history changed it'))
+    elif _tree_entry(commit, subpath) is None:
+        raise MissingResourceError(f'Path not found: {subpath} at {ref}, and no commit in its history touched it')
+
+
+def _element_not_found(element: str, searched: str) -> str:
+    """Rule 9's message for an element a history or diff did not find; a line range narrows blame only."""
+    if re.fullmatch(r'L\d+-L\d+', element):
+        return f'element {element} is a line range, which only blame reads; history and diff take an element name'
+    return f'Element not found: {element} in {searched}'
+
+
+def _tree_entry(commit, subpath):
+    try:
+        return commit.tree[subpath]
+    except KeyError:
+        return None
 
 
 def get_element_line_range_at_ref(repo, ref, subpath, element_name):

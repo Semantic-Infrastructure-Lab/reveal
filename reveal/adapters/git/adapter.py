@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional, Set, Tuple, Union
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
-from ...errors import MissingResourceError, NotApplicableError
+from ...errors import MissingResourceError, NotApplicableError, RequestValidationError
 from ...utils.query import (
     parse_query_filters,
     parse_query_params,
@@ -290,6 +290,7 @@ class GitAdapter(ResourceAdapter):
             # Parse resource string to extract path/subpath/ref
             parsed = self._parse_resource_string(resource, inline_query=inline_query, literal_paths=literal_paths)
             self.path = parsed['path']
+            self._address_ref = parsed['address_ref']
             # A ref= keyword wins over an @ref in the resource string
             if ref is None:
                 self.ref = parsed['ref']
@@ -304,6 +305,7 @@ class GitAdapter(ResourceAdapter):
         else:
             # Old style: explicit arguments (all provided)
             self.path = resource
+            self._address_ref = None
             self.ref = ref or 'HEAD'
             self.subpath = subpath
             self.query = query or {}
@@ -332,7 +334,7 @@ class GitAdapter(ResourceAdapter):
                 continue
             # ?ref= overrides the starting ref (alias for @ref in the URI)
             elif k == 'ref':
-                self.ref = v
+                self._join_address_ref(v)
                 mark_query_keys(self.query, k)
             # ?since=YYYY-MM-DD — ergonomic alias for date>=YYYY-MM-DD
             # ?until=YYYY-MM-DD — ergonomic alias for date<=YYYY-MM-DD (BACK-1192,
@@ -437,6 +439,14 @@ class GitAdapter(ResourceAdapter):
 
         self._unknown_filter_fields = self._find_unknown_filter_fields()
 
+    def _join_address_ref(self, value: str) -> None:
+        """``--ref``/``?ref=`` and the resource's ``@REF`` are one setting (COMMAND_MODEL "Conflicting values", ruling
+        Q5): equal values are one, different values are an invalid request naming both."""
+        if self._address_ref is not None and value != self._address_ref:
+            raise RequestValidationError(f'ref {value} conflicts with @{self._address_ref} in the resource: the ref is '
+                                         'set twice with different values; give it once')
+        self.ref = value
+
     def _find_unknown_filter_fields(self) -> List[str]:
         """Filter fields written with an operator that no commit record has (BACK-2309).
 
@@ -481,12 +491,13 @@ class GitAdapter(ResourceAdapter):
         """
         path = '.'
         ref = 'HEAD'
+        address_ref = None  # the @REF the resource spells, if any (BACK-2616 Q5)
         subpath = None
         query: Dict[str, Any] = QueryParams()
 
         # Handle empty resource
         if not resource or resource == '':
-            return {'path': path, 'ref': ref, 'subpath': subpath, 'query': query}
+            return {'path': path, 'ref': ref, 'subpath': subpath, 'query': query, 'address_ref': address_ref}
 
         # Extract query parameters first (?key=value)
         if inline_query and '?' in resource:
@@ -496,6 +507,7 @@ class GitAdapter(ResourceAdapter):
         # Extract ref (@branch or @tag or @commit)
         if '@' in resource and not (literal_paths and os.path.exists(resource)):
             resource, ref = resource.rsplit('@', 1)
+            address_ref = ref
 
         # What's left is path or subpath
         # Logic:
@@ -530,7 +542,7 @@ class GitAdapter(ResourceAdapter):
                 # or a repo root of its own (BACK-1760)
                 path, subpath = _relative_target_scope(resource)
 
-        return {'path': path, 'ref': ref, 'subpath': subpath, 'query': query}
+        return {'path': path, 'ref': ref, 'subpath': subpath, 'query': query, 'address_ref': address_ref}
 
     def _check_pygit2(self):
         """Check if pygit2 is available and provide helpful error."""
@@ -689,6 +701,8 @@ class GitAdapter(ResourceAdapter):
                     touch_func,
                     is_dir=subpath_is_dir,
                 )
+                files.require_history_target(repo, self.ref, git_subpath, element_name, result,
+                                             filtered=bool(self.query_filters or content_pattern))
                 if element_name:
                     result['element'] = element_name
                 return result

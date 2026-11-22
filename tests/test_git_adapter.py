@@ -1466,7 +1466,7 @@ class TestGitRenderer(unittest.TestCase):
 
         adapter = GitAdapter(
             path=str(self.git_repo),
-            subpath='test.txt',
+            subpath='README.md',  # a path history touched: one it never did exits 2 (BACK-2616 Q8)
             query={'type': 'history'}
         )
         result = adapter.get_structure()
@@ -1482,7 +1482,7 @@ class TestGitRenderer(unittest.TestCase):
 
         # Should contain file history info
         self.assertIn('File History:', output)
-        self.assertIn('test.txt', output)
+        self.assertIn('README.md', output)
 
     def test_renderer_empty_history_with_filter_shows_hint(self):
         """When history is empty and a filter was applied, renderer shows a helpful hint."""
