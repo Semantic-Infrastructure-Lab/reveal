@@ -9,7 +9,7 @@ import pytest
 from conftest import _run_reveal_direct, without_request_notes
 from reveal import api
 from reveal.adapters.ast.adapter import AstAdapter
-from reveal.utils.results import AnalysisCompleteness, ResultBuilder
+from reveal.utils.results import AnalysisCompleteness, FailureCause, ResultBuilder
 
 SOURCE = 'def consume(config: dict):\n    return config\n'
 
@@ -23,12 +23,13 @@ def answer(path, variable='config', *options):
     return response, json.loads(response.stdout)
 
 
-@pytest.mark.parametrize('variable', ['config', 'absent'])
-def test_genuine_recovery_is_incomplete_even_when_all_sources_recovered(tmp_path, variable):
+# A complete search finds 'absent' nowhere: a target that matches nothing, exit 2 (plan rule 9; BACK-2613 Q6).
+@pytest.mark.parametrize('variable,complete_exit', [('config', 0), ('absent', 2)])
+def test_genuine_recovery_is_incomplete_even_when_all_sources_recovered(tmp_path, variable, complete_exit):
     source = tmp_path / 'source.py'
     source.write_text(SOURCE, encoding='utf-8')
     healthy, clean = answer(source, variable)
-    assert healthy.returncode == 0
+    assert healthy.returncode == complete_exit
     source.write_text(SOURCE + '\ndef broken(:\n', encoding='utf-8')
     partial, data = answer(source, variable)
     assert partial.returncode == 3
@@ -39,7 +40,7 @@ def test_genuine_recovery_is_incomplete_even_when_all_sources_recovered(tmp_path
     assert 'confidence' not in data['meta']
     source.write_text(SOURCE, encoding='utf-8')
     restored, data = answer(source, variable)
-    assert restored.returncode == 0 and data['results'] == clean['results']
+    assert restored.returncode == complete_exit and data['results'] == clean['results']
     assert data['meta']['confidence'] == 1.0 and not without_request_notes(data)['meta']['warnings']  # the URI request's own note aside (BACK-2716)
 
 
@@ -95,15 +96,25 @@ def test_recovery_facts_precede_projection_and_cuts(tmp_path, options):
 
 
 @pytest.mark.parametrize('source,variable', [('', 'config'), ('VALUE = 1\n', 'absent'), (SOURCE, 'absent')])
-def test_healthy_zero_remains_complete(tmp_path, source, variable):
+def test_healthy_zero_is_a_complete_target_that_matches_nothing(tmp_path, source, variable):
+    """A complete search with no occurrence names what it searched and exits 2 (plan rule 9, BACK-2613 Q6); it used to
+    answer an empty list, exit 0. Completeness stays complete: nothing was lost."""
     (tmp_path / 'source.py').write_text(source, encoding='utf-8')
     response, data = answer(tmp_path, variable)
-    assert response.returncode == 0 and data['results'] == []
-    assert AstAdapter.execution_facts(data).completeness is AnalysisCompleteness.COMPLETE
+    assert response.returncode == 2 and data['results'] == [] and variable in data['error']
+    facts = AstAdapter.execution_facts(data)
+    assert facts.completeness is AnalysisCompleteness.COMPLETE and FailureCause.INVALID_REQUEST in facts.failures
+
+
+def test_a_zero_with_no_python_searched_stays_an_answer(tmp_path):
+    (tmp_path / 'source.js').write_text('const config = 1;\n', encoding='utf-8')
+    response, data = answer(tmp_path, 'config')
+    assert response.returncode == 0 and data['results'] == [] and 'error' not in data
 
 
 @pytest.mark.parametrize('query,kind', [
-    ('reveal_type=config', 'ast_reveal_type'), ('reveal_type=other&reveal_type=config', 'ast_reveal_type'),
+    # two different values are an invalid request the binder rejects: no mode beyond the default (BACK-2613)
+    ('reveal_type=config', 'ast_reveal_type'), ('reveal_type=other&reveal_type=config', 'ast_query'),
     ('reveal_type=config&reveal_type=', 'ast_query'), ('reveal_type%3Dconfig', 'ast_query'),
     ('show=dict-heatmap&reveal_type=config', 'ast_dict_heatmap'),
 ])

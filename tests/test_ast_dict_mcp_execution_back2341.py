@@ -52,11 +52,16 @@ def test_real_parse_loss_survivors_and_repair_through_stdio(tmp_path, provenance
             assert not fresh.is_error and 'fresh' in _text(fresh)
             assert 'first' not in _text(fresh)
         healthy.write_text('VALUE = 1\n', encoding='utf-8')
-        for query_string in ('show=dict-heatmap', 'show=dict-schemas', 'reveal_type=absent', 'name=absent'):
+        for query_string in ('show=dict-heatmap', 'show=dict-schemas', 'name=absent'):
             empty = await session.call_tool('reveal_query', {
                 'uri': f'ast://{tmp_path.as_posix()}?{query_string}', 'provenance': provenance})
             assert not empty.is_error
             assert 'incomplete' not in _text(empty).lower()
+        # a variable a complete search finds nowhere is a target that matches nothing (plan rule 9, BACK-2613 Q6)
+        absent = await session.call_tool('reveal_query', {
+            'uri': f'ast://{tmp_path.as_posix()}?reveal_type=absent', 'provenance': provenance})
+        assert absent.is_error and "'absent' has no occurrence" in _text(absent)
+        assert 'incomplete' not in _text(absent).lower()
         healthy.unlink()
         (tmp_path / 'healthy.lua').write_text('local value = 1\n', encoding='utf-8')
         for mode in MODES:

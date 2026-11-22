@@ -40,7 +40,7 @@ def test_retirement_inventory_matches_the_shipped_migrations():
                                    'flag:--fanout', 'flag:--flowto', 'flag:--ifmap', 'flag:--loopmap', 'flag:--mutations',
                                    'flag:--no-breadcrumbs', 'flag:--no-fallback', 'flag:--no-gitignore', 'flag:--no-group', 'flag:--no-snippets',
                                    'flag:--returns', 'flag:--search', 'flag:--sideeffects', 'flag:--statewrites',
-                                   'flag:--verbose', 'flag:--writes', 'param:architecture.verbose', 'param:ast.callee_of', 'param:ast.calls', 'param:ast.depth', 'param:ast.type',
+                                   'flag:--verbose', 'flag:--writes', 'param:architecture.verbose', 'param:ast.callee_of', 'param:ast.calls', 'param:ast.depth', 'param:ast.show', 'param:ast.type',
                                    'param:calls.external', 'param:calls.modules', 'param:calls.rank', 'param:calls.root', 'param:calls.target', 'param:calls.top', 'param:calls.type', 'param:calls.uncalled',
                                    'param:contracts.impls', 'param:patches.group', 'param:patches.min_categories', 'param:patches.min_patches', 'param:patches.no_suppress', 'param:patches.top', 'param:contracts.no_implementations', 'param:claude.contains', 'param:claude.filter', 'param:claude.full', 'param:claude.last', 'param:claude.raw', 'param:claude.search', 'param:claude.summary', 'param:claude.tail',
                                    'param:deps.verbose', 'param:git.verbose',
@@ -53,7 +53,7 @@ def test_retirement_inventory_matches_the_shipped_migrations():
                                    'param:metrics.no_churn', 'param:metrics.no_merges', 'param:metrics.summary_only',
                                    'param:metrics.top', 'param:overview.no_imports', 'param:overview.top', 'param:overview.verbose', 'param:pack.verbose',
                                    'param:testability.verbose', 'scheme:architecture', 'scheme:classify', 'scheme:depends', 'scheme:deps', 'scheme:hotspots', 'scheme:python', 'scheme:stats', 'scheme:testability', 'scheme:trace', 'subcommand:architecture', 'subcommand:deps', 'subcommand:hotspots', 'subcommand:review', 'subcommand:scaffold', 'subcommand:testability',
-                                   'subcommand:trace', 'target:health.code', 'target:nav.outline', 'value:ast.show=calls',
+                                   'subcommand:trace', 'target:health.code', 'target:nav.outline', 'value:ast.show=calls', 'value:ast.view=calls',
                                    'param:hotspots.top', 'param:testability.top'])
 
 

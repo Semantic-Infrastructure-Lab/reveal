@@ -186,9 +186,11 @@ def test_advisory_hint_only_zero_results_keep_domain_prior_and_existing_empty_cl
     assert result['total_results'] == 0 and result['meta']['confidence'] == 1.0
     assert len(result['meta']['warnings']) == 1
     assert 'capability-language hint' in result['meta']['warnings'][0]['message'].lower()
+    # The Python search was complete, so the advisory loss keeps the claim: a variable found nowhere is a target that
+    # matches nothing, exit 2 naming it (plan rule 9, BACK-2613 Q6; it answered an empty list, exit 0), never exit 3.
     response = run(f'ast://{root}?reveal_type=absent')
-    assert response.returncode == 0 and 'no occurrences found' in response.stdout
-    assert '0 occurrence(s) found' in response.stdout and 'analyzed portion' not in response.stdout
+    assert response.returncode == 2 and "'absent' has no occurrence" in response.stderr
+    assert 'analyzed portion' not in response.stdout + response.stderr
 
 
 def test_reused_adapter_source_events_clear_on_repair_and_sibling_stays_exact(tmp_path, fault):

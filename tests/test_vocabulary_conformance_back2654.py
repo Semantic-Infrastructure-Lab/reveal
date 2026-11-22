@@ -169,7 +169,7 @@ EXEMPT = {
                      'declarations through the shared builder',
     **{(noun, '20'): 'no answer reports a declared control unread, on any resource ANSWER_TARGETS lists (a control '
                      'read and not applied is the Step 4 backstop\'s)' for noun in (
-        'ast', 'contracts', 'deps', 'hotspots', 'pack', 'surface', 'testability', 'trace')},
+        'contracts', 'deps', 'hotspots', 'pack', 'surface', 'testability', 'trace')},
 }
 
 # Rules 1, 2, 5, 6, 10 and 12 are the shared seams' defaults (Scott 2026-11-16; BACK-2654 Step 3): their cells must
@@ -1066,8 +1066,8 @@ def _legacy_conflict_cases(noun, key, legacy, specs, sample):
 
 # --- rule 6: aliases, different words and spelling variants -----------------------------------------------
 
-# D18-deferred selector renames stay note-free until the pre-cut checkpoint (rule 6).
-DEFERRED_ALIASES = {('ast', 'show'), ('git', 'type')}
+# D18-deferred selector renames stay note-free until the pre-cut checkpoint (rule 6). AST show is --view since BACK-2613.
+DEFERRED_ALIASES = {('git', 'type')}
 
 
 def _spelling_only(spec, alias):
@@ -2442,7 +2442,8 @@ def test_ast_depth_is_a_translated_legacy_word_of_where():
     where = _spec_for('ast', 'where')
     assert 'depth' in where.legacy_words and _spec_for('ast', 'depth') is where
     row = RETIREMENTS['param:ast.depth']
-    assert row.stage == 'note' and not row.standalone and "--where 'depth" in row.replacement
+    # the replacement names the canonical field, nesting_depth (BACK-2613 Q10; depth was the replacement before)
+    assert row.stage == 'note' and not row.standalone and "--where 'nesting_depth" in row.replacement
 
 
 @pytest.mark.parametrize('term', ['depth=0', 'depth>1', 'depth>=3', 'depth<=1'])

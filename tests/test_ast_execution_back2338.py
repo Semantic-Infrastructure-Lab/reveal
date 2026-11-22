@@ -78,8 +78,10 @@ def test_ordinary_missing_resource_is_usage(root):
     assert 'Path not found' in json.loads(result.stdout)['error']
 
 
+# reveal_type=missing left this list: a complete search with no occurrence exits 2 (plan rule 9, BACK-2613 Q6;
+# tests/test_ast_type_execution_back2342.py).
 @pytest.mark.parametrize('query', ['name=absent', 'name=a*&limit=1', 'typo_key=unused', 'show=dict-heatmap',
-                                   'show=dict-schemas', 'reveal_type=missing'])
+                                   'show=dict-schemas'])
 def test_completed_empty_cut_warning_and_legacy_modes_stay_successful(root, query):
     result = run(root, query, '--format', 'json')
     assert result.returncode == 0, result.stderr
@@ -123,9 +125,7 @@ def test_requested_artifact_failure_still_outranks_complete_analysis(root):
 
 @pytest.mark.parametrize('query,qualified', [
     ('show=dict-heatmap', True), ('show=dict-schemas', True), ('reveal_type=x', True),
-    ('show=&reveal_type=', True), ('show&reveal_type', True),
-    ('show=dict%2Dheatmap', True), ('reveal_type%3Dx', True),
-    (' show=dict-heatmap ', True), ('show=dict-schemas&reveal_type=x', True),
+    ('reveal_type%3Dx', True), (' show=dict-heatmap ', True),
 ])
 def test_mode_selector_matches_actual_constructor_semantics(root, query, qualified):
     adapter = AstAdapter(str(root), query)
@@ -134,6 +134,16 @@ def test_mode_selector_matches_actual_constructor_semantics(root, query, qualifi
                      else 'ast_reveal_type' if adapter.reveal_type_var else 'ast_query')
     assert AstAdapter.uri_result_type(f'{root}?{query}') == expected_type
     assert (AstAdapter.uri_execution_facts(f'{root}?{query}') is not None) is qualified
+
+
+@pytest.mark.parametrize('query', ['show=&reveal_type=', 'show&reveal_type', 'show=dict%2Dheatmap',
+                                   'show=dict-schemas&reveal_type=x'])
+def test_an_invalid_mode_is_refused_when_it_binds(root, query):
+    """BACK-2613: a view outside its choices (empty, an undecoded spelling), a bare valueless view or variable, and two
+    answer selections are invalid requests when they bind; they used to answer the default listing."""
+    from reveal.errors import RequestValidationError
+    with pytest.raises(RequestValidationError):
+        AstAdapter(str(root), query)
 
 
 @pytest.mark.parametrize('query', ['show=dict-heatmap&show=functions', 'show=functions&show=dict-heatmap',

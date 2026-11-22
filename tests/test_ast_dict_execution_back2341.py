@@ -111,7 +111,7 @@ def test_healthy_zero_is_complete(tmp_path, mode, source):
     ('show=dict-heatmap', 'ast_dict_heatmap', True),
     ('show=dict-schemas&reveal_type=x', 'ast_dict_schemas', True),
     ('show=dict-heatmap&show=functions', 'ast_query', True),
-    ('show=functions&show=dict-schemas', 'ast_dict_schemas', True),
+    ('show=functions&show=dict-schemas', 'ast_query', True),  # rejected when it binds: no mode beyond the default
     ('show=dict%2Dheatmap', 'ast_query', True),
     ('show=&reveal_type=', 'ast_query', True),
     ('reveal_type=x', 'ast_reveal_type', True),

@@ -39,8 +39,9 @@ def test_real_recovered_tree_absence_and_repair_through_stdio(tmp_path, provenan
         fresh = await query()
         assert not fresh.is_error and 'fresh' in _text(fresh)
         assert 'first' not in _text(fresh)
-        absent = await query('absent')
-        assert not absent.is_error and 'incomplete' not in _text(absent).lower()
+        absent = await query('absent')  # no occurrence on a complete search: rule 9's usage error (BACK-2613 Q6)
+        assert absent.is_error and "'absent' has no occurrence" in _text(absent)
+        assert 'incomplete' not in _text(absent).lower()
         for control in ('name=absent', 'show=dict-heatmap', 'show=dict-schemas'):
             sibling = await session.call_tool('reveal_query', {
                 'uri': f'ast://{tmp_path.as_posix()}?{control}', 'provenance': provenance})

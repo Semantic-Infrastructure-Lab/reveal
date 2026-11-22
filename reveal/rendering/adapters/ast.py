@@ -20,10 +20,10 @@ _FILTER_SHORTHANDS = {
     'imports': '?kind=import',
 }
 
-# All keys that ast:// actually understands (a request's kind= is shown as its field, type)
-_KNOWN_FILTER_KEYS = {'type', 'kind', 'method', 'name', 'complexity', 'size', 'lines', 'depth', 'decorator', 'calls', 'callee_of', 'callers', 'has_annotations', 'param_type', 'return_type', 'reveal_type'}
+# All keys that ast:// actually understands (the echo prints the canonical fields kind and nesting_depth)
+_KNOWN_FILTER_KEYS = {'type', 'kind', 'method', 'name', 'complexity', 'size', 'lines', 'depth', 'nesting_depth', 'decorator', 'calls', 'callee_of', 'callers', 'has_annotations', 'param_type', 'return_type', 'reveal_type'}
 # The keys the hint teaches: legacy spellings print their own replaced-by note, so the list names their replacements
-# (type is kind; calls/callee_of are calls://; a bare depth is where=depth) and never the old words (BACK-2654).
+# (type is kind; calls/callee_of are the calls noun; depth is nesting_depth) and never the old words (BACK-2654).
 _TAUGHT_FILTER_KEYS = sorted((_KNOWN_FILTER_KEYS - {'type', 'calls', 'callee_of', 'depth'}) | {'kind'})
 
 

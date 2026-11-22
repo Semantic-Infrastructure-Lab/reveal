@@ -205,10 +205,12 @@ def test_hint_only_loss_keeps_prior_and_original_empty_text_footer(tmp_path, fau
     assert result['total_results'] == 0 and result['meta']['confidence'] == 1.0
     assert len(result['meta']['warnings']) == 1
     assert 'hint census' in result['meta']['warnings'][0]['message']
+    # The advisory loss keeps the clean answer: a complete search that finds the variable nowhere exits 2 naming it on
+    # both runs (plan rule 9, BACK-2613 Q6; it answered an empty list, exit 0), never exit 3.
     response = run(uri)
-    assert response.returncode == 0 and response.stdout.startswith(clean.stdout.rstrip())
-    assert 'no occurrences found' in response.stdout and '0 occurrence(s) found' in response.stdout
-    assert 'analyzed portion' not in response.stdout
+    assert clean.returncode == response.returncode == 2 and response.stderr == clean.stderr
+    assert "'absent' has no occurrence" in response.stderr
+    assert 'analyzed portion' not in response.stdout + response.stderr
 
 
 def test_default_two_positional_helper_native_shapes_and_unsorted_default_walk_unchanged(tmp_path, fault):

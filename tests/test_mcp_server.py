@@ -273,7 +273,7 @@ class TestRevealQueryTool(unittest.TestCase):
         os.chdir(self._orig_dir)
 
     def test_ast_query_returns_functions(self):
-        result = self.reveal_query('ast://reveal/utils/query.py?show=functions')
+        result = self.reveal_query('ast://reveal/utils/query.py')
         self.assertIsInstance(result, str)
         self.assertIn('parse_query_params', result)
 
@@ -299,18 +299,18 @@ class TestRevealQueryTool(unittest.TestCase):
         self.assertIsInstance(result, str)
 
     def test_provenance_attaches_execution_block(self):
-        result = self.reveal_query('ast://reveal/utils/query.py?show=functions', provenance=True)
+        result = self.reveal_query('ast://reveal/utils/query.py', provenance=True)
         self.assertIsInstance(result, str)
         self.assertIn('"execution"', result)
 
     def test_provenance_default_omits_execution_block(self):
-        result = self.reveal_query('ast://reveal/utils/query.py?show=functions')
+        result = self.reveal_query('ast://reveal/utils/query.py')
         self.assertIsInstance(result, str)
         self.assertNotIn('"execution"', result)
 
     def test_provenance_flag_does_not_leak_to_next_call(self):
-        self.reveal_query('ast://reveal/utils/query.py?show=functions', provenance=True)
-        result = self.reveal_query('ast://reveal/utils/query.py?show=functions')
+        self.reveal_query('ast://reveal/utils/query.py', provenance=True)
+        result = self.reveal_query('ast://reveal/utils/query.py')
         self.assertNotIn('"execution"', result)
 
 

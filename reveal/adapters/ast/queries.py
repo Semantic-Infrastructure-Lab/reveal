@@ -1,6 +1,6 @@
 """Query parsing and formatting for AST adapter."""
 
-from typing import Any, Dict, Iterator, List, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 from ...utils.query import parse_query_filters
 from ...utils.query_parser import coerce_value
 
@@ -149,11 +149,12 @@ def parse_query(query_string: str) -> Dict[str, Any]:
     }
 
 
-def format_query(query: Dict[str, Any]) -> str:
+def format_query(query: Dict[str, Any], names: Optional[Dict[str, str]] = None) -> str:
     """Format query dict back to readable string.
 
     Args:
         query: Query dict with filter conditions
+        names: Engine field -> the name to print it as (the canonical field of a retired word)
 
     Returns:
         Formatted query string
@@ -162,7 +163,8 @@ def format_query(query: Dict[str, Any]) -> str:
         return "none"
 
     parts = []
-    for key, condition in condition_pairs(query):
+    for engine_key, condition in condition_pairs(query):
+        key = (names or {}).get(engine_key, engine_key)
         op = condition['op']
         val = condition['value']
         if op == 'in':

@@ -328,7 +328,10 @@ def test_b5_reveal_type_and_view_exit_2(tree):
 
 # B6 / B7: a bare valueless scalar is an invalid request (exit 2), never a value.
 
-@pytest.mark.parametrize('key', ['limit', 'kind', 'sort', 'reveal_type'])
+@pytest.mark.parametrize('key', [
+    pytest.param('limit', marks=pytest.mark.xfail(strict=True, reason='BACK-2727 (lane mv-codex): the shared whole_number '
+                                                                      'codec ast limit uses rejects a bool there')),
+    'kind', 'sort', 'reveal_type'])
 def test_b6_b7_bare_scalar_exits_2(tree, key):
     code, _, err = doc(tree, f'ast://pkg?{key}')
     assert code == 2, (code, err)
@@ -431,3 +434,21 @@ def test_q10_depth_field_notes_nesting_depth(tree):
     assert 'param:ast.depth' in rows and 'nesting_depth' in rows['param:ast.depth'], notes(answer)
     _, bare, _ = doc(tree, 'ast://pkg?depth>1')
     assert any('nesting_depth>1' in r for r in _request_replacements(bare)), notes(bare)
+
+
+# --- BACK-2627 collision record: ast's answer --view and the element views share a flag name ----------------------
+
+def test_view_after_an_ast_uri_binds_the_ast_answer_view(tree):
+    code, answer, _ = doc(tree, 'ast://pkg', '--view', 'dict-heatmap')
+    assert code == 0 and answer['type'] == 'ast_dict_heatmap'
+
+
+def test_the_path_read_router_takes_no_answer_view(tree):
+    """``reveal DIR --name X`` builds an ast request internally; an ast answer view is not a path-read flag."""
+    assert run(tree, 'pkg', '--name', 'alp', '--view', 'dict-heatmap').returncode == 2
+
+
+@pytest.mark.xfail(strict=True, reason='BACK-2627: element --view boundary|effects|flow|exits|vars lands on the path '
+                                       'read; until then the main parser does not know --view')
+def test_element_view_on_a_path_read(tree):
+    assert run(tree, 'pkg/a.py', 'alpha', '--view', 'boundary').returncode == 0

@@ -498,17 +498,27 @@ RETIREMENTS: Dict[str, Retirement] = {
         '--view messages or --view prompts with --detail raw; canonical raw also expands the text display', standalone=True),
     'param:ast.calls': Retirement('ast://?calls=', "reveal calls <path> --callers NAME, or --grep 'PATTERN' for a pattern", standalone=True),
     # Different words for one control are legacy spellings with a note (COMMAND_MODEL "Different words", BACK-2654);
-    # AST show and Git type are D18-deferred and stay note-free.
-    'param:ast.type': Retirement('ast ?type=KIND (--type KIND)', '--kind KIND, the same element kind'),
-    # A bare shared control name is never a field (BACK-2654 rule 8): AST's bare depth is its where term.
-    'param:ast.depth': Retirement('ast ?depth OP N (bare)', "--where 'depth OP N', the same "
-                                                            'nesting-depth filter'),
+    # Git type is D18-deferred and stays note-free. AST show is --view (D20, BACK-2613).
+    'param:ast.type': Retirement('ast ?type=KIND (--type KIND, or the where field type)',
+                                 "--kind KIND, or the where field kind (--where 'kind!=KIND'), the same element kind"),
+    'param:ast.show': Retirement('ast ?show=VIEW (--show VIEW)', '--view VIEW, the same answer (dict-heatmap or '
+                                                                 'dict-schemas; the calls view retired to reveal calls)'),
+    # A bare shared control name is never a field (BACK-2654 rule 8): AST's bare depth is its where term, and depth is
+    # nesting_depth's retired field word (BACK-2613 Q10).
+    'param:ast.depth': Retirement('ast ?depth OP N (bare, or the where field depth)', "--where 'nesting_depth OP N', "
+                                                                                     'the same nesting-depth filter'),
     'param:markdown.body-contains': Retirement('markdown ?body-contains=TEXT (--body-contains TEXT)',
                                                '--match TEXT, the same body match; repeats AND'),
     'param:markdown.fields': Retirement('markdown ?fields=A,B', '--columns A,B, the same frontmatter columns'),
     'param:ast.callee_of': Retirement('ast://?callee_of=', 'reveal calls <path> --callees NAME', standalone=True),
-    'value:ast.show=calls': Retirement('ast://?show=calls',
-                                       "reveal calls <path> --callers NAME or --callees NAME, or --grep 'PATTERN'"),
+    # The within-file call graph view retired to the calls noun: a retired value of view that answers until the cut, with
+    # no canonical form (standalone; the request says no request note).
+    'value:ast.show=calls': Retirement('ast ?show=calls (--show calls)',
+                                       "reveal calls <path> --callers NAME or --callees NAME, or --grep 'PATTERN'",
+                                       standalone=True),
+    'value:ast.view=calls': Retirement('ast ?view=calls (--view calls)',
+                                       "reveal calls <path> --callers NAME or --callees NAME, or --grep 'PATTERN'",
+                                       standalone=True),
     # stats became metrics and absorbed classify (D2, BACK-2069): both old schemes answer from the
     # metrics owner, unchanged, until the cut. File hotspots are metrics' ?hotspots=true ranking.
     'scheme:stats': Retirement('stats://', 'reveal metrics <path> (the same answer)'),

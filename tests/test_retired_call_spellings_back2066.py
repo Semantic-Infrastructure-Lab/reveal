@@ -93,14 +93,26 @@ def _own_retired(doc):
 
 
 def _request_scheme(uri):
-    """The scheme whose request note a URI request says (a retired twin's own row is its note), else None."""
-    scheme, sep, _ = uri.partition('://')
-    return scheme if sep and request_noted(scheme) else None
+    """The scheme whose request note a URI request says (a retired twin's own row is its note), else None. A request
+    with no canonical form says none (a retired field or value has none, BACK-2613): each spelling says its own row."""
+    from test_retirements_back2066 import _renders
+    scheme, sep, rest = uri.partition('://')
+    return scheme if sep and request_noted(scheme) and _renders(scheme, rest) else None
 
 
 def _says_own_note(key, argv):
     """Whether the spelling's own note is said: a URI request's note replaces a covered per-key row (BACK-2716)."""
     return not (_request_scheme(argv[0]) and request_note_covers(key))
+
+
+def _also_said(key, uri):
+    """The other covered rows a URI with no canonical form says beside *key* (?show=calls also spells show)."""
+    from reveal.cli.invocation import uri_retirement_keys
+    scheme, sep, _ = uri.partition('://')
+    if not sep or not request_noted(scheme) or _request_scheme(uri):
+        return []
+    return [other for other in uri_retirement_keys(uri) if other != key and other in RETIREMENTS
+            and request_note_covers(other)]
 
 
 def _without_retirement(doc):
@@ -132,13 +144,16 @@ def test_a_retired_call_spelling_prints_one_note_and_keeps_its_answer(monkeypatc
     # One note and nothing else deprecated: reveal trace is not also noted as trace://. A URI request to a noted
     # scheme adds its one request note, which replaces the note of a spelling it covers (BACK-2716).
     scheme, own = _request_scheme(argv[0]), _says_own_note(key, argv)
+    also = _also_said(key, argv[0])
     assert text_run.stderr.count(f'note: {text}') == int(own), text_run.stderr
-    assert text_run.stderr.count('deprecated') == int(own) + int(bool(scheme)), text_run.stderr
+    assert text_run.stderr.count('deprecated') == int(own) + int(bool(scheme)) + len(also), text_run.stderr
     assert json_run.stderr.count('deprecated') == 0, json_run.stderr  # the JSON carries it (BACK-2659)
-    assert [w['field'] for w in _retired(json.loads(json_run.stdout))] == [key] * own + [f'request:{scheme}'] * bool(scheme)
+    assert sorted(w['field'] for w in _retired(json.loads(json_run.stdout))) == \
+        sorted([key] * own + [f'request:{scheme}'] * bool(scheme) + also)
 
     with monkeypatch.context() as m:
-        _unretired(m, key)
+        for retired in (key, *also):
+            _unretired(m, retired)
         base_text = run(*argv)
         base_json = run(*argv, '--format', 'json')
     assert 'deprecated' not in without_request_note_lines(base_text.stderr)

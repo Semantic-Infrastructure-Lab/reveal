@@ -20,10 +20,14 @@ def test_ast_where_is_built_by_the_factory():
     # AST's fields come from the analyzer (BACK-2654 note #15): an open field set on the same factory-built where;
     # its bare depth is a legacy word of it (BACK-2654 rule 8).
     assert [entry.name for entry in WHERE.legacy] == ['depth']
-    # its retired call fields note their rows through the factory's declaration (BACK-2613 Q2)
-    assert WHERE.open_fields and WHERE == where_param('Filter expressions, ANDed; repeat --where for multiple bounds',
-                                                      legacy=WHERE.legacy, open_fields=WHERE.open_fields,
-                                                      retired_fields=('calls', 'callee_of'))
+    # its retired fields note their rows through the factory's declaration (BACK-2613 Q2): calls/callee_of (the calls
+    # noun), type and depth (kind and nesting_depth, Q5/Q10); the listing is the answer it filters (Applicability)
+    from dataclasses import replace
+    assert WHERE.open_fields and WHERE == replace(
+        where_param('Filter expressions, ANDed; repeat --where for multiple bounds', legacy=WHERE.legacy,
+                    open_fields=WHERE.open_fields, retired_fields=('calls', 'callee_of', 'type', 'depth'),
+                    field_words=(('type', 'kind'), ('depth', 'nesting_depth'))),
+        answers=('ast_query',))
 
 
 @pytest.mark.parametrize('value,expected', [('lines>5', ['lines>5']), (['a>1', 'b<2'], ['a>1', 'b<2']),

@@ -727,16 +727,16 @@ string key in many — have a real shape nobody declared, so a renamed or missin
 
 ```bash
 # Step 1: Shapes read in several places, and any TypedDict that already covers one
-reveal 'ast://src/?show=dict-schemas'
+reveal ast src/ --view dict-schemas
 
 # Step 2: Every untyped-dict name (params, loop vars, locals, self.<attr>), most keys first
-reveal 'ast://src/?show=dict-heatmap'
+reveal ast src/ --view dict-heatmap
 
 # Step 3: Params whose key reads an existing TypedDict already covers (line-level, CI-gateable)
 reveal check src/ --select T006
 
 # Step 4: Where one variable's shape comes from
-reveal 'ast://src/?reveal_type=elem'
+reveal ast src/ --reveal-type x
 ```
 
 Scan the package root: TypedDicts are matched only if defined under the scanned path. A

@@ -348,6 +348,9 @@ PRODUCTION_CASES = {
     'param:markdown.fields': lambda f: [f'markdown://{Path(f).parent}?fields=title'],
     'param:ast.callee_of': lambda f: [f'ast://{f}?callee_of=auth_gate'],
     'value:ast.show=calls': lambda f: [f'ast://{f}?show=calls'],
+    # BACK-2613: show is --view; the calls view is a retired value on both spellings.
+    'param:ast.show': lambda f: ['ast', f, '--show', 'dict-heatmap'],
+    'value:ast.view=calls': lambda f: ['ast', f, '--view', 'calls'],
     'subcommand:trace': lambda f: ['trace', str(Path(f).parent), '--from', 'auth_gate'],
     'scheme:trace': lambda f: [f'trace://{Path(f).parent}?from=auth_gate'],
     # Phase 3 slice 3b (BACK-2068): review folded into check --changed plus diff.
@@ -392,7 +395,9 @@ ALSO_NOTED = {'param:hotspots.functions_only': 'scheme:hotspots', 'param:hotspot
               'param:hotspots.top': 'scheme:hotspots', 'param:testability.top': 'scheme:testability',
               **{f'flag:{noun}.{flag}': f'scheme:{noun}' for noun in ('hotspots', 'testability')
                  for flag in LEGACY_CLI_MODIFIERS[noun]},
-              'param:calls.type': 'param:calls.uncalled', 'param:calls.external': 'param:calls.modules'}
+              'param:calls.type': 'param:calls.uncalled', 'param:calls.external': 'param:calls.modules',
+              # ?show=calls spells show too; the retired value leaves no canonical form, so show says its row (BACK-2613)
+              'value:ast.show=calls': 'param:ast.show'}
 
 
 def test_every_production_row_is_well_formed():

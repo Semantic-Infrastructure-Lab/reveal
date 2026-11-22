@@ -8,7 +8,7 @@ from reveal.reveal_types import CONTRACT_VERSION, WarningEntry
 from pathlib import Path
 from typing import Dict, List, Any, Optional, cast
 
-from .queries import condition_pairs, format_query
+from .queries import condition_pairs
 from .analysis import (
     analysis_skipped_warning, collect_structures, parse_recovered_warning,
     traversal_failed_warning,
@@ -31,9 +31,9 @@ from ...utils.query_eval import unknown_filter_field_warning
 from ...utils.results import ResultBuilder, note_truncation
 from ...errors import RequestValidationError
 from ...utils.path_utils import failure_of
-from ...utils.query_parser import ResourceSpec, param_cli_flags, QueryParams, param_schema, parse_query_params
-from ...utils.query_binding import bind_declared_params
-from .params import PARAM_SPECS, VIEW, BUILTINS, REVEAL_TYPE, ast_query, result_control
+from ...utils.query_parser import ResourceSpec, param_cli_flags, QueryParams, param_schema
+from ...utils.query_binding import bind_declared_params, prepare_declared_params
+from .params import PARAM_SPECS, VIEW, VIEWS, BUILTINS, REVEAL_TYPE, ast_query, echo_query, result_control
 
 # Filter aliases that name a differently-named element field (see filtering.py).
 _SORT_FIELD_ALIASES = {'lines': 'line_count'}
@@ -70,9 +70,29 @@ def _dedicated_answer_requirement_error(result, prior_facts=None, *, type_mode=F
     return None
 
 
+def _absence_message(variable: str, path: str, analyzed: int) -> str:
+    return f"variable {variable!r} has no occurrence in {path} ({analyzed} Python file(s) searched)"
+
+
+def _reveal_type_absent(result) -> bool:
+    """A complete reveal-type search with no occurrence (plan rule 9): usage, exit 2, never an analysis failure. Only the
+    adapter's own absence message, on consistent counts with files searched and none lost, claims it."""
+    if not (isinstance(result, dict) and result.get('type') == 'ast_reveal_type' and result.get('total_results') == 0):
+        return False
+    variable = result.get('var_name')
+    if not (_source_counts_valid(result.get('analysis'), type_mode=True) and isinstance(variable, str) and variable):
+        return False
+    proof = cast(Dict[str, int], result['analysis'])
+    lost = proof['failed_files'] or proof['discovery_failures'] or proof['recovered_files']
+    return (proof['analyzed_files'] > 0 and not lost
+            and result.get('error') == _absence_message(variable, str(result.get('path')), proof['analyzed_files']))
+
+
 def _dedicated_execution_facts(result):
     """Classify source-count proof independently of observations or presentation."""
-    from ...utils.results import AnalysisCompleteness, result_execution_facts
+    from ...utils.results import AnalysisCompleteness, ExecutionFacts, FailureCause, result_execution_facts
+    if _reveal_type_absent(result):
+        return ExecutionFacts(AnalysisCompleteness.COMPLETE, failures=frozenset({FailureCause.INVALID_REQUEST}))
     if result.get('error') or result.get('applicable') is False:
         return result_execution_facts(result, completeness=AnalysisCompleteness.COMPLETE)
     proof = result.get('analysis')
@@ -333,15 +353,15 @@ class AstAdapter(ResourceAdapter):
         """The decoded home-relative resource names the expanded filesystem path."""
         return os.path.expanduser(path)
 
-    @staticmethod
-    def uri_result_type(resource):
-        """Resolve mode identity before construction using the existing mode codec."""
-        values = parse_query_params(resource.partition('?')[2])
-        show = values.get('view', values.get('show'))
-        variable = values.get('reveal-type', values.get('reveal_type'))
-        if show in ('dict-heatmap', 'dict-schemas'):
-            return 'ast_' + show.replace('-', '_')
-        return 'ast_reveal_type' if isinstance(variable, str) and variable else 'ast_query'
+    @classmethod
+    def uri_result_type(cls, resource):
+        """The answer a URI selects, before construction, read from the request the binder prepares (its spellings
+        translated): a query the binder rejects selects no mode beyond the default, and its answer says why."""
+        try:
+            params = prepare_declared_params(PARAM_SPECS, resource.partition('?')[2], 'uri')
+        except ValueError:
+            return cls.RESULT_TYPE
+        return cls.result_type_for(params)
 
     @classmethod
     def uri_execution_facts(cls, resource):
@@ -397,6 +417,7 @@ class AstAdapter(ResourceAdapter):
         fields = {key: value for key, value in schema['query_params'].items()
                   if key not in ('show', 'reveal_type')}
         fields['kind'] = fields['type']
+        fields['nesting_depth'] = fields['depth']  # the canonical field; depth is its retired word (Q10)
         return {**schema, 'filter_fields': fields,
                 'query_params': param_schema(PARAM_SPECS),
                 'resource': AstAdapter.RESOURCE_SPEC.schema()}
@@ -454,7 +475,7 @@ class AstAdapter(ResourceAdapter):
 
     @staticmethod
     def validate_request(params, args=None):
-        """Reject contradictory or invalid expressions before source analysis."""
+        """Reject contradictory or invalid expressions before source analysis (``RequestValidationError``)."""
         ast_query(params)
 
     @staticmethod
@@ -463,10 +484,16 @@ class AstAdapter(ResourceAdapter):
 
     @staticmethod
     def result_type_for(params):
-        view = dict(params.peek_items()).get('view')
-        if view in ('dict-heatmap', 'dict-schemas'):
+        given = dict(params.peek_items())
+        view = given.get('view')
+        if view in VIEWS:
             return 'ast_' + view.replace('-', '_')
-        return 'ast_reveal_type' if dict(params.peek_items()).get('reveal-type') else 'ast_query'
+        return 'ast_reveal_type' if given.get('reveal-type') else 'ast_query'
+
+    @staticmethod
+    def public_diagnostic(result: Dict[str, Any]) -> Optional[str]:
+        """The authored message of a variable with no occurrence (plan rule 9), naming what was searched."""
+        return result.get('error') if _reveal_type_absent(result) else None
 
     def _matches_decorator(self, decorators: List[str], condition: Dict[str, Any]) -> bool:
         """Check if any decorator matches the condition.
@@ -559,7 +586,7 @@ class AstAdapter(ResourceAdapter):
             contract_version=CONTRACT_VERSION,
             data={
                 'path': self.path,
-                'query': format_query(self.query),
+                'query': echo_query(self.query),
                 'show_mode': self.show_mode,
                 'total_files': len(structures),
                 'total_results': len(filtered),
@@ -706,4 +733,7 @@ class AstAdapter(ResourceAdapter):
             },
         )
         result['meta'] = meta
+        if not evidence and source_evidence.analyzed_files and not failures and not lost_files:
+            # a complete search that found the variable nowhere: a target that matches nothing (plan rule 9)
+            result['error'] = _absence_message(self.reveal_type_var, self.path, source_evidence.analyzed_files)
         return result

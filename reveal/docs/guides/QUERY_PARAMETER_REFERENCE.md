@@ -363,14 +363,14 @@ reveal 'metrics://.?view=hotspots&code-only=true'
   reveal 'calls://src?callees=main'            # was ast://src?callee_of=main
   ```
 
-- **`show=dict-heatmap`** - Rank untyped dicts by distinct string keys read (`x['k']`, `x.get('k')`, `'k' in x`); covers dict-annotated and unannotated params, loop variables (`for elem in structure['functions']`), and locals; suggests TypedDict names. Each result carries a `source` field.
+- **`--view dict-heatmap`** (was `show=dict-heatmap`) - Rank untyped dicts by distinct string keys read (`x['k']`, `x.get('k')`, `'k' in x`); covers dict-annotated and unannotated params, loop variables (`for elem in structure['functions']`), and locals; suggests TypedDict names. Each result carries a `source` field.
   ```bash
-  reveal 'ast://src?show=dict-heatmap'
+  reveal ast src --view dict-heatmap
   ```
 
-- **`show=dict-schemas`** - Cluster the heatmap across functions into implicit record shapes read in 2+ places; names any existing TypedDict under the scanned path that already covers a shape, and the keys its readers use that it doesn't declare (drift)
+- **`--view dict-schemas`** (was `show=dict-schemas`) - Cluster the heatmap across functions into implicit record shapes read in 2+ places; names any existing TypedDict under the scanned path that already covers a shape, and the keys its readers use that it doesn't declare (drift)
   ```bash
-  reveal 'ast://src?show=dict-schemas'
+  reveal ast src --view dict-schemas
   ```
 
 - **`sort`** - Sort by a field descending with `-` prefix (e.g., `sort=-complexity`)
@@ -406,7 +406,7 @@ reveal 'metrics://.?view=hotspots&code-only=true'
 
 - **`reveal_type=`** - Query type evidence for a variable without editing source
   ```bash
-  reveal 'ast://src/file.py?reveal_type=result'   # collect type evidence for 'result'
+  reveal ast src/file.py --reveal-type x   # type evidence for 'x'; a name with no occurrence exits 2
   ```
   Gathers annotations, assignment RHS shapes, and loop variable hints.
 

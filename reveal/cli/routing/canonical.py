@@ -137,10 +137,11 @@ def canonical_where_terms(spec: Any, terms: List[Any]) -> List[Any]:
     """*terms* of a where control on their canonical fields: a retired field that answers as another field is spelled as
     that field (``type!=x`` is ``kind!=x``); a retired field without one has no canonical form (``UnrenderableRequest``)."""
     from ...utils.query_binding import where_fields
+    from ...utils.query_parser import QueryParams
     words = dict(spec.field_words)
     canonical = []
     for term in terms:
-        field = next(iter(where_fields({spec.name: [term]}, spec)), '')
+        field = next(iter(where_fields(QueryParams({spec.name: [term]}), spec)), '')
         if field in spec.retired_fields:
             if field not in words:
                 raise UnrenderableRequest(f'where field {field!r} retired with no canonical field')

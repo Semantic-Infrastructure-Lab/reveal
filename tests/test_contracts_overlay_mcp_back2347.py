@@ -147,10 +147,13 @@ def test_contracts_budgets_losses_repair_and_siblings_through_stdio(tmp_path, pr
             failure = await query(query_string, path)
             assert failure.is_error and _text(failure).strip()
         for scheme, query_string in (('surface', 'type=env&top=0'), ('ast', 'name=absent'),
-                                     ('ast', 'show=dict-heatmap'), ('ast', 'show=dict-schemas'),
-                                     ('ast', 'reveal_type=absent')):
+                                     ('ast', 'show=dict-heatmap'), ('ast', 'show=dict-schemas')):
             sibling = await session.call_tool('reveal_query', {
                 'uri': f'{scheme}://{root.as_posix()}?{query_string}', 'provenance': provenance})
             assert not sibling.is_error and 'incomplete' not in _text(sibling).lower()
+        # a variable a complete search finds nowhere is rule 9's usage error, never lost evidence (BACK-2613 Q6)
+        absent = await session.call_tool('reveal_query', {
+            'uri': f'ast://{root.as_posix()}?reveal_type=absent', 'provenance': provenance})
+        assert absent.is_error and 'incomplete' not in _text(absent).lower()
 
     _run(tmp_path, scenario, _SERVER)
