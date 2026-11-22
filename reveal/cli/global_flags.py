@@ -60,15 +60,18 @@ class _SwitchAction(ScalarOnceAction):
 
 
 def add_switch_argument(parser: Any, name: str) -> None:
-    """``--NAME on|off`` and its legacy off flag (``--no-NAME`` or the one declared; plus any short spelling of off),
-    from ``SWITCHES[name]``."""
+    """``--NAME on|off``, its legacy off flag (``--no-NAME`` or the one declared) and any short spelling of off, from
+    ``SWITCHES[name]``: three arguments sharing one conflict box. The short spelling is the same word as off, not the
+    legacy flag, so it has an argument of its own: a declared noun's help hides the legacy flag alone (BACK-2755)."""
     switch = SWITCHES[name]
     shared: Dict[str, Any] = {'dest': switch.dest, 'default': switch.default, 'action': _SwitchAction,
                               'comparable': switch_value, 'seen': {}}
     bare: Dict[str, Any] = {'nargs': '?', 'const': 'on'} if switch.bare_on else {}
     parser.add_argument('--' + name, type=_on_off, metavar='on|off', help=switch.help, **bare, **shared)
-    parser.add_argument(switch.legacy_flag, *switch.short_off, nargs=0, **shared,
+    parser.add_argument(switch.legacy_flag, nargs=0, **shared,
                         help=f'Same as --{name} off ({switch.legacy_flag} is deprecated)')
+    if switch.short_off:
+        parser.add_argument(*switch.short_off, nargs=0, **shared, help=f'Same as --{name} off')
 
 
 _EXCLUDE_HELP = ('Exclude files/directories matching pattern from analysis entirely '
