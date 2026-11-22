@@ -319,8 +319,8 @@ def _row_matches(family, key, op, value, row, root):
 
 # A canonical request's flags, read as the query-string claims above (BACK-2613: the ast docs teach
 # `reveal ast PATH --where EXPR --kind K --sort F --limit N`, the same claims as `ast://PATH?EXPR&kind=K&...`).
-_CLAIM_NOUNS = ('ast',)
-_CLAIM_FLAGS = {'--where': None, '--kind': 'kind', '--sort': 'sort', '--limit': 'limit'}
+_CLAIM_NOUNS = ('ast', 'markdown')  # the nouns whose examples teach the flag form (BACK-2613, BACK-2614)
+_CLAIM_FLAGS = {'--where': None, '--kind': 'kind', '--match': 'match', '--sort': 'sort', '--limit': 'limit'}
 
 
 def _claim_uri(argv):
