@@ -175,14 +175,37 @@ def test_sorted_text_prints_rows_in_the_answer_order(tree, argv):
 
 
 def test_sorted_text_names_the_file_on_each_row(tree):
-    argv = ('ast', 'pkg', '--sort=-name', '--kind', 'function')
+    argv = ('ast', 'pkg', '--sort', 'line', '--kind', 'function')
     rows = answer(tree, *argv)['results']
+    assert [row['name'] for row in rows] == ['alpha', 'helper', 'beta', 'test_one', 'delta']
+    assert _text_row_names(text(tree, *argv)[1], [row['name'] for row in rows]) == [row['name'] for row in rows]
     _, out, _ = text(tree, *argv)
     lines = out.splitlines()
     for row in rows:
         printed = [line for line in lines if line.rstrip().split(' [')[0].endswith(f" {row['name']}")]
         assert len(printed) == 1 and row['file'] in printed[0], (row, out)
     assert not any(line.startswith('File: ') for line in lines), out
+
+
+def test_sort_whose_rows_come_file_by_file_keeps_groups_in_the_answer_order(tree):
+    """-name happens to keep each file's rows together (b.py's, then a.py's): the groups print in that order, not
+    regrouped alphabetically."""
+    argv = ('ast', 'pkg', '--sort=-name', '--kind', 'function')
+    _, out, _ = text(tree, *argv)
+    assert [line for line in out.splitlines() if line.startswith('File: ')] == ['File: pkg/b.py', 'File: pkg/a.py'], out
+
+
+def test_unsorted_groups_follow_the_answer_order(tree):
+    """The listing's own order (a directory's files before its subdirectories) is the order of the groups."""
+    (tree / 'pkg' / 'z.py').write_text('def zeta():\n    pass\n', encoding='utf-8')
+    (tree / 'pkg' / 'sub').mkdir()
+    (tree / 'pkg' / 'sub' / 'm.py').write_text('def mu():\n    pass\n', encoding='utf-8')
+    files = []
+    for row in answer(tree, 'ast', 'pkg', '--kind', 'function')['results']:
+        if not files or files[-1] != row['file']:
+            files.append(row['file'])
+    _, out, _ = text(tree, 'ast', 'pkg', '--kind', 'function')
+    assert [line[len('File: '):] for line in out.splitlines() if line.startswith('File: ')] == files, out
 
 
 def test_unsorted_listing_keeps_the_file_groups(tree):
