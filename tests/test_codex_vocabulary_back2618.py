@@ -160,11 +160,11 @@ def test_where_names_its_one_field(codex):
     assert run.returncode == 2 and 'session~=TEXT' in run.stderr
 
 
-def test_an_empty_filter_still_lists_every_session(codex):
-    """Negative control: the empty-term decision is parked for every noun; ``?filter=`` answers the bare list."""
-    _run, empty = _json('codex://sessions/?filter=')
-    _run, bare = _json('codex://sessions/')
-    assert _answer(empty) == _answer(bare) and 'where' not in empty
+def test_an_empty_filter_is_an_invalid_request(codex):
+    """The empty-term ruling (Scott 2026-11-22, BACK-2736): ``?filter=`` names no session, so it exits 2 naming the
+    spelling, where it answered the bare list while the decision was parked."""
+    run, _empty = _json('codex://sessions/?filter=')
+    assert run.returncode == 2 and 'filter needs a term' in run.stderr
 
 
 # --- Q1: search and --match --------------------------------------------------------------------------------

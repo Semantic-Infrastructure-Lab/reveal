@@ -42,7 +42,7 @@ def test_markdown_api_preserves_requested_relative_source_spelling(tmp_path, mon
     (root / 'good.md').write_text('---\nkind: guide\n---\nneedle\n', encoding='utf-8')
     monkeypatch.chdir(tmp_path)
     request = 'markdown://./docs?' + query
-    if query == 'body-contains':
+    if query in ('body-contains', 'body-contains='):  # no term: an invalid request (an empty one since BACK-2736)
         with pytest.raises(RequestValidationError):
             api.query(request)
         assert run(request, '--format', 'json').returncode == 2

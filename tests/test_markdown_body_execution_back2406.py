@@ -200,7 +200,7 @@ def test_resource_validation_precedes_controls_and_preserves_api_missing_excepti
                                    'lint', 'backlinks=good.md'])
 def test_sibling_views_now_record_source_completeness(tmp_path, query):
     document(tmp_path, 'good.md', b'---\ntitle: guide\n---\nneedle\n')
-    if query == 'body-contains':
+    if query in ('body-contains', 'body-contains='):  # no term: an invalid request (an empty one since BACK-2736)
         assert run(uri(tmp_path, query), '--format', 'json').returncode == 2
         with pytest.raises(RequestValidationError):
             api.query(uri(tmp_path, query))

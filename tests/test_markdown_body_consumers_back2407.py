@@ -281,7 +281,7 @@ def test_sibling_views_retain_partial_results_with_incomplete_status(tmp_path, s
     (tmp_path / 'bad.md').write_bytes(b'needle caf\xe9\n')
     request = 'markdown://' + tmp_path.as_posix() + suffix
     response = run(request, '--format', 'json')
-    if suffix == '?body-contains':
+    if suffix in ('?body-contains', '?body-contains='):  # no term: an invalid request (an empty one since BACK-2736)
         assert response.returncode == 2
         with pytest.raises(RequestValidationError):
             api.query(request)

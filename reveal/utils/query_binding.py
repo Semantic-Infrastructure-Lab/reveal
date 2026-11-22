@@ -8,6 +8,7 @@ from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Union
 from urllib.parse import quote, unquote
 
 from ..errors import RequestValidationError, UnreadControlError, UnsupportedOverrideError
+from .match_terms import TERM_EXAMPLES, TermValue, empty_term_error, is_blank_term
 from .query_parser import (SHARED_CONTROL_NAMES, CliBinding, LegacySpelling, ParamSpec, ParamValueError, QueryParams,
                            ResourceSpec, mark_query_keys, parse_query_params, peek_query_items, query_key,
                            query_key_recorder, whole_number)
@@ -161,6 +162,40 @@ def _conflicting_spellings(spec: ParamSpec, present: list, spelled: Optional[Map
     return f'{spec.name}: conflicting spellings: ' + ', '.join((spelled or {}).get(name, name) for name in present)
 
 
+def _term_example(spec: ParamSpec) -> Optional[str]:
+    """The term an empty value of *spec* is refused with, or None when *spec* states no term: match and where by their
+    shared names, a standalone word or legacy filter by its declared ``TermValue`` converter."""
+    if isinstance(spec.convert, TermValue):
+        return spec.convert.example
+    return TERM_EXAMPLES.get(spec.name)
+
+
+def _decoded_terms(spec: ParamSpec, value: Any) -> Any:
+    """A URI value as the control will read it (``?match=%20`` is a blank). Undecodable bytes are left for the binding,
+    which refuses them (``_validate_binding``)."""
+    items = value if isinstance(value, (list, tuple)) else [value]
+    try:
+        return [_decode_value(spec, item) for item in items]
+    except UnicodeDecodeError:
+        return items
+
+
+def _reject_empty_terms(declarations: tuple, given: Iterable[tuple], spelled: Optional[Mapping[str, str]] = None,
+                        *, uri: bool = False) -> None:
+    """COMMAND_MODEL "Empty match term" (Scott 2026-11-22, BACK-2736): an empty or whitespace-only term in any spelling
+    of a term control (``_term_example``) is an invalid request on every noun, refused before the request's spellings
+    are joined, so before its answer is selected. *given* is the request's (key, value) pairs, every occurrence of a
+    repeated URI key included (*uri*: not yet decoded); the spelling is named as typed (*spelled*: key -> the flag that
+    carried it)."""
+    terms = {name: (spec, example) for spec in declarations
+             for example in (_term_example(spec),) if example is not None for name in spec.spellings}
+    for name, value in given:
+        if name in terms and value is not None:
+            spec, example = terms[name]
+            if is_blank_term(_decoded_terms(spec, value) if uri else value):
+                raise empty_term_error((spelled or {}).get(name, name), example)
+
+
 def _normalize_aliases(declarations: Iterable[ParamSpec], supplied: Mapping[str, Any],
                        spelled: Optional[Mapping[str, str]] = None,
                        implied_by: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
@@ -169,9 +204,11 @@ def _normalize_aliases(declarations: Iterable[ParamSpec], supplied: Mapping[str,
     legacy word ``sets`` join the request's own (``_join_set_controls``). A conflict names each spelling as the request
     typed it: *spelled* maps a key to the flag that carried it (the subcommand form); without it the key is what was
     typed (a URI key, an ``api.query`` keyword). *implied_by* collects, for each control a legacy word set, that word
-    (so a later conflict or a second answer names what was typed)."""
+    (so a later conflict or a second answer names what was typed). An empty term is refused first (a query string's
+    already was, before its repeated keys were gathered: ``_prepare_uri_params``)."""
     declarations = tuple(declarations)
     result = dict(peek_query_items(supplied))
+    _reject_empty_terms(declarations, result.items(), spelled)
     given_as: Dict[str, str] = {}  # control -> the spelling the request gave it by
     set_by: list = []
     for spec in declarations:
@@ -491,6 +528,9 @@ def _prepare_uri_params(declarations: tuple[ParamSpec, ...], source: str) -> Que
     The domain's existing expression parser still owns their syntax and evaluation.
     """
     params = parse_query_params(source)
+    _reject_empty_terms(declarations, [(key, value) for key, separator, value in
+                                       (part.strip().partition('=') for part in source.split('&') if part.strip())
+                                       if separator], uri=True)
     _prepare_repeated_params(declarations, source, params)
     selectors = _prepare_legacy_selectors(declarations, source, params)
     expression = next((spec for spec in declarations if spec.role == 'filter-expression'), None)
