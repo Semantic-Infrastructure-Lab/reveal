@@ -359,7 +359,7 @@ def _offer_noun_formats(parser: argparse.ArgumentParser, adapter) -> None:
     extra = noun_formats(adapter)
     for action in parser._actions:
         if extra and '--format' in action.option_strings:
-            action.choices = [*action.choices, *extra]
+            action.choices = [*list(action.choices or ()), *extra]
 
 
 def _has_findings_gate(args, command: str | None) -> bool:
@@ -500,7 +500,6 @@ def run_declared_command(name: str, args, *, answer_consumer=None, uri_query: Op
     """Bind original argparse values; no URI string is constructed. *uri_query*: the query of the URI these flags
     followed, the request's second source (joined under "Conflicting values", BACK-2673)."""
     from ...utils.query_binding import convert_flag_only, flag_spellings, legacy_flag_dests
-    from .formats import noun_formats
     adapter = declared_adapter_class(name)
     _note_retired_flags(name, adapter)
     convert_flag_only(adapter.PARAM_SPECS, args)
@@ -508,21 +507,7 @@ def run_declared_command(name: str, args, *, answer_consumer=None, uri_query: Op
     spelled: Dict[str, str] = {}  # each key -> the flag that carried it, so errors name what was typed
     for spec in adapter.PARAM_SPECS:
         if spec.cli is None:
-            # A boolean with no flag of its own is carried by the global flag of its name
-            # (`--all` is `&all`), supplied only when set, as the URI spells it. The walk's --exclude scopes the walk
-            # (``_walk_scope``); after a URI that sets the declared exclude control (exclude_param) it fills that control
-            # too, in the URI's spelling, a literal comma kept (BACK-1380), so the URI's exclude= and the flags after it
-            # are one list: the control's own walk scope replaces the dispatch's (BACK-2673). A --format value only this
-            # noun renders (``noun_formats``: calls/imports dot) is its format control, as ?format=dot spells it, so an
-            # answer that draws no graph refuses it as it refuses the URI's; text and json stay presentation (BACK-2722).
-            value = peek(args, spec.name, None)
-            if spec.type == 'boolean' and value is True:
-                source[spec.name], spelled[spec.name] = True, _global_option(spec.name)
-            elif spec.name == 'exclude' and value and _uri_sets(adapter, uri_query, spec):
-                from ...utils.query_parser import join_exclude_patterns
-                source[spec.name], spelled[spec.name] = join_exclude_patterns(value), '--exclude'
-            elif spec.name == 'format' and value is not None and value in noun_formats(adapter):
-                source[spec.name], spelled[spec.name] = value, '--format'
+            _bind_global_carried(adapter, spec, args, uri_query, source, spelled)
             continue
         flags = flag_spellings(spec)
         dest = spec.cli.dest or spec.name
@@ -537,6 +522,26 @@ def run_declared_command(name: str, args, *, answer_consumer=None, uri_query: Op
                 source[legacy], spelled[legacy] = peek(args, legacy), flags[legacy]
     _run_declared(name, args, getattr(args, adapter.RESOURCE_SPEC.name), source, 'typed',
                   answer_consumer=answer_consumer, spelled=spelled, uri_query=uri_query)
+
+
+def _bind_global_carried(adapter, spec: ParamSpec, args, uri_query: Optional[str], source: dict,
+                         spelled: Dict[str, str]) -> None:
+    """A control with no flag of its own, carried by the global flag of its name. A boolean is supplied only when set
+    (`--all` is `&all`), as the URI spells it. The walk's --exclude scopes the walk (``_walk_scope``); after a URI that
+    sets the declared exclude control (exclude_param) it fills that control too, in the URI's spelling, a literal comma
+    kept (BACK-1380), so the URI's exclude= and the flags after it are one list: the control's own walk scope replaces
+    the dispatch's (BACK-2673). A --format value only this noun renders (``noun_formats``: calls/imports dot) is its
+    format control, as ?format=dot spells it, so an answer that draws no graph refuses it as it refuses the URI's; text
+    and json stay presentation (BACK-2722)."""
+    from .formats import noun_formats
+    value = peek(args, spec.name, None)
+    if spec.type == 'boolean' and value is True:
+        source[spec.name], spelled[spec.name] = True, _global_option(spec.name)
+    elif spec.name == 'exclude' and value and _uri_sets(adapter, uri_query, spec):
+        from ...utils.query_parser import join_exclude_patterns
+        source[spec.name], spelled[spec.name] = join_exclude_patterns(value), '--exclude'
+    elif spec.name == 'format' and value is not None and value in noun_formats(adapter):
+        source[spec.name], spelled[spec.name] = value, '--format'
 
 
 def _uri_sets(adapter, uri_query: Optional[str], spec: ParamSpec) -> bool:
