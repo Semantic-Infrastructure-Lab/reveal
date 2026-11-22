@@ -295,6 +295,20 @@ def test_b3_unread_control_uri_and_api(tree):
         _api(tree, view='dict-heatmap', limit=2)
 
 
+@pytest.mark.parametrize('argv', [
+    ['--view', 'dict-heatmap', '--head', '2'], ['--view', 'dict-schemas', '--tail', '1'],
+    ['--reveal-type', 'd', '--range', '1-2'],
+])
+def test_b3_legacy_slices_are_read_by_the_listing_only(tree, argv):
+    """The legacy --head/--tail/--range slice the listing; a Python-evidence answer reads none of them, and its
+    refusal lists no control it reads."""
+    code, _, err = doc(tree, 'ast', 'pkg', *argv)
+    assert code == 2 and 'is not read by this answer' in err and 'is read by: ast_query' in err, (code, err)
+    assert 'controls this answer reads: (none)' in err, err
+    code, answer, _ = doc(tree, 'ast', 'pkg', '--head', '2')
+    assert code == 0 and len(answer['results']) == 2
+
+
 @pytest.mark.parametrize('argv', [['--view', 'dict-heatmap', '--all'], ['--reveal-type', 'd', '--all']])
 def test_b3_all_on_an_uncapped_answer_is_quiet(tree, argv):
     code, answer, err = doc(tree, 'ast', 'pkg', *argv)
@@ -328,10 +342,7 @@ def test_b5_reveal_type_and_view_exit_2(tree):
 
 # B6 / B7: a bare valueless scalar is an invalid request (exit 2), never a value.
 
-@pytest.mark.parametrize('key', [
-    pytest.param('limit', marks=pytest.mark.xfail(strict=True, reason='BACK-2727 (lane mv-codex): the shared whole_number '
-                                                                      'codec ast limit uses rejects a bool there')),
-    'kind', 'sort', 'reveal_type'])
+@pytest.mark.parametrize('key', ['limit', 'kind', 'sort', 'reveal_type'])
 def test_b6_b7_bare_scalar_exits_2(tree, key):
     code, _, err = doc(tree, f'ast://pkg?{key}')
     assert code == 2, (code, err)
