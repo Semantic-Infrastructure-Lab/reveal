@@ -94,6 +94,16 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 - JSON `?gron&data-only` (and `?flatten&data-only`) now notes itself, `json ?data-only (with ?gron or ?flatten) is deprecated and works until 1.0; use --view flatten --detail raw, the same lines inside the JSON envelope.`, instead of a request note recommending `reveal json://F --view flatten` (in Python `where=['data-only']`), which answers differently; the bare array is unchanged. `data-only` with another view exits 2 as an option that view does not read (BACK-2725).
 
+- Git's older spellings answer as before with a note naming the flag that replaces them until 1.0: `?type=VIEW` is `--view VIEW`, `?no_merges` (and `--no-merges`) is `--merges off`, `?raw=1` is `--detail raw`, `--view log` is `--view history` and `--detail summary` is `--detail normal`. A request note names only the canonical form (`git://F?type=log` says `--view history`), and `reveal.api.query('git://F', raw=True)` on a resource URI with no query string now notes its keyword too (BACK-2616).
+
+- An older and a newer git spelling given together with the same meaning are one setting (`?no_merges=1&merges=off`, `?raw=1&detail=raw` exited 2); with different meanings they exit 2 naming both. `no_merges` now answers on ownership as `--merges off` (it exited 2), and `since`/`until` given as a typed list of two different dates exit 2 as on the CLI (BACK-2616).
+
+- Git's legacy aggregate limit is the commit-input budget on every form: `git://.?type=ownership&limit=N` and `?type=history&bucket=month&limit=N` answer as `--scan-limit N` (exit 3 when the window drops history) and their note names `--scan-limit N`; it named `--limit N`, a row cap over the whole history. A typed `limit=` keyword on such a URI in `reveal.api.query` now answers the same as the CLI (it flipped to the row cap), `--sort`/`--offset` apply to the aggregate rows instead of warning `unused_flag`, and `limit` with a different `scan-limit` exits 2. A cut aggregate says one hint, "raise scan-limit" (BACK-2616).
+
+- A `--where` term on a field the noun does not have exits 2 naming the fields on `git`, `metrics` (and `stats://`), `claude` and `patches`, from `--where` on the subcommand, `--where` after the URI and `reveal.api.query(..., where=...)`, as `?where=` already did: `reveal git . --view history --where 'authr=Ada'` answered 0 commits (or an `unknown_filter_field` warning for `authr~=`). AST, JSON and Markdown, whose fields come from the data, keep the warning (BACK-2731).
+
+- Git text answers state the ownership caveats (commit-share not line ownership, merges excluded, name+email identity) as one line, `Rules: --format json (_meta.known_limits)`, where they printed the sentence; the JSON is unchanged. The unmeasured `_meta.confidence: "high"` is gone from ownership answers (BACK-2616).
+
 ### Added
 
 - `reveal.api.query(NOUN, TARGET, **keywords)` asks a noun as its subcommand does: `api.query('calls', 'src', callers='main')` returns the JSON document `reveal calls src --callers main --format json` prints, each keyword the noun's flag with `-` as `_`. A request the subcommand exits 2 on raises `RequestValidationError` with its message (a missing path and a target that matches nothing included, which the URI form returned as answers), and a failed analysis raises its cause or the new `reveal.errors.AnalysisFailedError`. Resource URIs answer as before; a word that is neither a noun nor a URI still raises `ValueError`, now naming the nouns instead of "missing scheme" (BACK-2717).
@@ -103,6 +113,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 - `reveal calls PATH --callers NAME --format dot` and `reveal imports PATH --importers --format dot` draw the Graphviz graph that `?format=dot` draws, and exit 2 on the views that have no graph, as the URI does; a `?format=dot` URI request now notes this command as its replacement (BACK-2722).
 
 - The json, imports, calls, claude, metrics, contracts and patches guides teach `reveal NOUN PATH --flags` (`reveal metrics ./src --sort=-complexity --limit 5`), and the resource URI followed by flags where the URI names more than a path (`reveal json://data.json/users --where 'age>25'`, `reveal claude://session/NAME --errors`) (BACK-2726).
+
+- The git guide and the git lines of the shared guides teach flags (`reveal git://src/app.py --view history --where 'author~=John'`), and the README, AGENT_HELP and `help://quick` first screens teach `reveal git . --view history`. Git's help and schema examples, hints and error messages name flags too (`--view blame --detail full`, `--ignore off`, `--detail raw`) (BACK-2616).
 
 ### Fixed
 
@@ -127,6 +139,14 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 - `ast` text prints its two standing caveats (complexity is unweighted McCabe; a language below tier1-verified conformance) as one `Rules: --format json (meta.warnings)` line; their full text stays in JSON. Rows print in the answer's order: with `--sort` across files each row names its file instead of being regrouped by file, and unsorted groups follow the listing's order (BACK-2613).
 
 - `help://ast`, `help://schemas/ast`, the next steps of the dict views and `--reveal-type`, the W-CAP-1 Python-only warning and the AST guide teach `reveal ast PATH --flags` (`reveal ast src --where 'complexity>10' --sort=-complexity --limit 10`) instead of an `ast://` query string (BACK-2613).
+
+- `reveal git FILE@REF --view diff` exits 3 when `git diff` fails; it printed "(no changes to FILE in this commit)" with exit 0 (BACK-2616).
+
+- Git targets that match nothing exit 2 naming what was searched: an element on a directory (`reveal git pkg --view history --element serve` exited 3 with `'_pygit2.Tree' object has no attribute 'data'`), an unknown element on history or diff, a line range (`--element L1-L5`) on history or diff, and a path no commit ever touched (`reveal git nosuch.py --view history` answered 0 commits). A deleted file keeps its history at exit 0, and a filter matching no commit is still an empty answer (BACK-2690, BACK-2616).
+
+- `reveal git FILE@A --ref B` (and `git://FILE@A?ref=B`) with two different refs exits 2 naming both; `--ref` silently won. The same ref twice is one setting (BACK-2616).
+
+- Git text: a repository timeline header names the repository ("Timeline: repository @ HEAD", it said "None"), and a file's imports print as source lines instead of Python dicts. The git guide says `hash` compares the whole 7-character hash (a prefix is `hash~=^PREFIX`) and that an unknown blame element exits 2 (BACK-2616).
 
 ## [0.135.0] - 2026-11-18
 
