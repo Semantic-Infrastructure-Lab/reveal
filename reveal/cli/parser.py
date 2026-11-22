@@ -14,7 +14,7 @@ from typing import Optional
 _PACKAGE_DIR = Path(__file__).resolve().parent.parent
 from .argparsing import RevealArgumentParser
 from .global_flags import add_exclude_argument, add_gitignore_arguments, add_switch_argument, rule_patterns
-from ..utils.query_binding import ScalarOnceAction
+from ..utils.query_binding import ScalarOnceAction, _LegacyFlagAction
 from ..utils.query_parser import line_range
 from .routing.declared import JsonUsageParser, invalid_uri_request, uri_flag_message
 from ..rules.base import category_legend
@@ -335,7 +335,10 @@ def _collapse_specialized_groups(parser: argparse.ArgumentParser) -> None:
 
     Suppressed actions still parse normally — they only stop being *printed*,
     which also drops them from argparse's usage block (the bulk of the old
-    output). ``--help-all`` rebuilds the parser without this pass.
+    output). ``--help-all`` rebuilds the parser without this pass. The digest
+    teaches: an old flag a declaration generates (``_LegacyFlagAction``, such as
+    the element views' ``--boundary``) still parses and ``--help-all`` lists it,
+    but the digest names only the taught flags (BACK-2627).
     """
     for group in parser._action_groups:
         title = (group.title or '')
@@ -347,6 +350,7 @@ def _collapse_specialized_groups(parser: argparse.ArgumentParser) -> None:
             action.option_strings[0]
             for action in group._group_actions
             if action.option_strings and action.help is not argparse.SUPPRESS
+            and not isinstance(action, _LegacyFlagAction)
         ]
         if not flags:
             continue
