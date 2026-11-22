@@ -50,12 +50,14 @@ def _commit(repo, root, name, text, when, parents):
 
 @pytest.fixture
 def proj(tmp_path, monkeypatch):
-    """A repository with a commit in November 2023 and one made now (today, local time)."""
+    """A repository with a commit in November 2023 and one made now (today, local time), both touching a function
+    complex enough to rank as a hotspot, so the churn walk's commit count shows where it started."""
     root = tmp_path / 'proj'
     root.mkdir()
     repo = pygit2.init_repository(str(root))
-    old = _commit(repo, root, 'app.py', 'def serve(x):\n    if x:\n        return 1\n    return 0\n', 1700000000, [])
-    _commit(repo, root, 'app.py', 'def serve(x):\n    if x:\n        return 2\n    return 0\n', int(time.time()), [old])
+    branches = ''.join(f'    if x == {k}:\n        return {k}\n' for k in range(14))
+    old = _commit(repo, root, 'app.py', f'def serve(x):\n{branches}    return -1\n', 1700000000, [])
+    _commit(repo, root, 'app.py', f'def serve(x):\n{branches}    return -2\n', int(time.time()), [old])
     monkeypatch.chdir(tmp_path)
     return root
 
@@ -80,20 +82,27 @@ def test_today_on_git_answers_the_commits_made_today(proj):
     assert run.returncode == 0 and len(doc['history']) == 2
 
 
-@pytest.mark.parametrize('period,start', [('2023', '2023-01-01'), ('2023-11', '2023-11-01')])
-def test_a_period_bounds_the_metrics_churn_walk_from_its_start(proj, period, start):
+def _churned(doc):
+    return [hotspot['details']['commit_count'] for hotspot in doc['hotspots']]
+
+
+@pytest.mark.parametrize('period,start,commits', [('2023', '2023-01-01', 2), ('2024', '2024-01-01', 1),
+                                                  ('2023-11', '2023-11-01', 2), ('2023-12', '2023-12-01', 1)])
+def test_a_period_bounds_the_metrics_churn_walk_from_its_start(proj, period, start, commits):
     """Metrics refused a period (``fromisoformat``); the churn walk needs an instant, so it takes the period's start."""
     run, doc = _json('metrics', 'proj', '--view', 'hotspots', '--since', period)
     assert run.returncode == 0, run.stderr
     _base, explicit = _json('metrics', 'proj', '--view', 'hotspots', '--since', start)
-    assert doc == explicit
+    assert doc == explicit and _churned(doc) == [commits]
 
 
 def test_today_bounds_the_metrics_churn_walk_from_todays_start(proj):
     run, doc = _json('metrics', 'proj', '--view', 'hotspots', '--since', 'today')
     assert run.returncode == 0, run.stderr
     _base, explicit = _json('metrics', 'proj', '--view', 'hotspots', '--since', date.today().isoformat())
-    assert doc == explicit
+    assert doc == explicit and _churned(doc) == [1]
+    _base, unbounded = _json('metrics', 'proj', '--view', 'hotspots')
+    assert _churned(unbounded) == [2]  # the control: without a bound the walk counts both commits
 
 
 @pytest.mark.parametrize('value', ['20260201', '2026-W05', '2026-02-01T12', 'Today', '2026-1-1', ''])
