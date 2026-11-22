@@ -737,7 +737,7 @@ reveal ast src/ --view dict-heatmap
 reveal check src/ --select T006
 
 # Step 4: Where one variable's shape comes from
-reveal ast src/ --reveal-type x
+reveal ast src/ --reveal-type elem
 ```
 
 Scan the package root: TypedDicts are matched only if defined under the scanned path. A
@@ -885,7 +885,7 @@ AST queries require parsing source code, so they're slower than text search but 
 
 3. **Cache results**: For repeated queries, save JSON output
    ```bash
-   reveal ast ./src --kind function --all --format=json > structure_cache.json
+   reveal ast ./src --kind function --limit 100000 --format=json > structure_cache.json
    jq '.results[] | select(.complexity > 10)' structure_cache.json
    ```
 
@@ -926,8 +926,8 @@ git diff --name-only origin/main | grep '\.py$' | \
 For very large codebases, consider pre-computing structure:
 
 ```bash
-# Generate structure cache (run nightly); --all lifts the 200-result cap
-reveal ast ./src --kind function --all --format=json > structure_cache.json
+# Generate structure cache (run nightly); --limit lifts the 200-result cap
+reveal ast ./src --kind function --limit 100000 --format=json > structure_cache.json
 
 # Query cache with jq (instant)
 jq '.results[] | select(.complexity > 10)' structure_cache.json
@@ -1151,8 +1151,8 @@ reveal ast ./src --kind function --format=json | \
 reveal ast ./src --kind function --sort=-complexity --limit 10 --format=json | \
   jq -r '.results[] | {name, file, complexity, line_count}'
 
-# Generate CSV report (--all lifts the 200-result cap)
-reveal ast ./src --kind function --all --format=json | \
+# Generate CSV report (--limit lifts the 200-result cap)
+reveal ast ./src --kind function --limit 100000 --format=json | \
   jq -r '.results[] | [.file, .name, .complexity, .line_count] | @csv' \
   > code_metrics.csv
 ```
@@ -1205,8 +1205,8 @@ reveal ast ./src --where 'complexity>10' --format=json | \
   jq -r '.results | group_by(.file) |
          .[] | "\(.[0].file): \(length) complex functions"'
 
-# Generate HTML report (--all lifts the 200-result cap)
-reveal ast ./src --kind function --all --format=json | \
+# Generate HTML report (--limit lifts the 200-result cap)
+reveal ast ./src --kind function --limit 100000 --format=json | \
   jq -r '.results[] |
          "<tr><td>\(.name)</td><td>\(.complexity)</td></tr>"' \
   > report.html
@@ -1284,9 +1284,9 @@ import subprocess
 import json
 import pandas as pd
 
-# Get every function (--all lifts the 200-result cap)
+# Get every function (--limit lifts the 200-result cap)
 result = subprocess.run(
-    ["reveal", "ast", "./src", "--kind", "function", "--all", "--format=json"],
+    ["reveal", "ast", "./src", "--kind", "function", "--limit", "100000", "--format=json"],
     capture_output=True,
     text=True
 )
@@ -1303,8 +1303,8 @@ print(df.nlargest(10, "complexity"))
 ### With SQLite (code database)
 
 ```bash
-# Export to CSV (--all lifts the 200-result cap)
-reveal ast ./src --all --format=json | \
+# Export to CSV (--limit lifts the 200-result cap)
+reveal ast ./src --limit 100000 --format=json | \
   jq -r '.results[] | [.file, .name, .category, .line, .line_count, .complexity] | @csv' \
   > code_structure.csv
 

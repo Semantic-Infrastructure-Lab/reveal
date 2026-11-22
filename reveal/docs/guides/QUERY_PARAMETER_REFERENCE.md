@@ -406,7 +406,7 @@ reveal 'metrics://.?view=hotspots&code-only=true'
 
 - **`--reveal-type NAME`** (was `reveal_type=`) - Query type evidence for a variable without editing source
   ```bash
-  reveal ast src/file.py --reveal-type x   # type evidence for 'x'; a name with no occurrence exits 2
+  reveal ast src/file.py --reveal-type result   # collect type evidence for 'result'; a name with no occurrence exits 2
   ```
   Gathers annotations, assignment RHS shapes, and loop variable hints.
 
