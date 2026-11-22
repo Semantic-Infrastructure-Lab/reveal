@@ -35,6 +35,7 @@ from ..utils.path_utils import (
     hidden_entries_warning,
     TestLayout,
     is_test_file_name,
+    to_posix,
     traversal_failed_warning,
     walk_tree,
     failure_of,
@@ -381,7 +382,7 @@ def _scan_surface(
             '_discovery_error': discovery_error} if directory_loss else {}),
         '_scope_hidden': scope_hidden,
         **({'test_scope': layout.as_dict(path)} if layout is not None else {}),
-        'path': str(display_path),
+        'path': to_posix(display_path),
         'total': total,
         'surfaces': surfaces,
         'matrix': matrix,
@@ -621,7 +622,7 @@ class SurfaceAdapter(ResourceAdapter):
 
         result = ResultBuilder.create(
             result_type=self.RESULT_TYPE,
-            source=self.path,
+            source=Path(self.path),  # a path object: the envelope writes it with '/' (BACK-2310)
             contract_version=CONTRACT_VERSION,
             parse_mode='ast+tree_sitter',
             warnings=warnings,
