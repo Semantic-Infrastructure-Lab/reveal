@@ -100,10 +100,10 @@ reveal README.md --links --format json
 | **Front Matter Extraction** | `reveal doc.md --frontmatter --format json` | **Extract YAML metadata (requires JSON)** |
 | Broken Link Detection | `reveal doc.md --links` | **Find broken internal links** |
 | Progressive Disclosure | `reveal doc.md --head 5` | First 5 headings |
-| Cross-File Link Graph | `reveal 'markdown://docs/?link-graph'` | Whole-tree forward links, backlinks, orphans |
+| Cross-File Link Graph | `reveal 'markdown://docs/?view=links'` | Whole-tree forward links, backlinks, orphans |
 | Single-Doc Backlinks | `reveal 'markdown://docs/?backlinks=file.md'` | Who links to this doc, before you rename it |
 | Ranked Body Search | `reveal 'markdown://docs/?match=x&explain'` | Multi-doc search, best match first, with a score breakdown |
-| Frontmatter Lint Queue | `reveal 'markdown://docs/?lint'` | Malformed YAML / missing frontmatter across a tree |
+| Frontmatter Lint Queue | `reveal 'markdown://docs/?view=lint'` | Malformed YAML / missing frontmatter across a tree |
 
 ## The Problem This Solves
 
@@ -513,7 +513,7 @@ reveal README.md --frontmatter
 this, not a fallback:
 
 ```bash
-reveal 'markdown://docs/?aggregate=tags'          # frequency table of tag values across all docs
+reveal 'markdown://docs/?view=aggregate&field=tags'          # frequency table of tag values across all docs
 reveal 'markdown://docs/?tags=tutorial'           # find docs by tag/category/any field
 reveal 'markdown://docs/?columns=author,date'      # extra columns per matched file
 ```
@@ -559,10 +559,10 @@ Use `markdown://` — a single query, no shell loop, no `jq`:
 
 ```bash
 # Count tag frequency across all docs
-reveal 'markdown://docs/?aggregate=tags'
+reveal 'markdown://docs/?view=aggregate&field=tags'
 
 # Find all unique authors
-reveal 'markdown://docs/?aggregate=author'
+reveal 'markdown://docs/?view=aggregate&field=author'
 
 # Validate required fields are present (per file, via missing-field filter)
 reveal 'markdown://docs/?!title'    # docs missing a title field
@@ -582,7 +582,7 @@ reveal 'markdown://docs/?category=api'
 
 ```bash
 # Extract tags/topics for indexing — topic index in one call
-reveal 'markdown://docs/?aggregate=tags'
+reveal 'markdown://docs/?view=aggregate&field=tags'
 ```
 
 This pattern works well for building topic indexes, documentation search, and content categorization.
@@ -1141,7 +1141,7 @@ Two related but distinct queries over the tree's `[text](path)` link structure:
 
 ```bash
 # Whole-tree bidirectional graph: forward links, backlinks, orphans
-reveal 'markdown://docs/?link-graph'
+reveal 'markdown://docs/?view=links'
 
 # Single doc: who links to it, before you rename/restructure it
 reveal 'markdown://docs/?backlinks=auth.md'
@@ -1186,10 +1186,10 @@ A corpus-wide frontmatter health check, one list instead of one-file-at-a-time:
 
 ```bash
 # Malformed YAML and files with no frontmatter at all
-reveal 'markdown://docs/?lint'
+reveal 'markdown://docs/?view=lint'
 
 # Same, also flagging files missing required fields
-reveal 'markdown://docs/?lint&lint-fields=title,type'
+reveal 'markdown://docs/?view=lint&lint-fields=title,type'
 ```
 
 - Three issue types: `no_frontmatter` (file has none), `malformed_yaml`

@@ -93,11 +93,11 @@ target and joined to functions that cross runtime boundaries.
 
 ```bash
 reveal help://relationships
-reveal 'markdown://docs/?link-graph'
+reveal 'markdown://docs/?view=links'
 ```
 
 **Why this matters:** `help://relationships` shows the adapter ecosystem and
-power pairs; `markdown://?link-graph` turns docs into a bidirectional graph with
+power pairs; `markdown://?view=links` turns docs into a bidirectional graph with
 orphan detection.
 
 ### Session archaeology
@@ -689,13 +689,13 @@ reveal 'markdown://docs/?topics=authentication&match=oauth'
 
 ```bash
 # See frequency of each value for a frontmatter field
-reveal 'markdown://docs/?aggregate=type'
+reveal 'markdown://docs/?view=aggregate&field=type'
 
 # Count by topic tag (list fields are expanded per item)
-reveal 'markdown://docs/?aggregate=beth_topics'
+reveal 'markdown://docs/?view=aggregate&field=beth_topics'
 
 # Count by status
-reveal 'markdown://docs/?aggregate=status'
+reveal 'markdown://docs/?view=aggregate&field=status'
 ```
 
 **Output:** Sorted frequency table. Great for understanding your doc taxonomy.
@@ -704,13 +704,13 @@ reveal 'markdown://docs/?aggregate=status'
 
 ```bash
 # Which docs link to which? (forward edges + backlinks)
-reveal 'markdown://docs/?link-graph'
+reveal 'markdown://docs/?view=links'
 
 # Grep-friendly tab-separated edges for scripting
-reveal 'markdown://docs/?link-graph' --format=grep
+reveal 'markdown://docs/?view=links' --format=grep
 
 # Pipe to see which docs have the most backlinks
-reveal 'markdown://docs/?link-graph' --format=grep | cut -f2 | sort | uniq -c | sort -rn
+reveal 'markdown://docs/?view=links' --format=grep | cut -f2 | sort | uniq -c | sort -rn
 ```
 
 **Output:** Per-file: links-to list, linked-by count. Plus orphans (docs nothing links to) and isolated files (no links in or out).
@@ -752,10 +752,10 @@ when you want plain alphabetical/recency order.
 
 ```bash
 # Malformed YAML and files with no frontmatter at all
-reveal 'markdown://docs/?lint'
+reveal 'markdown://docs/?view=lint'
 
 # Same, also flagging files missing required fields
-reveal 'markdown://docs/?lint&lint-fields=title,type'
+reveal 'markdown://docs/?view=lint&lint-fields=title,type'
 ```
 
 **Output:** One list of `no_frontmatter`/`malformed_yaml`/`missing_fields`
@@ -1700,8 +1700,8 @@ reveal 'calls://src/?callees=fn'         # What does fn call? (cross-file forwar
 reveal 'calls://src/?sort=-callers'       # Most-called functions (coupling metrics)
 reveal 'claude://?match=term'           # Search session history for keyword
 reveal 'claude://files/path/to/file.py'  # Sessions that touched this file
-reveal 'markdown://docs/?link-graph'     # Cross-file doc link graph
-reveal 'markdown://docs/?aggregate=type' # Frontmatter field frequency table
+reveal 'markdown://docs/?view=links'     # Cross-file doc link graph
+reveal 'markdown://docs/?view=aggregate&field=type' # Frontmatter field frequency table
 ```
 
 ### Inspection commands

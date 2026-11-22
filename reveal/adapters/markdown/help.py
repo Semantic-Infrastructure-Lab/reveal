@@ -239,15 +239,15 @@ _SCHEMA_EXAMPLE_QUERIES = [
         'output_type': 'markdown_query'
     },
     {
-        'uri': 'markdown://docs/?aggregate=type',
+        'uri': 'markdown://docs/?view=aggregate&field=type',
         'description': 'Frequency table of "type" field values across all docs',
-        'cli_flag': '?aggregate=type',
+        'cli_flag': '?view=aggregate&field=type',
         'output_type': 'markdown_aggregate'
     },
     {
-        'uri': 'markdown://sessions/?aggregate=beth_topics',
+        'uri': 'markdown://sessions/?view=aggregate&field=beth_topics',
         'description': 'Topic distribution — list fields expanded per item',
-        'cli_flag': '?aggregate=beth_topics',
+        'cli_flag': '?view=aggregate&field=beth_topics',
         'output_type': 'markdown_aggregate'
     },
     {
