@@ -237,12 +237,7 @@ def _doc_rewrites():
 
 
 # original -> why its canonical request answers differently today. Strict xfail: a fix fails the run until deleted.
-KNOWN_DIVERGENCES = {
-    "reveal 'git://.?type=ownership&limit=500'": (
-        "git ownership: the URI's limit reports scope.history_window {commits_counted, complete, limit}; the same "
-        "limit as a flag after the URI (git://. --view ownership --limit 500) answers without it (BACK-2616; found "
-        "by BACK-2726)"),
-}
+KNOWN_DIVERGENCES: dict = {}  # git ownership's legacy limit renders --scan-limit since BACK-2616 Step 4: none left
 
 
 def _doc_rewrite_params():
