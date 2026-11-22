@@ -7,6 +7,8 @@ so no path spelling differs by platform.
 """
 import json
 import os
+import subprocess
+import sys
 
 import pytest
 
@@ -147,3 +149,230 @@ def test_partial_source_loss_is_incomplete_on_every_view(lossy, flags, kind):
     assert run.returncode == 3, run.stderr
     types = [w.get('type') for w in _warnings(doc)]
     assert 'unreadable_files' in types and 'analysis_incomplete' in types
+
+
+# --- REDs: what the package must change (each beside a sibling that passes today) ----------------------------------
+
+@pytest.mark.parametrize('term,alone,with_priority', [
+    ('title=alpha guide', ['alpha.md'], ['alpha.md']),
+    ('title=*alpha*', ['alpha.md'], ['alpha.md']),
+    ('type', ['alpha.md', 'beta.md', 'gamma.md', 'orphan.md'], ['alpha.md', 'beta.md', 'gamma.md']),
+])
+def test_a_where_term_means_the_same_whatever_other_terms_the_request_gives(root, term, alone, with_priority):
+    """RED (B1, ruling Q6): one parser, the shared one -- case-insensitive equality and glob, a bare FIELD is 'exists'.
+    Today a request of plain terms goes to markdown's own parser (case-sensitive, so the first two answer 0) and a request
+    with any operator term to the shared one (where a bare FIELD matches nothing, so the third answers 0)."""
+    _, one = _json(root, 'markdown', 'docs', '--where', term)
+    _, two = _json(root, 'markdown', 'docs', '--where', term, '--where', 'priority>1')
+    assert (_rows(one), _rows(two)) == (alone, with_priority)
+
+
+def test_priority_alone_is_the_control_for_the_pairs(root):
+    _, doc = _json(root, 'markdown', 'docs', '--where', 'priority>1')
+    assert _rows(doc) == ['alpha.md', 'beta.md', 'gamma.md']
+
+
+@pytest.mark.parametrize('flags', [
+    ['--link-graph', '--lint'],
+    ['--lint', '--backlinks', 'alpha.md'],
+    ['--backlinks', 'alpha.md', '--aggregate', 'type'],
+    ['--link-graph', '--aggregate', 'type'],
+    ['--view', 'links', '--lint'],
+], ids=lambda flags: ' '.join(flags))
+def test_two_selections_are_one_answer_too_many(root, flags):
+    """RED (B2): two selectors that pick different answers exit 2 naming both (COMMAND_MODEL "One answer per request");
+    today the first in a precedence chain answers, exit 0, and the ledger backstop warns that the other did nothing."""
+    run, _ = _json(root, 'markdown', 'docs', *flags)
+    named = [flag.lstrip('-') for flag in flags if flag.startswith('--')]
+    assert run.returncode == 2 and all(name in run.stderr for name in named), run.stderr
+    assert 'unused_flag' not in run.stdout + run.stderr
+
+
+@pytest.mark.parametrize('flags', [['--link-graph'], ['--lint'], ['--backlinks', 'alpha.md'], ['--aggregate', 'type']])
+def test_one_selection_answers(root, flags):
+    run, _ = _json(root, 'markdown', 'docs', *flags)
+    assert run.returncode == 0, run.stderr
+
+
+@pytest.mark.parametrize('legacy,canonical', [
+    (['--view', 'links', '--link-graph'], ['--view', 'links']),
+    (['--view', 'lint', '--lint'], ['--view', 'lint']),
+    (['--view', 'aggregate', '--field', 'type', '--aggregate', 'type'], ['--view', 'aggregate', '--field', 'type']),
+], ids=lambda flags: ' '.join(flags))
+def test_an_agreeing_legacy_and_canonical_selection_is_one_setting(root, legacy, canonical):
+    """RED (B3): equal meanings are one setting ("Spellings"); today a hand check exits 2 'view conflicts with a legacy
+    selector or backlinks target'."""
+    run, doc = _json(root, 'markdown', 'docs', *legacy)
+    _, expected = _json(root, 'markdown', 'docs', *canonical)
+    assert run.returncode == 0, run.stderr
+    strip = lambda d: {k: v for k, v in d.items() if k != 'meta'}  # noqa: E731 -- the legacy word's own note differs
+    assert strip(doc) == strip(expected)
+
+
+def test_an_agreeing_selection_on_the_uri_is_one_setting(root):
+    """RED (B3), the URI form of the same rule."""
+    run, doc = _json(root, 'markdown://docs?view=links&link-graph=true')
+    _, expected = _json(root, 'markdown', 'docs', '--view', 'links')
+    assert run.returncode == 0, run.stderr
+    assert {k: v for k, v in doc.items() if k != 'meta'} == {k: v for k, v in expected.items() if k != 'meta'}
+
+
+def test_two_different_aggregate_fields_exit_2_naming_both(root):
+    """RED (B3): --field and the legacy aggregate word set one field; different values exit 2 naming both ("Conflicting
+    values"); today --field wins silently."""
+    run, _ = _json(root, 'markdown', 'docs', '--field', 'type', '--aggregate', 'tags')
+    assert run.returncode == 2 and 'type' in run.stderr and 'tags' in run.stderr, run.stderr
+
+
+def test_one_aggregate_field_given_twice_alike_is_the_sibling(root):
+    run, _ = _json(root, 'markdown', 'docs', '--view', 'aggregate', '--field', 'type', '--field', 'type')
+    assert run.returncode == 0, run.stderr
+
+
+@pytest.mark.parametrize('underscore,hyphen', [
+    ('markdown://docs?body_contains=authentication', 'markdown://docs?body-contains=authentication'),
+    ('markdown://docs?lint&lint_fields=priority', 'markdown://docs?lint&lint-fields=priority'),
+], ids=['body_contains', 'lint_fields'])
+def test_the_underscore_spelling_of_a_hyphenated_key_is_that_key(root, underscore, hyphen):
+    """RED (B5, "Key spelling"): today ?body_contains= is read as a front-matter field (0 rows and a typo warning) and
+    ?lint_fields= as an unread where term (exit 2)."""
+    run, doc = _json(root, underscore)
+    _, expected = _json(root, hyphen)
+    assert run.returncode == 0, run.stderr
+    assert {k: v for k, v in doc.items() if k != 'meta'} == {k: v for k, v in expected.items() if k != 'meta'}
+
+
+def test_the_underscore_spelling_is_accepted_by_the_python_uri_form(root):
+    """RED (B5): api.query('markdown://docs', body_contains=...) raises UnsupportedOverrideError today."""
+    from reveal import api
+    assert api.query('markdown://docs', body_contains='authentication')['matched_files'] == 2
+
+
+def test_link_graph_underscore_is_the_sibling(root):
+    run, doc = _json(root, 'markdown://docs?link_graph')
+    assert run.returncode == 0 and doc['type'] == 'markdown_link_graph'
+
+
+def test_sort_by_a_front_matter_field_sorts_by_it(root):
+    """RED (B6): --sort reads the front matter it is declared to read; today it sorts only fields a row carries, so
+    priority is 'not a field of any result' and the rows stay unsorted."""
+    run, doc = _json(root, 'markdown', 'docs', '--where', 'priority>0', '--sort', '-priority')
+    assert run.returncode == 0
+    assert _rows_in_order(doc) == ['gamma.md', 'alpha.md', 'beta.md']
+    assert 'unknown_sort_field' not in [w.get('type') for w in _warnings(doc)]
+
+
+def test_sort_by_a_column_is_the_sibling(root):
+    _, doc = _json(root, 'markdown', 'docs', '--where', 'priority>0', '--sort', '-priority', '--columns', 'priority')
+    assert _rows_in_order(doc) == ['gamma.md', 'alpha.md', 'beta.md']
+
+
+def test_explain_without_match_is_a_conflicting_request(root):
+    """RED (B7): explain reads the body match; without one it is an invalid request naming match (exit 2), as a control
+    another control's value leaves unread is; today it answers the plain listing, exit 0."""
+    run, _ = _json(root, 'markdown', 'docs', '--explain')
+    assert run.returncode == 2 and 'match' in run.stderr, run.stderr
+
+
+def test_explain_with_match_is_the_sibling(root):
+    run, doc = _json(root, 'markdown', 'docs', '--explain', '--match', 'authentication')
+    assert run.returncode == 0 and all('term_counts' in str(row) for row in doc['results'])
+
+
+@pytest.mark.parametrize('flags', [['--view', 'links'], ['--backlinks', 'alpha.md'], ['--match', 'authentication']],
+                         ids=lambda flags: ' '.join(flags))
+def test_a_lost_file_is_reported_once_in_the_json_and_names_no_absolute_path(lossy, flags):
+    """RED (B10, "Transports"): in JSON mode a diagnostic the JSON carries (unreadable_files) is not printed on stderr as
+    well, and no error string names an absolute path; today a 'Failed to read /abs/...' log line does both. A real process:
+    the in-process runner does not capture the logging handler's stderr."""
+    run = _process(lossy, 'markdown', 'docs', *flags)
+    doc = json.loads(run.stdout)
+    assert run.returncode == 3 and 'unreadable_files' in [w.get('type') for w in _warnings(doc)]
+    assert str(lossy) not in run.stderr and 'beta.md' not in run.stderr, run.stderr
+
+
+def test_a_lost_file_on_the_listing_is_the_sibling(lossy):
+    run = _process(lossy, 'markdown', 'docs')
+    assert run.returncode == 3 and str(lossy) not in run.stderr and 'beta.md' not in run.stderr, run.stderr
+
+
+def _process(cwd, *argv):
+    return subprocess.run([sys.executable, '-m', 'reveal', *argv, '--format', 'json'], cwd=cwd, capture_output=True,
+                          text=True, encoding='utf-8', timeout=120, env={**os.environ, 'REVEAL_DISK_CACHE': '0'})
+
+
+def test_the_aggregate_view_without_a_field_names_the_flag(root):
+    """RED (B12): the refusal names --field, the flag the subcommand takes; today 'aggregate view requires field'."""
+    run, _ = _json(root, 'markdown', 'docs', '--view', 'aggregate')
+    assert run.returncode == 2 and '--field' in run.stderr, run.stderr
+
+
+def test_an_unknown_backlinks_doc_exits_2_naming_it_and_the_tree(root):
+    """RED (rule 9, ruling Q5): a backlinks target no document in the tree is exits 2 naming the doc and the tree
+    searched; today found: false, exit 0."""
+    run, _ = _json(root, 'markdown', 'docs', '--backlinks', 'nosuch.md')
+    assert run.returncode == 2 and 'nosuch.md' in run.stderr and 'docs' in run.stderr, run.stderr
+
+
+def test_a_known_backlinks_doc_with_no_inbound_link_still_answers(root):
+    """Sibling: orphan.md exists and nothing links to it -- an answer, not a miss."""
+    run, doc = _json(root, 'markdown', 'docs', '--backlinks', 'orphan.md')
+    assert run.returncode == 0 and doc['linked_by'] == []
+
+
+def test_an_aggregate_field_no_document_has_warns_as_an_open_field(root):
+    """RED (ruling Q5): the shared open-field unknown_filter_field warning, exit 0; today an empty table and nothing."""
+    run, doc = _json(root, 'markdown', 'docs', '--view', 'aggregate', '--field', 'zzz')
+    assert run.returncode == 0
+    assert 'unknown_filter_field' in [w.get('type') for w in _warnings(doc)]
+
+
+def test_a_where_field_no_document_has_is_the_sibling(root):
+    run, doc = _json(root, 'markdown', 'docs', '--where', 'zzz=1')
+    assert run.returncode == 0 and 'unknown_filter_field' in [w.get('type') for w in _warnings(doc)]
+
+
+def test_an_empty_tree_stays_an_answer(root):
+    """Ruling Q5 control: a directory with no documents is 0 of 0, exit 0."""
+    (root / 'empty').mkdir()
+    run, doc = _json(root, 'markdown', 'empty')
+    assert run.returncode == 0 and doc['total_files'] == 0
+
+
+@pytest.mark.parametrize('legacy,row,replacement', [
+    (['--link-graph'], 'param:markdown.link-graph', '--view links'),
+    (['--lint'], 'param:markdown.lint', '--view lint'),
+    (['--aggregate', 'type'], 'param:markdown.aggregate', '--view aggregate --field'),
+], ids=['link-graph', 'lint', 'aggregate'])
+def test_the_legacy_selectors_note_their_rows(root, legacy, row, replacement):
+    """RED (D20; rulings Q1, Q2-C): link-graph and lint translate to --view links / --view lint with a row; aggregate is
+    a standalone legacy word whose row names --view aggregate --field F. Each answers as its replacement."""
+    run, doc = _json(root, 'markdown', 'docs', *legacy)
+    assert run.returncode == 0
+    note = _notes(doc).get(row)
+    assert note is not None and replacement in note['replacement'], _notes(doc)
+
+
+@pytest.mark.parametrize('uri,canonical', [
+    ('markdown://docs?link-graph', 'reveal markdown docs --view links'),
+    ('markdown://docs?lint', 'reveal markdown docs --view lint'),
+], ids=['link-graph', 'lint'])
+def test_a_legacy_selector_request_note_renders_the_view(root, uri, canonical):
+    """RED: the request note renders the canonical request, never a spelling that itself retires (today --link-graph,
+    --lint)."""
+    _, doc = _json(root, uri)
+    assert _notes(doc)['request:markdown']['replacement'] == canonical
+
+
+def test_a_view_request_note_is_the_sibling(root):
+    _, doc = _json(root, 'markdown://docs?view=links')
+    assert _notes(doc)['request:markdown']['replacement'] == 'reveal markdown docs --view links'
+
+
+def test_the_standalone_aggregate_word_says_its_own_row_and_no_request_note(root):
+    """RED (ruling Q2-C): a request giving a standalone legacy word has no canonical form, so it says no request note,
+    only its own row (as surface's and overview's top do); today the request note recommends --aggregate type."""
+    run, doc = _json(root, 'markdown://docs?aggregate=type')
+    assert run.returncode == 0 and doc['type'] == 'markdown_aggregate'
+    notes = _notes(doc)
+    assert 'request:markdown' not in notes and 'param:markdown.aggregate' in notes, notes
