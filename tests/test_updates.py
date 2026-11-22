@@ -1,6 +1,7 @@
 """Tests for reveal/utils/updates.py - update checking."""
 
 import os
+import sys
 import pytest
 import json
 from datetime import datetime, timedelta
@@ -88,6 +89,7 @@ class TestCheckForUpdates:
         printed_text = ' '.join(str(call[0][0]) for call in mock_print.call_args_list)
         assert '0.27.0' in printed_text
         assert 'Update available' in printed_text or 'available' in printed_text.lower()
+        assert all(call.kwargs.get('file') is sys.stderr for call in mock_print.call_args_list)  # BACK-2738
 
     @patch('reveal.config.get_cache_path')
     def test_skips_if_checked_recently(self, mock_get_cache):

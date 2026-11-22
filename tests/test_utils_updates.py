@@ -188,9 +188,9 @@ class TestCheckForUpdates:
 
         # Check output
         captured = capsys.readouterr()
-        assert "Update available" in captured.out
-        assert "0.48.0" in captured.out
-        assert "0.47.0" in captured.out
+        assert "Update available" in captured.err and "Update available" not in captured.out
+        assert "0.48.0" in captured.err
+        assert "0.47.0" in captured.err
 
     @patch.dict(os.environ, {}, clear=True)
     @patch('reveal.config.get_cache_path')
@@ -214,7 +214,7 @@ class TestCheckForUpdates:
 
         # Check output - should be empty
         captured = capsys.readouterr()
-        assert "Update available" not in captured.out
+        assert "Update available" not in captured.out + captured.err
 
     @patch.dict(os.environ, {}, clear=True)
     @patch('reveal.config.get_cache_path')
@@ -238,7 +238,7 @@ class TestCheckForUpdates:
 
         # Check output - should be empty
         captured = capsys.readouterr()
-        assert "Update available" not in captured.out
+        assert "Update available" not in captured.out + captured.err
 
     @patch.dict(os.environ, {}, clear=True)
     @patch('reveal.config.get_cache_path')
@@ -323,7 +323,7 @@ class TestCheckForUpdates:
 
         # Should not print update message (version comparison failed)
         captured = capsys.readouterr()
-        assert "Update available" not in captured.out
+        assert "Update available" not in captured.out + captured.err
 
     @patch.dict(os.environ, {}, clear=True)
     @patch('reveal.config.get_cache_path')
@@ -397,5 +397,5 @@ class TestCheckForUpdates:
 
         # Should detect 0.100.0 > 0.10.0
         captured = capsys.readouterr()
-        assert "Update available" in captured.out
-        assert "0.100.0" in captured.out
+        assert "Update available" in captured.err and "Update available" not in captured.out
+        assert "0.100.0" in captured.err

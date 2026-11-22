@@ -1,6 +1,7 @@
 """Update checking utilities for reveal."""
 
 import os
+import sys
 from datetime import datetime, timedelta
 
 
@@ -21,13 +22,17 @@ def _is_update_recent(cache_file) -> bool:
 
 
 def _print_update_notice(latest: str, current: str) -> None:
-    """Print an update notice if latest > current."""
+    """Print an update notice on stderr if latest > current.
+
+    stderr, never stdout: the check runs before every answer, whatever --format, so a
+    notice on stdout broke the JSON a script reads once a day (BACK-2738).
+    """
     if latest == current:
         return
     try:
         if _parse_version(latest) > _parse_version(current):
-            print(f"⚠️  Update available: reveal {latest} (you have {current})")
-            print("Update available: pip install --upgrade reveal-cli\n")
+            print(f"⚠️  Update available: reveal {latest} (you have {current})", file=sys.stderr)
+            print("Update available: pip install --upgrade reveal-cli\n", file=sys.stderr)
     except (ValueError, AttributeError):
         pass
 
