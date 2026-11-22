@@ -90,9 +90,14 @@ def test_without_all_flag_nothing_changes():
     assert inject_query_flags('src', 'hotspots', _args()) == 'src'
 
 
-@pytest.mark.parametrize('scheme', ['surface', 'claude', 'nosuchscheme'])
+@pytest.mark.parametrize('scheme', ['contracts', 'claude', 'nosuchscheme'])
 def test_adapters_without_declaration_untouched(scheme):
     assert inject_query_flags('src', scheme, _args(all=True)) == 'src'
+
+
+def test_surface_declares_all_as_limit_zero():
+    # surface's --limit caps the answer since BACK-2623, so --all binds --limit 0's value (BACK-2729)
+    assert inject_query_flags('src', 'surface', _args(all=True)) == 'src?limit=0'
 
 
 def test_end_to_end_lifts_hotspots_cap(tmp_path):
