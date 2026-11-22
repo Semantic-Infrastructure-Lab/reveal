@@ -7,13 +7,14 @@ so no path spelling differs by platform.
 """
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
 
-from conftest import _run_reveal_in, without_request_notes
+from conftest import _run_reveal_in, without_request_note_lines, without_request_notes
 
 DOCS = {
     'alpha.md': ('---\ntitle: Alpha Guide\ntype: guide\npriority: 5\ntags: [auth, api]\n---\n# Alpha\n\n'
@@ -89,11 +90,13 @@ def test_each_view_answers_alike_on_the_subcommand_and_the_uri_with_flags(root, 
 @pytest.mark.parametrize('flags,kind', VIEWS, ids=_IDS)
 def test_each_view_answers_alike_on_the_python_noun_form(root, flags, kind):
     from reveal import api
-    keywords: dict = {}
-    for flag, value in zip(flags[::2], flags[1::2]):
-        keywords[flag.lstrip('-').replace('-', '_')] = value
     _, cli = _json(root, 'markdown', 'docs', *flags)
-    assert api.query('markdown', 'docs', **keywords) == cli
+    assert api.query('markdown', 'docs', **_keywords(flags)) == cli
+
+
+def _keywords(flags):
+    """The typed API's keywords for a flag list: each `--flag VALUE` pair, the flag spelled as a Python name."""
+    return {flag.lstrip('-').replace('-', '_'): value for flag, value in zip(flags[::2], flags[1::2])}
 
 
 @pytest.mark.parametrize('flags,kind', VIEWS, ids=_IDS)
@@ -399,3 +402,94 @@ def test_element_flags_on_the_directory_query_exit_2_naming_the_control(root, fl
     unreachable (BACK-357's note, deleted in BACK-2614)."""
     run, _ = _json(root, 'markdown://docs', flag)
     assert run.returncode == 2 and f"unsupported control '{flag}'" in run.stderr, run.stderr
+
+
+# --- acceptance (M6): every view and every refusal answers alike on every transport -------------------------------
+
+@pytest.mark.parametrize('flags,kind', VIEWS, ids=_IDS)
+def test_each_view_answers_alike_in_text_on_the_subcommand_and_the_uri_with_flags(root, flags, kind):
+    """D20: the URI with flags is the subcommand's request; its text and exit are equal (the request note aside)."""
+    cli = _run_reveal_in(root, 'markdown', 'docs', *flags)
+    uri = _run_reveal_in(root, 'markdown://docs', *flags)
+    assert cli.returncode == uri.returncode == 0, (cli.stderr, uri.stderr)
+    assert cli.stdout.strip() and cli.stdout == without_request_note_lines(uri.stdout)
+    assert without_request_note_lines(cli.stderr) == without_request_note_lines(uri.stderr)
+
+
+@pytest.mark.parametrize('flags,kind', VIEWS, ids=_IDS)
+def test_each_view_answers_alike_on_the_python_uri_form(root, flags, kind):
+    from reveal import api
+    _, cli = _json(root, 'markdown', 'docs', *flags)
+    assert without_request_notes(api.query('markdown://docs', **_keywords(flags))) == cli
+
+
+REFUSALS = [
+    # (flags, the typed API's keywords or None when a keyword cannot repeat, a word the refusal names)
+    (['--view', 'links', '--backlinks', 'alpha.md'], {'view': 'links', 'backlinks': 'alpha.md'}, 'backlinks'),
+    (['--view', 'links', '--view', 'lint'], None, 'lint'),
+    (['--backlinks', 'nosuch.md'], {'backlinks': 'nosuch.md'}, 'nosuch.md'),
+    (['--explain'], {'explain': True}, 'match'),
+    (['--view', 'aggregate'], {'view': 'aggregate'}, '--field'),
+    (['--view', 'aggregate', '--field', 'type', '--aggregate', 'tags'], None, '--aggregate'),
+    (['--limit', 'x'], {'limit': 'x'}, 'limit'),
+]
+_REFUSAL_IDS = [' '.join(flags) for flags, _, _ in REFUSALS]
+
+
+def _without_usage(text):
+    """Stderr without argparse's usage block: the URI form's parser lists one more --format choice (typed) than the
+    subcommand's, on every noun (a shared parser difference, not this noun's); the error line itself is compared."""
+    kept, in_usage = [], False
+    for line in text.splitlines(keepends=True):
+        in_usage = line.startswith('usage:') or (in_usage and line[:1].isspace())
+        if not in_usage:
+            kept.append(line)
+    return ''.join(kept)
+
+
+@pytest.mark.parametrize('flags,keywords,named', REFUSALS, ids=_REFUSAL_IDS)
+def test_each_refusal_exits_2_alike_on_the_subcommand_the_uri_and_the_api(root, flags, keywords, named):
+    """One refusal, one meaning: exit 2 with the same error on the subcommand and the URI with flags, in text and JSON,
+    and the typed API (noun and URI forms) raises the request error naming the same word."""
+    from reveal import api
+    from reveal.errors import RequestValidationError
+    for fmt in ([], ['--format', 'json']):
+        cli = _run_reveal_in(root, 'markdown', 'docs', *flags, *fmt)
+        uri = _run_reveal_in(root, 'markdown://docs', *flags, *fmt)
+        assert cli.returncode == uri.returncode == 2, (fmt, cli.returncode, uri.returncode, cli.stderr)
+        assert named in cli.stderr, cli.stderr
+        assert _without_usage(without_request_note_lines(cli.stderr)) == _without_usage(
+            without_request_note_lines(uri.stderr))
+        assert cli.stdout == uri.stdout
+    if keywords is not None:
+        for target in (('markdown', 'docs'), ('markdown://docs',)):
+            with pytest.raises(RequestValidationError, match=re.escape(named)):
+                api.query(*target, **keywords)
+
+
+@pytest.mark.parametrize('flags,keywords,named', REFUSALS, ids=_REFUSAL_IDS)
+def test_each_refusal_is_an_error_outcome_through_mcp(root, flags, keywords, named):
+    pytest.importorskip('mcp')
+    from reveal import mcp_server
+    out = mcp_server.reveal_run(['markdown', 'docs', *flags])
+    assert out.startswith('[reveal error:') and named in out, out[:300]
+
+
+@pytest.mark.parametrize('flags,kind', VIEWS, ids=_IDS)
+def test_partial_source_loss_answers_alike_on_the_uri_and_the_api(lossy, flags, kind):
+    """Exit 3 (required evidence lost) is the same answer on every form: the URI with flags exits 3 with the subcommand's
+    JSON, and the typed API returns that JSON with its unreadable_files and analysis_incomplete warnings."""
+    from reveal import api
+    run, cli = _json(lossy, 'markdown', 'docs', *flags)
+    uri, doc = _json(lossy, 'markdown://docs', *flags)
+    assert run.returncode == uri.returncode == 3 and cli == without_request_notes(doc), uri.stderr
+    assert api.query('markdown', 'docs', **_keywords(flags)) == cli
+    assert without_request_notes(api.query('markdown://docs', **_keywords(flags))) == cli
+
+
+@pytest.mark.parametrize('flags,kind', VIEWS, ids=_IDS)
+def test_partial_source_loss_answers_alike_through_mcp(lossy, flags, kind):
+    pytest.importorskip('mcp')
+    from reveal import mcp_server
+    _, cli = _json(lossy, 'markdown', 'docs', *flags)
+    assert json.loads(mcp_server.reveal_run(['markdown', 'docs', *flags, '--format', 'json'])) == cli
