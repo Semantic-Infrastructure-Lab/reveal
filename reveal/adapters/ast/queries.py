@@ -2,7 +2,7 @@
 
 from typing import Any, Dict, Iterator, List, Tuple
 from ...utils.query import parse_query_filters
-from ...utils.query_parser import coerce_value, note_query_parsed
+from ...utils.query_parser import coerce_value
 
 
 def parse_equality_value(key: str, value: str) -> Dict[str, Any]:
@@ -147,82 +147,6 @@ def parse_query(query_string: str) -> Dict[str, Any]:
         key: conditions[0] if len(conditions) == 1 else {'op': ALL_OP, 'value': conditions}
         for key, conditions in by_key.items()
     }
-
-
-def extract_builtins_param(query_string: str):
-    """Extract and remove 'builtins=<value>' or bare 'builtins' from a query string.
-
-    Args:
-        query_string: URL query string (e.g., "show=calls&builtins=true")
-
-    Returns:
-        (cleaned_query_string, include_builtins: bool)
-        Default is False — builtins are filtered out unless explicitly requested.
-    """
-    if not query_string or 'builtins' not in query_string:
-        return query_string, False
-    note_query_parsed('builtins')
-
-    parts = query_string.split('&')
-    include_builtins = False
-    remaining = []
-    for part in parts:
-        stripped = part.strip()
-        if stripped == 'builtins' or stripped == 'builtins=true':
-            include_builtins = True
-        elif stripped == 'builtins=false':
-            pass  # explicitly false — consume and drop
-        else:
-            remaining.append(part)
-    return '&'.join(remaining), include_builtins
-
-
-def extract_reveal_type_param(query_string: str):
-    """Extract and remove 'reveal_type=<var>' from a query string.
-
-    Args:
-        query_string: URL query string (e.g., "reveal_type=trade")
-
-    Returns:
-        (cleaned_query_string, var_name_or_None)
-    """
-    if not query_string or 'reveal_type=' not in query_string:
-        return query_string, None
-    note_query_parsed('reveal_type')
-
-    parts = query_string.split('&')
-    var_name = None
-    remaining = []
-    for part in parts:
-        if part.startswith('reveal_type='):
-            var_name = part[len('reveal_type='):]
-        else:
-            remaining.append(part)
-    return '&'.join(remaining), var_name
-
-
-def extract_show_param(query_string: str):
-    """Extract and remove 'show=<value>' from a query string.
-
-    Args:
-        query_string: URL query string (e.g., "show=calls&lines>50")
-
-    Returns:
-        (cleaned_query_string, show_value_or_None)
-    """
-    if not query_string or 'show=' not in query_string:
-        return query_string, None
-    note_query_parsed('show')
-
-    parts = query_string.split('&')
-    show_value = None
-    remaining = []
-    for part in parts:
-        if part.startswith('show='):
-            show_value = part[5:]
-        else:
-            remaining.append(part)
-    return '&'.join(remaining), show_value
 
 
 def format_query(query: Dict[str, Any]) -> str:

@@ -16,7 +16,6 @@ import pytest
 
 from reveal.adapters.ast.adapter import AstAdapter
 from reveal.adapters.ast.analysis import create_element_dict
-from reveal.adapters.ast.queries import extract_show_param, extract_builtins_param
 from reveal.adapters.ast.filtering import _matches_call_list
 from reveal.rendering.adapters.ast import render_ast_structure
 
@@ -44,40 +43,6 @@ def _query(path: str, query_string: str) -> Dict[str, Any]:
 def _results_by_name(path: str, query_string: str) -> Dict[str, Dict]:
     s = _query(path, query_string)
     return {r['name']: r for r in s.get('results', [])}
-
-
-# ---------------------------------------------------------------------------
-# Unit: extract_show_param
-# ---------------------------------------------------------------------------
-
-class TestExtractShowParam(unittest.TestCase):
-
-    def test_no_show(self):
-        q, mode = extract_show_param('lines>50&type=function')
-        self.assertEqual(q, 'lines>50&type=function')
-        self.assertIsNone(mode)
-
-    def test_show_calls(self):
-        q, mode = extract_show_param('show=calls')
-        self.assertEqual(q, '')
-        self.assertEqual(mode, 'calls')
-
-    def test_show_with_other_params(self):
-        q, mode = extract_show_param('type=function&show=calls&lines>10')
-        self.assertNotIn('show=calls', q)
-        self.assertEqual(mode, 'calls')
-        self.assertIn('type=function', q)
-        self.assertIn('lines>10', q)
-
-    def test_empty_string(self):
-        q, mode = extract_show_param('')
-        self.assertEqual(q, '')
-        self.assertIsNone(mode)
-
-    def test_none(self):
-        q, mode = extract_show_param(None)
-        self.assertIsNone(q)
-        self.assertIsNone(mode)
 
 
 # ---------------------------------------------------------------------------
@@ -300,50 +265,6 @@ class TestShowCallsRenderer(unittest.TestCase):
         out = _capture(render_ast_structure, self._data_with(results), 'text')
         self.assertNotIn('MyClass', out)
         self.assertIn('__init__', out)
-
-
-# ---------------------------------------------------------------------------
-# Unit: extract_builtins_param
-# ---------------------------------------------------------------------------
-
-class TestExtractBuiltinsParam(unittest.TestCase):
-
-    def test_no_builtins_param(self):
-        q, include = extract_builtins_param('lines>50&type=function')
-        self.assertEqual(q, 'lines>50&type=function')
-        self.assertFalse(include)
-
-    def test_builtins_true(self):
-        q, include = extract_builtins_param('builtins=true')
-        self.assertEqual(q, '')
-        self.assertTrue(include)
-
-    def test_builtins_false(self):
-        q, include = extract_builtins_param('builtins=false')
-        self.assertEqual(q, '')
-        self.assertFalse(include)
-
-    def test_bare_builtins_flag(self):
-        q, include = extract_builtins_param('builtins')
-        self.assertEqual(q, '')
-        self.assertTrue(include)
-
-    def test_builtins_with_other_params(self):
-        q, include = extract_builtins_param('type=function&builtins=true&lines>10')
-        self.assertNotIn('builtins', q)
-        self.assertIn('type=function', q)
-        self.assertIn('lines>10', q)
-        self.assertTrue(include)
-
-    def test_empty_string(self):
-        q, include = extract_builtins_param('')
-        self.assertEqual(q, '')
-        self.assertFalse(include)
-
-    def test_none(self):
-        q, include = extract_builtins_param(None)
-        self.assertIsNone(q)
-        self.assertFalse(include)
 
 
 # ---------------------------------------------------------------------------
