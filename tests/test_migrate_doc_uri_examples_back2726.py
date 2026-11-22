@@ -62,6 +62,10 @@ FORM_PROBES = [
     ("reveal 'json://config.json?view=keys&limit=2'", 'reveal json config.json --view keys --limit 2', 'subcommand'),
     ("reveal 'json://config.json/database?keys'", 'reveal json://config.json/database --view keys', 'resource'),
     ("reveal 'git://.@main?limit=2'", 'reveal git://.@main --limit 2', 'resource'),
+    # git declares no filesystem path, but its positional is a path: a plain one teaches the subcommand, and an @REF is
+    # the resource's address, so it keeps the URI (manager, step 6).
+    ("reveal 'git://app.py?view=history&limit=2'", 'reveal git app.py --view history --limit 2', 'subcommand'),
+    ("reveal 'git://app.py@main?view=history&limit=2'", 'reveal git://app.py@main --view history --limit 2', 'resource'),
 ]
 
 
@@ -190,6 +194,34 @@ def test_check_writes_nothing(tmp_path, capsys):
     assert migrate.main(['--check']) == 0
     assert capsys.readouterr().out.splitlines()[-1].startswith('total: found ')
     assert {p: p.read_bytes() for p in migrate.documented_sources().values()} == before
+
+
+def test_the_plain_path_decision_reads_declarations_not_a_noun_table(tmp_path):
+    """A plain path: the noun's positional is declared a path, the resource holds no address mark it declares (git's @)
+    and its declared resource_path is the whole resource. Claude's positional names a resource (sessions, a session), so
+    it keeps the URI; markdown is analysis-only, so it always teaches the subcommand."""
+    planned, _ = _planned(tmp_path, _fenced("reveal 'claude://sessions?limit=2'", "reveal 'git://.@HEAD~1?limit=2'",
+                                            "reveal 'git://.?limit=2'", "reveal 'markdown://docs?where=status=draft'"))
+    assert [(e.new_line, e.form) for e in planned.values()] == [
+        ('reveal claude://sessions --limit 2', 'resource'), ("reveal 'git://.@HEAD~1' --limit 2", 'resource'),
+        ('reveal git . --limit 2', 'subcommand'), ("reveal markdown docs --where status=draft", 'subcommand')]
+    from reveal.cli.routing.declared import declared_adapter_class
+    assert declared_adapter_class('git').RESOURCE_SPEC.address == '@'
+    assert declared_adapter_class('claude').RESOURCE_SPEC.name == 'resource'
+
+
+def test_a_replacement_that_spells_a_retiring_word_is_refused(tmp_path, monkeypatch):
+    """The self-check: a rendered replacement whose flag, flag value or parameter has a RETIREMENTS row would teach a
+    spelling that itself retires (git ?type=log rendered --view log); it is left, naming the row, never written."""
+    from reveal.cli.invocation import RETIREMENTS, Retirement
+    monkeypatch.setitem(RETIREMENTS, 'value:json.view=keys', Retirement('json --view keys', '--view schema'))
+    line = "reveal 'json://config.json?keys'"
+    planned, docs = _planned(tmp_path, _fenced(line, "reveal 'json://config.json?schema'"))
+    assert planned[line].kind == 'left'
+    assert planned[line].reason == f'{migrate.RETIRING_REPLACEMENT}: value:json.view=keys'
+    assert planned["reveal 'json://config.json?schema'"].kind == 'rewrite'  # control: an unretired view is written
+    text, done = migrate.rewrite_text((docs / 'guides' / 'G.md').read_text(encoding='utf-8'), planned.values())
+    assert done == 1 and line in text
 
 
 # --- every rewrite the script would make answers as its original does --------------------------------------------------
