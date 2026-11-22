@@ -295,8 +295,12 @@ def test_row_sort_and_offset_apply_after_aggregation(repo_path):
     assert data['commit_count'] == 5 and data['distinct_author_count'] == 3
     assert [b['period'] for b in data['buckets']] == ['2023-12']
     from reveal.api import query
-    overlay = query(f'git://{repo_path}?type=ownership&limit=1', sort='name', offset=1)
+    overlay = query(f'git://{repo_path}?view=ownership&limit=1', sort='name', offset=1)
     assert overlay['total_commits'] == 5 and [a['name'] for a in overlay['authors']] == ['Scott']
+    # A legacy type= request's limit is its scan-limit whatever else is typed (ruling Q1 A; it flipped to a row cap
+    # when any override was given).
+    legacy = query(f'git://{repo_path}?type=ownership&limit=1', sort='name', offset=1)
+    assert legacy['total_commits'] == 1 and legacy['scope']['history_window']['limit'] == 1
 
 
 @pytest.mark.parametrize('expression', ['limit=0', 'type=history', 'ref=HEAD~1'])

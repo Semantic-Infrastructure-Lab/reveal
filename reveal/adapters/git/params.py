@@ -214,6 +214,10 @@ def _aggregate_controls(params, values):
     return values, control
 
 
+# The one hint of an aggregate's commit-input cut (ownership and timeline), whatever spelled the budget (ruling Q1 A).
+AGGREGATE_INPUT_HINT = 'raise scan-limit; aggregate counts cover only the retained commit input'
+
+
 def apply_aggregate_rows(result: dict, control) -> dict:
     from ...utils.query import apply_result_control, unknown_sort_field_warning
     from ...utils.results import note_truncation, note_warning, truncations_of, relabel_truncations
@@ -222,7 +226,7 @@ def apply_aggregate_rows(result: dict, control) -> dict:
     for entry in truncations_of(result):
         if entry.get('field') == 'commits':
             entry['cause'] = 'scan-limit'
-    relabel_truncations(result, 'commits', 'raise scan-limit; aggregate counts cover only the retained commit input')
+    relabel_truncations(result, 'commits', AGGREGATE_INPUT_HINT)
     if not control.any_set():
         return result
     field = 'authors' if result['type'] == 'git_ownership' else 'buckets'

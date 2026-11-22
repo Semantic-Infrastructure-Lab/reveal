@@ -46,7 +46,7 @@ def test_limit_below_history_discloses_window_in_json(repo):
     assert data['total_commits'] == 2
     [cut] = cuts(data)
     assert (cut['field'], cut['shown'], cut['total'], cut['exact']) == ('commits', 2, 3, False)
-    assert 'newest 2' in cut['message']
+    assert 'raise scan-limit' in cut['message']  # the legacy limit is the scan-limit: one hint (BACK-2616)
     assert data['scope']['history_window'] == {'limit': 2, 'commits_counted': 2, 'complete': False}
 
 

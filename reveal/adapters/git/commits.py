@@ -6,6 +6,7 @@ from typing import Callable, Dict, Any, List, Optional, cast, TYPE_CHECKING
 from reveal.reveal_types import CONTRACT_VERSION
 
 from ...errors import MissingResourceError, RequestValidationError
+from .params import AGGREGATE_INPUT_HINT
 from .qualification import ref_sources
 from ...utils.query import ResultControl, apply_result_control, unknown_sort_field_warning
 from ...utils.results import ResultBuilder, note_truncation, note_warning
@@ -323,10 +324,9 @@ def timeline_fields(matched: List[Dict[str, Any]], bucket: str) -> Dict[str, Any
 
 
 def disclose_timeline_cut(result: Any, walk: HistoryWalk) -> None:
-    """A timeline counts only the commits its walk reached. When ``?limit`` stopped the
+    """A timeline counts only the commits its walk reached. When its scan-limit stopped the
     walk, older history is missing from every count, so the result says so (BACK-1547)."""
-    walk.disclose(result, 'commits',
-                  hint='raise ?limit=N; the timeline counts only the newest N commits')
+    walk.disclose(result, 'commits', hint=AGGREGATE_INPUT_HINT)
 
 
 # The fields of the record format_commit builds, in its order: what every git:// commit filter

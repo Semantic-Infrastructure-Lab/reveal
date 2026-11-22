@@ -114,7 +114,7 @@ class TestEveryViewDisclosesItsCut:
         assert result['commit_count'] == 2
         field, shown, total, exact = _cut(result)
         assert (field, shown, total, exact) == ('commits', 2, 3, False)
-        assert 'timeline counts only the newest N' in truncations_of(result)[0]['message']
+        assert 'raise scan-limit' in truncations_of(result)[0]['message']  # one hint (BACK-2616)
         assert 'walk' not in result
 
     def test_a_whole_timeline_is_not_a_cut(self, repo_path):

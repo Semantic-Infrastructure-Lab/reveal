@@ -10,7 +10,7 @@ from reveal.reveal_types import CONTRACT_VERSION
 from ...errors import MissingResourceError, RequestValidationError
 from ...utils.path_utils import failure_of
 from ...utils.results import ResultBuilder, note_truncation
-from .params import LIMIT
+from .params import AGGREGATE_INPUT_HINT, LIMIT
 from .qualification import text_evidence
 from .commits import (commit_time_text, commit_filter, resolve_commit, disclose_timeline_cut, history_sort, timeline_fields,
                       walk_history)
@@ -811,9 +811,7 @@ def get_ownership(
     if not window['complete']:
         note_truncation(
             result, 'commits', window['commits_counted'], window['commits_counted'] + 1,
-            'limit', exact=False,
-            hint=f"raise ?limit=N; shares and total_commits count only the newest "
-                 f"{window['commits_counted']} commits")
+            'scan-limit', exact=False, hint=AGGREGATE_INPUT_HINT)
 
     if getattr(repo, 'is_shallow', False):
         result['shallow_clone'] = True
