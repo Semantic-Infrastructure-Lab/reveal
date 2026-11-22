@@ -12,7 +12,7 @@ from conftest import _run_reveal_direct
 from reveal.cli.invocation import COMMANDS
 
 REJECTING = ('health', 'review')
-HONORING = ('check', 'overview')
+HONORING = ('check',)
 
 
 def _help(*command):
@@ -37,11 +37,22 @@ def test_rejection_is_unchanged(name, tmp_path):
 
 @pytest.mark.parametrize('name', HONORING)
 def test_help_of_a_command_that_writes_it_still_lists_it(name):
-    """Negative control: check (the one non-declared command that writes the artifact) and a
-    declared noun keep the option and its text."""
+    """Negative control: check (the one non-declared command that writes the artifact) keeps the
+    option and its text."""
     text = _help(name)
     assert '--also-json PATH' in text
     assert 'A write that fails exits 3' in text
+
+
+def test_a_declared_noun_hides_it_from_help_and_still_writes_it(tmp_path):
+    """Moved from HONORING (BACK-2755): --also-json has a note-stage row (flag:--also-json, replaced by
+    --output json=PATH), and a declared noun's usage and --help list only canonical flags, so overview's
+    help no longer lists it; the flag still writes the artifact, with its note."""
+    assert '--also-json' not in _help('overview')
+    (tmp_path / 'm.py').write_text('X = 1\n', encoding='utf-8')
+    result = _run_reveal_direct('overview', tmp_path, '--also-json', tmp_path / 'out.json')
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / 'out.json').exists() and 'use --output json=PATH' in result.stderr
 
 
 def test_the_main_help_still_lists_it():
@@ -49,7 +60,9 @@ def test_the_main_help_still_lists_it():
 
 
 def test_one_declaration_decides_help_and_rejection():
-    """Every command's help lists the option exactly when its spec says it writes it."""
+    """Every command's help lists the option exactly when its spec says it writes it, except a declared noun, whose
+    help hides it as a note-stage legacy flag (BACK-2755)."""
     for name, spec in COMMANDS.items():
         listed = '--also-json' in _help(name)
-        assert listed == spec.also_json, f'reveal {name}: help lists the option={listed}, spec says {spec.also_json}'
+        expected = spec.also_json and not spec.declared_adapter
+        assert listed == expected, f'reveal {name}: help lists the option={listed}, expected {expected}'

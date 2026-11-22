@@ -349,6 +349,7 @@ def create_declared_parser(name: str) -> '_DeclaredParser':
     if adapter.RESOURCE_SPEC.walks:
         add_exclude_argument(parser)
         add_gitignore_arguments(parser)
+    hide_note_stage_flags(parser, name, adapter.PARAM_SPECS)
     return parser
 
 
@@ -428,11 +429,10 @@ def _note_retired_flags(name: str, adapter) -> None:
         spec = flags.get(flag)
         if spec is None:
             continue
+        retirement_note(flag_retirement_key(name, spec, flag))
         if spec.flag_only:
-            retirement_note(f'flag:{name}.{flag}')
             continue
         param = _flag_param(spec, flag)
-        retirement_note(f'param:{name}.{param}')
         if not has_value and _flag_takes_value(spec, flag) and index + 1 < len(argv) and argv[index + 1] != '--':
             has_value, value = '=', argv[index + 1]
         if has_value:
@@ -463,6 +463,32 @@ def note_retired_where_fields(name: str, declarations, params, transport: str) -
     for field in dict.fromkeys(where_fields(params, expression)):
         if field in expression.retired_fields:
             note(f'param:{name}.{field}')
+
+
+def flag_retirement_key(name: str, spec: ParamSpec, flag: str) -> str:
+    """The RETIREMENTS key a declared control's *flag* is noted under on the subcommand route: a flag-only modifier's
+    ``flag:<name>.<flag>``, else ``param:<name>.<param>`` for the legacy word, alias or name the flag spells."""
+    return f'flag:{name}.{flag}' if spec.flag_only else f'param:{name}.{_flag_param(spec, flag)}'
+
+
+def hide_note_stage_flags(parser: argparse.ArgumentParser, name: str, specs) -> None:
+    """A declared noun's usage and --help list only canonical flags (Scott 2026-11-22, BACK-2755): an argument whose long
+    flags are all spelled by a note-stage RETIREMENTS row is hidden (argparse SUPPRESS), with its short spellings (-v is
+    --verbose). The row is the one typing the flag notes: a declared control's by ``flag_retirement_key``, any other
+    flag's (the global --verbose, --also-json, --no-breadcrumbs, --no-gitignore) ``flag:<flag>``. A hidden flag still
+    parses and answers with its note until the cut; help://schemas, generated from the declarations, keeps listing it."""
+    from ..invocation import RETIREMENTS
+    controls = {flag: spec for spec in specs if spec.cli is not None for flag in spec.flags}
+
+    def note_stage(flag: str) -> bool:
+        spec = controls.get(flag)
+        row = RETIREMENTS.get(flag_retirement_key(name, spec, flag) if spec is not None else f'flag:{flag}')
+        return row is not None and row.stage == 'note'
+
+    for action in parser._actions:
+        flags = [option for option in action.option_strings if option.startswith('--')]
+        if flags and all(note_stage(flag) for flag in flags):
+            action.help = argparse.SUPPRESS
 
 
 def _flag_param(spec: ParamSpec, flag: str) -> str:
