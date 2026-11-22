@@ -1,4 +1,5 @@
 """Markdown controls bind directly; existing operations keep selection and source ownership."""
+import shlex
 from typing import Any, Tuple
 
 from ...utils.query_parser import (CliBinding, LegacySpelling, ParamSpec, ParamValueError, QueryParams, peek_query_items,
@@ -107,6 +108,27 @@ def describe_request(params: QueryParams) -> str:
         sequence = value if isinstance(value, list) else [value]
         parts.extend(f'{spec.name}={item}' for item in sequence)
     return '&'.join(parts)
+
+
+def request_flags(params: QueryParams) -> str:
+    """The request as the subcommand's flags, for the text listing's header (COMMAND_MODEL "One spelling": the query
+    string is the retiring form): each control the request gave, in declaration order, as its first flag; a switch
+    bare, a repeatable control once per term, a list control's items joined by commas."""
+    values = dict(peek_query_items(params))
+    words: list[str] = []
+    for spec in PARAM_SPECS:
+        value = values.get(spec.name)
+        if value is None or spec.cli is None or value is False:
+            continue
+        flag = spec.cli.flags[0]
+        if value is True:
+            words.append(flag)
+            continue
+        items = value if isinstance(value, list) else [value]
+        if isinstance(value, list) and not spec.repeatable:
+            items = [','.join(str(item) for item in value)] if value else []
+        words += [word for item in items for word in (flag, str(item))]
+    return shlex.join(words)
 
 
 def validate_request(params: QueryParams, args=None) -> None:

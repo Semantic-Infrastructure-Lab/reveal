@@ -17,11 +17,12 @@ from . import query as query_module
 from . import operations
 from . import files
 from . import filtering
-from .results import BodySearchAnalysis, valid_source_analysis
+from .results import LINK_GRAPH_RULES, BodySearchAnalysis, valid_source_analysis
 from ...utils.query_parser import QueryParams, ResourceSpec, param_schema
 from ...utils.query_binding import bind_declared_params, prepare_declared_params
 from .params import (PARAM_SPECS, MATCH, BACKLINKS, FIELD, LINT_FIELDS, FIELDS, EXPLAIN,
-                     selected_view, result_type, result_control, filter_state, describe_request, validate_request)
+                     selected_view, result_type, result_control, filter_state, describe_request, request_flags,
+                     validate_request)
 from ...errors import MissingResourceError, RequestValidationError
 from ...utils.results import AnalysisCompleteness, result_execution_facts
 
@@ -261,6 +262,7 @@ class MarkdownQueryAdapter(ResourceAdapter):
         source = as_spelled(self.base_path, self.spelling)
         if self.link_graph:
             result = dict(operations.build_link_graph(self.base_path))
+            result['_meta'] = {'known_limits': list(LINK_GRAPH_RULES)}
             return ResultBuilder.create(
                 result_type='markdown_link_graph',
                 source=source,
@@ -318,7 +320,8 @@ class MarkdownQueryAdapter(ResourceAdapter):
             self.extra_fields,
             self.explain,
         )
-        result.update(contract_version=CONTRACT_VERSION, source_type='directory', source=source)
+        result.update(contract_version=CONTRACT_VERSION, source_type='directory', source=source,
+                      request=request_flags(self.query_params))  # the text header names the request as flags
         # Paths as the user named the directory, not its resolved location (BACK-1366).
         result['base_path'] = as_spelled(self.base_path, self.spelling)
         for item in result.get('results', []):

@@ -32,6 +32,19 @@ def valid_source_analysis(proof: Any) -> bool:
             and proof['candidate_files'] == proof['analyzed_files'] + proof['failed_files'])
 
 
+# The counting rules a text answer points to with one "Rules:" line (BACK-2599); the JSON carries them in
+# _meta.known_limits, so the text prints one number per word and no inline definitions.
+LINK_GRAPH_RULES = (
+    'orphans: documents no other document in the tree links to (isolated ones included)',
+    'isolated: documents with no links in or out',
+    'edges: links to documents in the tree; external URLs, anchors and missing targets are not edges',
+)
+RANKING_RULES = (
+    'ranked best-first by relevance_score: occurrences of the match terms in the body plus 3x those on heading lines; '
+    '--sort FIELD orders by a field instead',
+)
+
+
 def build_result_item(
     path: Path,
     frontmatter: Optional[Dict[str, Any]],

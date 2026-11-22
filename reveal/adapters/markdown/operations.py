@@ -144,6 +144,8 @@ def get_structure(
     )
     response['analysis'] = results.source_analysis(len(all_files), len(collected.failed), len(discovery))
     response['body_search'] = bool(body_contains)
+    if body_contains and not result_control.sort_field:
+        response['_meta'] = {'known_limits': list(results.RANKING_RULES)}
 
     # Add truncation warning if needed
     displayed = len(controlled_results)

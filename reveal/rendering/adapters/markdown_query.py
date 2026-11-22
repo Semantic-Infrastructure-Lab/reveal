@@ -3,6 +3,7 @@
 from typing import Any, Dict
 
 from reveal.utils import print_json_result
+from reveal.utils.warning_render import rule_text_lines
 
 
 def render_markdown_query(data: Dict[str, Any], output_format: str,
@@ -58,19 +59,27 @@ def _render_link_graph(data: Dict[str, Any], output_format: str) -> None:
             for target in node['links_to']:
                 print(f'  → {target}')
 
-    # Each file once: an isolated doc is an orphan too, and is listed under Isolated.
-    isolated_set = set(isolated)
-    _print_file_list('Orphans', 'files that link out but nothing links to',
-                     [f for f in orphans if f not in isolated_set])
-    _print_file_list('Isolated', 'files with no links', isolated)
+    # One number per word, as the header counts them (an isolated doc is an orphan too); the definitions are the
+    # Rules pointer's (_meta.known_limits, BACK-2599).
+    _print_file_list('Orphans', orphans)
+    _print_file_list('Isolated', isolated)
+    _print_rules(data)
 
 
-def _print_file_list(title: str, what: str, files: list) -> None:
+def _print_rules(data: Dict[str, Any]) -> None:
+    lines = rule_text_lines(data, fields=('_meta.known_limits',), standing_types=frozenset())
+    if lines:
+        print()
+        for line in lines:
+            print(line)
+
+
+def _print_file_list(title: str, files: list) -> None:
     """A titled, counted list of files; nothing at all when the list is empty."""
     if not files:
         return
     print()
-    print(f'{title} ({len(files)} {what}):')
+    print(f'{title} ({len(files)}):')
     for f in files:
         print(f'  {f}')
 
@@ -281,8 +290,8 @@ def _render_query_results(data: Dict[str, Any], output_format: str) -> None:
         return
 
     print(f"Markdown Query: {data.get('base_path', '.')}/")
-    if data.get('query'):
-        print(f"Filter: ?{data['query']}")
+    if data.get('request'):  # the request as the subcommand's flags, not the retiring query string (BACK-2614)
+        print(f"Filter: {data['request']}")
     print(f"Matched: {data.get('matched_files', 0)} of {data.get('total_files', 0)} files")
     print()
 
@@ -291,6 +300,7 @@ def _render_query_results(data: Dict[str, Any], output_format: str) -> None:
 
     for result in results:
         _render_result_row(result)
+    _print_rules(data)  # the ranking rule of a body match (BACK-2599)
 
     # Show hints (e.g. low match rate front matter warning)
     hints = data.get('hints', [])
