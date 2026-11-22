@@ -86,8 +86,8 @@ No comparative agent-effectiveness claim follows from that diagnostic coverage.
 
 1. **Reliable requests and shared controls.** Every declared noun gets both spellings (`reveal NOUN
    TARGET --option` and `NOUN://TARGET?option=value`) generated from one declaration, and a
-   shared idea gets one option name with one meaning on every noun (BACK-2597,
-   BACK-2598). Counting rules shrink to one line in text output and stay in full in the
+   shared idea gets one option name with one meaning on every noun (BACK-2598).
+   Counting rules shrink to one line in text output and stay in full in the
    JSON (BACK-2599). Old names keep working with a note until the cut. Switching working
    element and distinct operation selectors to a single view option is deferred;
    decide those names before the 1.0 freeze, using realistic-task evidence.
