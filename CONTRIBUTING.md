@@ -485,7 +485,7 @@ def test_lua_structure():
 
 The primary Python 3.12 `ci-local.sh --no-tests` run includes
 `scripts/check_parse_counts.py`. It runs `overview --no-git`, `hotspots`, default
-`check`, and `surface --type env` five times each in fresh subprocesses. Each run
+`check`, and `surface --kind env` five times each in fresh subprocesses. Each run
 copies the pinned three-file corpus, uses an empty user-config directory, disables
 Reveal's disk cache, and sets `REVEAL_MAX_WORKERS=1`. Complete root-PID audits and a
 child-launch observer are required. Unexpected errors, partial results, missing
