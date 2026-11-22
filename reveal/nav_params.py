@@ -263,21 +263,37 @@ def _effects_mode(params: Any) -> str:
     return 'loops' if IN_LOOPS.read(params) else 'state' if STATE.read(params) else 'ordinary'
 
 
+def _operation(params: Any) -> Tuple[Optional[str], Any]:
+    """The standalone operation a bound request selects and its value (None for a switch such as ``--scope``)."""
+    spec = next((spec for spec in _OPERATIONS if spec.name in params._given and spec.read(params) is not False), None)
+    if spec is None:
+        return None, None
+    return spec.name, spec.read(params) if spec.type != 'boolean' else None
+
+
+def _hop_budget(params: Any, transitive: bool) -> Optional[int]:
+    """The transitive hop budget in effect: the legacy clamp, the strict value, or the default 2; None without
+    ``--transitive``."""
+    if 'legacy-depth' in params._given:
+        return int(LEGACY_DEPTH.read(params))
+    if 'depth' in params._given:
+        return int(DEPTH.read(params))
+    return 2 if transitive else None
+
+
+def _given_value(spec: ParamSpec, params: Any, absent: Any = None) -> Any:
+    return spec.read(params) if spec.name in params._given else absent
+
+
 def _request(params: Any, path: str, element: Optional[str]) -> ElementRequest:
-    given = params._given
-    view = VIEW.read(params) if 'view' in given else None
-    operation = next((spec for spec in _OPERATIONS if spec.name in given and spec.read(params) is not False), None)
+    view = _given_value(VIEW, params)
+    operation, value = _operation(params)
     transitive = bool(TRANSITIVE.read(params))
-    depth = LEGACY_DEPTH.read(params) if 'legacy-depth' in given else DEPTH.read(params) if 'depth' in given else None
     return ElementRequest(
-        path=path, element=element, view=view,
-        operation=operation.name if operation is not None else None,
-        value=operation.read(params) if operation is not None and operation.type != 'boolean' else None,
-        kind=tuple(KIND.read(params) or ()) if 'kind' in given else (),
-        mode=_effects_mode(params) if view == 'effects' else None,
-        transitive=transitive, depth=depth if depth is not None else (2 if transitive else None),
-        nesting_depth=NESTING_DEPTH.read(params), range=RANGE.read(params) if 'range' in given else None,
-        cross_calls=bool(CROSS_CALLS.read(params)), params=params)
+        path=path, element=element, view=view, operation=operation, value=value,
+        kind=tuple(_given_value(KIND, params, ())), mode=_effects_mode(params) if view == 'effects' else None,
+        transitive=transitive, depth=_hop_budget(params, transitive), nesting_depth=NESTING_DEPTH.read(params),
+        range=_given_value(RANGE, params), cross_calls=bool(CROSS_CALLS.read(params)), params=params)
 
 
 def bind_element_request(source: Mapping[str, Any], spelled: Optional[Mapping[str, str]] = None, *, path: str,
