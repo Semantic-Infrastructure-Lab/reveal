@@ -33,7 +33,7 @@ def _json(path, element, *flags):
 @pytest.mark.parametrize('depth', [1, 3, 8])
 def test_bare_flow_retains_source_reviewed_full_records(language, depth):
     path, element = _fixture(language)
-    answer = _json(path, element, '--flow', '--depth', str(depth))
+    answer = _json(path, element, '--view', 'flow', '--nesting-depth', str(depth))
     assert answer['findings'] == _expected(language, depth)
     assert answer['meta']['flag'] == 'flow'
     assert answer['meta']['depth'] == depth
@@ -42,7 +42,7 @@ def test_bare_flow_retains_source_reviewed_full_records(language, depth):
 @pytest.mark.parametrize('language', sorted(ROWS))
 def test_selector_union_deduplicates_full_records_in_source_order(language):
     path, element = _fixture(language)
-    answer = _json(path, element, '--flow= try,if,loop,try ')
+    answer = _json(path, element, '--view', 'flow', '--kind', 'try', '--kind', 'if', '--kind', 'loop', '--kind', 'try')
     assert answer['findings'] == [row for row in _expected(language) if row['keyword'] in SELECTED]
     assert answer['meta']['flow_selectors'] == ['try', 'if', 'loop']
 
@@ -68,7 +68,7 @@ def test_flow_uses_qualified_positive_depth(tmp_path, depth):
 def test_file_only_flow_uses_literal_source_scope_and_preserves_file_outline(tmp_path):
     path = tmp_path / 'script.py'
     path.write_text('if ready:\n    launch()\n', encoding='utf-8')
-    result = _run_reveal_direct(path, '--flow', '--format', 'json')
+    result = _run_reveal_direct(path, '--view', 'flow', '--format', 'json')
     assert result.returncode == 0, result.stderr
     answer = json.loads(result.stdout)
     assert [(r['keyword'], r['line_start']) for r in answer['findings']] == [('IF', 1)]
@@ -80,7 +80,7 @@ def test_file_only_flow_uses_literal_source_scope_and_preserves_file_outline(tmp
 @pytest.mark.parametrize('language', sorted(ROWS))
 def test_exits_preserve_source_kinds_and_expected_gate_lines(language):
     path, element = _fixture(language)
-    answer = _json(path, element, '--exits')
+    answer = _json(path, element, '--view', 'exits')
     expected = EXPECTED[language] if language != 'tsx' else {
         'exits': [{'kind': 'RETURN', 'line': 16}, {'kind': 'RETURN', 'line': 18}],
         # L16 is in TRY (no branch gate); L18 is inside CATCH at L17.
@@ -96,17 +96,17 @@ def test_exits_preserve_source_kinds_and_expected_gate_lines(language):
 def test_exits_full_gates_summary_and_empty_selection(tmp_path):
     path = tmp_path / 'work.py'
     path.write_text('def work(a):\n if a:\n  return 1\n return 2\n', encoding='utf-8')
-    answer = _json(path, 'work', '--exits')
+    answer = _json(path, 'work', '--view', 'exits')
     assert answer['findings'] == [
         {'kind': 'RETURN', 'line': 3, 'text': 'return 1', 'gates': [{'line': 2, 'text': 'a'}]},
         {'kind': 'RETURN', 'line': 4, 'text': 'return 2', 'gates': []},
     ]
-    text = _run_reveal_direct(path, 'work', '--exits').stdout
+    text = _run_reveal_direct(path, 'work', '--view', 'exits').stdout
     assert 'Exit sites (static)' in text
     assert 'RETURN: 2' in text
     assert 'gate: a (L2)' in text
     assert 'unconditional' not in text
-    empty = _run_reveal_direct(path, 'work', '--exits', '--range', '1-1')
+    empty = _run_reveal_direct(path, 'work', '--view', 'exits', '--range', '1-1')
     assert 'No exits recorded in this selection.' in empty.stdout
 
 
@@ -115,7 +115,7 @@ def test_nested_sibling_and_exception_gates_are_full_source_facts(tmp_path):
     path.write_text('def work(a, b):\n if a:\n  if b:\n   return 1\n'
                     '  else:\n   return 2\n else:\n  try:\n   return 3\n'
                     '  except ValueError:\n   return 4\n return 5\n', encoding='utf-8')
-    rows = _json(path, 'work', '--exits')['findings']
+    rows = _json(path, 'work', '--view', 'exits')['findings']
     a, b = {'line': 2, 'text': 'a'}, {'line': 3, 'text': 'b'}
     not_a, not_b = {'line': 2, 'text': 'not (a)'}, {'line': 3, 'text': 'not (b)'}
     assert rows == [
@@ -133,14 +133,14 @@ def test_root_inventory_and_one_line_range_retain_recorded_gates(tmp_path):
     path.write_text('def first(a):\n if a:\n  return 1\n return 2\n'
                     'def second():\n return 3\n', encoding='utf-8')
     first = {'kind': 'RETURN', 'line': 3, 'text': 'return 1', 'gates': [{'line': 2, 'text': 'a'}]}
-    result = _run_reveal_direct(path, '--exits', '--format', 'json')
+    result = _run_reveal_direct(path, '--view', 'exits', '--format', 'json')
     answer = json.loads(result.stdout)
     assert answer['findings'] == [first,
         {'kind': 'RETURN', 'line': 4, 'text': 'return 2', 'gates': []},
         {'kind': 'RETURN', 'line': 6, 'text': 'return 3', 'gates': []}]
     assert answer['meta']['exit_scope']['mode'] == 'source_scope'
-    selected = _json(path, 'first', '--exits', '--range', '3-3')
-    literal = _json(path, ':3-3', '--exits')
+    selected = _json(path, 'first', '--view', 'exits', '--range', '3-3')
+    literal = _json(path, ':3-3', '--view', 'exits')
     assert selected['findings'] == literal['findings'] == [first]
     assert selected['meta']['exit_scope']['mode'] == 'selected_callable'
     assert literal['meta']['exit_scope']['mode'] == 'source_scope'
@@ -150,7 +150,7 @@ def test_empty_flow_projection_retains_actual_depth_cut(tmp_path):
     path = tmp_path / 'depth.py'
     path.write_text('def work(a):\n try:\n  if a:\n   return 1\n'
                     ' except ValueError:\n  return 2\n', encoding='utf-8')
-    answer = _json(path, 'work', '--flow=if', '--depth', '1')
+    answer = _json(path, 'work', '--view', 'flow', '--kind', 'if', '--nesting-depth', '1')
     assert answer['findings'] == []
     assert answer['meta']['depth_limited'] is True
     assert [warning['type'] for warning in answer['meta']['warnings']] == ['depth_limited']
@@ -182,12 +182,13 @@ def test_registered_mcp_flow_values_and_invalid_selector(tmp_path):
     _run(tmp_path, scenario)
 
 
-@pytest.mark.parametrize('flag', ['--flow', '--flow=if', '--exits'])
+@pytest.mark.parametrize('flags', [('--view', 'flow'), ('--view', 'flow', '--kind', 'if'), ('--view', 'exits')],
+                         ids=['flow', 'flow-kind-if', 'exits'])
 @pytest.mark.parametrize('fmt', ['text', 'json'])
-def test_active_spellings_have_no_retirement_or_ignored_flag_note(tmp_path, flag, fmt):
+def test_active_spellings_have_no_retirement_or_ignored_flag_note(tmp_path, flags, fmt):
     path = tmp_path / 'work.py'
     path.write_text('def work(a):\n if a:\n  return 1\n', encoding='utf-8')
-    result = _run_reveal_direct(path, 'work', flag, '--format', fmt)
+    result = _run_reveal_direct(path, 'work', *flags, '--format', fmt)
     assert result.returncode == 0
     assert 'deprecated' not in result.stderr
     assert 'ignored' not in result.stderr

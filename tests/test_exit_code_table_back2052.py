@@ -38,10 +38,11 @@ def test_retirement_inventory_matches_the_shipped_migrations():
     BACK-2616 adds Git's type, no_merges and raw (--view, --merges off, --detail raw) and its view=log and
     detail=summary values (--view history, --detail normal). BACK-2626 adds SQLite's check (--view health). BACK-2614 adds
     Markdown's link-graph and lint (--view links, --view lint) and its standalone aggregate (--view aggregate --field FIELD).
+    BACK-2627 adds the element view flags --boundary, --effects, --flow and --exits (--view).
     """
     generated = [f'flag:{noun}.{flag}' for noun, flags in LEGACY_CLI_MODIFIERS.items() for flag in flags]  # BACK-2673
-    assert sorted(RETIREMENTS) == sorted(generated + ['flag:--also-json', 'flag:--calls', 'flag:--catchmap', 'flag:--check', 'flag:--deps',
-                                   'flag:--fanout', 'flag:--flowto', 'flag:--ifmap', 'flag:--loopmap', 'flag:--mutations',
+    assert sorted(RETIREMENTS) == sorted(generated + ['flag:--also-json', 'flag:--boundary', 'flag:--calls', 'flag:--catchmap', 'flag:--check', 'flag:--deps',
+                                   'flag:--effects', 'flag:--exits', 'flag:--fanout', 'flag:--flow', 'flag:--flowto', 'flag:--ifmap', 'flag:--loopmap', 'flag:--mutations',
                                    'flag:--no-breadcrumbs', 'flag:--no-fallback', 'flag:--no-gitignore', 'flag:--no-group', 'flag:--no-snippets',
                                    'flag:--returns', 'flag:--search', 'flag:--sideeffects', 'flag:--statewrites',
                                    'flag:--verbose', 'flag:--writes', 'param:architecture.verbose', 'param:ast.callee_of', 'param:ast.calls', 'param:ast.depth', 'param:ast.show', 'param:ast.type',

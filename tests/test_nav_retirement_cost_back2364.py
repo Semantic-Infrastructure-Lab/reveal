@@ -24,8 +24,9 @@ def _count_builds(monkeypatch):
 
 
 @pytest.mark.parametrize('option,expected', [
-    ('--exits', None), ('--format', None), ('--depth', None), ('--returns', 'flag:--returns'),
-    ('--flow', None),    # a live option that is a prefix of the retired --flowto is not it
+    ('--view', None), ('--format', None), ('--depth', None), ('--returns', 'flag:--returns'),
+    ('--exits', 'flag:--exits'),
+    ('--flow', 'flag:--flow'),  # its own row (BACK-2627), never a prefix match of the retired --flowto
     ('--flowt', None),   # nor is a prefix of a retired flag: it is an unknown option to the parser
 ])
 def test_retired_flag_lookup_is_exact_and_builds_no_parser(monkeypatch, option, expected):

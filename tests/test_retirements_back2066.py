@@ -292,6 +292,10 @@ PRODUCTION_CASES = {
     'flag:--sideeffects': lambda f: [f, 'auth_gate', '--sideeffects'],
     'flag:--fanout': lambda f: [f, 'auth_gate', '--fanout'],
     'flag:--statewrites': lambda f: [f, 'auth_gate', '--statewrites'],
+    'flag:--boundary': lambda f: [f, 'auth_gate', '--boundary'],  # the four view flags (BACK-2627)
+    'flag:--effects': lambda f: [f, 'auth_gate', '--effects'],
+    'flag:--flow': lambda f: [f, 'auth_gate', '--flow'],
+    'flag:--exits': lambda f: [f, 'auth_gate', '--exits'],
     'flag:--search': lambda f: [f, '--search', 'auth'],
     'flag:--check': lambda f: [f, '--check', '--select', 'B001'],
     # Phase 3 slice 5a (BACK-2089): --output json=PATH is the sink, --also-json its retired spelling.

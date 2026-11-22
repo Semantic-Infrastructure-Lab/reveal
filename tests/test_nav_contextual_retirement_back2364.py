@@ -72,7 +72,8 @@ def test_retirement_teaching_context_distinguishes_code_and_markdown():
     assert scan('reveal app.py --outline') == []
     assert scan('reveal guide.md Setup --outline') == []
     assert scan('reveal guide.markdown "Long Heading" --outline') == []
-    assert scan('reveal app.py work --flow=if,loop') == []
+    assert scan('reveal app.py work --view flow --kind if --kind loop') == []
+    assert [key for _, key, _ in scan('reveal app.py work --flow=if,loop')] == ['flag:--flow']  # BACK-2627
 
 
 @pytest.mark.parametrize('command', [

@@ -105,7 +105,8 @@ CASES = [('python', 'def outer(a):\n def inner():\n  return 1\n f = lambda: exit
 def _answer(tmp_path, language, source, flag='--returns', element='outer'):
     path = tmp_path / ('sample.' + EXTENSIONS[language])
     path.write_text(source, encoding='utf-8')
-    response = _run_reveal_direct(path, element, flag, '--format', 'json')
+    flags = (flag,) if isinstance(flag, str) else flag
+    response = _run_reveal_direct(path, element, *flags, '--format', 'json')
     assert response.returncode == 0, (response.stdout, response.stderr)
     return json.loads(response.stdout)
 
@@ -254,7 +255,7 @@ def test_rust_async_block_candidates_do_not_claim_enclosing_execution(tmp_path, 
 
 
 def test_dart_resolved_body_is_not_unqualified_header_execution(tmp_path):
-    answer = _answer(tmp_path, 'dart', 'int outer(){\n return 1;\n}', flag='--exits')
+    answer = _answer(tmp_path, 'dart', 'int outer(){\n return 1;\n}', flag=('--view', 'exits'))
     assert answer['meta']['exit_scope']['mode'] == 'selected_callable'
     assert answer['meta']['exit_scope'].get('unresolved_sites', []) == []
     warnings = answer['meta'].get('warnings', [])
