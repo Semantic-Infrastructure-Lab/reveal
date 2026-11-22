@@ -600,8 +600,9 @@ def _alias_on_subcommand(noun, spec, alias, values):
     entry = _entry(spec, alias)
     if entry is not None and getattr(entry, 'flag_value', None) is not None and alias_flag:
         value = entry.translate(entry.flag_value)[spec.name]
-        other = _other(spec, value)
-        conflict = _sub(noun, f'{name_flag}={other}', alias_flag, base=base)
+        # a control with one valid value cannot be given two (sqlite --view health and its --check, BACK-2626)
+        other = None if [str(choice) for choice in spec.choices if choice] == [value] else _other(spec, value)
+        conflict = _sub(noun, f'{name_flag}={other}', alias_flag, base=base) if other else None
         pair = _sub(noun, f'{name_flag}={value}', alias_flag, base=base)
         names = (name_flag, alias_flag)
     elif alias_flag is not None and alias_flag != name_flag:
