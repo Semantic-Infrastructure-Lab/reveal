@@ -1120,13 +1120,14 @@ def _add_legacy_flag_arguments(parser, spec) -> None:
                             **_legacy_flag_arity(entry))
 
 
-def _add_legacy_rider_arguments(parser, spec: ParamSpec, options: Dict[str, Any], separate: set) -> None:
+def _add_legacy_rider_arguments(parser, spec: ParamSpec, cli: CliBinding, options: Dict[str, Any],
+                                separate: set) -> None:
     """A legacy entry's old flag that stores the control's own value (``--type`` for ``--kind``, ``--body-contains`` for
     ``--match``): an argument of its own beside the control's, with the same dest and options and the control's one
     conflict box (``ScalarOnceAction``'s ``seen``), so ``--kind A --type B`` still exits 2 naming both and a repeatable
     control still accumulates; marked an old flag (``is_legacy_flag_action``), so a help can hide it alone (BACK-2755)."""
-    for flag in (flag for flag in spec.flags if flag not in spec.cli.flags and flag not in separate):
-        if spec.cli.exclusive:
+    for flag in (flag for flag in spec.flags if flag not in cli.flags and flag not in separate):
+        if cli.exclusive:
             raise ValueError(f'{spec.name}: the old flag {flag} of an exclusive control needs its own declaration')
         rider = parser.add_argument(flag, **{**options, 'required': False, 'help': f'Legacy {flag}: {spec.name}'})
         rider.legacy_flag = True
@@ -1209,7 +1210,7 @@ def add_declared_arguments(parser: argparse.ArgumentParser, specs: Iterable[Para
                 groups[cli.exclusive] = parser.add_mutually_exclusive_group()
             owner = groups[cli.exclusive]
         owner.add_argument(*(flag for flag in cli.flags if flag not in separate), **options)
-        _add_legacy_rider_arguments(parser, spec, options, separate)
+        _add_legacy_rider_arguments(parser, spec, cli, options, separate)
         _add_legacy_flag_arguments(parser, spec)
 
 
