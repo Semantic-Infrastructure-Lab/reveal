@@ -139,7 +139,7 @@ def test_actual_callable_and_declarations_adopt_existing_protocol():
     assert list(inspect.signature(ContractsAdapter.get_structure).parameters) == ['self']
     assert 'from_uri' not in ContractsAdapter.__dict__
     specs = {spec.name: spec for spec in ContractsAdapter.PARAM_SPECS}
-    assert set(specs) == {'abstract_only', 'implementations', 'implementations_limit'}
+    assert set(specs) == {'abstract_only', 'implementations', 'implementations_limit', 'exclude'}  # exclude: the shared walk control (BACK-2730)
     assert specs['implementations_limit'].role == 'presentation'
 
 

@@ -185,7 +185,12 @@ def test_navigation_keeps_explicit_scope_without_repeating_config_defaults(tmp_p
         assert '--respect-gitignore' in tokens and 'off' in tokens and 'explicit.py' in tokens
         deeper = run(*tokens[1:], '--format', 'json')
         assert deeper.returncode == 0, deeper.stderr
-        assert 'configured.py' not in deeper.stdout and 'explicit.py' not in deeper.stdout
+        # the answer, not its request note: since BACK-2730 imports declares exclude, so the note of the step's URI
+        # spells the --exclude it carries ('reveal imports PATH ... --exclude explicit.py')
+        shown = json.loads(deeper.stdout)
+        for meta in (shown.get('meta') or {}, shown.get('metadata') or {}):
+            meta['warnings'] = [w for w in meta.get('warnings') or [] if w.get('code') != 'retired_spelling']
+        assert 'configured.py' not in json.dumps(shown) and 'explicit.py' not in json.dumps(shown)
     fan_in = json.loads(run(*shlex.split(body['next_steps'][0]['command'])[1:], '--format', 'json').stdout)
     assert any(row['file'] == 'ignored/b.py' and row['fan_in'] == 1 for row in fan_in['entries'])
 

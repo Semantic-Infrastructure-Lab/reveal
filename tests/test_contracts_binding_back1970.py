@@ -26,7 +26,7 @@ def test_impls_rejects_boolean_fraction_and_scientific_forms(query):
 
 def test_declaration_defaults_roles_polarity_and_consumption():
     specs = {spec.name: spec for spec in ContractsAdapter.PARAM_SPECS}
-    assert set(specs) == {'abstract_only', 'implementations', 'implementations_limit'}
+    assert set(specs) == {'abstract_only', 'implementations', 'implementations_limit', 'exclude'}  # exclude: the shared walk control (BACK-2730)
     assert specs['abstract_only'].default is False
     assert specs['implementations'].default is True
     assert specs['implementations'].cli.flags == ('--implementations',)
