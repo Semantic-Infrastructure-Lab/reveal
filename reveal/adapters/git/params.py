@@ -36,8 +36,7 @@ def predicates(value):
 def detail(value: Any) -> str:
     if isinstance(value, bool):
         return 'full' if value else 'normal'
-    name = nonempty_scalar(value)
-    return 'normal' if name == 'summary' else name
+    return nonempty_scalar(value)  # summary is a value entry translated to normal (its declaration)
 
 
 def raw_detail(value: Any) -> Any:
@@ -102,7 +101,7 @@ def aggregate_selection(values) -> bool:
 # A type= aggregate request's limit bounded the commit input, which is scan-limit now (ruling Q1 A): the binder moves it.
 VIEW = string('view', 'history, blame, diff or ownership; omitted preserves resource-dependent inspection',
               legacy=(LegacySpelling('type', rebinds=(('limit', 'scan-limit'),), rebinds_when=aggregate_selection),
-                      LegacySpelling('view', value='log')),
+                      LegacySpelling('view', value='log', codec=lambda _: 'history')),
               choices=('history', 'log', 'blame', 'diff', 'ownership'), role='operation')
 WHERE = ParamSpec('where', 'array', 'Existing commit predicates; repeat to AND (Git DSL percent-decodes values)',
                   [], predicates, role='filter-expression', repeatable=True, cli=CliBinding(('--where',)),
@@ -111,7 +110,7 @@ WHERE = ParamSpec('where', 'array', 'Existing commit predicates; repeat to AND (
 DETAIL = ParamSpec('detail', 'string', 'normal, full blame, or raw historical file content', None, detail,
                    choices=('normal', 'full', 'raw'), cli=CliBinding(('--detail',)),
                    legacy=(verbose_legacy('full', 'detail=full (--detail full)'), LegacySpelling('raw', codec=raw_detail),
-                           LegacySpelling('detail', value='summary')),
+                           LegacySpelling('detail', value='summary', codec=lambda _: 'normal')),
                    answers=(_BLAME, 'git_file'))
 # One on/off switch on every view (COMMAND_MODEL "Switches"): a legacy boolean spelling (merges=0/1) is its value, and
 # legacy no_merges is merges=off (the Metrics declaration, BACK-2621).
