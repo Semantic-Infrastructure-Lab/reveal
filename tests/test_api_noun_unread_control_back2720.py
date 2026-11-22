@@ -78,3 +78,22 @@ def test_an_invalid_answer_keeps_a_validation_error_beside_exception():
                             error=FileNotFoundError('x'))
     assert other.request_error is None and other.exception is None
     assert _invalid_answer(adapter, 'metrics', '.', 'm', Namespace(format='json')).request_error is None
+
+
+def test_the_kept_error_holds_no_frames_so_the_answer_is_freed():
+    """The kept error is detached: no traceback, context or cause, whose frames could hold the Answer in a reference
+    cycle past its request (BACK-2674; tests/test_answer_lifetime_back2674.py). Its class, message and attributes stay."""
+    from argparse import Namespace
+    from reveal.cli.routing.declared import _invalid_answer, declared_adapter_class
+    try:
+        try:
+            raise KeyError('inner')
+        except KeyError:
+            raise UnreadControlError("control 'top' is not read by this answer")
+    except UnreadControlError as exc:
+        caught = exc
+        answer = _invalid_answer(declared_adapter_class('metrics'), 'metrics', '.', str(exc), Namespace(format='json'),
+                                 error=exc)
+    kept = answer.request_error
+    assert type(kept) is UnreadControlError and str(kept) == str(caught)
+    assert kept.__traceback__ is None and kept.__context__ is None and kept.__cause__ is None
