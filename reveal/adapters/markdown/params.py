@@ -110,7 +110,7 @@ def describe_request(params: QueryParams) -> str:
     return '&'.join(parts)
 
 
-def request_flags(params: QueryParams) -> str:
+def request_flags(params: Any) -> str:
     """The request as the subcommand's flags, for the text listing's header (COMMAND_MODEL "One spelling": the query
     string is the retiring form): each control the request gave, in declaration order, as its first flag; a switch
     bare, a repeatable control once per term, a list control's items joined by commas."""
