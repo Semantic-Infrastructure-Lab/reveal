@@ -88,7 +88,7 @@ def test_loss_repair_reuse_and_siblings_keep_evidence(tmp_path, fault, stage):
     _absent(lost)
     fault['denied'] = set()
     assert adapter.get_structure() == clean
-    _assert_same_answer_source_spelling(clean, api.query(f'surface://{tmp_path}?respect_gitignore=false', type='env', top=0))
+    _assert_same_answer_source_spelling(clean, api.query(f'surface://{tmp_path}?respect_gitignore=false', kind='env', limit=0))  # D20 words (BACK-2623)
     _absent(clean)
     sibling = api.query(f'ast://{tmp_path}?name=absent')
     assert sibling['meta']['confidence'] == 1.0
@@ -97,12 +97,12 @@ def test_loss_repair_reuse_and_siblings_keep_evidence(tmp_path, fault, stage):
 @pytest.mark.parametrize('spelling', ['noun', 'uri'])
 def test_cli_json_text_and_artifact_preserve_requested_rows(tmp_path, spelling):
     _project(tmp_path)
-    args = ['surface', str(tmp_path), '--type', 'env'] if spelling == 'noun' else [f'surface://{tmp_path}?type=env']
+    args = ['surface', str(tmp_path), '--kind', 'env'] if spelling == 'noun' else [f'surface://{tmp_path}?kind=env']
     response = run(*args, '--format', 'json', '--respect-gitignore=off')
     assert response.returncode == 0
     result = json.loads(response.stdout)
     _assert_same_answer_source_spelling(
-        without_request_notes(result), without_request_notes(api.query(f'surface://{tmp_path}?respect_gitignore=false', type='env')))
+        without_request_notes(result), without_request_notes(api.query(f'surface://{tmp_path}?respect_gitignore=false', kind='env')))
     assert result['total'] == 2
     _absent(result)
     artifact = tmp_path / 'answer.json'

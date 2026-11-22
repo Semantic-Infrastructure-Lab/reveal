@@ -30,12 +30,13 @@ def names(answer):
 
 
 def test_api_source_only_matches_supported_uri_constructor_and_command(project):
-    expected = api.query(uri(project, 'type=env&source_only=true'))
-    constructor = SurfaceAdapter(str(project), params={'type': 'env', 'source_only': True}).get_structure()
-    command = _run_reveal_direct('surface', str(project), '--type', 'env', '--source-only', '--format', 'json')
+    # The D20 words (BACK-2623); type and source_only are their legacy words, pinned in test_surface_vocabulary_back2623
+    expected = api.query(uri(project, 'kind=env&tests=exclude'))
+    constructor = SurfaceAdapter(str(project), params={'kind': 'env', 'tests': 'exclude'}).get_structure()
+    command = _run_reveal_direct('surface', str(project), '--kind', 'env', '--tests', 'exclude', '--format', 'json')
     assert command.returncode == 0
     _assert_same_answer_source_spelling(expected, constructor, json.loads(command.stdout))
-    actual = api.query(uri(project), source_only=True)
+    actual = api.query(uri(project, 'kind=env'), tests='exclude')
     assert names(actual) == {'PRODUCTION_VAR'}
     assert actual == expected
     assert actual['scope']['total_code_files'] == 2
@@ -88,10 +89,11 @@ def test_direct_method_keyword_rejects_without_mutating_adapter(project):
     assert names(adapter.get_structure()) == {'PRODUCTION_VAR', 'TEST_VAR'}
 
 
-def test_top_zero_and_none_do_not_cut_raw_analysis(project):
+def test_limit_zero_and_none_do_not_cut_raw_analysis(project):
     complete = without_request_notes(api.query(uri(project)))  # each request's own note aside (BACK-2716)
-    assert without_request_notes(api.query(uri(project), top=0)) == complete
-    assert without_request_notes(api.query(uri(project, 'type=env&top=0'), top=None)) == complete
+    # limit is the cap (BACK-2623): 0 and None are uncapped; the legacy top never cut the raw answer at all
+    assert without_request_notes(api.query(uri(project), limit=0)) == complete
+    assert without_request_notes(api.query(uri(project, 'type=env&limit=0'), limit=None)) == complete
     assert complete['total'] == 2
 
 

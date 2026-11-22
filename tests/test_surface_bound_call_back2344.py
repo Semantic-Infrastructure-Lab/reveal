@@ -154,7 +154,7 @@ def test_adopter_callable_and_class_local_capability():
     assert SurfaceAdapter.__dict__['BOUND_QUERY_CALL'] is True
     assert ResourceAdapter.BOUND_QUERY_CALL is False
     assert 'from_uri' not in SurfaceAdapter.__dict__
-    assert {spec.name for spec in SurfaceAdapter.PARAM_SPECS} == {'type', 'source_only', 'by', 'depth', 'top'}
+    assert {spec.name for spec in SurfaceAdapter.PARAM_SPECS} == {'kind', 'tests', 'view', 'dir-depth', 'limit', 'top'}
     class Child(SurfaceAdapter):
         pass
     assert not uses_bound_query_call(Child)

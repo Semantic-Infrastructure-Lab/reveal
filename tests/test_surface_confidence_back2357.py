@@ -86,7 +86,7 @@ def test_filter_and_source_only_keep_real_counts_and_known_limits(tmp_path):
     assert answer['total'] == 2 and set(answer['surfaces']) == {'env'}
     assert answer['scope']['total_code_files'] == 3
     assert {row['name'] for row in answer['surfaces']['env']} == {'VISIBLE', 'HIDDEN'}
-    assert 'test files excluded (--source-only)' in answer['_meta']['known_limits']
+    assert 'test files excluded (--tests exclude)' in answer['_meta']['known_limits']
     assert sum(row['total'] for row in answer['by_dir']) == 2
     _absent(answer)
 

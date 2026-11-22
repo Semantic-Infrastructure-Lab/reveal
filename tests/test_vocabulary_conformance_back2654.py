@@ -126,6 +126,7 @@ CONTROL_BASES = {('calls', 'kind'): (['--uncalled'], '?uncalled'), ('calls', 'ex
                  # a legacy word read by another answer than its control's base (Git raw is detail=raw: a file's text)
                  ('git', 'raw'): ([], ''),
                  ('patches', 'where'): (['--view', 'pressure'], '?view=pressure'),
+                 ('surface', 'dir-depth'): (['--view', 'dir'], '?view=dir'),  # only the rollup reads its depth
                  ('codex', 'matches'): (['--match', 'auth'], '?match=auth'),
                  **{('codex', bound): (['--where', 'session~=auth'], '?where=session~=auth')
                     for bound in ('since', 'until')}}
@@ -146,29 +147,28 @@ _NO_ALIAS = 'declares no aliased control: there is no alias and name to give twi
 _NO_LEGACY = 'no note-stage RETIREMENTS row spells this noun: there is no legacy spelling to note'
 EXEMPT = {
     **{(noun, '1b'): _NO_ALIAS for noun in ('architecture', 'deps', 'json',
-                                            'overview', 'surface', 'trace')},
-    **{(noun, '2'): _NO_LEGACY for noun in ('surface',)},
+                                            'overview', 'trace')},
     **{(noun, '1d'): 'declares no repeatable control with an alias'
        for noun in NOUNS if noun not in ('ast', 'claude', 'codex', 'markdown', 'metrics', 'patches', 'stats')},
     **{(noun, '5'): 'no note-stage param: row whose replacement is a control of this noun' for noun in (
-        'surface', 'trace')},
+        'trace',)},
     **{(noun, '6'): 'declares no alias: nothing to note or keep note-free' for noun in (
-        'architecture', 'deps', 'json', 'overview', 'surface', 'trace')},
+        'architecture', 'deps', 'json', 'overview', 'trace')},
     **{(noun, '8a'): 'no where expression: a bare key is never read as a field'
        for noun in ('architecture', 'calls', 'contracts', 'deps', 'hotspots', 'imports', 'overview',
                     'pack', 'surface', 'testability', 'trace')},
     **{(noun, '8b'): 'declares no where control: there are no field filters' for noun in (
         'architecture', 'calls', 'contracts', 'deps', 'hotspots', 'imports', 'overview', 'pack', 'surface', 'testability', 'trace')},
     **{(noun, '16'): 'no legacy word and no standalone legacy parameter: nothing to translate or mark' for noun in (
-        'surface', 'trace')},
+        'trace',)},
     **{(noun, '17'): 'one control at most selects the answer: no two selections to give' for noun in (
-        'architecture', 'contracts', 'deps', 'hotspots', 'overview', 'pack', 'surface', 'testability',
+        'architecture', 'contracts', 'deps', 'hotspots', 'overview', 'pack', 'testability',
         'trace')},
     **{(noun, '24'): 'a retired twin: its own scheme: row of RETIREMENTS is its note, not the request note'
        for noun in ('architecture', 'deps', 'hotspots', 'testability', 'trace')},
     **{(noun, '20'): 'no answer reports a declared control unread, on any resource ANSWER_TARGETS lists (a control '
                      'read and not applied is the Step 4 backstop\'s)' for noun in (
-        'contracts', 'deps', 'hotspots', 'pack', 'surface', 'testability', 'trace')},
+        'contracts', 'deps', 'hotspots', 'pack', 'testability', 'trace')},
 }
 
 # Rules 1, 2, 5, 6, 10 and 12 are the shared seams' defaults (Scott 2026-11-16; BACK-2654 Step 3): their cells must
@@ -197,6 +197,8 @@ STANDALONE_WORDS = {
                                          'twenty resources where match answers a search or exits 2 (rule 20, BACK-2656)'),
     ('json', 'data-only'): ('modifier', 'not identical to --view flatten --detail raw: the same lines as a bare JSON array '
                                         'with no envelope; it shapes the flatten answer, selects none (BACK-2725)'),
+    ('surface', 'top'): ('modifier', 'not identical to limit: it cuts the text only, where limit cuts each category in '
+                                     'JSON and text (Scott ruling Q1, BACK-2623)'),
     ('codex', 'search'): ('operation', 'not identical to match: the same sessions, snippets and text, but its JSON query '
                                        'stays the string given where match echoes a list of terms (ruling Q1, BACK-2618)'),
 }

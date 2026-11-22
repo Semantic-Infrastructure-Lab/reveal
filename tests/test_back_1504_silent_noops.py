@@ -41,7 +41,7 @@ def test_calls_depth_where_it_applies_is_silent(pkg, capsys, query):
 
 
 def test_surface_unknown_type_is_an_error(pkg):
-    with pytest.raises(ValueError, match=r"type must be one of .*got 'routes'"):
+    with pytest.raises(ValueError, match=r"kind must be one of .*got 'routes'"):  # type is kind's legacy word (BACK-2623)
         SurfaceAdapter(str(pkg), 'type=routes').get_structure()
 
 
@@ -49,7 +49,7 @@ def test_surface_subcommand_rejects_unknown_type(pkg):
     proc = subprocess.run([sys.executable, '-m', 'reveal', 'surface', str(pkg), '--type', 'routes'],
                           capture_output=True, text=True, encoding='utf-8')
     assert proc.returncode == 2
-    assert "type must be one of" in proc.stderr and "routes" in proc.stderr
+    assert "kind must be one of" in proc.stderr and "routes" in proc.stderr
 
 
 @pytest.fixture

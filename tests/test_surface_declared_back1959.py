@@ -28,11 +28,11 @@ def test_surface_declaration_exports_complete_binding_schema():
     assert schema['resource'] == SurfaceAdapter.RESOURCE_SPEC.schema()
     for name, declaration in specs.items():
         assert schema['query_params'][name] == declaration.schema()
-    assert specs['depth'].minimum == 0 and 'env' in specs['type'].choices
+    assert specs['dir-depth'].minimum == 0 and 'env' in specs['kind'].choices
     assert {name: schema['query_params'][name]['examples'] for name in specs} == {
-        'type': ['type=env'], 'source_only': ['source_only=true'],
-        'by': ['by=dir'], 'depth': ['depth=2'], 'top': ['top=20', 'top=0'],
-    }
+        'kind': ['kind=env'], 'tests': ['tests=exclude'], 'view': ['view=dir'], 'dir-depth': ['view=dir&dir-depth=2'],
+        'limit': ['limit=20'], 'top': ['top=20'],
+    }  # D20 words; type, source_only, by and depth are their legacy words (BACK-2623)
 
 
 def test_surface_typed_and_uri_inputs_share_scanner_result(tmp_path):
@@ -53,9 +53,9 @@ def test_surface_rejects_malformed_values_at_declared_boundary(tmp_path, query):
 @pytest.mark.parametrize('value,expected', [('yes', True), ('1', True), ('no', False), ('0', False),
                                           ('true', True), ('false', False)])
 def test_surface_boolean_spellings_are_shared(tmp_path, value, expected):
-    adapter = SurfaceAdapter(str(tmp_path), 'source_only='+value)
-    declaration = next(spec for spec in SurfaceAdapter.PARAM_SPECS if spec.name == 'source_only')
-    assert declaration.read(adapter.query_params) is expected
+    adapter = SurfaceAdapter(str(tmp_path), 'source_only='+value)  # tests' legacy word (BACK-2623)
+    declaration = next(spec for spec in SurfaceAdapter.PARAM_SPECS if spec.name == 'tests')
+    assert declaration.read(adapter.query_params) == ('exclude' if expected else 'include')
 
 
 def test_surface_presentation_top_is_not_consumed_by_analysis(tmp_path):

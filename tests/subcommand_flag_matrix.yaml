@@ -642,10 +642,13 @@ subcommands:
       via: []
   surface:
     all:
-      reason: 'BACK-2654 item 1c: accepted as on the URI form; surface declares no --all (no cap it lifts), so the flag ledger names it unused on both forms (unused_flag), compared by test_declared_parity_back2053.py::test_option_values_are_read_alike'
-      review: not-applicable
+      reason: 'BACK-2654 item 1c: the declared runner binds --all through the URI
+        form''s own --all declaration (limit=1000000, the value --limit 0 binds: BACK-2729,
+        BACK-2623); test_declared_parity_back2053.py::test_option_values_are_read_alike
+        compares both forms.'
+      review: honored
       via:
-      - declared-unused
+      - declared-read
     respect_gitignore:
       reason: 'BACK-1386: applied to every walker by apply_global_flags; PROBES entry
         proves an output diff'

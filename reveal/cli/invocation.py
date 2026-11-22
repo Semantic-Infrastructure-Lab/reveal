@@ -447,6 +447,15 @@ RETIREMENTS: Dict[str, Retirement] = {
                                        standalone=True),
     'param:contracts.impls': Retirement('contracts ?impls=N (--impls N)', '--implementations-limit N'),
     'param:contracts.no_implementations': Retirement('contracts --no-implementations', '--implementations off'),
+    # Surface's D20 words (BACK-2623): the category is a kind, the test filter is tests, the rollup is a view and its
+    # depth dir-depth. top cut the text only where limit cuts the answer, so it stays a cap of its own until the cut.
+    'param:surface.type': Retirement('surface ?type=KIND (--type KIND)', '--kind KIND'),
+    'param:surface.source_only': Retirement('surface ?source_only (--source-only)', '--tests exclude'),
+    'param:surface.by': Retirement('surface ?by=dir (--by dir)', '--view dir'),
+    'param:surface.depth': Retirement('surface ?depth=N (--depth N)', '--dir-depth N'),
+    'param:surface.top': Retirement('surface ?top=N (--top N)',
+                                    '--limit N, which caps each category in JSON and text; 0 is uncapped',
+                                    standalone=True),
     'param:architecture.verbose': Retirement('architecture ?verbose (--verbose)',
                                              'reveal overview <path> --all, the same uncapped map'),
     'param:hotspots.verbose': Retirement('hotspots ?verbose (--verbose)', '--limit 0, both rankings uncapped'),

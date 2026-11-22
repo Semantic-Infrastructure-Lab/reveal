@@ -1017,10 +1017,8 @@ adapters:
       - declared-binding
   surface:
     all:
-      reason: top defaults to None (surface.py:291,336) -- already unclamped; confirmed
-        live, output identical
-      review: not-applicable
-      via: []
+      via:
+      - declared
     code_only:
       reason: 'metrics'' own switch (BACK-2621): no other adapter has a data/config
         file filter; the flag ledger reports it unused here'

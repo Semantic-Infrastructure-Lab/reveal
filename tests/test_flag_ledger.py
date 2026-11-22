@@ -430,6 +430,9 @@ def _enrich(root):
     (proj / 'GUIDE.md').write_text('---\ntitle: Guide\n---\n# Guide\n\n## One\n', encoding='utf-8')
     (proj / 'data.json').write_text(
         '[{"name": "b", "n": 2}, {"name": "a", "n": 1}, {"name": "c", "n": 3}]', encoding='utf-8')
+    # two entries in one surface category, so surface's --limit 1 cuts a list (BACK-2623)
+    (proj / 'settings.py').write_text('import os\n\nA = os.getenv("PROBE_A")\nB = os.getenv("PROBE_B")\n',
+                                      encoding='utf-8')
     _enrich_past_default_caps(root, proj)
     conn = sqlite3.connect(str(proj / 'app.db'))
     conn.execute('CREATE TABLE orders (id INTEGER)')
@@ -532,7 +535,14 @@ def _satisfied(harness, scheme, dest):
         scheme, harness_module.FIXTURE_URIS[scheme])
     target, _, query = uri.partition('://')[2].partition('?')
     adapter = get_adapter_class(scheme)
-    return lifts_no_cap(spec, adapter, declared_flag_fragment(spec, adapter, query, str(harness.root / target)))
+    fragment = declared_flag_fragment(spec, adapter, query, str(harness.root / target))
+    if lifts_no_cap(spec, adapter, fragment):
+        return True
+    # A cap whose declared default is already every row (surface's limit, BACK-2623): --all binds its uncapped value,
+    # so the answer is the default one, every row
+    key, _, value = (fragment or '').partition('=')
+    cap = next((p for p in adapter.PARAM_SPECS if key in p.spellings), None)
+    return cap is not None and cap.zero_uncaps and cap.default in (None, 0) and value == '0'
 
 
 def test_tracked_args_behave_like_the_namespace_they_copy():

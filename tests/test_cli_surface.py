@@ -123,7 +123,7 @@ class TestCreateSurfaceParser(unittest.TestCase):
     def test_type_flag(self):
         parser = create_surface_parser()
         args = parser.parse_args(['--type', 'env'])
-        self.assertEqual(args.type, 'env')
+        self.assertEqual(args.kind, 'env')  # --type is kind's legacy flag (BACK-2623)
 
     def test_top_flag(self):
         parser = create_surface_parser()
@@ -917,7 +917,7 @@ class TestRenderReport(unittest.TestCase):
     def test_top_shows_truncation_hint(self):
         out = self._capture(self._report_with_env(10), top=3)
         self.assertIn('7 more', out)
-        self.assertIn('--top 10', out)
+        self.assertIn('omit --top to see all', out)  # --top is legacy: the hint names no retiring spelling (BACK-2623)
 
     def test_top_none_shows_all(self):
         out = self._capture(self._report_with_env(10))
@@ -1457,7 +1457,7 @@ class TestSourceOnly(unittest.TestCase):
     def test_source_only_meta_limit_recorded(self):
         report = _scan_surface(Path(self.tmp), source_only=True)
         limits = report['_meta']['known_limits']
-        self.assertTrue(any('source-only' in lim for lim in limits))
+        self.assertTrue(any('--tests exclude' in lim for lim in limits))
 
     def test_source_only_excludes_nested_tests_dir(self):
         _write(self.tmp, 'src/core.py', 'import os\nDB = os.getenv("CORE_KEY")\n')
@@ -2540,7 +2540,7 @@ class TestSurfaceByDir(unittest.TestCase):
 
     def test_cli_flags(self):
         args = create_surface_parser().parse_args(['x', '--by', 'dir', '--depth', '2'])
-        self.assertEqual((args.by, args.depth), ('dir', '2'))
+        self.assertEqual((args.view, args.dir_depth), ('dir', '2'))  # legacy flags of view and dir-depth (BACK-2623)
         with self.assertRaises(SystemExit):
             run_surface(create_surface_parser().parse_args(['x', '--by', 'file']))
 

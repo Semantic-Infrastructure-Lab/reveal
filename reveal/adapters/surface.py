@@ -40,14 +40,14 @@ from ..utils.path_utils import (
     failure_of,
 )
 from ..utils.query_parser import (
-    CliBinding, ParamSpec, QueryParams, ResourceSpec, nonnegative_display_limit, param_schema,
+    CliBinding, LegacySpelling, ParamSpec, QueryParams, ResourceSpec, nonnegative_display_limit, param_schema,
 )
-from ..utils.query_binding import bind_declared_params, boolean_value
+from ..utils.query_binding import bind_declared_params, legacy_switch
 from .ast.surface_matrix import CATEGORIES, RECOVERED_KEY, UNPARSED_KEY, coverage_matrix
 from .surface_file_cache import scan_file_cached
 from .ast.nav_surface_common import ROUTE_CLASSES_KEY, resolve_inherited_route_prefixes
 from .ast.nav_surface_rails import resolve_engine_mounts
-from ..utils.results import PARSE_RECOVERED, ResultBuilder
+from ..utils.results import PARSE_RECOVERED, ResultBuilder, note_truncation
 from ..reveal_types import PathFailure
 
 
@@ -396,11 +396,11 @@ def _scan_surface(
             'known_limits': [
                 'taxonomy covers common libraries only — project-specific clients not detected',
                 'dynamic surface registrations (e.g. plugin-loaded routes) not tracked',
-                *(['test files excluded (--source-only)'] if source_only else []),
+                *(['test files excluded (--tests exclude)'] if source_only else []),
                 *([
                     f"{test_origin_count} of {len(http_entries)} 'http' surface entries come from "
                     "test files (test-spec calls exercising a route, not the route declaration "
-                    "itself) -- see each entry's 'test_origin' field, or pass source_only=true to "
+                    "itself) -- see each entry's 'test_origin' field, or pass --tests exclude to "
                     "exclude them"
                 ] if test_origin_count else []),
                 *([_unparsed_note(unparsed_files)] if unparsed_files else []),
@@ -417,6 +417,63 @@ def _surface_limit(value: Any, name: str) -> int:
     return nonnegative_display_limit(value, name)
 
 
+def _blank_is_omitted(value: Any) -> Any:
+    """A legacy word's empty value (``?type=``, ``?by=``) was its default, so it stands for the control omitted."""
+    return None if value == '' else value
+
+
+# The answer the per-directory rollup selects (COMMAND_MODEL "Applicability"): only it reads the rollup depth.
+_DIR_VIEW = ('view=dir',)
+TEST_CHOICES = ('include', 'exclude')
+
+# The declaration `reveal surface` and surface:// are both generated from (D20, BACK-2623). type, source_only, by and
+# depth are legacy words of kind, tests, view and dir-depth (each answers as its replacement, with its note); top is a
+# legacy cap of its own until the cut: it cuts the text only, where limit cuts the answer, so the two never agree and
+# are never given together.
+_KIND = ParamSpec('kind', 'string', 'One surface category: ' + ', '.join(CATEGORIES) + ' (omitted: every category)',
+                  None, str, examples=('kind=env',), choices=CATEGORIES, role='analysis',
+                  cli=CliBinding(('--kind',), metavar='KIND'),
+                  legacy=(LegacySpelling('type', codec=_blank_is_omitted, flag='--type'),))
+_TESTS = ParamSpec('tests', 'string', 'Test/support files, selected by the project test/support policy: include them '
+                   '(default) or exclude them', 'include', str, examples=('tests=exclude',), choices=TEST_CHOICES,
+                   role='analysis', cli=CliBinding(('--tests',), metavar='{include,exclude}'),
+                   legacy=(LegacySpelling('source_only', codec=legacy_switch('source_only', 'exclude', 'include'),
+                                          flag='--source-only', flag_value=True),))
+_VIEW = ParamSpec('view', 'string', 'dir: add the per-directory rollup (by_dir: entries per directory and category, '
+                  'busiest first); the text lists the directories in place of the entries', None, str,
+                  examples=('view=dir',), choices=('dir',), role='operation', cli=CliBinding(('--view',), metavar='VIEW'),
+                  cap='limit', legacy=(LegacySpelling('by', codec=_blank_is_omitted, flag='--by'),))
+_DIR_DEPTH = ParamSpec('dir-depth', 'integer', 'With --view dir: keep the first N path segments of each directory '
+                       '(0 = the full directory)', 0, lambda value: _surface_limit(value, 'dir-depth'), minimum=0,
+                       examples=('view=dir&dir-depth=2',), zero_policy='full directory', role='analysis',
+                       aliases=('dir_depth',), cli=CliBinding(('--dir-depth',), dest='dir_depth', metavar='N'),
+                       answers=_DIR_VIEW, legacy=(LegacySpelling('depth', flag='--depth'),))
+_LIMIT = ParamSpec('limit', 'integer', 'Rows per category, and directories in --view dir, in JSON and text; 0 = no cap '
+                   '(the default). total stays the uncut count', None, lambda value: _surface_limit(value, 'limit'),
+                   minimum=0, examples=('limit=20',), zero_policy='no cap', role='analysis',
+                   cli=CliBinding(('--limit',), metavar='N'))
+_TOP = ParamSpec('top', 'integer', 'Legacy: text entries per category (omitted or 0 = all; JSON stays complete), '
+                 'replaced by limit', None, lambda value: _surface_limit(value, 'top'), minimum=0,
+                 examples=('top=20',), zero_policy='all', role='presentation', cli=CliBinding(('--top',), metavar='N'),
+                 requires=('!limit',))
+_LIMIT_HINT = 'raise --limit N, or --limit 0 for every row'
+
+
+def _cut_rows(result: Any, limit: Optional[int]) -> None:
+    """--limit cuts each category (and the rollup's directories) in the answer itself, with the shared cut marker;
+    ``total`` and the rollup's counts stay the uncut figures (COMMAND_MODEL "Caps", BACK-2623)."""
+    if not limit:
+        return
+    for category, entries in result['surfaces'].items():
+        if len(entries) > limit:
+            result['surfaces'][category] = entries[:limit]
+            note_truncation(result, f'surfaces.{category}', limit, len(entries), 'limit', hint=_LIMIT_HINT)
+    rows = result.get('by_dir')
+    if rows is not None and len(rows) > limit:
+        result['by_dir'] = rows[:limit]
+        note_truncation(result, 'by_dir', limit, len(rows), 'limit', hint=_LIMIT_HINT)
+
+
 @register_adapter('surface')
 @register_renderer(SurfaceRenderer)
 class SurfaceAdapter(ResourceAdapter):
@@ -429,7 +486,8 @@ class SurfaceAdapter(ResourceAdapter):
     HELP_CLUSTER = 'Code Analysis'
 
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
-    CLI_QUERY_FLAGS = {'respect_gitignore': 'respect_gitignore=false'}  # --no-gitignore (BACK-1386)
+    # --all lifts the answer cap: it binds --limit 0's value (BACK-2729); --no-gitignore (BACK-1386)
+    CLI_QUERY_FLAGS = {'all': 'limit=1000000', 'respect_gitignore': 'respect_gitignore=false'}
     RESOURCE_IS_PATH = True  # a nonexistent path is an error, not an empty result (BACK-1321)
     RESULT_TYPE = 'surface_scan'
     FINDINGS_POLICIES = ('none',)
@@ -437,25 +495,7 @@ class SurfaceAdapter(ResourceAdapter):
     RESOURCE_SPEC = ResourceSpec(uri_codec='existing-path-first')
     BOUND_QUERY_CALL = True
 
-    PARAM_SPECS = (
-        ParamSpec('type', 'string', 'Filter to one surface type', '', str,
-                  examples=('type=env',),
-                  choices=('', *CATEGORIES), role='analysis', cli=CliBinding(('--type',), metavar='TYPE')),
-        ParamSpec('source_only', 'boolean', 'Exclude test files and directories', False, boolean_value,
-                  examples=('source_only=true',),
-                  role='analysis', cli=CliBinding(('--source-only',), action='store_true')),
-        ParamSpec('by', 'string', 'Group entries by directory', '', str,
-                  examples=('by=dir',),
-                  choices=('', 'dir'), role='analysis', cli=CliBinding(('--by',))),
-        ParamSpec('depth', 'integer', 'Directory rollup depth (0 = full directory)', 0,
-                  lambda value: _surface_limit(value, 'depth'), minimum=0,
-                  examples=('depth=2',),
-                  zero_policy='full directory', role='analysis', cli=CliBinding(('--depth',), metavar='N')),
-        ParamSpec('top', 'integer', 'Text entries per category (omitted or 0 = all; JSON stays complete)', None,
-                  lambda value: _surface_limit(value, 'top'), minimum=0,
-                  examples=('top=20', 'top=0'),
-                  zero_policy='all', role='presentation', cli=CliBinding(('--top',), metavar='N')),
-    )
+    PARAM_SPECS = (_KIND, _TESTS, _VIEW, _DIR_DEPTH, _LIMIT, _TOP)
 
     def __init__(self, resource: str, query: Optional[str] = None, *,
                  params: Optional[Dict[str, Any]] = None):
@@ -542,18 +582,17 @@ class SurfaceAdapter(ResourceAdapter):
         }
 
     def get_structure(self) -> Dict[str, Any]:
-        applied = {spec.name: spec.read(self.query_params)
-                   for spec in self.PARAM_SPECS if spec.role == 'analysis'}
-        type_filter = applied['type']
-        source_only = applied['source_only']
+        type_filter = _KIND.read(self.query_params) or ''
+        source_only = _TESTS.read(self.query_params) == 'exclude'
+        by = _VIEW.read(self.query_params) or ''
+        depth = _DIR_DEPTH.read(self.query_params)
+        limit = _LIMIT.read(self.query_params)
         layout = None
         if source_only or type_filter in ('', 'http'):
             from ..config import RevealConfig
             target = Path(os.path.abspath(self.path))
             layout = TestLayout.for_path(target, fallback_root=target)
             layout = RevealConfig.get(layout.anchor).apply_test_layout(layout)
-        by = applied['by']
-        depth = applied['depth']
 
         report = _scan_surface(Path(self.path), type_filter=type_filter, source_only=source_only,
                                by=by, depth=depth, test_layout=layout)
@@ -578,7 +617,7 @@ class SurfaceAdapter(ResourceAdapter):
             warnings.append({'type': PARSE_RECOVERED, 'code': 'W-SURFACE-3', 'message': _recovered_note(
                 report['recovered_files'], _count_error_region(report['surfaces']))})
 
-        return ResultBuilder.create(
+        result = ResultBuilder.create(
             result_type=self.RESULT_TYPE,
             source=self.path,
             contract_version=CONTRACT_VERSION,
@@ -588,3 +627,5 @@ class SurfaceAdapter(ResourceAdapter):
             scope=report.pop('scope'),
             data=report,
         )
+        _cut_rows(result, limit)
+        return result
