@@ -6,7 +6,6 @@ from ...utils.query_parser import (CliBinding, LegacySpelling, ParamSpec, ParamV
 from ...utils.query_binding import boolean_value
 from ...utils.query import parse_query_filters
 from ...utils.query_control import declared_result_control as result_control
-from .query import parse_query
 
 
 def strings(value: Any) -> list[str]:
@@ -90,10 +89,10 @@ def result_type(params: Any) -> str:
             'backlinks': 'markdown_backlinks', 'aggregate': 'markdown_aggregate'}.get(selected_view(params), 'markdown_query')
 
 
-def filter_state(params: QueryParams) -> tuple:
-    text = '&'.join(WHERE.read(params))
-    operators = text and any(op in text for op in ('>', '<', '!=', '~=', '!~', '..', '=='))
-    return text, ([] if operators else parse_query(text)), (parse_query_filters(text) if operators else [])
+def filter_state(params: QueryParams) -> list:
+    """The where terms as the shared filter parser reads them, one parser for every term (ruling Q6): ``F=V``
+    case-insensitive, ``F=*V*`` a glob, a bare ``F`` exists, ``!F`` missing, and the comparison operators."""
+    return parse_query_filters('&'.join(WHERE.read(params)))
 
 
 def describe_request(params: QueryParams) -> str:

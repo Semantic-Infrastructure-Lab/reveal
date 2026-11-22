@@ -260,7 +260,7 @@ reveal 'markdown://docs/?priority=high&status=draft' # High-priority drafts
 
 **Wildcard Search**:
 ```bash
-reveal 'markdown://docs/?title=*API*'    # Titles containing "API" (case-sensitive)
+reveal 'markdown://docs/?title=*API*'    # Titles containing "API" (case-insensitive)
 ```
 
 **Body Text Search** (markdown-specific, not frontmatter):

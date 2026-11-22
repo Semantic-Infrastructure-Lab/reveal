@@ -35,14 +35,14 @@ def _prefilter_unreadable(candidates) -> List[Tuple[str, str]]:
     return [(failure.path, failure.cause) for failure in getattr(candidates, 'unreadable', [])]
 
 
-def _query_candidate(path: Path, filters: list, query_filters: list,
+def _query_candidate(path: Path, filters: list,
                      body_contains: Optional[list], extra_fields: Optional[list],
                      explain: bool) -> Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
     """One source decision; body selection and ranking share the same UTF-8 read."""
     content = path.read_text(encoding='utf-8')
     frontmatter = files.extract_frontmatter_diagnostic(path, content=content)['frontmatter']
     body, _ = files.read_body_outcome(path, content=content) if body_contains else ('', None)
-    if not filtering.matches_all_filters(frontmatter, filters, query_filters):
+    if not filtering.matches_all_filters(frontmatter, filters):
         return frontmatter, None
     if body_contains and not filtering.body_has_terms(body, body_contains):
         return frontmatter, None
@@ -58,7 +58,7 @@ def _query_candidate(path: Path, filters: list, query_filters: list,
     return frontmatter, item
 
 
-def _collect_query_sources(all_files: List[Path], filters: list, query_filters: list,
+def _collect_query_sources(all_files: List[Path], filters: list,
                            body_contains: Optional[list], extra_fields: Optional[list],
                            explain: bool) -> _QuerySources:
     candidates = grep_files(all_files, body_contains) if body_contains else all_files
@@ -70,7 +70,7 @@ def _collect_query_sources(all_files: List[Path], filters: list, query_filters: 
     for path in candidates:
         try:
             frontmatter, item = _query_candidate(
-                path, filters, query_filters, body_contains, extra_fields, explain)
+                path, filters, body_contains, extra_fields, explain)
         except (OSError, UnicodeDecodeError) as exc:
             collected.failed.add(path)
             collected.unreadable.append((to_posix(path), failure_of(exc).cause))
@@ -87,7 +87,6 @@ def get_structure(
     base_path: Path,
     query: str,
     filters: list,
-    query_filters: list,
     result_control: Any,
     body_contains: Optional[list] = None,
     extra_fields: Optional[list] = None,
@@ -98,8 +97,7 @@ def get_structure(
     Args:
         base_path: Directory to search
         query: Query string
-        filters: Legacy filters
-        query_filters: New query filters
+        filters: The where terms (the shared parser's QueryFilter objects)
         result_control: ResultControl object with sort/limit/offset
         body_contains: Optional list of terms that must appear in body text
         extra_fields: Optional list of additional frontmatter fields to include in results
@@ -114,7 +112,7 @@ def get_structure(
     """
     discovery: List[PathFailure] = []
     all_files = files.find_markdown_files(base_path, on_error=lambda exc: discovery.append(failure_of(exc)))
-    collected = _collect_query_sources(all_files, filters, query_filters, body_contains, extra_fields, explain)
+    collected = _collect_query_sources(all_files, filters, body_contains, extra_fields, explain)
     matched_results = collected.items
 
     # Apply result control (sort, limit, offset). A multi-doc body-contains
@@ -165,7 +163,7 @@ def get_structure(
 
     # Disclose when a zero-match result traces to a filter field that no scanned file's front matter has: typo vs.
     # genuine zero (BACK-1111), the shared warning of the open-field nouns (BACK-2654 note #14)
-    unknown = results.unknown_filter_fields(total_matches, collected.seen_fields, filters, query_filters)
+    unknown = results.unknown_filter_fields(total_matches, collected.seen_fields, filters)
     note_warning(response, unknown_filter_field_warning(unknown, "file's front matter", 'markdown'))
 
     return response
@@ -175,7 +173,6 @@ def aggregate_field_values(
     base_path: Path,
     field: str,
     filters: list,
-    query_filters: list,
     body_contains: Optional[list] = None,
 ) -> Dict[str, Any]:
     """Count occurrences of each value for a frontmatter field across matched files.
@@ -186,8 +183,7 @@ def aggregate_field_values(
     Args:
         base_path: Directory to search
         field: Frontmatter field name to aggregate (e.g. 'type', 'beth_topics')
-        filters: Legacy query filters
-        query_filters: New query filters
+        filters: The where terms (the shared parser's QueryFilter objects)
         body_contains: Optional list of terms that must appear in body text
 
     Returns:
@@ -204,7 +200,7 @@ def aggregate_field_values(
     matched = missing = 0
     for path in candidates:
         try:
-            frontmatter, selected = _aggregate_candidate(path, filters, query_filters, body_contains)
+            frontmatter, selected = _aggregate_candidate(path, filters, body_contains)
         except (OSError, UnicodeDecodeError) as exc:
             failed.add(path)
             unreadable.append((to_posix(path), failure_of(exc).cause))
@@ -231,12 +227,12 @@ def aggregate_field_values(
     return result
 
 
-def _aggregate_candidate(path: Path, filters: list, query_filters: list,
+def _aggregate_candidate(path: Path, filters: list,
                          body_contains: Optional[list]) -> Tuple[Optional[Dict[str, Any]], bool]:
     """Read once; a missing or malformed frontmatter block remains completed content."""
     content = path.read_text(encoding='utf-8')
     frontmatter = files.extract_frontmatter_diagnostic(path, content=content)['frontmatter']
-    if not filtering.matches_all_filters(frontmatter, filters, query_filters):
+    if not filtering.matches_all_filters(frontmatter, filters):
         return frontmatter, False
     if body_contains:
         body, _ = files.read_body_outcome(path, content=content)

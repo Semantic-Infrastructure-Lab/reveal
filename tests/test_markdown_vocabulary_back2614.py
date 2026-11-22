@@ -173,6 +173,20 @@ def test_priority_alone_is_the_control_for_the_pairs(root):
     assert _rows(doc) == ['alpha.md', 'beta.md', 'gamma.md']
 
 
+@pytest.mark.parametrize('terms,rows', [
+    (['!type'], ['bad.md', 'plain.md']),                   # a document without front matter misses every field
+    (['type!=guide'], ['beta.md', 'orphan.md']),           # ...and has no value to compare
+    (['!type', 'priority>1'], []),
+    (['type=GUIDE', 'tags=api'], ['alpha.md']),            # equality is case-insensitive; a list matches by item
+    (['tags=ap'], []),                                     # an item is equal, not a substring
+], ids=lambda value: '&'.join(value) if isinstance(value, list) and value and '.md' not in value[0] else None)
+def test_where_terms_follow_the_shared_rules(root, terms, rows):
+    """B1 controls (ruling Q6): presence, front-matter-less documents and list items under the one parser."""
+    argv = [part for term in terms for part in ('--where', term)]
+    _, doc = _json(root, 'markdown', 'docs', *argv)
+    assert _rows(doc) == rows
+
+
 @pytest.mark.parametrize('flags', [
     ['--link-graph', '--lint'],
     ['--lint', '--backlinks', 'alpha.md'],

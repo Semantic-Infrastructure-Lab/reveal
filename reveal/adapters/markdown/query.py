@@ -1,49 +1,8 @@
-"""Query parsing and comparison for markdown adapter."""
+"""Front-matter value comparison for markdown adapter (the where terms parse with the shared filter parser)."""
 
-from typing import Any, List, Tuple
+from typing import Any
 
 from ...utils.query import compare_values
-from ...utils.query_parser import note_query_parsed
-
-
-def parse_query(query: str) -> List[Tuple[str, str, str]]:
-    """Parse query string into filter tuples.
-
-    Args:
-        query: Query string (e.g., 'field=value&!other')
-
-    Returns:
-        List of (field, operator, value) tuples
-        Operators: '=' (match), '!' (missing), '*' (wildcard)
-    """
-    filters: List[tuple] = []
-    if not query:
-        return filters
-    note_query_parsed(query)
-
-    # Split on & for multiple filters
-    parts = query.split('&')
-    for part in parts:
-        part = part.strip()
-        if not part:
-            continue
-
-        if part.startswith('!'):
-            # Missing field filter: !field
-            field = part[1:]
-            filters.append((field, '!', ''))
-        elif '=' in part:
-            # Value filter: field=value or field=*pattern*
-            field, value = part.split('=', 1)
-            if '*' in value:
-                filters.append((field, '*', value))
-            else:
-                filters.append((field, '=', value))
-        else:
-            # Treat as existence check: field (exists)
-            filters.append((part, '?', ''))
-
-    return filters
 
 
 def compare(field_value: Any, operator: str, target_value: bool | int | float | str) -> bool:

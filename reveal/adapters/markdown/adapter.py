@@ -238,7 +238,7 @@ class MarkdownQueryAdapter(ResourceAdapter):
         self.base_path, self.spelling = _directory_resource(resource, True)
         self.query = describe_request(params)
         self.result_control = result_control(params)
-        _, self.filters, self.query_filters = filter_state(params)
+        self.query_filters = filter_state(params)
         view = selected_view(params, apply=True)
         self.link_graph = view == 'links'
         self.lint = view == 'lint'
@@ -295,7 +295,6 @@ class MarkdownQueryAdapter(ResourceAdapter):
             result = operations.aggregate_field_values(
                 self.base_path,
                 self.aggregate_field,
-                self.filters,
                 self.query_filters,
                 self.body_contains or None,
             )
@@ -312,7 +311,6 @@ class MarkdownQueryAdapter(ResourceAdapter):
         result = operations.get_structure(
             self.base_path,
             self.query or '',
-            self.filters,
             self.query_filters,
             self.result_control,
             self.body_contains or None,
@@ -354,10 +352,6 @@ class MarkdownQueryAdapter(ResourceAdapter):
         return operations.get_metadata(self.base_path)
 
     # Backward compatibility methods for tests
-    def _parse_query(self, query: str):
-        """Parse query string (backward compatibility)."""
-        return query_module.parse_query(query)
-
     def _compare(self, field_value, operator, target_value):
         """Compare values (backward compatibility)."""
         return query_module.compare(field_value, operator, target_value)
@@ -370,10 +364,6 @@ class MarkdownQueryAdapter(ResourceAdapter):
         """Extract frontmatter (backward compatibility)."""
         return files.extract_frontmatter(path)
 
-    def _matches_filter(self, frontmatter, field, operator, value):
-        """Match filter (backward compatibility)."""
-        return filtering.matches_filter(frontmatter, field, operator, value)
-
     def _matches_all_filters(self, frontmatter):
         """Match all filters (backward compatibility)."""
-        return filtering.matches_all_filters(frontmatter, self.filters, self.query_filters)
+        return filtering.matches_all_filters(frontmatter, self.query_filters)

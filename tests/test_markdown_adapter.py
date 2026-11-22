@@ -539,7 +539,7 @@ No frontmatter here but mentions nginx configuration.
         """body-contains= is stripped before frontmatter filter parsing."""
         adapter = MarkdownQueryAdapter(str(body_docs), query='body-contains=nginx&type=guide')
         # Should have no frontmatter filter for 'body-contains' field
-        filter_fields = {f[0] for f in adapter.filters}
+        filter_fields = {f.field for f in adapter.query_filters}
         assert 'body-contains' not in filter_fields
 
     def test_body_contains_with_result_control(self, body_docs):

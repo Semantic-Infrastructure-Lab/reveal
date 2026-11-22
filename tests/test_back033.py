@@ -37,7 +37,7 @@ class TestDeclaredAggregate:
     def test_extracts_aggregate_field(self, tmp_path):
         adapter = MarkdownQueryAdapter(str(tmp_path), 'aggregate=type')
         assert adapter.aggregate_field == 'type'
-        assert adapter.filters == []
+        assert adapter.query_filters == []
 
     def test_aggregate_with_other_params(self, tmp_path):
         _write_md(tmp_path / 'a.md', '---\nstatus: active\ntype: guide\n---\n')
@@ -52,7 +52,7 @@ class TestDeclaredAggregate:
     def test_no_aggregate_returns_none(self, tmp_path):
         adapter = MarkdownQueryAdapter(str(tmp_path), 'status=active&limit=10')
         assert adapter.aggregate_field is None
-        assert adapter.filters
+        assert adapter.query_filters
         assert adapter.result_control.limit == 10
 
     def test_empty_aggregate_value_ignored(self, tmp_path):
@@ -62,7 +62,7 @@ class TestDeclaredAggregate:
     def test_empty_query_returns_none(self, tmp_path):
         adapter = MarkdownQueryAdapter(str(tmp_path), '')
         assert adapter.aggregate_field is None
-        assert adapter.filters == []
+        assert adapter.query_filters == []
 
 
 # ─── aggregate_field_values ───────────────────────────────────────────────────
@@ -73,7 +73,7 @@ class TestAggregateFieldValues:
         _write_md(tmp_path / 'b.md', '---\ntype: guide\n---\n')
         _write_md(tmp_path / 'c.md', '---\ntype: reference\n---\n')
 
-        result = aggregate_field_values(tmp_path, 'type', [], [], None)
+        result = aggregate_field_values(tmp_path, 'type', [], None)
         agg = {e['value']: e['count'] for e in result['aggregate']}
         assert agg['guide'] == 2
         assert agg['reference'] == 1
@@ -82,7 +82,7 @@ class TestAggregateFieldValues:
         _write_md(tmp_path / 'a.md', '---\nbeth_topics:\n  - reveal\n  - deployment\n---\n')
         _write_md(tmp_path / 'b.md', '---\nbeth_topics:\n  - reveal\n  - testing\n---\n')
 
-        result = aggregate_field_values(tmp_path, 'beth_topics', [], [], None)
+        result = aggregate_field_values(tmp_path, 'beth_topics', [], None)
         agg = {e['value']: e['count'] for e in result['aggregate']}
         assert agg['reveal'] == 2
         assert agg['deployment'] == 1
@@ -92,7 +92,7 @@ class TestAggregateFieldValues:
         _write_md(tmp_path / 'has.md', '---\ntype: guide\n---\n')
         _write_md(tmp_path / 'missing.md', '---\ntitle: No type field\n---\n')
 
-        result = aggregate_field_values(tmp_path, 'type', [], [], None)
+        result = aggregate_field_values(tmp_path, 'type', [], None)
         assert result['files_missing_field'] == 1
         assert result['matched_files'] == 2
 
@@ -102,7 +102,7 @@ class TestAggregateFieldValues:
         _write_md(tmp_path / 'c.md', '---\ntype: common\n---\n')
         _write_md(tmp_path / 'd.md', '---\ntype: common\n---\n')
 
-        result = aggregate_field_values(tmp_path, 'type', [], [], None)
+        result = aggregate_field_values(tmp_path, 'type', [], None)
         agg = result['aggregate']
         assert agg[0]['value'] == 'common'
         assert agg[0]['count'] == 3
@@ -113,19 +113,19 @@ class TestAggregateFieldValues:
         _write_md(tmp_path / 'a.md', '---\ntype: guide\n---\n')
         _write_md(tmp_path / 'b.md', '---\ntype: reference\n---\n')
 
-        result = aggregate_field_values(tmp_path, 'type', [], [], None)
+        result = aggregate_field_values(tmp_path, 'type', [], None)
         assert result['total_files'] == 2
         assert result['matched_files'] == 2
 
     def test_no_matching_files_empty_aggregate(self, tmp_path):
-        result = aggregate_field_values(tmp_path, 'type', [], [], None)
+        result = aggregate_field_values(tmp_path, 'type', [], None)
         assert result['aggregate'] == []
         assert result['matched_files'] == 0
 
     def test_no_frontmatter_counted_as_missing(self, tmp_path):
         _write_md(tmp_path / 'no_fm.md', '# Just content\nNo frontmatter.\n')
 
-        result = aggregate_field_values(tmp_path, 'type', [], [], None)
+        result = aggregate_field_values(tmp_path, 'type', [], None)
         assert result['files_missing_field'] == 1
         assert result['aggregate'] == []
 

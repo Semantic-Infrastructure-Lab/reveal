@@ -142,7 +142,7 @@ def apply_pagination(results: List[Dict[str, Any]], offset: int, limit: Optional
 def build_response_dict(
     base_path: Path,
     query: str,
-    filters: List[tuple],
+    filters: List[Any],
     files: List[Path],
     total_matches: int,
     controlled_results: List[Dict[str, Any]]
@@ -152,7 +152,7 @@ def build_response_dict(
     Args:
         base_path: Base path for the query
         query: Query string
-        filters: List of filter tuples
+        filters: The where terms (QueryFilter objects)
         files: All markdown files found
         total_matches: Total number of matching files
         controlled_results: Filtered, sorted, and paginated results
@@ -168,8 +168,8 @@ def build_response_dict(
             'base_path': str(base_path),
             'query': query,
             'filters': [
-                {'field': f, 'operator': o, 'value': v}
-                for f, o, v in filters
+                {'field': term.field, 'operator': term.op, 'value': term.value}
+                for term in filters
             ],
             'total_files': len(files),
             'matched_files': total_matches,
@@ -202,7 +202,7 @@ def add_low_match_rate_hint(
     response: Dict[str, Any],
     total_files: int,
     total_matches: int,
-    filters: List[tuple]
+    filters: List[Any]
 ) -> None:
     """Add a hint when the match rate is very low, suggesting the filter requires front matter.
 
@@ -210,7 +210,7 @@ def add_low_match_rate_hint(
         response: Response dict to modify
         total_files: Total number of files scanned
         total_matches: Number of files that matched
-        filters: List of (field, operator, value) filter tuples
+        filters: The where terms (QueryFilter objects)
 
     Modifies response in place.
     """
@@ -219,7 +219,7 @@ def add_low_match_rate_hint(
     match_rate = total_matches / total_files
     if match_rate < 0.05:
         # Find type= filter if present
-        type_filters = [v for f, o, v in filters if f == 'type']
+        type_filters = [term.value for term in filters if term.field == 'type']
         if type_filters:
             hint = (
                 f"Only {total_matches} of {total_files} files matched. "
@@ -241,8 +241,7 @@ def add_low_match_rate_hint(
 def unknown_filter_fields(
     total_matches: int,
     seen_fields: set,
-    filters: List[tuple],
-    query_filters: list,
+    filters: List[Any],
 ) -> List[str]:
     """The filter fields of a zero-match result that no scanned file's front matter has: a typo'd field name, not
     a genuine "0 of N files have this value" answer (BACK-1111). The '!' (missing-field) operator is excluded: for
@@ -251,15 +250,8 @@ def unknown_filter_fields(
     Args:
         total_matches: Number of files that matched
         seen_fields: Union of frontmatter keys observed across scanned files
-        filters: Legacy (field, operator, value) filter tuples
-        query_filters: New-syntax QueryFilter objects (field/op/value)
+        filters: The where terms (QueryFilter objects: field/op/value)
     """
     if total_matches != 0:
         return []
-    return sorted({
-        field for field, op, _value in filters
-        if op != '!' and field not in seen_fields
-    } | {
-        qf.field for qf in query_filters
-        if qf.op != '!' and qf.field not in seen_fields
-    })
+    return sorted({term.field for term in filters if term.op != '!' and term.field not in seen_fields})
