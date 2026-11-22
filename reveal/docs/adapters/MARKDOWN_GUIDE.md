@@ -24,7 +24,7 @@ reveal markdown docs/ --backlinks guide.md
 |-----------|-------------|
 | `where` | Frontmatter expressions, ANDed; repeat for multiple bounds |
 | `match` | Body terms, ANDed; repeated values preserve every term |
-| `view` | `list`, `links`, `aggregate`, or legacy `lint` |
+| `view` | `list`, `links`, `aggregate` or `lint` |
 | `field` | Field counted by `view=aggregate` |
 | `backlinks` | Existing reverse-link target lookup |
 | `columns` | Additional frontmatter columns; `fields=` remains a URI alias |
@@ -33,9 +33,10 @@ reveal markdown docs/ --backlinks guide.md
 | `limit` | Answer rows; `0` = no cap, every row (it used to return an empty page) |
 | `offset` | Answer rows skipped after sorting |
 | `aggregate` | Legacy field selector; use `view=aggregate&field=FIELD` |
-| `link-graph` | Legacy selector; use `view=links` |
-| `lint` | Legacy frontmatter maintenance queue |
-| `lint-fields` | Required frontmatter fields for legacy lint |
+| `lint-fields` | Required frontmatter fields for `view=lint` |
+
+The older selectors `link-graph` and `lint` are replaced by `view=links` and `view=lint`: they answer the same with a
+note naming the view.
 
 Each control is read by the answers it applies to: the listing reads `where`, `match`, `columns`, `explain`,
 `sort`, `limit` and `offset`; `view=aggregate` reads `field`, `where` and `match`; lint reads `lint-fields`; the link
