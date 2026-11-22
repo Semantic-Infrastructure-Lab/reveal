@@ -22,6 +22,10 @@ parses a URI or finds an example on its own:
   context    ``scripts/check_retired_names.py`` ``REPLACED_BY_CONTEXT``: a command line that says its spelling is
              deprecated (an inline ``# deprecated`` comment) is left, as prose naming a retired spelling is.
 
+The extra pass (BACK-2726 step 7): a line already written in the resource form, ``reveal SCHEME://PLAIN --flags`` (no
+query string, at least one flag after it), is rewritten to ``reveal NOUN PLAIN --flags`` when the same plain-path rule
+says so (``plain_path``) and the subcommand round-trips; a resource line naming an address is no example at all.
+
 Only the URI word changes: words before it, flags after it (BACK-2673: flags after a URI are the subcommand's flags),
 pipes and comments stay as written. An example is left, with the reason counted, when the doc shows it failing, it names
 its spelling as deprecated, it is not one line of the file, a control it gives has no flag (``UnrenderableRequest``),
@@ -77,6 +81,7 @@ RETIRING_REPLACEMENT = 'the replacement spells a word that itself retires'  # + 
 EMBEDDED = 'an embedded Markdown table cell: by hand'
 COPY_LEFT = 'a copy of this line elsewhere in the file is left (lines are rewritten by text)'
 SEVERAL_COMMANDS = 'another reveal command follows on the line (the extractor reads the first): by hand'
+NO_ROUND_TRIP = 'the subcommand rendering does not round-trip: the resource line stays'
 
 # A comment that presents the example as the other spelling of a neighbouring command ("# the same answer as a URI"):
 # rewritten, it would repeat that command under a false comment.
@@ -235,6 +240,7 @@ class Example:
     reason: str = ''
     new_line: str = ''
     form: str = ''  # a rewrite's form: 'subcommand' | 'resource'
+    origin: str = 'query'  # 'query': a retiring URI request; 'resource': an already-written resource line (step 7)
     fell_back: bool = False  # a subcommand rendering that did not round-trip: the resource form was kept
 
 
@@ -252,17 +258,50 @@ def _located(line: str, word: str) -> Optional[Tuple[int, str]]:
     return None
 
 
+def resource_line_index(tokens: Sequence[str]) -> Optional[int]:
+    """The index of the URI word when *tokens* is an already-written resource line: its first word that is not a flag is
+    a URI to a known scheme that is not analysis-only and spells no query string (``retiring_uri_index`` reads the
+    others). None otherwise."""
+    from reveal.adapters.base import get_adapter_class
+    words = [(i, w) for i, w in enumerate(tokens[1:], 1) if not w.startswith('-')]
+    if not words or '://' not in words[0][1]:
+        return None
+    index, word = words[0]
+    scheme, _, rest = word.partition('://')
+    adapter = get_adapter_class(scheme.lower())
+    if adapter is None or '?' in rest or getattr(adapter, 'ANALYSIS_ONLY', False):
+        return None
+    return index
+
+
+def _plain_resource_line(tokens: Sequence[str], index: int) -> bool:
+    """Whether a resource line is an example of the extra pass: a declared noun with a request note, a flag after the
+    URI, and a resource the plain-path rule calls a plain path (an address, or a URI the binder refuses, is not)."""
+    from reveal.cli.invocation import request_noted
+    uri = tokens[index]
+    if not request_noted(uri.partition('://')[0].lower()):
+        return False
+    if not any(w.startswith('-') for i, w in enumerate(_stage(tokens, 1), 1) if i != index):
+        return False
+    try:
+        return plain_path(bind_uri(uri))
+    except (ValueError, TypeError):
+        return False
+
+
 def classify(source: str, line: str, tokens: List[str], failing: bool, text: str,
              nouns: Optional[Sequence[str]] = None) -> Optional[Example]:
     """The plan for one documented command, or None when it is no retiring URI request. *nouns*: rewrite only these
     schemes' requests (the rest are left, counted)."""
     from reveal.cli.invocation import RETIREMENTS, request_noted
     from scripts.check_retired_names import REPLACED_BY_CONTEXT
-    index = retiring_uri_index(tokens)
+    index, origin = retiring_uri_index(tokens), 'query'
     if index is None:
-        return None
+        index, origin = resource_line_index(tokens), 'resource'
+        if index is None or not _plain_resource_line(tokens, index):
+            return None
     uri = tokens[index]
-    example = Example(source, line, list(tokens), uri.partition('://')[0].lower())
+    example = Example(source, line, list(tokens), uri.partition('://')[0].lower(), origin=origin)
 
     def left(reason: str) -> Example:
         example.kind, example.reason = 'left', reason
@@ -299,6 +338,8 @@ def classify(source: str, line: str, tokens: List[str], failing: bool, text: str
         return left(f'{prefix}: {exc}')
     except TypeError as exc:
         return left(f'{BINDER_REJECTS}: {exc}')
+    if origin == 'resource' and form != 'subcommand':
+        return left(NO_ROUND_TRIP)
     found = _located(line, uri)
     if found is None:
         return left(NOT_LOCATED)
@@ -392,6 +433,7 @@ def _summary(examples: Sequence[Example]) -> Dict[str, object]:
             'left': sum(e.kind == 'left' for e in examples), 'left_by_reason': dict(reasons.most_common()),
             'by_scheme': dict(Counter(e.scheme for e in examples).most_common()),
             'forms': dict(Counter(e.form for e in examples if e.kind == 'rewrite').most_common()),
+            'resource_lines': sum(e.kind == 'rewrite' and e.origin == 'resource' for e in examples),
             'round_trip_fallbacks': sum(e.kind == 'rewrite' and e.fell_back for e in examples)}
 
 
@@ -426,7 +468,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     baseline = expected_baseline(names, args.nouns) if args.baseline else None
     if args.format == 'json':
         detail = {name: [{'line': e.line, 'kind': e.kind, 'reason': e.reason, 'new_line': e.new_line, 'scheme': e.scheme,
-                          'form': e.form, 'fell_back': e.fell_back}
+                          'form': e.form, 'fell_back': e.fell_back, 'origin': e.origin}
                          for e in examples] for name, examples in planned.items()} if args.show else None
         print(json.dumps({'files': report, 'not_extractor_sources': unread, 'detail': detail,
                           'baseline': None if baseline is None else {'now': baseline[0], 'after': baseline[1]}},
@@ -443,6 +485,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         forms = ', '.join(f'{n} {form}' for form, n in row['forms'].items())
         fallbacks = f", {row['round_trip_fallbacks']} kept the resource form (no round trip)" \
             if row['round_trip_fallbacks'] else ''
+        fallbacks += f", {row['resource_lines']} from resource lines" if row['resource_lines'] else ''
         print(f"{name}: found {row['found']}, {'written' if args.write else 'rewritten'} {row['rewritten']}"
               f"{' (' + forms + fallbacks + ')' if forms else ''}, left {row['left']}{' (' + reasons + ')' if reasons else ''}; prose mentions {row['prose']}")
         if args.show:
