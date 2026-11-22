@@ -64,7 +64,7 @@ def time_bound(name: str) -> Callable[[Any], str]:
         text = one_value(value) if isinstance(value, (list, tuple)) else value
         if not is_time_bound(text):
             raise ParamValueError(f'{name} must be {FORMS}, got {text!r}')
-        return text
+        return str(text)  # a str: is_time_bound accepts nothing else
     return convert
 
 
