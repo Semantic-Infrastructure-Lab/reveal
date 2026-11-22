@@ -107,6 +107,7 @@ class FlagLedger:
         self._query_log: Optional[QueryKeyLog] = None
         self.query_warnings: List[dict] = []
         self._policy_reads = gitignore_policy_reads()
+        self.exclusion_satisfied = False  # a walk over one file: nothing to prune (satisfy_walk_exclusion)
 
     def track(self, args: Namespace) -> TrackedArgs:
         tracked = TrackedArgs(**vars(args))
@@ -140,10 +141,11 @@ class FlagLedger:
                 self.used.update(self._walk_scopes_applied())
 
     def _walk_scopes_applied(self) -> set[str]:
-        """The walk controls a walk applied during this dispatch: ``--exclude`` when a walk checked a path against
-        the scope, the gitignore policy (either spelling) when the answer read it."""
+        """The walk controls a walk applied during this dispatch: ``exclude`` (the flag and the URI key: BACK-2730) when
+        a walk checked a path against the scope or the target was one file, the gitignore policy (either spelling) when
+        the answer read it."""
         applied = set()
-        if exclusions_consulted():
+        if exclusions_consulted() or self.exclusion_satisfied:
             applied.add('exclude')
         if gitignore_policy_reads() != self._policy_reads:
             applied.add(_WALK_POLICY)
@@ -156,7 +158,10 @@ class FlagLedger:
                 and (dest not in self.delegated or self.delegated[dest] not in self.used_keys)]
 
     def unused_query_keys(self) -> List[str]:
-        carried = set(self.delegated.values()) | (self._walk_scopes_applied() & {_WALK_POLICY})
+        # exclude applied during the dispatch (``dispatching`` recorded it: a URI route clears the scope before it
+        # reports) carries the URI key too, the one walk control however spelled (BACK-2730)
+        carried = set(self.delegated.values()) | (self._walk_scopes_applied() & {_WALK_POLICY, 'exclude'}) | \
+            (self.used & {'exclude'})
         seen: List[str] = []
         for key in self.query_keys:
             if key not in self.used_keys and key not in carried and key not in seen:
@@ -274,6 +279,14 @@ def peek(args: Any, dest: str, default: Any = None) -> Any:
     if isinstance(args, TrackedArgs):
         return vars(args).get(dest, default)
     return getattr(args, dest, default)
+
+
+def satisfy_walk_exclusion(args: Any) -> None:
+    """The walk's target is one file: its exclude patterns (flag or URI key) have nothing to prune and count as
+    applied, never unused (COMMAND_MODEL "Walk exclusion", Scott 2026-11-22, D-2730-2 (a))."""
+    ledger = ledger_of(args)
+    if ledger is not None:
+        ledger.exclusion_satisfied = True
 
 
 def mark(args: Any, *dests: str) -> None:

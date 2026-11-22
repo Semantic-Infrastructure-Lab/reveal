@@ -566,29 +566,21 @@ def typed_source(specs, args, *, carried=None) -> tuple:
 def _bind_global_carried(adapter, spec: ParamSpec, args, uri_query: Optional[str], source: dict,
                          spelled: Dict[str, str]) -> None:
     """A control with no flag of its own, carried by the global flag of its name. A boolean is supplied only when set
-    (`--all` is `&all`), as the URI spells it. The walk's --exclude scopes the walk (``_walk_scope``); after a URI that
-    sets the declared exclude control (exclude_param) it fills that control too, in the URI's spelling, a literal comma
-    kept (BACK-1380), so the URI's exclude= and the flags after it are one list: the control's own walk scope replaces
-    the dispatch's (BACK-2673). A --format value only this noun renders (``noun_formats``: calls/imports dot) is its
-    format control, as ?format=dot spells it, so an answer that draws no graph refuses it as it refuses the URI's; text
-    and json stay presentation (BACK-2722)."""
+    (`--all` is `&all`), as the URI spells it. The walk's --exclude fills the declared walk control (exclude_param) in
+    the URI's spelling, a literal comma kept (BACK-1380), so a URI's exclude= and the flags after it are one list
+    (BACK-2673) and the request is one request however it was spelled: ``?exclude=P`` is ``--exclude P`` (BACK-2730).
+    The walk applies it through the one scope (``_walk_scope``). A --format value only this noun renders
+    (``noun_formats``: calls/imports dot) is its format control, as ?format=dot spells it, so an answer that draws no
+    graph refuses it as it refuses the URI's; text and json stay presentation (BACK-2722)."""
     from .formats import noun_formats
     value = peek(args, spec.name, None)
     if spec.type == 'boolean' and value is True:
         source[spec.name], spelled[spec.name] = True, _global_option(spec.name)
-    elif spec.name == 'exclude' and value and _uri_sets(adapter, uri_query, spec):
+    elif spec.name == 'exclude' and value:
         from ...utils.query_parser import join_exclude_patterns
         source[spec.name], spelled[spec.name] = join_exclude_patterns(value), '--exclude'
     elif spec.name == 'format' and value is not None and value in noun_formats(adapter):
         source[spec.name], spelled[spec.name] = value, '--format'
-
-
-def _uri_sets(adapter, uri_query: Optional[str], spec: ParamSpec) -> bool:
-    """Whether the URI's query (None: no URI) gives *spec*'s control under any of its spellings."""
-    from ...utils.query_parser import query_key
-    if not uri_query:
-        return False
-    return any(query_key(part) in spec.spellings for part in uri_query.split('&') if part)
 
 
 def _global_option(dest: str) -> str:
@@ -707,8 +699,11 @@ def _delegate_typed_parameters(name, adapter, args, source, transport: str, spel
 
 
 def _validate_walk_policy(adapter, args, query_policy) -> None:
-    """File-only declarations cannot promise filesystem-walking controls."""
+    """File-only declarations cannot promise filesystem-walking controls; a walking one refuses an empty pattern of its
+    walk control's flag, declared or not (BACK-2730: ``--exclude ''`` answered as no exclusion)."""
     if adapter.RESOURCE_SPEC.walks:
+        from ...utils.query_binding import reject_empty_walk_patterns
+        reject_empty_walk_patterns(peek(args, 'exclude') or ())
         return
     if peek(args, 'exclude'):
         raise ValueError('--exclude requires a directory-walking operation')
@@ -718,9 +713,23 @@ def _validate_walk_policy(adapter, args, query_policy) -> None:
 
 
 
-def _walk_scope(adapter, path, args):
+def _walk_scope(adapter, path, args, params=None):
+    """The walk's scope (COMMAND_MODEL "Walk exclusion", BACK-2730): the walk control's patterns however the request
+    spelled them, the --exclude flags and the declared exclude of the URI or a keyword (``params``, peeked, not read),
+    as one list with REVEAL_IGNORE and config ``ignore`` (``dispatch_scope``). A file target has nothing to prune: it
+    satisfies exclude quietly (D-2730-2 (a)), never an unused note or a refusal."""
     from ...utils.exclusions import dispatch_scope
-    return dispatch_scope(path, peek(args, 'exclude')) if adapter.RESOURCE_SPEC.walks else (None, [])
+    from ...utils.query_parser import peek_query_items, split_exclude_param
+    from .ledger import satisfy_walk_exclusion
+    if not adapter.RESOURCE_SPEC.walks:
+        return None, []
+    bound = dict(peek_query_items(params)).get('exclude') if params is not None else None
+    patterns = list(peek(args, 'exclude') or [])
+    for value in (bound if isinstance(bound, (list, tuple)) else [bound]):
+        patterns += [pattern for pattern in split_exclude_param(value) if pattern not in patterns]
+    if os.path.isfile(path):
+        satisfy_walk_exclusion(args)
+    return dispatch_scope(path, patterns)
 
 def _spelled_query(uri_query: Optional[str], transport: str, source: Any) -> bool:
     """Whether the request spelled a URI query string: the query of the URI the flags followed, or the URI route's own."""
@@ -844,7 +853,7 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
             scope_path = scope_path_of(adapter, path)
             expected_type = predicted_result_type(adapter, source, scope_path)
             try:
-                root, excludes = _walk_scope(adapter, scope_path, args)
+                root, excludes = _walk_scope(adapter, scope_path, args, source)
             except (OSError, ValueError, ConfigLoadError) as exc:  # the walk's settings included (BACK-2677)
                 consume(_invalid_answer(adapter, name, path, str(exc), args, _resource_failure_cause(exc),
                                         result_type=expected_type, error=exc))

@@ -567,38 +567,43 @@ def _dispatch(uri: str, element: Optional[str], args: 'Namespace',
             ledger.report(scheme)
 
 
+def _declares_exclude(adapter_class: Optional[type]) -> bool:
+    """Whether the scheme declares the shared walk control ``exclude`` (``exclude_param``): its URI key is the walk
+    control (COMMAND_MODEL "Walk exclusion", BACK-2730), read from the declaration, never a table of scheme names."""
+    return any(getattr(spec, 'name', None) == 'exclude' for spec in getattr(adapter_class, 'PARAM_SPECS', None) or ())
+
+
+def _uri_exclude_patterns(resource: str) -> List[str]:
+    """The patterns of every ``exclude=`` key in the URI's query, decoded as the control decodes them (BACK-1380)."""
+    from ...utils.query_parser import query_key, split_exclude_param
+    patterns: List[str] = []
+    for part in resource.partition('?')[2].split('&'):
+        if query_key(part) == 'exclude':
+            patterns += [pattern for pattern in split_exclude_param(part.partition('=')[2]) if pattern not in patterns]
+    return patterns
+
+
 def _inject_exclude_flag(resource: str, scheme: str, args: 'Namespace', *,
                          adapter_class: Optional[type] = None) -> str:
-    """Inject --exclude into the URI query string for the URI-scheme adapters
-    that actually consume ?exclude= (BACK-1187/BACK-1192): only overview://
-    and stats:// read it (BACK-1042). Every other scheme accepted the CLI
-    flag via argparse and silently discarded it before this fix -- "the
-    caller believes the scope was applied" (BACK-1192's framing) is exactly
-    the failure mode a DD scoping flag must never have. --exclude is
-    action='append' (a list); ?exclude= takes one comma-separated value,
-    matching BACK-1042's own format. Skip injection if the URI already has
-    an explicit exclude= param -- URI takes precedence, same as --sort/--limit.
+    """Inject --exclude into the URI query string of a scheme that declares the walk control ``exclude``
+    (BACK-1187/BACK-1192; the declaration, not a hand-typed scheme table: BACK-2730), so the flag reaches the query
+    the adapter binds. Every other scheme accepted the CLI flag via argparse and silently discarded it before
+    BACK-1192 -- "the caller believes the scope was applied" is exactly the failure mode a scoping flag must never
+    have. --exclude is action='append' (a list); ?exclude= takes one comma-separated value (BACK-1042). Skip injection
+    if the URI already has an explicit exclude= param -- URI takes precedence, same as --sort/--limit.
     """
-    # BACK-1266 follow-up (2026-09-02): pack:// already reads its own
-    # ?exclude= (BACK-1196, same comma-separated format as overview's) all
-    # the way through _collect_candidates -> _walk_files' own
-    # should_skip_file() check -- which handles file-shaped patterns
-    # (*.min.js), not just directory-shaped ones. It just never received the
-    # CLI --exclude flag because this set predates BACK-1196 having its own
-    # query param wired up.
-    _EXCLUDE_AWARE_SCHEMES = {'overview', 'metrics', 'stats', 'pack'}
+    declares = _declares_exclude(adapter_class)
     exclude_values = list(peek(args, 'exclude') or [])
 
-    if exclude_values and scheme in _EXCLUDE_AWARE_SCHEMES and 'exclude=' not in resource:
+    if exclude_values and declares and 'exclude=' not in resource:
         sep = '&' if '?' in resource else '?'
         resource = f"{resource}{sep}{exclude_fragment(exclude_values)}"
         delegate(args, 'exclude', 'exclude')
 
-    # BACK-1257: every other path-walking scheme gets exclusion by publishing
-    # the scope for the shared directory-pruning predicate (see
-    # utils/exclusions.py), rather than 13+ per-adapter query params. Schemes
-    # whose resource is not a filesystem path (env://, help://, git://,
-    # sqlite://, ssl://, ...) never walk, so they keep the advisory.
+    # BACK-1257: every path-walking scheme gets exclusion by publishing the scope for the shared directory-pruning
+    # predicate (see utils/exclusions.py), rather than 13+ per-adapter query params; the URI's own exclude= joins it,
+    # the one walk control however spelled (BACK-2730). Schemes whose resource is not a filesystem path (env://,
+    # help://, git://, sqlite://, ssl://, ...) never walk, so they keep the advisory.
     # BACK-1266: the scope also carries REVEAL_IGNORE / config 'ignore:'.
     from ...utils.exclusions import dispatch_scope, set_active_exclusions
     scope_path = resource.partition('?')[0]
@@ -610,14 +615,16 @@ def _inject_exclude_flag(resource: str, scheme: str, args: 'Namespace', *,
             scope_path = bind_resource_path(spec, scope_path, transport='uri',
                                             resolve=getattr(adapter_class, 'resource_path', None), validate_kind=False)
         scope_path = scope_path_of(adapter_class, scope_path)
-    walk_root, combined_values = dispatch_scope(os.path.expanduser(scope_path), exclude_values)
+    uri_values = _uri_exclude_patterns(resource) if declares else []
+    walk_root, combined_values = dispatch_scope(os.path.expanduser(scope_path),
+                                                exclude_values + [p for p in uri_values if p not in exclude_values])
 
     if not combined_values:
         return resource
     if walk_root is not None:
         # Used only if a walk consults the scope (the ledger checks exclusions_consulted).
         set_active_exclusions(walk_root, combined_values)
-    elif exclude_values and scheme not in _EXCLUDE_AWARE_SCHEMES:
+    elif exclude_values and not declares:
         mark(args, 'exclude')
         print(
             f"Note: --exclude has no effect on {scheme}:// -- it does not walk a "

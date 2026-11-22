@@ -12,6 +12,7 @@ import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 from argparse import Namespace
+from reveal.utils.query_parser import exclude_param
 
 from reveal.cli.routing import (
     _build_check_kwargs,
@@ -131,11 +132,12 @@ class TestHandleUriExclude:
     """--exclude was accepted by argparse and silently discarded for every
     URI-scheme target (worked only via bare-path routing or an explicit
     ?exclude= query param) — the same routing-seam silent-no-op class as
-    BACK-1034/BACK-1108."""
+    BACK-1034/BACK-1108. A scheme that declares the walk control ``exclude`` gets the flag in its query: the
+    declaration decides, not a table of scheme names (BACK-2730), so the mocked adapters declare it."""
 
     def test_exclude_injected_for_overview_scheme(self):
         """Legacy overview dispatch (API/batch) retains query injection."""
-        mock_adapter_cls = MagicMock(RESOURCE_SPEC=None, resource_path=None)
+        mock_adapter_cls = MagicMock(RESOURCE_SPEC=None, resource_path=None, PARAM_SPECS=(exclude_param(),))
         mock_renderer_cls = MagicMock()
         mock_renderer_cls.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls):
@@ -147,7 +149,7 @@ class TestHandleUriExclude:
         assert 'exclude=skip_me%2A' in resource_arg or 'exclude=skip_me*' in resource_arg
 
     def test_exclude_joins_multiple_patterns_with_comma(self):
-        mock_adapter_cls = MagicMock(RESOURCE_SPEC=None, resource_path=None)
+        mock_adapter_cls = MagicMock(RESOURCE_SPEC=None, resource_path=None, PARAM_SPECS=(exclude_param(),))
         mock_renderer_cls = MagicMock()
         mock_renderer_cls.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls):
@@ -160,7 +162,7 @@ class TestHandleUriExclude:
         assert 'exclude=a*,b*' in resource_arg or 'exclude=a%2A%2Cb%2A' in resource_arg
 
     def test_uri_exclude_takes_precedence_over_flag(self):
-        mock_adapter_cls = MagicMock(RESOURCE_SPEC=None, resource_path=None)
+        mock_adapter_cls = MagicMock(RESOURCE_SPEC=None, resource_path=None, PARAM_SPECS=(exclude_param(),))
         mock_renderer_cls = MagicMock()
         mock_renderer_cls.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
         with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls):
