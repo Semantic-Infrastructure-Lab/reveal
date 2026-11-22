@@ -315,6 +315,39 @@ def _row_matches(family, key, op, value, row, root):
                                    '<=': float.__le__}[op](float(actual), float(value))
 
 
+# A canonical request's flags, read as the query-string claims above (BACK-2613: the ast docs teach
+# `reveal ast PATH --where EXPR --kind K --sort F --limit N`, the same claims as `ast://PATH?EXPR&kind=K&...`).
+_CLAIM_NOUNS = ('ast',)
+_CLAIM_FLAGS = {'--where': None, '--kind': 'kind', '--sort': 'sort', '--limit': 'limit'}
+
+
+def _claim_uri(argv):
+    """The URI query *argv* spells with flags (``ast PATH --where X`` or ``ast://PATH --where X``), so the claim
+    check reads the flag form as it reads the query string; *argv*'s first word when a flag has no reading here."""
+    if not argv:
+        return ''
+    head, rest = argv[0], list(argv[1:])
+    if head in _CLAIM_NOUNS and rest and not rest[0].startswith('-'):
+        head, rest = f'{head}://{rest[0]}', rest[1:]
+    if '://' not in head or '?' in head:
+        return head
+    parts, i = [], 0
+    while i < len(rest):
+        flag, eq, value = rest[i].partition('=')
+        step = 1 if eq else 2
+        if not eq:
+            if i + 1 >= len(rest):
+                return head
+            value = rest[i + 1]
+        i += step
+        if flag == '--format':
+            continue
+        if flag not in _CLAIM_FLAGS:
+            return head
+        parts.append(value if _CLAIM_FLAGS[flag] is None else f'{_CLAIM_FLAGS[flag]}={value}')
+    return f"{head}?{'&'.join(parts)}" if parts else head
+
+
 def _claim_violations(uri, payload, root):
     """Rows that contradict the query's own predicates, or None when it is not claim-checkable."""
     family = payload.get('type')
@@ -352,7 +385,7 @@ def _claim_violations(uri, payload, root):
 
 
 def _assert_claim(harness, query, payload):
-    problems = _claim_violations(_argv(query)[0], payload, harness.root)
+    problems = _claim_violations(_claim_uri(_argv(query)), payload, harness.root)
     assert not problems, f'{query}: output contradicts the query: {problems[:3]}'
     return problems is not None
 
@@ -559,7 +592,7 @@ def test_filter_claims_are_checked_and_the_check_bites(harness):
     count that contradicts the query; flags it has no reading of are left unchecked."""
     params = [p for p in _recipes() + _schema_examples() if not p.marks]
     checked = [p for p in params if _claim_violations(
-        _argv(p.values[0].get('query') or _schema_query(p.values[0]['uri']))[0],
+        _claim_uri(_argv(p.values[0].get('query') or _schema_query(p.values[0]['uri']))),
         {'type': p.values[0].get('output_type'), 'results': []}, None) is not None]
     assert len(checked) >= 20, len(checked)
     assert _claim_violations('markdown://proj/?!topics', {'type': 'markdown_query'}, None) is None
@@ -577,6 +610,14 @@ def test_filter_claims_are_checked_and_the_check_bites(harness):
     assert _claim_violations('ast://proj?sort=-complexity', nulls, None) == [
         'not in -complexity order: [None, 20, 3]']
     doc = {'type': 'markdown_query', 'results': [{'path': 'proj/README.md'}, {'path': 'proj/auth.md'}]}
+    # The flag form is the same claim (BACK-2613).
+    assert _claim_violations(_claim_uri(['ast', 'proj', '--where', 'complexity>15', '--format', 'json']), ast,
+                             None) == ['small: not complexity>15']
+    assert _claim_violations(_claim_uri(['ast://proj', '--kind', 'class']), ast, None) == [
+        'big: not type=class', 'small: not type=class']
+    assert _claim_violations(_claim_uri(['ast', 'proj', '--sort=-lines', '--limit', '1']), ast, None) == [
+        'not in -lines order: [9, 90]', '2 rows past limit=1']
+    assert _claim_uri(['ast', 'proj', '--view', 'dict-heatmap']) == 'ast://proj'
     assert _claim_violations('markdown://proj/?body-contains=nginx', doc, harness.root) == [
         'proj/auth.md: not body-contains=nginx']
 
@@ -897,9 +938,13 @@ def named_harness(tmp_path_factory):
 def test_documentation_command_runs_in_named_fixture(named_harness, command):
     _assert_text_as_written(named_harness, command, literal=True)
     argv = _pipeline(command)[0][1:]
-    if len(argv) == 1 and argv[0].startswith(('ast://', 'markdown://')):  # rows as the query has them
-        _, out, _, _ = named_harness.run_subcommand(argv[0], '--format', 'json')
-        problems = _claim_violations(argv[0], json.loads(out), named_harness.root)
+    claim = _claim_uri(argv)
+    flag_form = claim != argv[0] and '?' in claim  # an ast request spelled with flags (BACK-2613)
+    if flag_form or (len(argv) == 1 and argv[0].startswith(('ast://', 'markdown://'))):  # rows as the request has them
+        typed = [w for i, w in enumerate(argv)
+                 if not w.startswith('--format') and not (i and argv[i - 1] == '--format')]
+        _, out, _, _ = named_harness.run_subcommand(*typed, '--format', 'json')
+        problems = _claim_violations(claim, json.loads(out), named_harness.root)
         assert not problems, f'{command}: output contradicts the query: {problems[:3]}'
 
 
