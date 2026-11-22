@@ -590,25 +590,40 @@ def _nav_controls(flag, flag_value, mode, transitive, depth) -> dict:
     """reveal_nav's flag as the element declarations' controls (``nav_params``): a view name selects ``view``, an old
     word is its legacy key, an operation its own control. Raises NavRequestValidationError for a request the tool
     shape itself cannot carry; the binder judges the rest."""
-    from .nav_params import ELEMENT_VIEWS, ELEMENT_VIEW_SPECS, parse_flow_selectors
-    from .utils.query_binding import legacy_flag_dests
+    from .nav_params import ELEMENT_VIEWS
 
     if flag != 'effects' and (mode is not None or transitive is not False or depth is not None):
         raise NavRequestValidationError('mode, transitive and depth controls apply only to flag=effects.')
     if flag in ELEMENT_VIEWS:
-        controls: dict = {'view': flag}
-        if flag == 'flow' and flag_value:
-            try:
-                controls['kind'] = list(parse_flow_selectors(flag_value))
-            except ValueError as exc:
-                raise NavRequestValidationError(str(exc)) from None
-        if flag == 'effects':
-            _nav_effects_controls(controls, flag_value, mode, transitive, depth)
-        return controls
+        return _nav_view_controls(flag, flag_value, mode, transitive, depth)
     if flag in _NAV_BOOLEAN_FLAGS:
-        if flag == 'outline' or any(flag in legacy_flag_dests(spec) for spec in ELEMENT_VIEW_SPECS):
-            return {flag: True}  # its own legacy key (the contextual outline included)
-        return {next(spec.name for spec in ELEMENT_VIEW_SPECS if flag in spec.spellings): True}
+        return _nav_word_controls(flag)
+    return _nav_value_controls(flag, flag_value)
+
+
+def _nav_view_controls(flag, flag_value, mode, transitive, depth) -> dict:
+    from .nav_params import parse_flow_selectors
+    controls: dict = {'view': flag}
+    if flag == 'flow' and flag_value:
+        try:
+            controls['kind'] = list(parse_flow_selectors(flag_value))
+        except ValueError as exc:
+            raise NavRequestValidationError(str(exc)) from None
+    if flag == 'effects':
+        _nav_effects_controls(controls, flag_value, mode, transitive, depth)
+    return controls
+
+
+def _nav_word_controls(flag) -> dict:
+    """A no-value word: its own legacy key (the contextual outline included), else the control it spells."""
+    from .nav_params import ELEMENT_VIEW_SPECS
+    from .utils.query_binding import legacy_flag_dests
+    if flag == 'outline' or any(flag in legacy_flag_dests(spec) for spec in ELEMENT_VIEW_SPECS):
+        return {flag: True}
+    return {next(spec.name for spec in ELEMENT_VIEW_SPECS if flag in spec.spellings): True}
+
+
+def _nav_value_controls(flag, flag_value) -> dict:
     if flag in _NAV_VAR_NAME_FLAGS:
         if not flag_value:
             raise NavRequestValidationError(

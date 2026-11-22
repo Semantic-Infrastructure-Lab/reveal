@@ -18,8 +18,8 @@ from typing import Any, Callable, Mapping, Optional, Tuple
 from .errors import NavRequestValidationError, RequestValidationError
 from .utils.query_binding import (bind_prepared_params, bind_resource_path, boolean_value, prepare_declared_params,
                                   reject_two_answers, reject_unread_controls, string_value)
-from .utils.query_parser import CliBinding, LegacySpelling, ParamSpec, ParamValueError, ResourceSpec, line_range, \
-    whole_number
+from .utils.query_parser import CliBinding, LegacySpelling, ParamSpec, ParamValueError, ResourceSpec, clamped_whole, \
+    line_range, whole_number
 
 ELEMENT_VIEWS = ('boundary', 'effects', 'flow', 'exits')
 FLOW_KINDS = ('if', 'loop', 'try')
@@ -126,8 +126,7 @@ def nesting_depth(value: Any) -> int:
 def legacy_hop_depth(value: Any) -> int:
     """The legacy transitive ``--depth`` (``--boundary``/``--sideeffects --transitive --depth N``) keeps its clamp until
     the cut (X10): 0 is the default 2, other values clamp to 1..5. The answer states the effective depth (E8)."""
-    from .adapters.ast.nav_effects import effective_transitive_depth  # noqa: I006 -- deferred: analysis import
-    return effective_transitive_depth(whole_number(value) or 2)
+    return clamped_whole(whole_number(value) or 2, 1, 5)  # nav_effects.effective_transitive_depth's 1..5
 
 
 def _switch(name: str, description: str, **kwargs: Any) -> ParamSpec:
@@ -268,6 +267,7 @@ class ElementRequest:
     range: Optional[Tuple[int, Optional[int]]] = None
     cross_calls: bool = False
     params: Any = field(default=None, compare=False, repr=False)  # the bound QueryParams (reads, given controls)
+    spelled: Mapping[str, str] = field(default_factory=dict, compare=False, repr=False)  # key -> the flag typed
 
     @property
     def answer(self) -> str:
@@ -303,7 +303,7 @@ def _given_value(spec: ParamSpec, params: Any, absent: Any = None) -> Any:
     return spec.read(params) if spec.name in params._given else absent
 
 
-def _request(params: Any, path: str, element: Optional[str]) -> ElementRequest:
+def _request(params: Any, path: str, element: Optional[str], spelled: Mapping[str, str]) -> ElementRequest:
     view = _given_value(VIEW, params)
     operation, value = _operation(params)
     transitive = bool(TRANSITIVE.read(params))
@@ -311,7 +311,7 @@ def _request(params: Any, path: str, element: Optional[str]) -> ElementRequest:
         path=path, element=element, view=view, operation=operation, value=value,
         kind=tuple(_given_value(KIND, params, ())), mode=_effects_mode(params) if view == 'effects' else None,
         transitive=transitive, depth=_hop_budget(params, transitive), nesting_depth=NESTING_DEPTH.read(params),
-        range=_given_value(RANGE, params), cross_calls=bool(CROSS_CALLS.read(params)), params=params)
+        range=_given_value(RANGE, params), cross_calls=bool(CROSS_CALLS.read(params)), params=params, spelled=spelled)
 
 
 def bind_element_request(source: Mapping[str, Any], spelled: Optional[Mapping[str, str]] = None, *, path: str,
@@ -343,7 +343,6 @@ def _bound(source: Mapping[str, Any], spelled: Optional[Mapping[str, str]], path
         raise NavRequestValidationError(f'{exc}; {_ONE_FILE}') from exc
     params = prepare_declared_params(ELEMENT_VIEW_SPECS, source, 'typed', spelled=spelled)
     params = bind_prepared_params(ELEMENT_VIEW_SPECS, params, transport='typed')
-    params._spelled = dict(spelled or {})  # key -> the flag that carried it, for a diagnostic naming what was typed
     reject_two_answers(ELEMENT_VIEW_SPECS, params)
     reject_unread_controls(ELEMENT_VIEW_SPECS, params, lambda: ELEMENT_ANSWER)
-    return _request(params, path, element)
+    return _request(params, path, element, dict(spelled or {}))

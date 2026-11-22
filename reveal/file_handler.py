@@ -299,7 +299,7 @@ def _dispatch_nav(analyzer, element: str, output_format: str, args, request=None
 
     func_node, func_start, func_end = _resolve_func_node(analyzer, element)
     _require_selected_lines(analyzer, element, request)
-    if 'outline' in getattr(request.params, '_spelled', {}):  # the code-element --outline, once its element resolves
+    if 'outline' in request.spelled:  # the code-element --outline, once its element resolves
         from .cli.invocation import retirement_note
         retirement_note('target:nav.outline')
     ctx = _NavCtx(
@@ -394,13 +394,13 @@ def _requested_nav_flag(request) -> str:
     """The element flag as the request spelled it, for a diagnostic (BACK-2529): the flag that carried the selected
     operation or view (the binder's record), else its canonical spelling."""
     params = request.params
-    spelled = getattr(params, '_spelled', None) or {}
+    spelled = request.spelled
     implied = getattr(params, '_implied_by', None) or {}
     name = request.operation or 'view'
     word = implied.get(name) or next((alias for alias in getattr(params, '_supplied_aliases', ())
                                       if alias in _spellings_of(name)), None)
     if word:
-        return spelled.get(word, f'--{word}')
+        return str(spelled.get(word, f'--{word}'))
     return f'--{name}' if request.operation else f'--view {request.view}'
 
 
@@ -504,6 +504,26 @@ def _dispatch_special_flags(analyzer, path: str, output_format: str, args, confi
     return False
 
 
+def _refuse_meta_beside(request) -> None:
+    """D3/U1 at the library entry: ``show_meta`` (``--meta``) is a control no element view reads."""
+    if request is None:
+        return
+    from .errors import NavRequestValidationError
+    from .nav_params import ELEMENT_VIEW_SPECS
+    from .utils.query_binding import unsupported_controls_message
+    raise NavRequestValidationError(unsupported_controls_message(ELEMENT_VIEW_SPECS, ['--meta']))
+
+
+def _whole_file_element(analyzer, request) -> str:
+    """The whole-file (flat) element view's element: a full-file line range, so _dispatch_nav falls back to root_node.
+    --scope and --around require a line reference: the one check says so, exit 2 (BACK-2627 E9). `reveal file.py
+    --outline` (no element) is no element request: show_structure renders the file outline."""
+    if request.operation in ('scope', 'around'):
+        from .nav_handlers import _single_line_ref
+        _single_line_ref(None, f'--{request.operation}')
+    return f':1-{len(split_lines(analyzer.content))}'
+
+
 def handle_file(path: str, element: Optional[str], show_meta: bool,
                 output_format: str, args: Optional['Namespace'] = None, *, element_request=None) -> None:
     """Handle file analysis.
@@ -532,11 +552,7 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
     )
 
     if show_meta:
-        if request is not None:  # D3/U1 at the library entry: --meta is a control no element view reads
-            from .errors import NavRequestValidationError
-            from .nav_params import ELEMENT_VIEW_SPECS
-            from .utils.query_binding import unsupported_controls_message
-            raise NavRequestValidationError(unsupported_controls_message(ELEMENT_VIEW_SPECS, ['--meta']))
+        _refuse_meta_beside(request)
         show_metadata(analyzer, output_format, config=config)
         return
 
@@ -544,13 +560,7 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
         return
 
     if request is not None and not element:
-        # --scope and --around require a line reference: the one check says so, exit 2 (BACK-2627 E9).
-        if request.operation in ('scope', 'around'):
-            from .nav_handlers import _single_line_ref
-            _single_line_ref(element, f'--{request.operation}')
-        # The whole-file (flat) element view: a full-file line element, so _dispatch_nav falls back to root_node.
-        # `reveal file.py --outline` (no element) is no element request: show_structure renders the file outline.
-        element = f':1-{len(split_lines(analyzer.content))}'
+        element = _whole_file_element(analyzer, request)
 
     if element:
         if request is not None:
