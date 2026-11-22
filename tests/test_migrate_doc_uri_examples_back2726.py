@@ -127,11 +127,12 @@ def test_a_dot_graph_request_teaches_its_format_flag(tmp_path):
 
 
 def test_twin_and_undeclared_schemes_and_other_nouns_are_left_with_their_reason(tmp_path):
-    stats, xlsx, ast = ("reveal 'stats://src?hotspots=true'", "reveal 'xlsx://book.xlsx?sheet=Sales'",
-                        "reveal 'ast://src?kind=function'")
-    planned, _ = _planned(tmp_path, _fenced(stats, xlsx, ast), nouns=['calls'])
+    # xlsx is declared since BACK-2626: the undeclared example is an ops scheme with a query string
+    stats, ops, ast = ("reveal 'stats://src?hotspots=true'", "reveal 'letsencrypt://?check-orphans&check-duplicates'",
+                       "reveal 'ast://src?kind=function'")
+    planned, _ = _planned(tmp_path, _fenced(stats, ops, ast), nouns=['calls'])
     assert planned[stats].reason == migrate.NO_REQUEST_NOTE_TWIN
-    assert planned[xlsx].reason == migrate.NO_REQUEST_NOTE_UNDECLARED
+    assert planned[ops].reason == migrate.NO_REQUEST_NOTE_UNDECLARED
     assert planned[ast].reason == migrate.OTHER_NOUN
     planned, _ = _planned(tmp_path / 'all', _fenced(ast))
     assert planned[ast].new_line == 'reveal ast src --kind function'

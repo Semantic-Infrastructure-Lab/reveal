@@ -54,8 +54,17 @@ def test_declarations_exist():
         ('overview', 'respect_gitignore'), ('stats', 'respect_gitignore')}
 
 
+def _workbook(directory):
+    """xlsx's resource is a workbook, not a directory (declared since BACK-2626)."""
+    openpyxl = pytest.importorskip('openpyxl')
+    wb = openpyxl.Workbook()
+    wb.active.append(['a', 1])
+    wb.save(directory / 'book.xlsx')
+    return (directory / 'book.xlsx').as_posix()
+
+
 @pytest.mark.parametrize('scheme,dest,fragment', list(_declarations()))
-def test_declared_fragment_is_accepted_by_its_adapter_without_warning(scheme, dest, fragment, caplog):
+def test_declared_fragment_is_accepted_by_its_adapter_without_warning(scheme, dest, fragment, caplog, tmp_path):
     """A declaration the adapter's own validator flags would print a false 'unknown param'
     every time the flag is used (the BACK-1361 failure)."""
     cls = adapters_base.get_adapter_class(scheme)
@@ -67,7 +76,7 @@ def test_declared_fragment_is_accepted_by_its_adapter_without_warning(scheme, de
     err = io.StringIO()
     with redirect_stderr(err), caplog.at_level(logging.WARNING):
         # Session catalog dates are scoped to a semantic resource, not a filesystem path.
-        cls('sessions' if scheme == 'claude' else str(REPO), query)
+        cls('sessions' if scheme == 'claude' else _workbook(tmp_path) if scheme == 'xlsx' else str(REPO), query)
     seen = err.getvalue() + caplog.text
     assert 'nknown query param' not in seen, f'{scheme}:// warns on its own {fragment!r}: {seen}'
 
