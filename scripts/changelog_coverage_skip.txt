@@ -4,3 +4,4 @@
 # Clear this list in the first commit after each release: it only names work since the last tag.
 BACK-2683  Maintainer release scripts: every Tests run on HEAD's sha counts, not the newest (a queued master run hid the ci/** branch's green one).
 BACK-2684  Maintainer release scripts: local test runs unset PYTHONPATH and use ci-local's 3.12 venv with the dev extras.
+BACK-2597  Internal: codex reads its selectors through declarations; no answer changed.

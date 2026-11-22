@@ -72,11 +72,23 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 - A retired spelling's note (stderr, and `replacement` in its `retired_spelling` JSON warning) now names only the flag form, never another spelling that is itself on its way out: `calls ?top=5` says `use --limit N; 0 is uncapped` where it said `use ?limit=N (--limit N)`, and `trace://` says `use reveal calls <path> --callees FUNC --depth N --detail` where it named `calls://<path>?callees=...`. A script that matched the old note text needs the new wording (BACK-2716).
 
+- `codex://` now exits 2 naming the problem for an unknown resource, an unknown session view, a suffix on a whole resource (`codex://memories/x`) and a skill or plugin that does not exist, on the CLI, `reveal.api.query` and MCP; these exited 1 or answered something else with exit 0 (BACK-2700).
+
+- `codex://` memories, rules, skills, plugins and the memory pipeline: a missing directory or database is an empty answer (exit 0); unreadable or malformed input, invalid UTF-8 included, exits 3 and keeps what was read. The pipeline opens its database read-only and says when it cut its list at 20 rows. Claude's and Codex's messages about a workspace entry they could not read name the cause without the host path (BACK-2618).
+
+- `--all` and `--limit 0` are one setting on `ast`, `git`, `calls`, `metrics`, `patches` and `hotspots`: given together they answer once, while `--all` with a different stated cap exits 2 as two values (`reveal 'ast://src?limit=1000000' --all`). `patches` JSON echoes `"limit": 0` under `--all` (BACK-2729).
+
+- An option repeated with an equal stated value is one setting (`imports://src?circular&circular=true`, `?full=1&full=true`); two different stated values exit 2 even where they used to read alike (Claude `?snippet=3&snippet=7`, Codex `?last=true&last=false`). Whole-number options refuse true/false: `git://repo?limit` with no value exits 2 ("limit must be a whole number") instead of answering one commit (BACK-2727).
+
 ### Added
 
 - `reveal.api.query(NOUN, TARGET, **keywords)` asks a noun as its subcommand does: `api.query('calls', 'src', callers='main')` returns the JSON document `reveal calls src --callers main --format json` prints, each keyword the noun's flag with `-` as `_`. A request the subcommand exits 2 on raises `RequestValidationError` with its message (a missing path and a target that matches nothing included, which the URI form returned as answers), and a failed analysis raises its cause or the new `reveal.errors.AnalysisFailedError`. Resource URIs answer as before; a word that is neither a noun nor a URI still raises `ValueError`, now naming the nouns instead of "missing scheme" (BACK-2717).
 
 - MCP tool `reveal_run(args)`: any reveal command line, one list item per word, answered as the CLI answers it (`reveal_run(["calls", "src", "--callers", "main", "--format", "json"])` returns the CLI's JSON exactly). An invalid request (CLI exit 2) is a tool error naming what the noun accepts; findings and a self-described incomplete answer are results. It refuses `--stdin`, `--copy`, `--output FORMAT=PATH` and the `dev`/`offline` commands. `reveal_query(uri)` keeps working and retires at 1.0 with query-string options (BACK-2710).
+
+- `reveal calls PATH --callers NAME --format dot` and `reveal imports PATH --importers --format dot` draw the Graphviz graph that `?format=dot` draws, and exit 2 on the views that have no graph, as the URI does; a `?format=dot` URI request now notes this command as its replacement (BACK-2722).
+
+- The json, imports, calls, claude, metrics, contracts and patches guides teach `reveal NOUN PATH --flags` (`reveal metrics ./src --sort=-complexity --limit 5`), and the resource URI followed by flags where the URI names more than a path (`reveal json://data.json/users --where 'age>25'`, `reveal claude://session/NAME --errors`) (BACK-2726).
 
 ### Fixed
 
@@ -87,6 +99,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 - `?respect_gitignore=off` on `ast://`, `markdown://` and `imports://` directories no longer says "Input respect_gitignore has no effect for this operation" while it lists the ignored files. `--respect-gitignore off` (and `--no-gitignore`) is now judged like `--exclude`: where the answer never reads the walk policy (a single file, `reveal check FILE`) it says the flag has no effect, as the URI form already did, instead of nothing (BACK-2721).
 
 - An answer that does not apply to its target now names the options it could not use in one `control_unread_by_data` warning, in JSON and text: `patches://pkg?limit=0` (or `--all`, `--min`, `--target`) on a directory with no test files, and `git://DIR?view=log&limit=2` outside a repository, answered exit 0 with an `unused_query_param` or `unused_flag` warning (text: a stderr note) instead. The exit code is unchanged (BACK-2696).
+
+- `ast` `--where` on the retired `calls` and `callee_of` fields (`--where 'calls=main'`) and `--show calls` now print their replaced-by note on every form, the subcommand included, pointing at `reveal calls PATH --callers NAME` (BACK-2613).
 
 ## [0.135.0] - 2026-11-18
 
