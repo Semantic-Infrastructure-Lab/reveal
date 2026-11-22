@@ -102,7 +102,7 @@ def aggregate_selection(values) -> bool:
 VIEW = string('view', 'history, blame, diff or ownership; omitted preserves resource-dependent inspection',
               legacy=(LegacySpelling('type', rebinds=(('limit', 'scan-limit'),), rebinds_when=aggregate_selection),
                       LegacySpelling('view', value='log', codec=lambda _: 'history')),
-              choices=('history', 'log', 'blame', 'diff', 'ownership'), role='operation')
+              choices=('history', 'blame', 'diff', 'ownership'), role='operation')  # log: a value entry of history
 WHERE = ParamSpec('where', 'array', 'Existing commit predicates; repeat to AND (Git DSL percent-decodes values)',
                   [], predicates, role='filter-expression', repeatable=True, cli=CliBinding(('--where',)),
                   fields=tuple(COMMIT_FILTER_FIELDS), answers=_COMMITS)
