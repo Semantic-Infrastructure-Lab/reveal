@@ -516,24 +516,6 @@ def _dispatch(uri: str, element: Optional[str], args: 'Namespace',
             file=sys.stderr,
         )
 
-    # --links / --frontmatter apply to element retrieval (text-body content) only.
-    # On markdown:// directory queries these flags have no effect — warn with
-    # alternatives so users know their intent wasn't silently dropped (BACK-357).
-    if scheme == 'markdown' and not element:
-        if getattr(args, 'links', False):
-            print(
-                "Note: --links has no effect on markdown:// directory queries. "
-                "For cross-file link analysis use: reveal 'markdown://dir?link-graph'",
-                file=sys.stderr,
-            )
-        if getattr(args, 'frontmatter', False):
-            print(
-                "Note: --frontmatter has no effect on markdown:// directory queries "
-                "(frontmatter is already the primary output). "
-                "Use ?columns=field1,field2 to select specific frontmatter keys.",
-                file=sys.stderr,
-            )
-
     # --sort/--limit/--since/--until/... become query fragments here (flag_specs.FLAG_SPECS);
     # a different value already in the URI is an invalid request naming both (BACK-2654); an equal one is one request.
     # Resolve the adapter before preparing its filesystem scope. Resource codecs

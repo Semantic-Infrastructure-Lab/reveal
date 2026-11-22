@@ -1554,46 +1554,6 @@ class TestRenderElementLinksAndFrontmatter:
         mock_renderer.render_element.assert_called_once()
 
 
-# ─── handle_uri — BACK-357 warnings for markdown:// directory ────────────────
-
-class TestHandleUriMarkdownFlags:
-    def _make_args(self, **kwargs):
-        defaults = {
-            'format': 'text', 'grep': None, 'sort': None, 'desc': False,
-            'links': False, 'frontmatter': False, 'link_type': None, 'domain': None,
-        }
-        defaults.update(kwargs)
-        return Namespace(**defaults)
-
-    def test_links_on_markdown_dir_warns(self, capsys):
-        from unittest.mock import patch, MagicMock as MM
-        from reveal.cli.routing.uri import handle_uri
-        args = self._make_args(links=True)
-        mock_adapter_cls = MM(RESOURCE_SPEC=None, resource_path=None)
-        mock_adapter_cls.return_value.get_structure.return_value = {'contract_version': '1.0', 'type': 'markdown_query', 'source': '.', 'source_type': 'directory', 'results': []}
-        mock_renderer_cls = MM()
-        mock_renderer_cls.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
-        with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls), \
-             patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
-            handle_uri('markdown://docs/', None, args)
-        err = capsys.readouterr().err
-        assert 'link-graph' in err
-
-    def test_frontmatter_on_markdown_dir_warns(self, capsys):
-        from unittest.mock import patch, MagicMock as MM
-        from reveal.cli.routing.uri import handle_uri
-        args = self._make_args(frontmatter=True)
-        mock_adapter_cls = MM(RESOURCE_SPEC=None, resource_path=None)
-        mock_adapter_cls.return_value.get_structure.return_value = {'contract_version': '1.0', 'type': 'markdown_query', 'source': '.', 'source_type': 'directory', 'results': []}
-        mock_renderer_cls = MM()
-        mock_renderer_cls.exit_code.return_value = 0  # a renderer's findings exit (BACK-916)
-        with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls), \
-             patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
-            handle_uri('markdown://docs/', None, args)
-        err = capsys.readouterr().err
-        assert 'columns=' in err  # the canonical spelling; fields is markdown's legacy word (BACK-2654)
-
-
 # ─── _build_adapter_kwargs — uri param in signature (line 296) ───────────────
 
 class TestBuildAdapterKwargsUri:

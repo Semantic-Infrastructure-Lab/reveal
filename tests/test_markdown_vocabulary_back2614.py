@@ -390,3 +390,12 @@ def test_the_aggregate_word_request_note_renders_view_and_field(root):
     run, doc = _json(root, 'markdown://docs?aggregate=type')
     assert run.returncode == 0 and doc['type'] == 'markdown_aggregate'
     assert _notes(doc)['request:markdown']['replacement'] == 'reveal markdown docs --view aggregate --field type'
+
+
+@pytest.mark.parametrize('flag', ['--links', '--frontmatter'])
+def test_element_flags_on_the_directory_query_exit_2_naming_the_control(root, flag):
+    """--links and --frontmatter read one document's text: on the directory query the declared controls refuse them
+    (exit 2 naming the control). This replaced a 'has no effect' note in the URI router that the refusal made
+    unreachable (BACK-357's note, deleted in BACK-2614)."""
+    run, _ = _json(root, 'markdown://docs', flag)
+    assert run.returncode == 2 and f"unsupported control '{flag}'" in run.stderr, run.stderr
