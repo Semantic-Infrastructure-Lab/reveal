@@ -6,7 +6,11 @@ from typing import Dict, Any, List, NoReturn, Optional
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from ..help_data import load_help_data
 from ...errors import RequestValidationError
-from ...utils.results import AnalysisCompleteness, FailureCause, ResultBuilder, result_execution_facts
+from ...utils.query_binding import bind_declared_params, boolean_value
+from ...utils.query_parser import (CliBinding, LegacySpelling, ParamSpec, ParamValueError, QueryParams, ResourceSpec,
+                                   param_schema, parse_query_params, peek_query_items)
+from ...utils.results import (AnalysisCompleteness, ExecutionFacts, FailureCause, ResultBuilder,
+                              result_execution_facts)
 from .renderer import SqliteRenderer
 from reveal.reveal_types import CONTRACT_VERSION, RevealResult
 
@@ -33,6 +37,35 @@ def _split_connection_string(uri: str) -> tuple[str, Optional[str]]:
         if part.endswith(('.db', '.sqlite', '.sqlite3')):
             return '/'.join(parts[:i + 1]), ('/'.join(parts[i + 1:]) or None)
     return uri, None
+
+
+def _health_word(raw: Any) -> Optional[str]:
+    """The legacy ``--check`` (``?check``) as the view it stands for: ``health`` when true, the default answer when
+    false (COMMAND_MODEL "Switches")."""
+    try:
+        return 'health' if boolean_value(raw) else None
+    except ValueError:
+        raise ParamValueError(f'check must be a valid boolean, got {raw!r}: use --view health') from None
+
+
+# The declaration `reveal sqlite` and sqlite:// are both generated from (D20, BACK-2626). --check, the flag that ran the
+# integrity check before, is the legacy word of --view health (ruling Q4): the same answer and exit, with its note. The
+# seam has no flag-only legacy entry, so the word is also the URI key ?check, which answers and notes alike.
+_VIEW = ParamSpec('view', 'string', 'health: the integrity check (PRAGMA integrity_check and foreign_key_check) of the '
+                  'whole database, in place of the database or table answer', None, str, examples=('view=health',),
+                  choices=('health',), role='operation', cli=CliBinding(('--view',), metavar='VIEW'),
+                  legacy=(LegacySpelling('check', codec=_health_word, flag='--check', flag_value=True),))
+PARAM_SPECS = (_VIEW,)
+
+
+def _selects_health(params: Any) -> bool:
+    """Whether a request (bound, prepared or a plain mapping) selects the health answer; prediction never raises."""
+    given = dict(peek_query_items(params))
+    try:
+        return any(_VIEW.canonical_value(word, given[word]) == 'health'
+                   for word in _VIEW.spellings if given.get(word) is not None)
+    except ValueError:
+        return False
 
 _SCHEMA_OUTPUT_TYPES = [
     {
@@ -120,9 +153,9 @@ _SCHEMA_EXAMPLE_QUERIES = [
         'output_type': 'sqlite_table'
     },
     {
-        'uri': 'sqlite:///path/to/app.db --check',
+        'uri': 'sqlite:///path/to/app.db --view health',
         'description': 'Run integrity checks on database',
-        'cli_flag': '--check',
+        'cli_flag': '--view health',
         'output_type': 'sqlite_health'
     },
     {
@@ -148,9 +181,9 @@ class SQLiteAdapter(ResourceAdapter):
     Progressive disclosure pattern for SQLite database exploration.
 
     Usage:
-        reveal sqlite:///path/to/db.db           # Database overview
-        reveal sqlite:///path/to/db.db/users     # Table structure
-        reveal sqlite:///path/to/db.db --check   # Database health
+        reveal sqlite /path/to/db.db                 # Database overview (or sqlite:///path/to/db.db)
+        reveal sqlite /path/to/db.db/users           # Table structure
+        reveal sqlite /path/to/db.db --view health   # Database health
     """
     HELP_CLUSTER = 'Data & Config'
     QUICK_RANK = 8
@@ -158,27 +191,56 @@ class SQLiteAdapter(ResourceAdapter):
     LEGACY_INIT = False  # canonical (resource, query) signature — BACK-907
     CANONICAL_EMPTY_RESOURCE = ''  # bare sqlite:// must stay empty, not '.'
     RESULT_TYPE = 'sqlite_database'
-    DEFAULT_FAIL_ON = 'none'
+    BOUND_QUERY_CALL = True
+    PARAM_SPECS = PARAM_SPECS
+    # DB[/TABLE]: the database is a file, the table is inside it (_split_connection_string), so the resource is no
+    # filesystem path the binder may stat or walk.
+    RESOURCE_SPEC = ResourceSpec(name='resource', cli_default=None, uri_default='', required=True, walks=False,
+                                 filesystem=False)
+    # The health answer keeps the gate --check had: 1 on foreign-key violations without --fail-on (BACK-2753 owns the
+    # health exit codes); the database and table answers have no findings, so the gate never fires on them.
+    DEFAULT_FAIL_ON = 'findings'
+    FINDINGS_POLICIES = ('none', 'findings')
 
     @classmethod
     def uri_execution_facts(cls, resource):
-        """The overview and table views share D6 (BACK-2521); --check keeps its own 0/1/2 gate."""
+        """The overview, table and health views share D6 (BACK-2521, BACK-2626)."""
         return cls.execution_facts
 
     @staticmethod
     def uri_result_type(resource):
-        try:
-            table = _split_connection_string(resource.partition('?')[0])[1]
-        except RequestValidationError:
+        path, _, query = resource.partition('?')
+        try:  # prediction never raises: a query or path the binder rejects names no other answer
+            if _selects_health(parse_query_params(query)):
+                return 'sqlite_health'
+            table = _split_connection_string(path)[1]
+        except ValueError:  # RequestValidationError and a malformed query alike
             table = None
         return 'sqlite_table' if table else 'sqlite_database'
 
     @staticmethod
+    def result_type_for(params):
+        return 'sqlite_health' if _selects_health(params) else 'sqlite_database'
+
+    @classmethod
+    def result_type_at(cls, params, resource):
+        """The answer the resource and --view pick: health, else a table when the resource names one."""
+        return 'sqlite_health' if _selects_health(params) else cls.uri_result_type(resource)
+
+    @staticmethod
     def execution_facts(result):
         """A missing database or table, or a non-database file, is a request failure (exit 2);
-        any other failed read (permissions, corruption) is a failed analysis (exit 3)."""
+        any other failed read (permissions, corruption) is a failed analysis (exit 3).
+
+        The health answer keeps the codes --check had until BACK-2753 decides them: a foreign-key violation is a
+        finding (exit 1 under the default gate), and a failed integrity check exits 2."""
         codes = {entry.get('code') for entry in result.get('meta', {}).get('errors', [])} if isinstance(result, dict) else set()
         cause = FailureCause.INVALID_REQUEST if 'invalid_request' in codes else FailureCause.ANALYSIS
+        if isinstance(result, dict) and result.get('type') == 'sqlite_health' and not codes:
+            if result.get('integrity') is False:
+                return ExecutionFacts(AnalysisCompleteness.COMPLETE, findings=True,
+                                      failures=frozenset({FailureCause.INVALID_REQUEST}))
+            return ExecutionFacts(AnalysisCompleteness.COMPLETE, findings=bool(result.get('foreign_key_violations')))
         return result_execution_facts(result, completeness=AnalysisCompleteness.COMPLETE, failure_cause=cause)
 
     @staticmethod
@@ -191,12 +253,10 @@ class SQLiteAdapter(ResourceAdapter):
             'adapter': 'sqlite',
             'description': 'SQLite database inspection with schema exploration and health checks',
             'uri_syntax': 'sqlite:///path/to/db.db[/table]',
-            'query_params': {},
+            'query_params': param_schema(PARAM_SPECS),
+            'resource': SQLiteAdapter.RESOURCE_SPEC.schema(),
             'elements': {},
-            'cli_flags': ['--check'],
-            'cli_only_flags': {
-                '--check': 'Run SQLite integrity checks (PRAGMA integrity_check, foreign key violations)',
-            },
+            'cli_flags': ['--view'],
             'supports_batch': False,
             'supports_advanced': False,
             'output_types': _SCHEMA_OUTPUT_TYPES,
@@ -213,7 +273,8 @@ class SQLiteAdapter(ResourceAdapter):
         """
         return load_help_data('sqlite') or {}
 
-    def __init__(self, resource: str, query: Optional[str] = None):
+    def __init__(self, resource: str, query: Optional[str] = None, *,
+                 params: Optional[Dict[str, Any]] = None):
         """Initialize SQLite adapter with database path.
 
         Args:
@@ -222,20 +283,24 @@ class SQLiteAdapter(ResourceAdapter):
                 strips it if present, so both direct construction
                 (SQLiteAdapter("sqlite:///x.db")) and router construction
                 (bare "/x.db") work unchanged.
-            query: Unused — sqlite:// supports no query parameters
+            query: The URI query, bound through the declaration (an unknown key is an invalid request)
+            params: Already-bound or typed controls, in place of *query*
 
         Raises:
-            RequestValidationError (a ValueError): When no path is given
+            RequestValidationError (a ValueError): When no path is given, or a control is invalid
         """
         connection_string = resource
 
         # Validate connection string is not empty (after required check)
         if not connection_string:
-            raise RequestValidationError(
-                "SQLiteAdapter requires a non-empty connection string. "
-                "Use SQLiteAdapter('sqlite:///path/to/db.db')"
-            )
+            raise RequestValidationError("sqlite requires a database path: reveal sqlite path/to/db.db "
+                                         "(or sqlite://path/to/db.db)")
 
+        if params is not None:
+            self.query_params = params if isinstance(params, QueryParams) else bind_declared_params(
+                PARAM_SPECS, params, transport='typed')
+        else:
+            self.query_params = bind_declared_params(PARAM_SPECS, query or '', transport='uri')
         self.connection_string = connection_string
         self._connection: Optional[sqlite3.Connection] = None
         db_path, self.table = _split_connection_string(connection_string)
@@ -455,6 +520,8 @@ class SQLiteAdapter(ResourceAdapter):
         Returns:
             Dict containing database structure and statistics
         """
+        if _VIEW.read(self.query_params) == 'health':
+            return self.check()
         # If table specified, delegate to get_element
         if self.table:
             element_data = self.get_element(self.table)
@@ -522,7 +589,7 @@ class SQLiteAdapter(ResourceAdapter):
                 'tables': table_stats,
                 'next_steps': [
                     f"reveal sqlite://{self.db_path}/<table>     # Inspect specific table",
-                    f"reveal sqlite://{self.db_path} --check     # Run integrity check",
+                    f"reveal sqlite://{self.db_path} --view health     # Run integrity check",
                 ]
             }
         )

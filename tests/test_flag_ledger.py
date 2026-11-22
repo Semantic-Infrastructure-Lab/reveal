@@ -242,20 +242,25 @@ def db(tmp_path):
 
 
 def test_sqlite_limit_is_named_not_dropped(db):
-    """The BACK-1514 repro: all tables listed, and no word about --limit."""
+    """The BACK-1514 repro (all tables listed, and no word about --limit): since sqlite is declared (BACK-2626) the
+    unsupported control is refused by name, before any answer; an undeclared adapter still notes it."""
     proc = _cli('sqlite://t.db', '--limit', '2', cwd=db)
-    assert proc.returncode == 0, proc.stderr
-    assert 'Note: --limit has no effect on sqlite://' in proc.stderr
+    assert proc.returncode == 2 and not proc.stdout
+    assert "unsupported control '--limit'; supported controls: view" in proc.stderr
+    proc = _cli('help://adapters', '--limit', '2', cwd=db)
+    assert proc.returncode == 0 and 'Note: --limit has no effect on help://' in proc.stderr
 
 
 def test_unread_query_key_is_named(db):
-    proc = _cli('sqlite://t.db?bogus=1', cwd=db)
-    assert "query param 'bogus' has no effect on sqlite://" in proc.stderr
+    proc = _cli('sqlite://t.db?bogus=1', cwd=db)  # declared (BACK-2626): an unknown key is an invalid request
+    assert proc.returncode == 2 and "unsupported control 'bogus'; supported controls: view" in proc.stderr
 
 
 def test_exclude_on_an_adapter_that_never_walks_is_named(db):
-    proc = _cli('sqlite://t.db', '--exclude', 'tests', cwd=db)
-    assert 'Note: --exclude has no effect on sqlite://' in proc.stderr
+    proc = _cli('sqlite://t.db', '--exclude', 'tests', cwd=db)  # declared (BACK-2626): refused by name
+    assert proc.returncode == 2 and "unsupported control '--exclude'" in proc.stderr
+    proc = _cli('help://adapters', '--exclude', 'tests', cwd=db)
+    assert 'Note: --exclude has no effect on help://' in proc.stderr
 
 
 @pytest.fixture

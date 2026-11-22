@@ -573,7 +573,9 @@ class TestSQLiteAdapterSchema(unittest.TestCase):
         schema = SQLiteAdapter.get_schema()
 
         self.assertIn('cli_flags', schema)
-        self.assertIn('--check', schema['cli_flags'])
+        self.assertIn('--view', schema['cli_flags'])  # --view health; --check is its legacy word (BACK-2626)
+        self.assertEqual(schema['query_params']['view']['choices'], ['health'])
+        self.assertIn('check', schema['query_params']['view']['aliases'])
 
     def test_schema_output_types(self):
         """Schema should define output types."""

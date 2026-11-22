@@ -947,11 +947,11 @@ adapters:
       review: not-applicable
       via: []
     verbose:
-      reason: 'get_structure(**kwargs) has no query validation; confirmed live against
-        a real 30-row fixture db: ?verbose=1 output byte-identical, no warning, no
-        per-table/column detail expansion (adapter.py:435)'
-      review: not-applicable
-      via: []
+      reason: 'BACK-2654 rule 4 (declared since BACK-2626): --verbose is --detail full, bound from the declarations;
+        sqlite declares no detail, so it exits 2 naming detail and its controls'
+      review: honored
+      via:
+      - declared-binding
   ssl:
     all:
       reason: single-certificate detail view; no list-of-many-certs output type exists

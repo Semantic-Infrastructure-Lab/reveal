@@ -36,8 +36,17 @@ def source(tmp_path, monkeypatch):
     path = tmp_path / 'sample.py'
     path.write_text(SOURCE, encoding='utf-8')
     (tmp_path / 'rows.json').write_text('[{"n": 1}, {"n": 2}]', encoding='utf-8')  # JSON's legacy slice rows
+    sample_database(tmp_path)
     commit_sample(path)
     return path
+
+
+def sample_database(directory):
+    """A clean one-table database beside the sample: sqlite's legacy --check row answers on it (BACK-2626)."""
+    import sqlite3
+    from contextlib import closing
+    with closing(sqlite3.connect(directory / 'store.db')) as connection, connection:
+        connection.execute('CREATE TABLE items (id INTEGER PRIMARY KEY)')
 
 
 def commit_sample(path):
@@ -319,6 +328,7 @@ PRODUCTION_CASES = {
     'param:json.keys': lambda f: [f'json://{Path(f).parent / "rows.json"}?keys'],
     'param:json.length': lambda f: [f'json://{Path(f).parent / "rows.json"}?length'],
     'param:json.data-only': lambda f: [f'json://{Path(f).parent / "rows.json"}?view=flatten&data-only'],
+    'param:sqlite.check': lambda f: ['sqlite', str(Path(f).parent / 'store.db'), '--check'],
     'param:contracts.impls': lambda f: ['contracts', str(Path(f).parent), '--impls', '1'],
     'param:contracts.no_implementations': lambda f: ['contracts', str(Path(f).parent), '--no-implementations'],
     'param:surface.type': lambda f: ['surface', str(Path(f).parent), '--type', 'env'],

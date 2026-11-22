@@ -148,6 +148,8 @@ COMMANDS: Dict[str, CommandSpec] = {
                      'reveal scaffold <kind>',
                      'Retired: use `reveal dev new-*`',
                      help_guide=_SUBCOMMANDS_GUIDE),
+    'sqlite':       _declared('sqlite', 'reveal sqlite DB[/TABLE] [--view health]',
+                     'Inspect a SQLite database, a table or view, or its integrity through declared controls'),
     'surface':      _declared('surface',
                      'reveal surface [path]',
                      'External surfaces: CLI commands, HTTP routes, env vars, network calls, FS writes, subprocess calls'),
@@ -164,7 +166,7 @@ COMMANDS: Dict[str, CommandSpec] = {
 
 
 # Order of the `--help-all` subcommand listing: task entry points first, tooling last.
-EPILOG_ORDER = ('ast', 'overview', 'imports', 'deps', 'hotspots', 'git', 'claude', 'codex', 'json', 'markdown', 'metrics', 'contracts', 'surface',
+EPILOG_ORDER = ('ast', 'overview', 'imports', 'deps', 'hotspots', 'git', 'claude', 'codex', 'json', 'sqlite', 'markdown', 'metrics', 'contracts', 'surface',
                 'patches', 'testability', 'calls', 'trace', 'check', 'review', 'health', 'pack', 'dev',
                 'scaffold', 'offline', 'architecture')
 
@@ -445,6 +447,8 @@ RETIREMENTS: Dict[str, Retirement] = {
     'param:json.data-only': Retirement('json ?data-only (with ?gron or ?flatten)',
                                        '--view flatten --detail raw, the same lines inside the JSON envelope',
                                        standalone=True),
+    # SQLite's integrity check is a view (ruling Q4, BACK-2626): the same answer and exit, one spelling.
+    'param:sqlite.check': Retirement('sqlite --check (?check)', '--view health'),
     'param:contracts.impls': Retirement('contracts ?impls=N (--impls N)', '--implementations-limit N'),
     'param:contracts.no_implementations': Retirement('contracts --no-implementations', '--implementations off'),
     # Surface's D20 words (BACK-2623): the category is a kind, the test filter is tests, the rollup is a view and its

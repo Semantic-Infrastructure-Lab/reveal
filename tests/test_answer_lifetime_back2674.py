@@ -29,6 +29,7 @@ def project(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     (tmp_path / 'proj').mkdir()
     (tmp_path / 'proj' / 'app.py').write_text('def main():\n    return 1\n', encoding='utf-8')
+    (tmp_path / 'proj' / 'old.py').write_text('def main():\n    return 0\n', encoding='utf-8')  # diff://'s other side
     with closing(sqlite3.connect(tmp_path / 'data.db')) as connection, connection:
         connection.execute('CREATE TABLE items (id INTEGER)')
     return tmp_path
@@ -61,10 +62,12 @@ def sqlite_adapters(monkeypatch):
     return made
 
 
-# One request per Answer builder that printed through a closure: the structure answer (sqlite://, an undeclared
-# noun, and ast://, a declared one), the router's answer for a failed read, and the declared invalid-request answer.
-REQUESTS = {'structure, undeclared noun': 'sqlite://data.db',
+# One request per Answer builder that printed through a closure: the structure answer (diff://, an undeclared
+# noun, and ast:// and sqlite://, declared ones; sqlite since BACK-2626), the router's answer for a failed read, and the
+# declared invalid-request answer.
+REQUESTS = {'structure, undeclared noun': 'diff://proj/app.py:proj/old.py',
             'structure, declared noun': 'ast://proj',
+            'structure, declared noun with a connection': 'sqlite://data.db',
             'router failure': 'sqlite://data.db/no_such_table',
             'declared invalid request': 'metrics://proj?limit=-1'}
 
@@ -89,7 +92,7 @@ def test_an_answer_is_freed_when_the_request_ends(project, uri):
 
 
 def test_the_sqlite_adapter_is_freed_on_the_thread_that_used_it(project, sqlite_adapters):
-    uri = f'sqlite://{project / "data.db"}?bogus=1'
+    uri = f'sqlite://{project / "data.db"}'  # declared (BACK-2626): ?bogus=1 is refused before an adapter exists
     replies = []
     with _no_cyclic_collection():
         worker = threading.Thread(target=lambda: replies.append(mcp_server.reveal_query(uri, provenance=True)))
@@ -105,7 +108,7 @@ def test_a_later_tool_call_keeps_no_stderr_from_an_earlier_request(project, monk
     # The server runs without pytest's unraisable-exception hook (it turns the report into a warning): restore
     # the interpreter's own, which writes "Exception ignored in ..." to the current sys.stderr.
     monkeypatch.setattr(sys, 'unraisablehook', sys.__unraisablehook__)
-    uri = f'sqlite://{project / "data.db"}?bogus=1'
+    uri = f'sqlite://{project / "data.db"}'  # declared (BACK-2626): ?bogus=1 is refused before an adapter exists
     with _no_cyclic_collection():
         worker = threading.Thread(target=lambda: mcp_server.reveal_query(uri, provenance=True))
         worker.start()

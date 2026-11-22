@@ -261,6 +261,7 @@ Reveal has both a **path-based interface** (`reveal <path>` + flags) and a set o
 | `reveal ast [path] [--where EXPR] [--kind KIND]` | Find code elements by properties; repeated --where expressions are ANDed | `reveal ast --help` |
 | `reveal git [path[@REF]] [--view VIEW] [--where EXPR]` | Inspect repository history and historical files | `reveal git --help` |
 | `reveal json FILE[/KEY] [--where EXPR] [--view VIEW]` | Navigate JSON data, filter array elements or inspect schema, keys and types | `reveal json --help` |
+| `reveal sqlite DB[/TABLE] [--view health]` | Inspect a SQLite database, a table or view, or its integrity through declared controls | `reveal sqlite --help` |
 | `reveal markdown [path] [--where EXPR] [--match TEXT]` | Find documents by frontmatter/body; inspect links and aggregate fields | `reveal markdown --help` |
 | `reveal claude [RESOURCE] [--view VIEW] [--match TEXT]` | Inspect Claude sessions and installation resources through declared controls | `reveal claude --help` |
 | `reveal codex [RESOURCE] [--since DATE] [--limit N]` | Inspect Codex CLI sessions and installation resources through declared controls | `reveal codex --help` |
@@ -1739,13 +1740,14 @@ reveal mysql://localhost --check           # Pass/warn/fail health thresholds (c
 # SQLite — file-based, schema only
 reveal sqlite:///path/to/app.db            # Schema overview: tables, row counts, indexes
 reveal sqlite:///path/to/app.db/trades     # One table: columns, indexes, foreign keys, row count
+reveal sqlite /path/to/app.db --view health  # Integrity check and foreign-key violations (exit 1 on a violation)
 ```
 
 Neither adapter returns row data; for rows, query the database directly (`sqlite3`, `mysql`).
 
 **Discovery:** `reveal help://schemas/mysql --format=json` and `reveal help://schemas/sqlite --format=json` enumerate query params, table-detail modes, and check rules.
 
-**Use case:** Inspect schema, surface row-count outliers, and run health checks on databases without writing SQL or installing a DB client. Both adapters integrate with `reveal health` and `--check --only-failures` for CI gates.
+**Use case:** Inspect schema, surface row-count outliers, and run health checks on databases without writing SQL or installing a DB client. Both adapters integrate with `reveal health`; MySQL also takes `--check --only-failures`, and SQLite's integrity check is `--view health` (`--check` is its deprecated spelling) for CI gates.
 
 ---
 

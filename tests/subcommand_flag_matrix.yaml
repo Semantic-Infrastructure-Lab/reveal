@@ -640,6 +640,35 @@ subcommands:
         rejects it loudly (unrecognized arguments), not a silent gap
       review: not-applicable
       via: []
+  sqlite:
+    all:
+      reason: 'BACK-2654 item 1c: accepted as on the URI form; sqlite declares no --all and no cap (no answer lists
+        rows), so the flag lifts nothing and both forms answer as without it'
+      review: not-applicable
+      via:
+      - declared-unused
+    respect_gitignore:
+      reason: --respect_gitignore is not declared on `reveal sqlite`'s own parser
+        -- argparse rejects it loudly (unrecognized arguments), not a silent gap
+      review: not-applicable
+      via: []
+    since:
+      reason: --since is not declared on `reveal sqlite`'s own parser -- argparse
+        rejects it loudly (unrecognized arguments), not a silent gap
+      review: not-applicable
+      via: []
+    until:
+      reason: --until is not declared on `reveal sqlite`'s own parser -- argparse
+        rejects it loudly (unrecognized arguments), not a silent gap
+      review: not-applicable
+      via: []
+    verbose:
+      reason: 'BACK-2654 rule 4: --verbose is --detail full, bound from the
+        declarations; this noun declares no detail, so it exits 2 naming detail and its
+        controls.'
+      review: honored
+      via:
+      - declared-read
   surface:
     all:
       reason: 'BACK-2654 item 1c: the declared runner binds --all through the URI

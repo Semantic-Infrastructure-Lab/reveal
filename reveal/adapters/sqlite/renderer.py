@@ -103,13 +103,8 @@ class SqliteRenderer(TypeDispatchRenderer):
                 print(f"  {step}")
 
     @staticmethod
-    def render_check(result: dict, format: str = 'text', **kwargs) -> None:
-        """Render ``--check``: the integrity verdict and each finding."""
-        from reveal.utils import print_json_result
-
-        if format == 'json':
-            print_json_result(result)
-            return
+    def _render_sqlite_health(result: dict) -> None:
+        """Render ``--view health``: the integrity verdict and each finding."""
         detections = result.get('detections', [])
         print(f"{result['source']}: integrity {'ok' if result['integrity'] else 'FAILED'}")
         if not detections:

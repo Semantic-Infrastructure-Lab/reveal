@@ -34,6 +34,7 @@ CASES = {
     'overview': ([], ''),
     'pack': ([], ''),
     'patches': ([], ''),
+    'sqlite': ([], ''),
     'surface': ([], ''),
     'testability': ([], ''),
     'trace': (['--from', 'serve'], '?from=serve'),
@@ -41,7 +42,8 @@ CASES = {
 NOUNS = sorted(CASES)
 # A noun whose default answer is not a findings view gates the view that is (imports: BACK-1054 S4;
 # metrics: the hotspots ranking, BACK-2149).
-FINDINGS_VIEWS = {'imports': (['--unused'], '?unused'), 'metrics': (['--hotspots'], '?hotspots=true')}
+FINDINGS_VIEWS = {'imports': (['--unused'], '?unused'), 'metrics': (['--hotspots'], '?hotspots=true'),
+                  'sqlite': (['--view', 'health'], '?view=health')}  # the fixture database has an orphan foreign key
 
 APP = '''\
 import os
@@ -149,6 +151,12 @@ def project(tmp_path, monkeypatch):
     codex = build_codex_home(tmp_path / 'codex-home')
     monkeypatch.setattr(CodexAdapter, 'CODEX_HOME', codex)
     monkeypatch.setattr(CodexAdapter, 'CODEX_DB', codex / 'state_5.sqlite')
+    import sqlite3
+    from contextlib import closing
+    with closing(sqlite3.connect(tmp_path / 'app.db')) as connection, connection:  # sqlite's resource, beside proj
+        connection.executescript('CREATE TABLE users(id INTEGER PRIMARY KEY);'
+                                 'CREATE TABLE posts(id INTEGER, user_id INTEGER REFERENCES users(id));'
+                                 'INSERT INTO posts VALUES (1, 9);')
     root = tmp_path / 'proj'
     (root / 'tests').mkdir(parents=True)
     (root / 'app.py').write_text(APP, encoding='utf-8')
@@ -169,6 +177,8 @@ def argv_for(noun, spelling, resource='proj'):
     cli, query = CASES[noun]
     if noun in ('claude', 'codex') and resource == 'proj':
         resource = 'sessions'
+    if noun == 'sqlite' and resource == 'proj':
+        resource = 'app.db'
     if noun == 'json':
         resource += '/data.json'
     if spelling == 'cli':
@@ -313,7 +323,7 @@ def test_missing_resource_is_rejected_alike(project, noun, fmt):
 def test_fail_on_means_the_same_before_after_and_on_a_uri(project, noun, gate):
     """The project carries an unused import and a branchy function, so a declared gate has something to match."""
     cli, query = FINDINGS_VIEWS.get(noun, CASES[noun])
-    target = 'proj/data.json' if noun == 'json' else ('sessions' if noun in ('claude', 'codex') else 'proj')
+    target = {'json': 'proj/data.json', 'claude': 'sessions', 'codex': 'sessions', 'sqlite': 'app.db'}.get(noun, 'proj')
     walk_flags = ['--respect-gitignore=off'] if declared_adapter_class(noun).RESOURCE_SPEC.walks else []
     spellings = {
         'after': [noun, target, *cli, '--fail-on', gate],

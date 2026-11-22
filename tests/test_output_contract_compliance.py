@@ -171,6 +171,7 @@ SUBCOMMAND_ARGV = {
     'git': ['.'],
     'ast': ['proj'],
     'json': ['proj/data.json'],
+    'sqlite': ['proj/app.db'],
     'markdown': ['proj'],
     'architecture': ['proj'],
     'calls': ['proj', '--target', 'main'],
