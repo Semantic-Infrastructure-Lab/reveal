@@ -763,7 +763,7 @@ Use `?flag` syntax for operations:
 | `tests=include\|exclude` | Count importers selected by the scoped conventional/configured test-support policy, or exclude them | `imports://src?importers&tests=exclude` |
 | `root=DIR` | Pin the scan root (must contain the path; not a filesystem/home/system root; a refused value is a warning) | `imports://src/app.py?importers&root=.` |
 | `lazy=include\|exclude\|only` | Function-level (lazy) import edges: include them, exclude them (load-time edges only) or show only them. Default: `?circular` excludes, every other view includes | `imports://src?sort=-fan-in&lazy=exclude` |
-| `format=text\|json\|dot` | Output override for `?importers` on a directory: `dot` draws one importer -> module edge per listed importer as Graphviz | `imports://src?importers&format=dot` |
+| `format=text\|json\|dot` | Output override for `?importers` on a directory: `dot` (`--format dot` on the subcommand) draws one importer -> module edge per listed importer as Graphviz | `imports://src?importers&format=dot` |
 | `detail=normal\|full` | `full` shows everything instead of a summary: every file in a cycle group, all unused imports, all violations, every package; JSON adds `"verbose": true` (`--detail full` on the subcommand; the global `--verbose` means `full`) | `imports://src?circular&detail=full` |
 | `scan-limit=N` | Source files the walk may keep (default 20000, minimum 1): an input budget, not a row cap. A cut is incomplete analysis (exit 3), `meta.scan_budget.capped` and a `scan_capped` warning (`scan_limit` is the same key) | `imports://.?importers&scan-limit=50000` |
 

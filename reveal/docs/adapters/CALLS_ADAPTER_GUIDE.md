@@ -47,8 +47,8 @@ reveal calls src/ --callees validate_item --depth 2 --detail
 # Include callers-of-callers (2 levels deep)
 reveal calls src/ --callers validate_item --depth 2
 
-# Graphviz dot output (pipe to dot for SVG/PNG)
-reveal 'calls://src/?callers=main&format=dot' | dot -Tsvg > call_graph.svg
+# Graphviz dot output (pipe it to dot for SVG/PNG: | dot -Tsvg > call_graph.svg)
+reveal calls src/ --callers main --format dot
 
 # Per-function calls/called_by fields of one file (ast:// adapter — no project index)
 reveal 'ast://src/auth.py?kind=function' --format json
@@ -126,8 +126,8 @@ reveal calls src/ --callers process_batch --depth 2
 # Full transitive tree (5 levels max)
 reveal calls src/ --callers entry_point --depth 5
 
-# Graphviz for visual diagram
-reveal 'calls://src/?callers=main&format=dot' | dot -Tsvg > main_callers.svg
+# Graphviz for visual diagram (| dot -Tsvg > main_callers.svg)
+reveal calls src/ --callers main --format dot
 
 # JSON for programmatic use
 reveal calls src/ --callers validate_item --format json
@@ -224,7 +224,7 @@ it does not promise method-only results. No population changed (BACK-2645).
 `--max-items` remains a separate output budget: zero means an empty page,
 whereas `limit=0` is uncapped. `where`, `match`, `offset`, `since` and `until`
 are unsupported on Calls and reject with per-symbol lookup guidance.
-URI `format=dot` is retained; global `--format` is not widened. Ranking keeps
+`format=dot` is `--format dot` on the subcommand (only calls and imports offer `dot`). Ranking keeps
 its existing URI-format behavior; use global `--format json` for ranked JSON.
 
 ### Python API
@@ -245,7 +245,7 @@ keywords.
 
 `reveal calls <path>` takes the same parameters as flags (`--callers NAME`, `--callees NAME`, `--depth N`, `--detail`, `--sort=-callers`, `--limit N`, `--uncalled`, `--type KIND`, `--modules`,
 `--external`, `--builtins`, `--test-framework`, and the retired `--target`/`--root`, which print the
-same note as `?target=`/`?root=`); both spellings give equal JSON through one execution path. `format=dot` stays URI-only. Details: [SUBCOMMANDS_GUIDE](../guides/SUBCOMMANDS_GUIDE.md#reveal-calls--cross-file-call-graph).
+same note as `?target=`/`?root=`); both spellings give equal JSON through one execution path. `?format=dot` is `--format dot`. Details: [SUBCOMMANDS_GUIDE](../guides/SUBCOMMANDS_GUIDE.md#reveal-calls--cross-file-call-graph).
 
 | Exit | Meaning |
 |------|---------|
@@ -584,13 +584,10 @@ and `format=dot` on them exits 2 naming the views that have one.
 
 ```bash
 # Text preview
-reveal 'calls://src/?callers=validate_item&format=dot'
+reveal calls src/ --callers validate_item --format dot
 
-# SVG
-reveal 'calls://src/?callers=main&format=dot' | dot -Tsvg > call_graph.svg
-
-# PNG
-reveal 'calls://src/?callers=main&format=dot' | dot -Tpng > call_graph.png
+# SVG or PNG: pipe it to Graphviz (| dot -Tsvg > call_graph.svg, or | dot -Tpng > call_graph.png)
+reveal calls src/ --callers main --format dot
 ```
 
 Example dot output:
