@@ -430,7 +430,7 @@ def _unknown_where_fields(params: Mapping[str, Any], expression: Optional[ParamS
     """The where terms' fields a closed-field expression does not declare (an open field set has no unknown field)."""
     if expression is None or not expression.fields or expression.open_fields:
         return []
-    terms = {expression.name: dict.get(params, expression.name)}  # a routing check, not a read
+    terms = QueryParams({expression.name: dict(peek_query_items(params)).get(expression.name)})  # not a read of params
     return [key for key in where_fields(terms, expression) if not _declared_field(key, expression.fields)]
 
 
