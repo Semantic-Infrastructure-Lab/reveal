@@ -313,7 +313,7 @@ Reveal has **26 URI adapters** for specialized queries:
 reveal 'ast://./src?complexity>10&lines<50'
 
 # Git blame a specific function
-reveal git://src/app.py --view blame --element handle_request
+reveal git src/app.py --view blame --element handle_request
 
 # Analyze imports and dependencies
 reveal 'imports://./src'

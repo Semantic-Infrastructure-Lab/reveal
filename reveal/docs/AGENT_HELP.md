@@ -1210,43 +1210,43 @@ reveal git://src/auth.py@abc1234                                  # structure at
 reveal git://src/auth.py@abc1234 --detail raw                         # previous raw behavior
 
 # File history — commits that touched a file
-reveal git://src/auth.py --view history --limit 20
-reveal git://src/auth.py --view history --where author=Alice --limit 10
-reveal git://src/auth.py --view history --merges off             # exclude merge commits
+reveal git src/auth.py --view history --limit 20
+reveal git src/auth.py --view history --where author=Alice --limit 10
+reveal git src/auth.py --view history --merges off             # exclude merge commits
 
 # Pickaxe search — history where a string appears in the diff
-reveal git://src/auth.py --view history --where 'content~=AuditLog'       # commits that added/removed AuditLog
-reveal git://src/auth.py --view history --where 'content~=CURLOPT_TIMEOUT' --merges off
+reveal git src/auth.py --view history --where 'content~=AuditLog'       # commits that added/removed AuditLog
+reveal git src/auth.py --view history --where 'content~=CURLOPT_TIMEOUT' --merges off
 
 # Element-scoped history — commits that actually changed a specific function
 # Runs analyzer per commit — use ?limit=N to keep it fast
-reveal git://src/auth.py --view history --element process_payment
-reveal git://src/auth.py --view history --limit 10 --element process_payment
+reveal git src/auth.py --view history --element process_payment
+reveal git src/auth.py --view history --limit 10 --element process_payment
 
 # Date filtering
-reveal git://src/auth.py --view history --where 'date>2026-04-01'
-reveal git://src/auth.py --view history --where author=Priya --since 2026-01-01
+reveal git src/auth.py --view history --where 'date>2026-04-01'
+reveal git src/auth.py --view history --where author=Priya --since 2026-01-01
 
 # Blame — who owns which lines
-reveal git://src/auth.py --view blame                            # summary by contributor
-reveal git://src/auth.py --view blame --element process_payment   # blame scoped to function
-reveal git://src/auth.py --view blame --element L128-L162         # blame for explicit line range
+reveal git src/auth.py --view blame                            # summary by contributor
+reveal git src/auth.py --view blame --element process_payment   # blame scoped to function
+reveal git src/auth.py --view blame --element L128-L162         # blame for explicit line range
 
 # Noise-commit suppression — strip mass-formatting commits from blame
 # Auto-ignored by default: .git-blame-ignore-revs + noise heuristic (>50% hunks, noise message)
-reveal git://src/auth.py --view blame --ignore off                # disable auto-ignore, see raw blame
-reveal git://src/auth.py --view blame --ignore 69b0093            # explicit suppress (stacks with auto)
-reveal git://src/auth.py --view blame --ignore 69b0093,f5fcac0    # multiple explicit
+reveal git src/auth.py --view blame --ignore off                # disable auto-ignore, see raw blame
+reveal git src/auth.py --view blame --ignore 69b0093            # explicit suppress (stacks with auto)
+reveal git src/auth.py --view blame --ignore 69b0093,f5fcac0    # multiple explicit
 
 # The motivating combined pattern: who really changed this function, ignoring formatting?
-reveal git://src/auth.py --view blame --element process_payment --ignore off
+reveal git src/auth.py --view blame --element process_payment --ignore off
 
 # Ownership — commit-share over a file, directory, or whole repo
-reveal git://src/auth.py --view ownership                        # primary author, contributor count, last touch
-reveal git://src/ --view ownership                              # aggregate ownership of a directory
-reveal git://. --view ownership                                # whole-repo ownership
-reveal git://src/auth.py --view ownership --merges on             # include merge commits (excluded by default)
-reveal git://. --view ownership --scan-limit 500                      # cap the history walk on huge repos
+reveal git src/auth.py --view ownership                        # primary author, contributor count, last touch
+reveal git src/ --view ownership                              # aggregate ownership of a directory
+reveal git . --view ownership                                # whole-repo ownership
+reveal git src/auth.py --view ownership --merges on             # include merge commits (excluded by default)
+reveal git . --view ownership --scan-limit 500                      # cap the history walk on huge repos
 ```
 
 **When to use each mode:**

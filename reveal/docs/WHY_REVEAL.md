@@ -281,7 +281,7 @@ reveal 'ast://.?decorator=*cache*'
 reveal 'ast://src/?lines>50&sort=-lines'
 
 # Who wrote this function? (semantic blame)
-reveal git://src/auth.py --view blame --element validate_token
+reveal git src/auth.py --view blame --element validate_token
 ```
 
 **What you get:** The `reveal file.py → reveal file.py function` loop trains a better workflow reflex than `cat`. The breadcrumbs mean you never have to remember syntax. Wildcard decorator matching (`*cache*` → matches `@lru_cache`, `@cached_property`, `@cache`) finds patterns without knowing exact names.

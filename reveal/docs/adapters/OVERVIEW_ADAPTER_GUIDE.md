@@ -94,7 +94,7 @@ reveal imports . --circular
 reveal metrics . --view hotspots
 reveal 'ast://.?kind=function&sort=-complexity&limit=20'
 reveal check .
-reveal git://. --view history --limit 10
+reveal git . --view history --limit 10
 ```
 
 The raw imports entrypoint query includes static fan-in-zero candidates that the

@@ -22,13 +22,13 @@ reveal 'json://data.json?age>25'
 reveal 'markdown://docs/?status=draft&priority=high'
 
 # Sort and limit results
-reveal git://. --view history --where author=John --sort=-date --limit 10
+reveal git . --view history --where author=John --sort=-date --limit 10
 
 # Range queries
 reveal 'metrics://src/?lines=100..500&sort=-complexity'
 
 # Regex matching
-reveal git://. --where 'message~=bug.*fix'
+reveal git . --where 'message~=bug.*fix'
 ```
 
 ---
@@ -185,7 +185,7 @@ reveal 'ast://src/?kind=function&sort=-complexity&limit=10'
 reveal 'metrics://src/?lines=50..100&sort=-complexity'
 
 # Recent commits by John, newest first
-reveal git://. --where author=John --sort=-date --limit 20
+reveal git . --where author=John --sort=-date --limit 20
 
 # Paginated results (page 2, 10 items per page)
 reveal 'json://data.json?status=active&sort=name&offset=10&limit=10'
@@ -353,42 +353,42 @@ reveal 'ast://src/?lines<30&complexity>10'
 
 **Author filtering**:
 ```bash
-reveal git://. --where author=John                        # Exact full-name match (use author~= for part of a name)
-reveal git://. --where 'author~=john'                       # Contains "john" (any case)
-reveal git://. --where 'email~=@example.com'                # Company emails
+reveal git . --where author=John                        # Exact full-name match (use author~= for part of a name)
+reveal git . --where 'author~=john'                       # Contains "john" (any case)
+reveal git . --where 'email~=@example.com'                # Company emails
 ```
 
 **Message filtering**:
 ```bash
-reveal git://. --where 'message~=bug'                       # Bug fixes
-reveal git://. --where 'message~=^feat:'                    # Features (conventional commits)
-reveal git://. --where 'message~=(fix|bug)'                 # Fixes or bugs
+reveal git . --where 'message~=bug'                       # Bug fixes
+reveal git . --where 'message~=^feat:'                    # Features (conventional commits)
+reveal git . --where 'message~=(fix|bug)'                 # Fixes or bugs
 ```
 
 **Combined filters**:
 ```bash
 # John's bug fixes
-reveal git://. --where author=John --where 'message~=bug'
+reveal git . --where author=John --where 'message~=bug'
 
 # Recent work by email domain
-reveal git://. --where 'email~=@company.com' --sort=-date --limit 20
+reveal git . --where 'email~=@company.com' --sort=-date --limit 20
 
 # Features by specific author
-reveal git://. --where 'author~=jane' --where 'message~=^feat:' --sort=-date
+reveal git . --where 'author~=jane' --where 'message~=^feat:' --sort=-date
 ```
 
 **Hash filtering**:
 ```bash
-reveal git://. --where hash=a1b2c3                        # Commit by prefix
+reveal git . --where hash=a1b2c3                        # Commit by prefix
 ```
 
 **Date filtering**:
 ```bash
-reveal git://. --where 'date>2026-02-01'                    # After 1 Feb (1 Feb itself excluded)
-reveal git://. --where 'date>=2026-02-01'                   # From 1 Feb on (1 Feb included)
-reveal git://. --since 2026-01-01 --until 2026-01-31  # All of January
-reveal git://. --where date=2026-02-06                    # Any commit on 6 Feb
-reveal git://. --where 'date>2026-10-27T22:00:00Z'          # After 22:00 UTC (zone converted)
+reveal git . --where 'date>2026-02-01'                    # After 1 Feb (1 Feb itself excluded)
+reveal git . --where 'date>=2026-02-01'                   # From 1 Feb on (1 Feb included)
+reveal git . --since 2026-01-01 --until 2026-01-31  # All of January
+reveal git . --where date=2026-02-06                    # Any commit on 6 Feb
+reveal git . --where 'date>2026-10-27T22:00:00Z'          # After 22:00 UTC (zone converted)
 ```
 
 A year, month or day bound names the whole period: `date=P` is any time in P, `date!=P` any time
@@ -407,7 +407,7 @@ the data, answer instead with an `unknown_filter_field` warning (exit 0).
 
 **File history**:
 ```bash
-reveal git://app.py --view history --where author=John --sort=-date --limit 10
+reveal git app.py --view history --where author=John --sort=-date --limit 10
 ```
 
 ---
@@ -514,7 +514,7 @@ reveal 'markdown://docs/?tags~=python&priority>=5&status=draft'
 reveal 'metrics://src/?lines>200&complexity>10'
 
 # Git: John's bug fixes this year
-reveal git://. --where author=John --where 'message~=bug' --where 'date>2026-01-01'
+reveal git . --where author=John --where 'message~=bug' --where 'date>2026-01-01'
 
 # AST: Long, complex functions
 reveal 'ast://src/?kind=function&lines>100&complexity>15'
@@ -562,7 +562,7 @@ reveal 'ast://src/?kind=function&sort=-complexity&limit=10'
 reveal 'metrics://src/?sort=-lines&limit=20'
 
 # Most active committers (recent)
-reveal git://. --view history --limit 50 --format json | jq '.history | group_by(.author) | map({author: .[0].author, count: length}) | sort_by(-.count)'
+reveal git . --view history --limit 50 --format json | jq '.history | group_by(.author) | map({author: .[0].author, count: length}) | sort_by(-.count)'
 
 # Worst quality files
 reveal 'metrics://src/?sort=quality&limit=10'
@@ -582,7 +582,7 @@ reveal 'metrics://src/?lines=100..500&sort=-complexity'
 reveal 'ast://src/?lines=20..50&sort=-complexity'
 
 # Commits from January, newest first
-reveal git://. --where date=2026-01..2026-02 --sort=-date
+reveal git . --where date=2026-01..2026-02 --sort=-date
 ```
 
 ---
@@ -610,7 +610,7 @@ Use regex for OR logic:
 
 ```bash
 # Bug fixes or features
-reveal git://. --where 'message~=(bug|feat)'
+reveal git . --where 'message~=(bug|feat)'
 
 # Python or JavaScript files
 reveal 'metrics://src/?file~=\.(py|js)$'
@@ -689,16 +689,16 @@ reveal 'markdown://docs/?!published&status=complete'
 
 ```bash
 # Bug fix commits this month
-reveal git://. --where 'message~=bug' --where 'date>2026-02-01' --sort=-date
+reveal git . --where 'message~=bug' --where 'date>2026-02-01' --sort=-date
 
 # Feature commits by author
-reveal git://. --where 'message~=^feat:' --where author=John --sort=-date
+reveal git . --where 'message~=^feat:' --where author=John --sort=-date
 
 # Commits from external contributors
-reveal git://. --view history --where 'email!~@company.com' --sort=-date
+reveal git . --view history --where 'email!~@company.com' --sort=-date
 
 # Recent work by file
-reveal git://app.py --view history --sort=-date --limit 10
+reveal git app.py --view history --sort=-date --limit 10
 ```
 
 ---
@@ -781,13 +781,13 @@ Build complex queries step by step:
 
 ```bash
 # Step 1: Basic filter
-reveal git://. --where author=John
+reveal git . --where author=John
 
 # Step 2: Add message filter
-reveal git://. --where author=John --where 'message~=bug'
+reveal git . --where author=John --where 'message~=bug'
 
 # Step 3: Sort and limit
-reveal git://. --where author=John --where 'message~=bug' --sort=-date --limit 10
+reveal git . --where author=John --where 'message~=bug' --sort=-date --limit 10
 ```
 
 ---
