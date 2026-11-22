@@ -420,9 +420,27 @@ def _reject_unknown_keys(declarations: tuple[ParamSpec, ...], params: QueryParam
     """The one unknown-key check (rule 3): a key that is neither a declared control nor a declared field exits 2, and
     so does a bare key spelling a shared control the noun does not declare (rule 8; *shared*, never folded)."""
     known = _declared_keys(declarations) | _TRANSPORT_KEYS
-    unknown = [*shared, *(key for key in dict.keys(params) if key not in known)]
-    if expression is not None and expression.fields and not expression.open_fields:
-        unknown += [key for key in where_fields(params, expression) if not _declared_field(key, expression.fields)]
+    unknown = [*shared, *(key for key in dict.keys(params) if key not in known),
+               *_unknown_where_fields(params, expression)]
+    if unknown:
+        raise RequestValidationError(unsupported_controls_message(declarations, unknown))
+
+
+def _unknown_where_fields(params: Mapping[str, Any], expression: Optional[ParamSpec]) -> list:
+    """The where terms' fields a closed-field expression does not declare (an open field set has no unknown field)."""
+    if expression is None or not expression.fields or expression.open_fields:
+        return []
+    terms = {expression.name: dict.get(params, expression.name)}  # a routing check, not a read
+    return [key for key in where_fields(terms, expression) if not _declared_field(key, expression.fields)]
+
+
+def reject_unknown_where_fields(declarations: Iterable[ParamSpec], params: Mapping[str, Any]) -> None:
+    """Rule 3 for every where term a request binds (BACK-2731): a field a closed-field noun does not declare exits 2
+    with the one unknown-key message, whichever transport gave the term (``?where=``, ``--where`` on the subcommand or
+    after a URI, a typed keyword or override), as the URI's own check does."""
+    declarations = tuple(declarations)
+    expression = next((spec for spec in declarations if spec.role == 'filter-expression'), None)
+    unknown = _unknown_where_fields(params, expression)
     if unknown:
         raise RequestValidationError(unsupported_controls_message(declarations, unknown))
 
@@ -899,6 +917,7 @@ def apply_declared_overrides(declarations: Iterable[ParamSpec], params: QueryPar
                 value = spec.validate(None) if raw is None else _validate_binding(spec, raw, 'typed')
                 params.set_normalized(spec, value)
         _rebind_overrides(declarations, params, overrides, supplied)
+        reject_unknown_where_fields(declarations, params)
     return params
 
 
@@ -928,6 +947,7 @@ def bind_prepared_params(declarations: Iterable[ParamSpec], params: QueryParams,
         if spec.repeatable and isinstance(value, list):
             value = _distinct(value)  # an equal repeated term is one term (BACK-2715)
         params.set_normalized(spec, value)
+    reject_unknown_where_fields(declarations, params)
     return params
 
 
