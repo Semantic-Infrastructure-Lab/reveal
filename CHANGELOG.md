@@ -114,7 +114,7 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 - The json, imports, calls, claude, metrics, contracts and patches guides teach `reveal NOUN PATH --flags` (`reveal metrics ./src --sort=-complexity --limit 5`), and the resource URI followed by flags where the URI names more than a path (`reveal json://data.json/users --where 'age>25'`, `reveal claude://session/NAME --errors`) (BACK-2726).
 
-- The git guide and the git lines of the shared guides teach flags (`reveal git://src/app.py --view history --where 'author~=John'`), and the README, AGENT_HELP and `help://quick` first screens teach `reveal git . --view history`. Git's help and schema examples, hints and error messages name flags too (`--view blame --detail full`, `--ignore off`, `--detail raw`) (BACK-2616).
+- The git guide and the git lines of the shared guides teach the subcommand with flags (`reveal git src/app.py --view history --where 'author~=John'`), keeping the resource URI where it names a ref (`reveal git://src/app.py@abc1234 --view diff`), and the README, AGENT_HELP and `help://quick` first screens teach `reveal git . --view history`. Git's help and schema examples, hints and error messages name flags too (`--view blame --detail full`, `--ignore off`, `--detail raw`) (BACK-2616).
 
 ### Fixed
 
