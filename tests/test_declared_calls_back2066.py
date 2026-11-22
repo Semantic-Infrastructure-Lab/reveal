@@ -268,9 +268,14 @@ def test_directory_named_calls_in_cwd(project):
 def test_generated_help_names_every_mode_and_its_exits():
     result = run('calls', '--help')
     assert result.returncode == 0, result.stderr
-    for flag in ('--target NAME', '--callees NAME', '--root NAME', '--depth N', '--rank callers',
-                 '--top N', '--uncalled', '--modules', '--builtins', '--external', '--test-framework'):
+    for flag in ('--callers NAME', '--callees NAME', '--depth N', '--sort', '--limit N', '--builtins',
+                 '--test-framework'):
         assert flag in result.stdout, flag
+    # Moved (BACK-2755): the legacy modes and words have note-stage RETIREMENTS rows, so a declared noun's usage and
+    # --help no longer list them as arguments; each still parses and answers with its note (conformance column 28).
+    listed = [line.strip().split('  ')[0] for line in result.stdout.splitlines() if line.startswith('  -')]
+    for flag in ('--target', '--root', '--rank', '--top', '--uncalled', '--modules', '--external'):
+        assert not [line for line in listed if flag in line.replace(',', ' ').split()], flag
     assert 'clamped 1-5' in result.stdout
     assert 'Exit codes:' in result.stdout
     assert '\n  3  ' in result.stdout
