@@ -459,7 +459,6 @@ def test_the_path_read_router_takes_no_answer_view(tree):
     assert run(tree, 'pkg', '--name', 'alp', '--view', 'dict-heatmap').returncode == 2
 
 
-@pytest.mark.xfail(strict=True, reason='BACK-2627: element --view boundary|effects|flow|exits|vars lands on the path '
-                                       'read; until then the main parser does not know --view')
 def test_element_view_on_a_path_read(tree):
+    """BACK-2627: the element --view (boundary, effects, flow, exits) lands on the path read."""
     assert run(tree, 'pkg/a.py', 'alpha', '--view', 'boundary').returncode == 0
