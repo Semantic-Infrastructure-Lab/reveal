@@ -195,26 +195,30 @@ def rebind_legacy(declarations: Iterable[ParamSpec], params: QueryParams, spelle
     values = dict(peek_query_items(params))  # a routing check, not a read
     owners = {spec.name: spec for spec in declarations}
     for entry in (entry for spec in declarations for entry in spec.legacy if entry.rebinds and entry.name in spelled):
-        if entry.rebinds_when is not None and not entry.rebinds_when(values):
-            continue
-        for source, target in entry.rebinds:
-            value, given, spec = dict.get(params, source), dict.get(params, target), owners[target]
-            if value is None:
-                continue
-            del params[source]
-            params._given.discard(source)
-            params._given.add(target)
-            if given is not None and (target in replacing) != (source in replacing):
-                if target in replacing:
-                    continue  # the override of the control it moves to stands
-            elif given is not None:
-                if not _same_scalar(spec, given, value):
-                    raise ValueError(_conflicting_spellings(spec, [source, target], None))
-                continue
-            if bound:
-                params.set_normalized(spec, _validate_binding(spec, value, 'typed'))
-            else:
-                params[target] = value
+        if entry.rebinds_when is None or entry.rebinds_when(values):
+            for source, target in entry.rebinds:
+                if dict.get(params, source) is not None:
+                    _move_value(params, owners[target], source, replacing, bound)
+
+
+def _move_value(params: QueryParams, spec: ParamSpec, source: str, replacing: set, bound: bool) -> None:
+    """``rebind_legacy``'s move of *source*'s value to *spec*'s control, under "Conflicting values"."""
+    value, given = dict.get(params, source), dict.get(params, spec.name)
+    del params[source]
+    params._given.discard(source)
+    params._given.add(spec.name)
+    if given is not None:
+        if (spec.name in replacing) != (source in replacing):
+            if spec.name in replacing:
+                return  # the override of the control it moves to stands
+        elif _same_scalar(spec, given, value):
+            return
+        else:
+            raise ValueError(_conflicting_spellings(spec, [source, spec.name], None))
+    if bound:
+        params.set_normalized(spec, _validate_binding(spec, value, 'typed'))
+    else:
+        params[spec.name] = value
 
 
 def _prepare_repeated_params(declarations: tuple[ParamSpec, ...], source: str, params: QueryParams) -> None:
@@ -894,10 +898,17 @@ def apply_declared_overrides(declarations: Iterable[ParamSpec], params: QueryPar
                 (params._given.discard if raw is None else params._given.add)(spec.name)  # None: the default
                 value = spec.validate(None) if raw is None else _validate_binding(spec, raw, 'typed')
                 params.set_normalized(spec, value)
-        typed_words = {alias for spec in declarations for alias in spec.spellings[1:] if alias in overrides}
-        rebind_legacy(declarations, params, set(params._supplied_aliases) | typed_words,
-                      replacing=[name for name, raw in supplied.items() if raw is not None], bound=True)
+        _rebind_overrides(declarations, params, overrides, supplied)
     return params
+
+
+def _rebind_overrides(declarations: tuple, params: QueryParams, overrides: Mapping[str, Any],
+                      supplied: Mapping[str, Any]) -> None:
+    """``rebind_legacy`` after typed overrides apply: a legacy word the URI or a keyword spelled; an overriding value
+    replaces the one it overrides."""
+    typed_words = {alias for spec in declarations for alias in spec.spellings[1:] if alias in overrides}
+    rebind_legacy(declarations, params, set(params._supplied_aliases) | typed_words,
+                  replacing=[name for name, raw in supplied.items() if raw is not None], bound=True)
 
 
 def bind_prepared_params(declarations: Iterable[ParamSpec], params: QueryParams, *,
