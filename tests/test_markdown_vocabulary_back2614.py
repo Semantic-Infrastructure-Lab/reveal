@@ -370,10 +370,9 @@ def test_a_view_request_note_is_the_sibling(root):
     assert _notes(doc)['request:markdown']['replacement'] == 'reveal markdown docs --view links'
 
 
-def test_the_standalone_aggregate_word_says_its_own_row_and_no_request_note(root):
-    """RED (ruling Q2-C): a request giving a standalone legacy word has no canonical form, so it says no request note,
-    only its own row (as surface's and overview's top do); today the request note recommends --aggregate type."""
+def test_the_aggregate_word_request_note_renders_view_and_field(root):
+    """Ruling Q2-A (re-ruled from Q2-C after M3): aggregate=F translates to two controls, so its request note renders the
+    full canonical request, --view aggregate --field F, never the retiring --aggregate F."""
     run, doc = _json(root, 'markdown://docs?aggregate=type')
     assert run.returncode == 0 and doc['type'] == 'markdown_aggregate'
-    notes = _notes(doc)
-    assert 'request:markdown' not in notes and 'param:markdown.aggregate' in notes, notes
+    assert _notes(doc)['request:markdown']['replacement'] == 'reveal markdown docs --view aggregate --field type'
