@@ -50,6 +50,10 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 - `reveal contracts PATH --implementations on|off` replaces `--no-implementations`, and `--implementations-limit N` (`?implementations_limit=N`) replaces `--impls N` (`?impls=N`). The old words answer as before and note their replacement until 1.0; an old and a new spelling that disagree exit 2. The text hint after a cut names `--implementations-limit`, and the nested cap still never limits the JSON implementer lists (BACK-2624).
 
+- `reveal surface PATH` speaks the shared vocabulary: `--kind KIND` replaces `--type`, `--tests exclude` replaces `--source-only`, `--view dir` replaces `--by dir`, and `--dir-depth N` replaces `--depth N`, which now exits 2 without the rollup instead of being ignored. `--limit N` caps each category (and the rollup's directories) in JSON and text with the shared truncation note, `total` keeping the uncut count; `--all` is `--limit 0`. The old words, also as `surface://` query keys, answer as before with a replaced-by note until 1.0 (BACK-2623).
+
+- `reveal surface PATH --top N` stays a text-only cap until 1.0 and now exits 2 beside `--limit` or `--all` (it dropped `--all` silently). Surface text prints its standing caveats as one `Rules: --format json (_meta.known_limits)` line, and its JSON `path` and `source` use `/` on Windows (BACK-2623, BACK-2599).
+
 - JSON's first bare words `?schema`, `?flatten`, `?gron`, `?type`, `?keys`, `?length` are legacy spellings of `--view`, each with its note until 1.0 and the same answer; the same view named twice (`?gron&view=flatten`) is one setting instead of exit 2, and two different views still exit 2. The json guides teach `reveal json FILE --view VIEW`.
 
 - `reveal.api.query('metrics://P?top=3', top=None)` now exits 2 like the URI alone: on every noun that declares which options its answers read, the URI is judged as a request of its own before the typed overrides, so an override cannot hide an invalid one (the Calls overlay `callers=sink&detail=true` with `callees='top'` and imports `?top=2` with `sort='-fan-in'` now exit 2; give those options as overrides too).
