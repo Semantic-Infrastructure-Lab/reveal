@@ -744,7 +744,7 @@ tracking also qualify content acquisition through `meta.session_content`, after
 date scope and before display cuts. Search measures the consumed prefix through
 its first match; tracking measures full transcripts. Failed records, repaired
 decoding and required read/analysis failures give 3. Missing tracking paths give
-2; legacy empty search terms require no reads and remain empty success. The
+2; an empty search term (`claude://search` with none, `?search=`) exits 2 before any read. The
 legacy `sessions_scanned` field is a candidate count; receipts supply actual scan
 decisions. MCP retains usable partial data and rejects fully failed scans.
 Indexed `/message/N` and `/message` ranges share transcript source qualification.

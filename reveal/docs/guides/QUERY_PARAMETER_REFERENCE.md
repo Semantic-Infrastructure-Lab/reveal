@@ -759,6 +759,10 @@ filters and ranks results, which `?search=` adapters don't do).
 `~=`/`match` combine with any filter. `reveal 'help://<scheme>'` documents
 which one a given adapter supports.
 
+**Either family needs a term.** An empty or blank term (`--match ''`, `?match=`, `?search=`,
+`?filter=`, `--where ''`, `claude://search` with none) exits 2 on every noun with
+`SPELLING needs a term: --match TEXT` (or `--where FIELD OP VALUE`); it never matches every row.
+
 ---
 
 ## Combining Query Parameters

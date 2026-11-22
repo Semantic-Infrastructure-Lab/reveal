@@ -2014,7 +2014,7 @@ another analysis path: `claude://session/my-session?view=messages` is the same
 reader as `/messages`. Supported names are `overview`, `messages`, `prompts`,
 `thinking`, `tools`, `files`, `workflow`, `agents`, `context`, `timeline`, `errors`,
 `tokens`, `digest`, `exchanges`, `message`, `search` and `chain`. `view=search`
-uses content search, with `match` supplying the text; `view=chain` reads the
+uses content search, with `match` supplying the text (without one it exits 2); `view=chain` reads the
 optional continuation metadata independently of transcripts. Equal path/view
 selectors coalesce; conflicting path or legacy query selectors reject with 2.
 Non-session namespaces reject `view`. API `view=None` clears a valid URI view,
@@ -2095,8 +2095,8 @@ at its first content match; its receipt says `matched-prefix`, without claiming
 to have checked later records. File tracking consumes the full source. Malformed
 or non-object records, repaired decoding and required read/analysis failures
 give exit 3, retaining usable results from other sessions. Missing file-tracking
-paths give exit 2. The legacy empty search term remains an empty result requiring
-no content reads. `sessions_scanned` retains its legacy candidate-count meaning;
+paths give exit 2. An empty search term (`claude://search` or `--view search` with no
+term, `?search=`, `--match ''`) exits 2 before any content read. `sessions_scanned` retains its legacy candidate-count meaning;
 the receipt supplies measured scan counts. Display cuts retain match counts and
 source receipts. MCP keeps usable partial answers, rejects fully failed scans,
 and re-reads source decisions on follow-up requests.
