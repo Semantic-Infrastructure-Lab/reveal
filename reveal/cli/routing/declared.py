@@ -499,15 +499,29 @@ def _refuse_element(name: str, path: str, element: str, args, answer_consumer=No
 def run_declared_command(name: str, args, *, answer_consumer=None, uri_query: Optional[str] = None) -> None:
     """Bind original argparse values; no URI string is constructed. *uri_query*: the query of the URI these flags
     followed, the request's second source (joined under "Conflicting values", BACK-2673)."""
-    from ...utils.query_binding import convert_flag_only, flag_spellings, legacy_flag_dests
+    from ...utils.query_binding import convert_flag_only
     adapter = declared_adapter_class(name)
     _note_retired_flags(name, adapter)
     convert_flag_only(adapter.PARAM_SPECS, args)
+    source, spelled = typed_source(
+        adapter.PARAM_SPECS, args,
+        carried=lambda spec, source, spelled: _bind_global_carried(adapter, spec, args, uri_query, source, spelled))
+    _run_declared(name, args, getattr(args, adapter.RESOURCE_SPEC.name), source, 'typed',
+                  answer_consumer=answer_consumer, spelled=spelled, uri_query=uri_query)
+
+
+def typed_source(specs, args, *, carried=None) -> tuple:
+    """(source, spelled): the binder's typed source from parsed argparse values, and each key -> the flag that carried
+    it, so errors name what was typed. The one reading of a declaration's flags off a namespace: a declared subcommand
+    and the path read's element views both bind through it (BACK-2627). Reading here is peeking, not use (the ledger
+    counts the reads the answer makes). *carried(spec, source, spelled)* fills a control with no flag of its own."""
+    from ...utils.query_binding import flag_spellings, legacy_flag_dests
     source: dict = {}
-    spelled: Dict[str, str] = {}  # each key -> the flag that carried it, so errors name what was typed
-    for spec in adapter.PARAM_SPECS:
+    spelled: Dict[str, str] = {}
+    for spec in specs:
         if spec.cli is None:
-            _bind_global_carried(adapter, spec, args, uri_query, source, spelled)
+            if carried is not None:
+                carried(spec, source, spelled)
             continue
         flags = flag_spellings(spec)
         dest = spec.cli.dest or spec.name
@@ -520,8 +534,7 @@ def run_declared_command(name: str, args, *, answer_consumer=None, uri_query: Op
         for legacy in legacy_flag_dests(spec):  # an old flag keeps its legacy name; the binder translates it
             if legacy in vars(args):
                 source[legacy], spelled[legacy] = peek(args, legacy), flags[legacy]
-    _run_declared(name, args, getattr(args, adapter.RESOURCE_SPEC.name), source, 'typed',
-                  answer_consumer=answer_consumer, spelled=spelled, uri_query=uri_query)
+    return source, spelled
 
 
 def _bind_global_carried(adapter, spec: ParamSpec, args, uri_query: Optional[str], source: dict,
