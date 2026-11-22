@@ -97,10 +97,13 @@ def test_cli_discloses_loss_in_each_format(docs, denied, mode, output):
 
 
 def test_healthy_empty_graph_and_missing_backlink_are_not_discovery_loss(tmp_path):
-    for mode in ('link-graph', 'backlinks=absent.md'):
-        answer = api.query(_uri(tmp_path, mode))
-        assert answer['total_files'] == 0 and not _warnings(answer)
-        assert run(_uri(tmp_path, mode), '--format', 'json').returncode == 0
+    answer = api.query(_uri(tmp_path, 'link-graph'))
+    assert answer['total_files'] == 0 and not _warnings(answer)
+    assert run(_uri(tmp_path, 'link-graph'), '--format', 'json').returncode == 0
+    # A backlinks target no document in the tree is: an invalid resource, exit 2 naming it, not discovery loss (exit 3)
+    # and not an answer (BACK-2614 ruling Q5).
+    missing = run(_uri(tmp_path, 'backlinks=absent.md'), '--format', 'json')
+    assert missing.returncode == 2 and 'absent.md' in missing.stderr and 'analysis_incomplete' not in missing.stdout
 
 
 @pytest.mark.disk_cache

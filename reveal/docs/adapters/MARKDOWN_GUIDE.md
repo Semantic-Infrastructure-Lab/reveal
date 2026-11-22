@@ -26,7 +26,7 @@ reveal markdown docs/ --backlinks guide.md
 | `match` | Body terms, ANDed; repeated values preserve every term |
 | `view` | `list`, `links`, `aggregate` or `lint` |
 | `field` | Field counted by `view=aggregate` |
-| `backlinks` | Existing reverse-link target lookup |
+| `backlinks` | Existing reverse-link target lookup; a doc that is not in the tree exits 2 naming it |
 | `columns` | Additional frontmatter columns; `fields=` remains a URI alias |
 | `explain` | Per-term evidence for body relevance scores; needs `match` (without one it exits 2) |
 | `sort` | Frontmatter field; prefix `-` for descending |

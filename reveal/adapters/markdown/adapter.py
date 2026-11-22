@@ -9,7 +9,7 @@ from reveal.reveal_types import CONTRACT_VERSION
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from ...utils.results import ResultBuilder
 from ...utils.validation import require_directory
-from ...utils.path_utils import as_spelled
+from ...utils.path_utils import as_spelled, to_posix
 
 from .renderer import MarkdownRenderer
 from .help import get_schema, get_help
@@ -22,7 +22,7 @@ from ...utils.query_parser import QueryParams, ResourceSpec, param_schema
 from ...utils.query_binding import bind_declared_params, prepare_declared_params
 from .params import (PARAM_SPECS, MATCH, BACKLINKS, FIELD, LINT_FIELDS, FIELDS, EXPLAIN,
                      selected_view, result_type, result_control, filter_state, describe_request, validate_request)
-from ...errors import RequestValidationError
+from ...errors import MissingResourceError, RequestValidationError
 from ...utils.results import AnalysisCompleteness, result_execution_facts
 
 
@@ -283,6 +283,7 @@ class MarkdownQueryAdapter(ResourceAdapter):
 
         if self.backlinks_target:
             result = operations.get_backlinks(self.base_path, self.backlinks_target)
+            self._require_backlinks_target(result, source)
             return ResultBuilder.create(
                 result_type='markdown_backlinks',
                 source=source,
@@ -323,6 +324,17 @@ class MarkdownQueryAdapter(ResourceAdapter):
         for item in result.get('results', []):
             item['path'] = as_spelled(item['path'], self.spelling)
         return result
+
+    @staticmethod
+    def _require_backlinks_target(result: Dict[str, Any], source: Any) -> None:
+        """A backlinks target no document in the tree is: an invalid resource, exit 2 naming the doc and the tree
+        searched (rule 9, ruling Q5), as git's unknown path is. An ambiguous bare name stays an answer listing its
+        candidates; a scan that lost documents stays the incomplete answer (exit 3), since the target may be one."""
+        complete = not result.get('unreadable_files') and not result.get('meta', {}).get('warnings')
+        if result['found'] or result.get('ambiguous') or not complete:
+            return
+        raise MissingResourceError(f"backlinks target {result['target']!r} is not a document under {to_posix(source)} "
+                                   f"({result['total_files']} markdown files searched)")
 
     def _source_warnings(self, result: Dict[str, Any], consequence: str) -> list:
         """Consume source diagnostics before the builder owns the result envelope."""
