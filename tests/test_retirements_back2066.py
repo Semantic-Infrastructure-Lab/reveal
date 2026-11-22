@@ -296,6 +296,7 @@ PRODUCTION_CASES = {
     'flag:--no-gitignore': lambda f: [str(Path(f).parent), '--no-gitignore'],
     'param:git.verbose': lambda f: [f'git://{f}?view=blame&verbose'],  # detail is blame's (BACK-2656)
     # Git vocabulary (BACK-2616): URI spellings say the request note that covers them; flags and values say their rows.
+    'param:git.type': lambda f: [f'git://{f}?type=history'],
     'param:git.raw': lambda f: [f'git://{f}?raw=1'],
     'param:git.no_merges': lambda f: ['git', str(Path(f).parent), '--view', 'history', '--no-merges'],
     'value:git.view=log': lambda f: ['git', f, '--view', 'log'],

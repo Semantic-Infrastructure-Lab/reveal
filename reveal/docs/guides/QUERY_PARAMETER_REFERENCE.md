@@ -16,7 +16,7 @@ Query parameters allow filtering, formatting, and modifying adapter behavior usi
 | Adapter | Query Params | Example |
 |---------|--------------|---------|
 | **imports://** | `unused`, `circular`, `violations`, `importers`, `sort`, `limit`, `entrypoints`, `components`, `external`, `detail`, `lazy`, `scope`, `tests`, `root`, `scan-limit`, `format` (retired, with a note: `rank`, `top`, `verbose`, `max_files`) | `imports://.?unused` |
-| **git://** | `type`, `detail`, `element`, `author`, `email`, `message`, `hash`, `date`, `since`, `until`, `ref`, `sort`, `limit`, `offset` | `git://file.py?type=history` |
+| **git://** | `view`, `where` (fields `author`, `email`, `message`, `hash`, `date`, `timestamp`, `content`), `detail`, `merges`, `element`, `bucket`, `ignore`, `context`, `since`, `until`, `ref`, `sort`, `limit`, `scan-limit`, `offset` (retired, with a note: `type`, `no_merges`, `raw`) | `reveal git://file.py --view history` |
 | **json://** | `view` (`value`, `schema`, `flatten`, `type`, `keys`, `length`), `where` (field filters), `detail`, `sort`, `limit`, `offset` (retired, with a note: the first bare words `schema`, `flatten`, `gron`, `type`, `keys`, `length`) | `json://data.json?view=schema` |
 | **markdown://** | field filters (frontmatter), `aggregate`, `body-contains`, `sort`, `limit`, `offset` | `markdown://docs/?status=draft` |
 | **metrics://** | `view` (`hotspots`, `provenance`), `where` (field filters), `code-only`, `churn`, `merges`, `since`, `tests`, `detail`, `exclude`, `sort`, `limit`, `offset` (retired, with a note: `hotspots`, `top`, `min_lines`, `max_lines`, `min_complexity`, `max_complexity`, `min_functions`, `no_merges`, `summary_only`) | `metrics://.?view=hotspots` |
@@ -121,8 +121,8 @@ reveal 'imports://src?circular&detail=full'   # Cycle paths
   - **Values**: `history`, `blame`
   - **Examples**:
     ```bash
-    reveal 'git://app.py?type=history'   # File commit history
-    reveal 'git://app.py?type=blame'     # Git blame for file
+    reveal git://app.py --view history   # File commit history
+    reveal git://app.py --view blame     # Git blame for file
     ```
 
 - **`detail`** - Detail level for blame (`normal`, `full`) or `raw` for a file's historical text
@@ -135,7 +135,7 @@ reveal 'imports://src?circular&detail=full'   # Cycle paths
 - **`element`** - Semantic element for blame (function/class name)
   - **Example**:
     ```bash
-    reveal 'git://app.py?type=blame&element=load_config'
+    reveal git://app.py --view blame --element load_config
     ```
   - Blames only the specified function or class
 
@@ -143,28 +143,28 @@ reveal 'imports://src?circular&detail=full'   # Cycle paths
   - **Operators**: `=` (exact), `~=` (contains)
   - **Examples**:
     ```bash
-    reveal 'git://app.py?type=history&author=John'
-    reveal 'git://app.py?type=history&author~=john'
+    reveal git://app.py --view history --where author=John
+    reveal git://app.py --view history --where 'author~=john'
     ```
 
 - **`email`** - Filter commits by author email
   - **Operators**: `=` (exact), `~=` (contains)
   - **Example**:
     ```bash
-    reveal 'git://app.py?type=history&email~=@example.com'
+    reveal git://app.py --view history --where 'email~=@example.com'
     ```
 
 - **`message`** - Filter commits by message (supports regex with `~=`)
   - **Examples**:
     ```bash
-    reveal 'git://app.py?type=history&message~=bug'
-    reveal 'git://app.py?type=history&message=Initial commit'
+    reveal git://app.py --view history --where 'message~=bug'
+    reveal git://app.py --view history --where 'message=Initial commit'
     ```
 
 - **`hash`** - Filter commits by short hash: `=` compares the whole 7-character hash; a prefix is `hash~=^PREFIX`
   - **Example**:
     ```bash
-    reveal 'git://app.py?type=history&hash=a1b2c3d'
+    reveal git://app.py --view history --where hash=a1b2c3d
     ```
 
 - **`date`** - Filter commits by commit date: `=`, `!=`, `>`, `<`, `>=`, `<=` or a range `=a..b`
@@ -182,11 +182,11 @@ reveal 'imports://src?circular&detail=full'   # Cycle paths
   - `since=D` is `date>=D` and `until=D` is `date<=D`
   - **Examples**:
     ```bash
-    reveal 'git://.?date>2026-02-01'                       # commits after 1 Feb
-    reveal 'git://.?date=2026-02-06'                       # every commit on 6 Feb
-    reveal 'git://.?since=2026-01-01&until=2026-01-31'     # all of January
-    reveal 'git://.?date>=2025&date<2026'                  # all of 2025
-    reveal 'git://.?date>2026-10-27T22:00:00Z'             # after 22:00 UTC that day
+    reveal git://. --where 'date>2026-02-01'                       # commits after 1 Feb
+    reveal git://. --where date=2026-02-06                       # every commit on 6 Feb
+    reveal git://. --since 2026-01-01 --until 2026-01-31     # all of January
+    reveal git://. --where 'date>=2025' --where 'date<2026'                  # all of 2025
+    reveal git://. --where 'date>2026-10-27T22:00:00Z'             # after 22:00 UTC that day
     ```
 
 - **`timestamp`** - Filter commits by commit time in epoch seconds: `timestamp>1767225600`
@@ -198,13 +198,13 @@ reveal 'imports://src?circular&detail=full'   # Cycle paths
 - **`ref`** - Override the starting ref (alias for `@ref` in the URI)
   - **Example**:
     ```bash
-    reveal 'git://src/app.py?type=history&ref=v0.63.0'
-    reveal 'git://.?ref=main'          # same as git://.@main
+    reveal git://src/app.py --view history --ref v0.63.0
+    reveal git://. --ref main          # same as git://.@main
     ```
 
 **Combining Parameters**:
 ```bash
-reveal 'git://.?type=history&author~=john&message~=fix'
+reveal git://. --view history --where 'author~=john' --where 'message~=fix'
 ```
 
 ---
@@ -763,7 +763,7 @@ which one a given adapter supports.
 Multiple query parameters are combined with `&`:
 
 ```bash
-reveal 'git://.?type=history&author~=john&message~=fix'
+reveal git://. --view history --where 'author~=john' --where 'message~=fix'
 reveal 'markdown://docs/?status=draft&priority=high'
 reveal 'imports://.?circular&detail=full'
 ```
@@ -817,8 +817,8 @@ reveal help://schemas/imports --format json | jq '.query_params'
 
 2. **Start broad, then filter** - Run without params first to see data structure
    ```bash
-   reveal 'git://app.py?type=history'                    # All commits
-   reveal 'git://app.py?type=history&author~=john'       # Then filter
+   reveal git://app.py --view history                    # All commits
+   reveal git://app.py --view history --where 'author~=john'       # Then filter
    ```
 
 3. **Combine complementary filters** - Use multiple params for precision

@@ -1507,7 +1507,7 @@ reveal ast src/hotspot.py --where 'complexity>10'
 reveal diff://git://HEAD~10/src/hotspot.py:src/hotspot.py
 
 # 4. Who wrote the complex function?
-reveal 'git://src/hotspot.py?type=blame&element=complex_function'
+reveal git://src/hotspot.py --view blame --element complex_function
 ```
 
 ### Pattern 2: The Import Archaeology
@@ -1522,8 +1522,8 @@ reveal ast src/module_a.py --kind function
 reveal ast src/module_b.py --kind function
 
 # 3. When was the cycle introduced?
-reveal 'git://src/module_a.py?type=history'
-reveal 'git://src/module_b.py?type=history'
+reveal git://src/module_a.py --view history
+reveal git://src/module_b.py --view history
 ```
 
 ### Pattern 3: The Config Drift Detector
@@ -1548,7 +1548,7 @@ reveal env://
 reveal check src/ --select B,S
 
 # 2. Who wrote insecure code?
-reveal 'git://src/insecure.py?type=blame&element=bad_function'
+reveal git://src/insecure.py --view blame --element bad_function
 
 # 3. Check for secrets in env
 reveal env:// --format=json | jq '[.categories[] | .[] | select(.sensitive==true)]'
@@ -1603,7 +1603,7 @@ reveal ast ./src --where 'complexity>15' --format=json
 reveal 'imports://src?circular'
 
 # "Who wrote this function?"
-reveal 'git://src/app.py?type=blame&element=process'
+reveal git://src/app.py --view blame --element process
 
 # "What changed between these versions?"
 reveal diff://v1.py:v2.py

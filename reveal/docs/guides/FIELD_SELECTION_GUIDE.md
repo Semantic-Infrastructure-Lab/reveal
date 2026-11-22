@@ -23,7 +23,7 @@ reveal ssl://example.com --fields=host,days_until_expiry,health_status --format=
 reveal 'ast://src?kind=function' --max-items=10 --format=json
 
 # Truncate long string values (every string, paths and names included)
-reveal 'git://.?type=log&limit=20' --max-snippet-chars=60 --format=json
+reveal git://. --view history --limit 20 --max-snippet-chars=60 --format=json
 
 # Combine field selection + budget
 reveal 'ast://src?kind=function' --fields=name,line,complexity --max-items=20 --format=json
@@ -268,17 +268,17 @@ reveal 'metrics://src?sort=-complexity' --max-items=10 --fields=file,complexity 
 
 **Recent commits** (`?limit=` sets how many):
 ```bash
-reveal 'git://.?type=log&limit=20' --format=json
+reveal git://. --view history --limit 20 --format=json
 ```
 
 **Field selection for the commit list** (the log's `history` items):
 ```bash
-reveal 'git://.?type=log&limit=50' --fields=hash,author,date,message --format=json
+reveal git://. --view history --limit 50 --fields=hash,author,date,message --format=json
 ```
 
 **One file's history** (its `commits` items):
 ```bash
-reveal 'git://src/app.py?type=history' --fields=hash,date,message --format=json
+reveal git://src/app.py --view history --fields=hash,date,message --format=json
 ```
 
 ---
@@ -383,7 +383,7 @@ Note: --fields: expiry matched no field of this ssl:// result. Fields: common_na
 
 ```bash
 # Truncate long string values (commit messages here) to 60 chars
-reveal 'git://.?type=log&limit=20' --max-snippet-chars=60 --format=json
+reveal git://. --view history --limit 20 --max-snippet-chars=60 --format=json
 # "message": "docs(elements): git @ref syntax, available_elements absent o..."
 ```
 
@@ -588,7 +588,7 @@ Items of `files`:
 
 #### Git Adapter
 
-Items of `history` (`git://.?type=log`) and `commits` (`git://file?type=history`):
+Items of `history` (`reveal git . --view history`) and `commits` (`reveal git FILE --view history`):
 - `hash`, `author`, `email`, `date`, `timestamp`, `message`
 
 The log view's top-level `commit` holds the ref's own commit, with `full_hash`,

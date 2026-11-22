@@ -327,7 +327,7 @@ reveal ssl://example.com --fields host,valid_until,days_until_expiry --format js
 reveal metrics://src --fields file,quality.score --format json
 
 # Git - one file's commits
-reveal 'git://src/app.py?type=history' --fields hash,author,date,message --format json
+reveal git://src/app.py --view history --fields hash,author,date,message --format json
 ```
 
 One rule for every adapter: a name is a top-level key first, else a key of each item in
@@ -437,7 +437,7 @@ ssl://nginx:///path/*.conf?summary
 **git://**:
 ```bash
 git://repo@branch           # Specific branch/ref
-git://repo?type=history     # Query by type
+git://repo --view history   # A view, as a flag
 ```
 
 ---

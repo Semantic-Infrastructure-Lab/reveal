@@ -112,9 +112,9 @@ def get_file_at_ref(
         else:
             raise RequestValidationError(
                 f"Path is not a file: {subpath}\n"
-                f"  git:// expects a file path, not a directory.\n"
-                f"  For repo overview: reveal git://\n"
-                f"  For a specific repo: reveal 'git:///path/to/repo'"
+                f"  A file's content needs a file path; a directory has a history and ownership (--view history).\n"
+                f"  For the repository overview: reveal git .\n"
+                f"  For a specific repo: reveal git /path/to/repo"
             )
 
     except KeyError as e:
@@ -122,7 +122,7 @@ def get_file_at_ref(
         # (BACK-2545). A file deleted earlier still has its history.
         raise MissingResourceError(
             f"File not found at {ref}: {subpath}\n"
-            "  A file deleted earlier still has its history: add ?type=history to the URI"
+            "  A file deleted earlier still has its history: --view history"
         ) from e
     except pygit2.GitError as e:
         raise ValueError(f"File not found at {ref}: {subpath}") from e
@@ -527,7 +527,7 @@ def _apply_element_blame_filter(element_name, hunks, path, subpath, get_range_fu
     if not element_range:
         raise MissingResourceError(
             f"Element not found: {element_name} in {subpath}. "
-            'Use element=L<start>-L<end> for an explicit line range.')
+            'Use --element L<start>-L<end> for an explicit line range.')
 
     element_info = {
         'name': element_name,
@@ -641,7 +641,7 @@ def get_file_blame(
                 element_name, hunks, path, subpath, get_element_line_range_func
             )
 
-        # ?ignore=off disables all auto-ignore and shows raw blame.
+        # --ignore off disables all auto-ignore and shows raw blame.
         ignore_off = query.get('ignore', '').strip().lower() == 'off'
         explicit_shas: List[str] = []
         ignore_revs_shas: List[str] = []
@@ -761,7 +761,7 @@ def get_ownership(
 
     Returns commit-share ownership: primary author, per-author commit share,
     contributor count, and last-touch date. This is straight commit-log
-    aggregation (commit-share, NOT line-ownership — use ?type=blame for
+    aggregation (commit-share, NOT line-ownership — use --view blame for
     surviving-line attribution). The consumer applies the bus-factor /
     key-person judgment over this data.
 
@@ -809,8 +809,8 @@ def get_ownership(
         _meta={
             'analysis_kind': 'commit-ownership',
             'known_limits': [
-                'commit-share, not line-ownership — use ?type=blame for surviving-line attribution',
-                'merge commits excluded by default (use ?merges=1 to include)',
+                'commit-share, not line-ownership — use --view blame for surviving-line attribution',
+                'merge commits excluded by default (--merges on includes them)',
                 'author identity is name+email — aliases / multiple emails count as distinct contributors',
             ],
         },

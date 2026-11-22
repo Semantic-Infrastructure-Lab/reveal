@@ -3,7 +3,7 @@
 from ...utils import print_json_result
 from ...utils.formatting import lines_label
 from ...rendering.base import print_omitted
-from ...utils.warning_render import render_meta_warnings
+from ...utils.warning_render import render_meta_warnings, rule_text_lines
 
 
 class GitRenderer:
@@ -45,7 +45,7 @@ class GitRenderer:
         else:
             print_json_result(result)
             return
-        # A filter field no commit has (BACK-2309); the ?sort=/?limit= notes are the output
+        # A filter field no commit has (BACK-2309); the --sort/--limit notes are the output
         # seam's, which warning_render leaves to it.
         render_meta_warnings(result)
 
@@ -138,7 +138,7 @@ class GitRenderer:
 
     @staticmethod
     def _render_timeline(result: dict) -> None:
-        """Render ?type=history&bucket=... -- commit and author counts per period.
+        """Render --view history --bucket ... -- commit and author counts per period.
         It fell through to raw JSON in text mode (BACK-1502)."""
         buckets = result.get('buckets') or []
         where = result['path'] or 'repository'  # a repository's timeline has no path (it printed "None", BACK-2616)
@@ -211,7 +211,7 @@ class GitRenderer:
         auto_ignored = [e for e in ignored if e.get('source') in ('auto-detect', 'ignore-revs')]
         explicit_ignored = [e for e in ignored if e.get('source') not in ('auto-detect', 'ignore-revs')]
         if auto_ignored:
-            print(f"Auto-ignored {len(auto_ignored)} noise commit(s) — use ?ignore=off to include:")
+            print(f"Auto-ignored {len(auto_ignored)} noise commit(s) — --ignore off includes them:")
             for entry in auto_ignored:
                 src = '.git-blame-ignore-revs' if entry.get('source') == 'ignore-revs' else 'noise heuristic'
                 print(f"  {entry['hash']}  {entry['lines']:4} lines  {entry['message'][:55]}  [{src}]")
@@ -259,7 +259,7 @@ class GitRenderer:
             GitRenderer._render_ignored_commits(ignored)
 
         GitRenderer._render_key_hunks(result['hunks'])
-        print(f"Use: reveal 'git://{result['path']}?type=blame&detail=full' for line-by-line view")
+        print(f"Use: reveal git://{result['path']} --view blame --detail full for line-by-line view")
 
     @staticmethod
     def _render_ownership(result: dict) -> None:
@@ -289,8 +289,10 @@ class GitRenderer:
             print(f"  {a['name'][:28]:28} {a['commits']:5} commits ({pct:5.1f}%)  Last: {a['last_touch']}")
         if len(authors) > 10:
             print(f"  ... and {len(authors) - 10} more contributors")
-        print()
-        print("ℹ Commit-share (not surviving-line ownership) — use ?type=blame for line-level attribution.")
+        # The standing caveats (commit-share, merge default, author identity) are one pointer line (BACK-2599); their
+        # text stays in _meta.known_limits.
+        for line in rule_text_lines(result, fields=('_meta.known_limits',), standing_types=frozenset()):
+            print(line)
 
     @staticmethod
     def _render_file_structure(result: dict) -> None:
@@ -303,7 +305,7 @@ class GitRenderer:
 
         structure = result.get('structure', {})
         if not structure:
-            print("(no structured analysis available for this file type — use ?raw=1 for contents)")
+            print("(no structured analysis available for this file type — use --detail raw for contents)")
             return
 
         functions = structure.get('functions', [])

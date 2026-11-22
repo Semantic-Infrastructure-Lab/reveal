@@ -433,7 +433,7 @@ _PLACEHOLDER_MAP = dict(SCHEMA_PLACEHOLDERS)
 # key). Their syntax is not checked here; a fixture that grew the content would be.
 SCHEMA_UNRUNNABLE = (
     'diff://git://app.py@main', 'git://.@abc1234', 'git://.@main',
-    'git://src/app.py@v1.0', 'element=load_config', 'sheet=Sales',
+    'git://src/app.py@v1.0', 'load_config', 'sheet=Sales',
     'json://data.json/users', 'json://package.json/', 'format=dot',
 )
 # Also needs a live host / package / session beyond the recipe list's schemes.
@@ -653,7 +653,7 @@ RUN_SOURCES = frozenset({'AGENT_HELP.md', 'QUICK_START.md', 'WHY_REVEAL.md', '..
 TUTORIAL_COMMANDS = {
     'README.md --frontmatter': 'shows the text-mode note that frontmatter data needs --format json',
     'README.md --frontmatter --code': 'shows the text-mode note that frontmatter data needs --format json',
-    'git://.?limit=10000': 'the guide\'s own bad example (scan everything, filter later)',
+    'git://. --limit 10000': 'the guide\'s own bad example (scan everything, filter later)',
     'claude://session/infernal-earth-0118/message/334': 'index into a long real session; the fixture has 8',
     'project:// --check --select P001,P002': 'rule codes of the tutorial\'s made-up project adapter',
 }
@@ -876,6 +876,8 @@ def _named_fixture_skip(tokens, fixture_names=None):
         targets = [t for t in stage[2:] if not t.startswith('-') and ('/' in t or re.search(r'\.\w+$', t))]
     else:
         targets = [stage[1]]
+    if '--ref' in stage[:-1] and stage[stage.index('--ref') + 1] not in refs:  # git's --ref names a ref (BACK-2616)
+        return f'names ref {stage[stage.index("--ref") + 1]}, which the named fixture lacks'
     for target in targets:
         if target.startswith(PATHLESS_SCHEMES):
             continue

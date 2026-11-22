@@ -189,7 +189,7 @@ def validate_resource_controls(params, subpath):
     # shares the timeline type with a path's, so only this resource check can tell that it has no element to narrow to.
     if values.get('element') is not None and not subpath:
         raise RequestValidationError("element names an element of a file: give the file's path "
-                                     '(git://PATH/FILE?view=history&element=NAME)')
+                                     '(reveal git PATH/FILE --view history --element NAME)')
 
 
 def _validate_content_scope(values, subpath):

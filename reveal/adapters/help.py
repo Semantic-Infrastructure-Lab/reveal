@@ -180,7 +180,7 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
         'description': 'Debugging and error investigation',
         'recipes': [
             {'goal': 'Find error handlers', 'query': 'ast://src?name~=error&kind=function', 'description': 'Locate error handling code', 'output_type': 'ast_query'},
-            {'goal': 'Check recent changes', 'query': 'git://.?type=history', 'description': 'Review recent commit history', 'output_type': 'git_ref'},
+            {'goal': 'Check recent changes', 'query': 'reveal git . --view history', 'description': 'Review recent commit history', 'output_type': 'git_ref'},
             {'goal': 'Find large functions', 'query': 'ast://src?lines>100&kind=function', 'description': 'Locate potentially problematic large functions', 'output_type': 'ast_query'},
             {'goal': 'Walk the call chain from an entry point', 'query': 'calls://src?callees=main&depth=2&detail', 'description': 'Level-by-level callee walk with params and side effects — see the actual path a bug report walks', 'output_type': 'calls_callees'},
         ]
@@ -1566,7 +1566,7 @@ class HelpAdapter(ResourceAdapter):
         {'want': 'domain DNS / WHOIS / email health',
          'use': 'domain://', 'example': "reveal domain://example.com"},
         {'want': 'search git commit history by message, author, or date',
-         'use': 'git://', 'example': "reveal 'git://.?type=history&message~=fix'"},
+         'use': 'git://', 'example': "reveal git . --view history --where 'message~=fix'"},
         {'want': 'search markdown docs or notes by content',
          'use': 'markdown://', 'example': "reveal 'markdown://docs/?match=keyword'"},
         {'want': 'read one section of a markdown document',
@@ -1760,7 +1760,7 @@ class HelpAdapter(ResourceAdapter):
                 {
                     'adapters': ['claude', 'git'],
                     'description': 'Session archaeology: history + code changes',
-                    'example': "reveal 'claude://sessions/?search=auth'  &&  reveal 'git://.?type=history&message~=auth'",
+                    'example': "reveal 'claude://sessions/?search=auth'  &&  reveal git . --view history --where 'message~=auth'",
                 },
             ],
         }

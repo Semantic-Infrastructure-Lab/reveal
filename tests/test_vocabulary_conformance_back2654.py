@@ -28,7 +28,7 @@ Columns added with Scott's 2026-11-16 rulings (the table's rows "Conflicting val
       a ``legacy`` entry of the canonical control it replaces (rows whose replacement is another scheme are
       reported, not cells).
   6   aliases: a different word carries a RETIREMENTS row and its note on every transport; a spelling-only
-      variant and the D18-deferred rows (AST ``show``, Git ``type``) are note-free.
+      variant is note-free (no D18-deferred row is left: AST ``show`` and Git ``type`` note).
   8a  bare shared-control keys on a ``where`` noun are that control (or a declared legacy spelling with its
       note), never a field filter.
   8b  bare field filters on a ``where`` noun: ``?FIELD=VALUE`` and ``?FIELD OP VALUE`` answer as ``?where=...``.
@@ -1070,8 +1070,9 @@ def _legacy_conflict_cases(noun, key, legacy, specs, sample):
 
 # --- rule 6: aliases, different words and spelling variants -----------------------------------------------
 
-# D18-deferred selector renames stay note-free until the pre-cut checkpoint (rule 6). AST show is --view since BACK-2613.
-DEFERRED_ALIASES = {('git', 'type')}
+# D18-deferred selector renames stay note-free until the pre-cut checkpoint (rule 6). AST show is --view since BACK-2613;
+# D20 adopted Git type (BACK-2616), whose RETIREMENTS row landed with the git guide migration. None is left.
+DEFERRED_ALIASES: set = set()
 
 
 def _spelling_only(spec, alias):

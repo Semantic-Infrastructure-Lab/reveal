@@ -42,7 +42,7 @@ reveal docs/guide.md               # Markdown with --links, --outline
 ```bash
 reveal ssl://example.com           # Live cert check — not a local file
 reveal 'ast://./src?complexity>10' # Code as a queryable database
-reveal 'git://.?author=Alice'      # Git log filtered by author
+reveal git://. --where author=Alice      # Git log filtered by author
 reveal 'cpanel://USERNAME/ssl'     # cPanel filesystem introspection
 ```
 
@@ -77,7 +77,7 @@ reveal doc.md --links              # markdown-specific
 reveal 'ast://src?complexity>10'             # Filter by complexity
 reveal 'ssl://host?expiring-within=30'           # Expiry threshold (implies --check)
 reveal 'cpanel://USER/ssl?dns-verified'     # Exclude NXDOMAIN domains
-reveal 'git://.?author=Alice&since=2024-01-01'  # Multi-condition git query
+reveal git://. --where author=Alice --since 2024-01-01  # Multi-condition git query
 ```
 
 **Batch/pipeline mode** — when options must travel with each URI:

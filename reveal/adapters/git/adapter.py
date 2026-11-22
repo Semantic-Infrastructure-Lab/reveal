@@ -57,7 +57,7 @@ _SCHEMA_OUTPUT_TYPES = [
         'path': {'type': 'string'}, 'ref': {'type': 'string'}, 'commit': {'type': 'string'},
         'size': {'type': 'integer'}, 'lines': {'type': 'integer'}, 'structure': {'type': 'object'}
     }),
-    _git_output_type('git_file', 'File contents at specific ref (?raw=1)', {
+    _git_output_type('git_file', 'File contents at specific ref (--detail raw)', {
         'source_type': {'type': 'string', 'const': 'file'},
         'path': {'type': 'string'}, 'ref': {'type': 'string'}, 'commit': {'type': 'string'},
         'size': {'type': 'integer'}, 'lines': {'type': 'integer'}, 'content': {'type': 'string'}
@@ -100,22 +100,22 @@ _SCHEMA_EXAMPLE_QUERIES = [
     {'uri': 'git://.@main', 'description': 'Branch/commit history', 'ref': 'main', 'output_type': 'git_ref'},
     {'uri': 'git://.@abc1234', 'description': 'Specific commit details', 'ref': 'abc1234', 'output_type': 'git_ref'},
     {'uri': 'git://src/app.py@v1.0', 'description': 'File structure at tag', 'ref': 'v1.0', 'output_type': 'git_file_structure'},
-    {'uri': 'git://src/app.py@v1.0?raw=1', 'description': 'File contents at tag', 'ref': 'v1.0', 'query_param': '?raw=1', 'output_type': 'git_file'},
-    {'uri': 'git://src/app.py?type=history', 'description': 'File commit history (50 commits)', 'query_param': '?type=history', 'output_type': 'git_file_history'},
-    {'uri': 'git://src/app.py?type=blame', 'description': 'File blame summary (contributors + key hunks)', 'query_param': '?type=blame', 'output_type': 'git_file_blame'},
-    {'uri': 'git://src/app.py?type=blame&detail=full', 'description': 'File blame detailed (line-by-line)', 'query_param': '?type=blame&detail=full', 'output_type': 'git_file_blame'},
-    {'uri': 'git://src/app.py?type=blame&element=load_config', 'description': 'Semantic blame (who wrote this function)', 'query_param': '?type=blame&element=load_config', 'output_type': 'git_file_blame'},
-    {'uri': 'git://src/app.py?type=ownership', 'description': 'Commit-share ownership of a file (primary author, contributors, last touch)', 'query_param': '?type=ownership', 'output_type': 'git_ownership'},
-    {'uri': 'git://src/?type=ownership', 'description': 'Commit-share ownership of a directory', 'query_param': '?type=ownership', 'output_type': 'git_ownership'},
-    {'uri': 'git://src/app.py?type=history&bucket=month', 'description': 'Monthly commit/author counts for a file', 'query_param': '?type=history&bucket=month', 'output_type': 'git_timeline'},
-    {'uri': 'git://src/?type=history&bucket=week', 'description': 'Weekly commit/author counts for a directory', 'query_param': '?type=history&bucket=week', 'output_type': 'git_timeline'},
-    {'uri': 'git://.?type=history&bucket=month', 'description': 'Monthly commit/author counts for the whole repo', 'query_param': '?type=history&bucket=month', 'output_type': 'git_timeline'},
+    {'uri': 'reveal git://src/app.py@v1.0 --detail raw', 'description': 'File contents at tag', 'ref': 'v1.0', 'flags': '--detail raw', 'output_type': 'git_file'},
+    {'uri': 'reveal git://src/app.py --view history', 'description': 'File commit history (50 commits)', 'flags': '--view history', 'output_type': 'git_file_history'},
+    {'uri': 'reveal git://src/app.py --view blame', 'description': 'File blame summary (contributors + key hunks)', 'flags': '--view blame', 'output_type': 'git_file_blame'},
+    {'uri': 'reveal git://src/app.py --view blame --detail full', 'description': 'File blame detailed (line-by-line)', 'flags': '--view blame --detail full', 'output_type': 'git_file_blame'},
+    {'uri': 'reveal git://src/app.py --view blame --element load_config', 'description': 'Semantic blame (who wrote this function)', 'flags': '--view blame --element load_config', 'output_type': 'git_file_blame'},
+    {'uri': 'reveal git://src/app.py --view ownership', 'description': 'Commit-share ownership of a file (primary author, contributors, last touch)', 'flags': '--view ownership', 'output_type': 'git_ownership'},
+    {'uri': 'reveal git://src/ --view ownership', 'description': 'Commit-share ownership of a directory', 'flags': '--view ownership', 'output_type': 'git_ownership'},
+    {'uri': 'reveal git://src/app.py --view history --bucket month', 'description': 'Monthly commit/author counts for a file', 'flags': '--view history --bucket month', 'output_type': 'git_timeline'},
+    {'uri': 'reveal git://src/ --view history --bucket week', 'description': 'Weekly commit/author counts for a directory', 'flags': '--view history --bucket week', 'output_type': 'git_timeline'},
+    {'uri': 'reveal git://. --view history --bucket month', 'description': 'Monthly commit/author counts for the whole repo', 'flags': '--view history --bucket month', 'output_type': 'git_timeline'},
 ]
 
 _SCHEMA_NOTES = [
     'Requires pygit2 library (pip install "reveal-cli[git]")',
     'Supports @ syntax for refs (branches, tags, commits)',
-    'Query params for file-level operations (history, blame)',
+    'Options are flags after the resource: reveal git://path --view history (a query string still answers, with a note)',
     'Semantic blame works with Python functions/classes'
 ]
 
@@ -192,8 +192,8 @@ class GitAdapter(ResourceAdapter):
         git://.                    # Repository overview
         git://.@main               # Branch/commit history
         git://path/file.py@tag     # File at specific tag
-        git://path/file.py?type=history  # File history
-        git://path/file.py?type=blame    # File blame
+        git://path/file.py --view history  # File history
+        git://path/file.py --view blame    # File blame
 
     Requires: pip install "reveal-cli[git]"
     """
@@ -223,7 +223,7 @@ class GitAdapter(ResourceAdapter):
     CLI_QUERY_FLAGS = {
         'since': 'since={value}', 'until': 'until={value}',  # BACK-1192
         **param_cli_flags(PARAM_SPECS),  # legacy --all lifts the history cap (BACK-1379)
-        # --verbose is the legacy word verbose of detail (rule 4, BACK-2654); detail is view-scoped to type=blame.
+        # --verbose is the legacy word verbose of detail (rule 4, BACK-2654); detail is view-scoped to --view blame.
     }
 
     @classmethod
@@ -827,79 +827,78 @@ class GitAdapter(ResourceAdapter):
             'name': 'git',
             'description': 'Explore Git repositories with progressive disclosure',
             'syntax': 'reveal git [path[@REF]] [--view VIEW] [--where EXPR]',
-            'epilog': ('Views: history, blame, diff, ownership; omit view for repository/file inspection.\n'
-                       'where repeats to AND commit predicates; content~=TEXT matches literal changed-line text.\n'
-                       'limit/offset cap returned rows; scan-limit bounds aggregate commit input (loss exits 3).\n'
+            'epilog': ('Views: history, blame, diff, ownership; omit --view for repository/file inspection.\n'
+                       '--where repeats to AND commit predicates; content~=TEXT matches literal changed-line text.\n'
+                       '--limit/--offset cap returned rows; --scan-limit bounds aggregate commit input (loss exits 3).\n'
                        'A legacy type= aggregate request binds its limit as scan-limit.\n'
-                       'detail=raw reads historical file text. Git resolves paths in the requested revision.\n'
-                       'URI: git://PATH[@REF]?view=VIEW&where=EXPR.'),
+                       '--detail raw reads historical file text. Git resolves paths in the requested revision.\n'
+                       'A resource URI takes the same flags: reveal git://PATH[@REF] --view VIEW.'),
             'examples': [
                 {'uri': 'git://.', 'description': 'Repository overview (branches, tags, commits)'},
                 {'uri': 'git://.@main', 'description': 'Branch/commit history'},
                 {'uri': 'git://.@abc1234', 'description': 'Specific commit details'},
                 {'uri': 'git://src/app.py@v1.0', 'description': 'File structure at tag (functions, classes, imports)'},
-                {'uri': 'git://src/app.py@v1.0?raw=1', 'description': 'File raw contents at tag'},
-                {'uri': 'git://src/app.py@abc1234?type=diff', 'description': 'What this commit changed in the file (vs parent)'},
-                {'uri': 'git://src/app.py@abc1234?type=diff&element=load_config', 'description': 'Diff scoped to hunks touching a named element'},
-                {'uri': 'git://src/app.py@abc1234?type=diff&context=10', 'description': 'Diff with more context lines'},
-                {'uri': 'git://src/app.py?type=history', 'description': 'File commit history (50 commits)'},
-                {'uri': 'git://src/app.py?type=history&element=load_config', 'description': 'Element-scoped history (only commits that changed this function)'},
-                {'uri': 'git://src/app.py?type=blame', 'description': 'File blame summary (contributors + key hunks)'},
-                {'uri': 'git://src/app.py?type=blame&detail=full', 'description': 'File blame detailed (line-by-line)'},
-                {'uri': 'git://src/app.py?type=blame&element=load_config', 'description': 'Semantic blame (who wrote this function)'},
-                {'uri': 'git://src/app.py?type=blame&ignore=69b0093,f5fcac0', 'description': 'Blame suppressing noise commits (e.g. mass-formatting)'},
-                {'uri': 'git://src/app.py?type=blame&element=process_payment&ignore=69b0093', 'description': 'Who really wrote this function, excluding a mass-format commit'},
-                {'uri': 'git://src/app.py?type=ownership', 'description': 'Commit-share ownership of a file (primary author, contributor count, last touch)'},
-                {'uri': 'git://src/?type=ownership', 'description': 'Commit-share ownership of a directory (aggregate over all files beneath it)'},
-                {'uri': 'git://.?type=ownership', 'description': 'Commit-share ownership of the whole repository'},
-                {'uri': 'git://src/app.py?type=ownership&merges=1', 'description': 'Ownership including merge commits (excluded by default)'},
-                {'uri': 'git://.?author=John', 'description': 'Filter commits by author name'},
-                {'uri': 'git://.?message~=bug', 'description': 'Filter commits with "bug" in message (regex)'},
-                {'uri': 'git://.?author=John&message~=fix', 'description': 'Filter by author AND message'},
-                {'uri': 'git://src/app.py?type=history&date>2026-01-01', 'description': 'File history since a date (ISO format, operator form)'},
-                {'uri': 'git://src/app.py?type=history&since=2026-01-01', 'description': 'File history since a date (since= alias, equivalent)'},
-                {'uri': 'git://src/app.py?type=history&since=2026-01-01&author=John', 'description': 'History since date AND by author'},
-                {'uri': 'git://src/app.py?type=history&content~=MyClass', 'description': 'Commits where the diff added or removed "MyClass" (pickaxe search)'},
-                {'uri': 'git://.?content~=AuditLog', 'description': 'Repo-wide: find any commit whose diff contains "AuditLog"'},
-                {'uri': 'git://src/app.py?type=history&no_merges=1', 'description': 'File history excluding merge commits'},
-                {'uri': 'git://.@main?no_merges=1', 'description': 'Branch history without merge noise'},
-                {'uri': 'git://src/app.py?type=history&bucket=month', 'description': 'Monthly commit/author counts for a file (is activity trending up or down?)'},
-                {'uri': 'git://src/?type=history&bucket=week', 'description': 'Weekly commit/author counts for a directory'},
-                {'uri': 'git://.?type=history&bucket=month', 'description': 'Monthly commit/author counts for the whole repo'},
-                {'uri': 'git://.?type=history&bucket=month&author=John', 'description': 'Monthly timeline filtered to one author'},
+                {'uri': 'reveal git://src/app.py@v1.0 --detail raw', 'description': 'File raw contents at tag'},
+                {'uri': 'reveal git://src/app.py@abc1234 --view diff', 'description': 'What this commit changed in the file (vs parent)'},
+                {'uri': 'reveal git://src/app.py@abc1234 --view diff --element load_config', 'description': 'Diff scoped to hunks touching a named element'},
+                {'uri': 'reveal git://src/app.py@abc1234 --view diff --context 10', 'description': 'Diff with more context lines'},
+                {'uri': 'reveal git://src/app.py --view history', 'description': 'File commit history (50 commits)'},
+                {'uri': 'reveal git://src/app.py --view history --element load_config', 'description': 'Element-scoped history (only commits that changed this function)'},
+                {'uri': 'reveal git://src/app.py --view blame', 'description': 'File blame summary (contributors + key hunks)'},
+                {'uri': 'reveal git://src/app.py --view blame --detail full', 'description': 'File blame detailed (line-by-line)'},
+                {'uri': 'reveal git://src/app.py --view blame --element load_config', 'description': 'Semantic blame (who wrote this function)'},
+                {'uri': 'reveal git://src/app.py --view blame --ignore 69b0093,f5fcac0', 'description': 'Blame suppressing noise commits (e.g. mass-formatting)'},
+                {'uri': 'reveal git://src/app.py --view blame --element process_payment --ignore 69b0093', 'description': 'Who really wrote this function, excluding a mass-format commit'},
+                {'uri': 'reveal git://src/app.py --view ownership', 'description': 'Commit-share ownership of a file (primary author, contributor count, last touch)'},
+                {'uri': 'reveal git://src/ --view ownership', 'description': 'Commit-share ownership of a directory (aggregate over all files beneath it)'},
+                {'uri': 'reveal git://. --view ownership', 'description': 'Commit-share ownership of the whole repository'},
+                {'uri': 'reveal git://src/app.py --view ownership --merges on', 'description': 'Ownership including merge commits (excluded by default)'},
+                {'uri': 'reveal git://. --where author=John', 'description': 'Filter commits by author name'},
+                {'uri': "reveal git://. --where 'message~=bug'", 'description': 'Filter commits with "bug" in message (regex)'},
+                {'uri': "reveal git://. --where author=John --where 'message~=fix'", 'description': 'Filter by author AND message'},
+                {'uri': "reveal git://src/app.py --view history --where 'date>2026-01-01'", 'description': 'File history since a date (ISO format, operator form)'},
+                {'uri': 'reveal git://src/app.py --view history --since 2026-01-01', 'description': 'File history since a date (--since, equivalent)'},
+                {'uri': 'reveal git://src/app.py --view history --where author=John --since 2026-01-01', 'description': 'History since date AND by author'},
+                {'uri': "reveal git://src/app.py --view history --where 'content~=MyClass'", 'description': 'Commits where the diff added or removed "MyClass" (pickaxe search)'},
+                {'uri': "reveal git://. --where 'content~=AuditLog'", 'description': 'Repo-wide: find any commit whose diff contains "AuditLog"'},
+                {'uri': 'reveal git://src/app.py --view history --merges off', 'description': 'File history excluding merge commits'},
+                {'uri': 'reveal git://.@main --merges off', 'description': 'Branch history without merge noise'},
+                {'uri': 'reveal git://src/app.py --view history --bucket month', 'description': 'Monthly commit/author counts for a file (is activity trending up or down?)'},
+                {'uri': 'reveal git://src/ --view history --bucket week', 'description': 'Weekly commit/author counts for a directory'},
+                {'uri': 'reveal git://. --view history --bucket month', 'description': 'Monthly commit/author counts for the whole repo'},
+                {'uri': 'reveal git://. --view history --where author=John --bucket month', 'description': 'Monthly timeline filtered to one author'},
             ],
             'query_parameters': {
-                'type': 'Operation type: history, blame, diff, or ownership. Default (no type): structural view of file at ref.',
-                'bucket': 'Modifier on type=history: "week" or "month" — buckets commits into periods (commit_count + distinct author_count per period) instead of returning a flat list. Works on a file, directory, or the whole repo. Rendering (bars, charts) is consumer-side.',
-                'merges': 'on/off (legacy 1/0): include or exclude merge commits. Ownership excludes them by default (merges rarely represent authorship); every other commit list includes them.',
-                'raw': 'For file-at-ref: "1" returns raw file contents instead of structural view',
-                'detail': 'For blame: "full" shows line-by-line (default is summary)',
-                'element': 'For blame/diff/history: function/class name to scope output to that element. For ?type=history, runs the analyzer at each commit — use ?limit=N on files with deep history.',
-                'ignore': 'For blame: comma-separated commit hash prefixes to suppress (e.g. ignore=69b0093,f5fcac0). Any prefix length works — 4–7 chars is typical.',
+                'view': 'Operation: history, blame, diff or ownership (--view VIEW). Omitted: the repository overview, a ref\'s history, or a file\'s structure at the ref.',
+                'bucket': 'With --view history: "week" or "month" — buckets commits into periods (commit_count + distinct author_count per period) instead of returning a flat list. Works on a file, directory, or the whole repo. Rendering (bars, charts) is consumer-side.',
+                'merges': 'on/off: include or exclude merge commits. Ownership excludes them by default (merges rarely represent authorship); every other commit list includes them.',
+                'detail': 'For blame: full shows line-by-line (default normal). With no view on a file: raw returns its contents at the ref instead of its structure.',
+                'element': 'For blame/diff/history: function/class name to scope output to that element (blame also takes a line range, L10-L20). For --view history, runs the analyzer at each commit — use --limit N on files with deep history.',
+                'ignore': 'For blame: comma-separated commit hash prefixes to suppress (e.g. --ignore 69b0093,f5fcac0); off disables auto-ignore. Any prefix length works — 4–7 chars is typical.',
                 'context': 'For diff: number of context lines (default 3)',
-                'limit': 'Limit number of results (default: 10 recent commits, branches and tags for the repository view, 50 for history, 20 for refs, 20000 for bucket= timelines — timelines need the full matching range, not a short page). A cut history says so: "showing 50 of 51+" (at least 51).',
-                'sort': 'Order commits by a field: date, author, message (-field for descending). History is newest first without it; a sort reads all matching history before ?limit cuts it.',
-                'author': 'Filter commits by author name (case-insensitive, use ~= for regex)',
-                'email': 'Filter commits by author email (case-insensitive, use ~= for regex)',
-                'message': 'Filter commits by message (use ~= for regex matching)',
-                'hash': 'Filter commits by short hash (the 7-character hash, compared whole; a prefix is hash~=^PREFIX)',
-                'date': 'Filter commits by date — supports =, !=, >, <, >=, <= and a range =a..b with an ISO date or timestamp (e.g. date>2026-01-01). A year, month or day bound is the whole period: date=2026-01-31 is any commit that day, date>2026-01 excludes January, date>=P and date<=P include it. A timestamp may use a space or T, and a zone (Z, +02:00) is converted to local time. Use since=YYYY-MM-DD (or YYYY-MM) as an ergonomic alias for date>=. A filter with an operator on a field no commit has (authr~=x) warns unknown_filter_field.',
-                'timestamp': 'Filter commits by commit time in epoch seconds (e.g. timestamp>1767225600)',
-                'content~': 'Pickaxe search: only commits where the diff added or removed the given string. Works on file-scoped history (?type=history) and repo-wide (git://.?content~=X). Independent of commit message wording.',
-                'no_merges': 'Set to 1 to exclude merge commits (commits with more than one parent). Useful for repos with noisy merge-commit messages.',
+                'limit': 'Returned rows (default: 10 recent commits, branches and tags for the repository view, 50 for history, 20 for refs); 0 = no cap. A cut history says so: "showing 50 of 51+" (at least 51).',
+                'scan-limit': 'Commit-input budget for ownership and timelines (omitted: timeline 20,000, ownership unbounded; 0 = no budget). A cut that loses required history exits 3.',
+                'sort': 'Order commits by a field: date, author, message (-field for descending). History is newest first without it; a sort reads all matching history before --limit cuts it.',
+                'author': "--where field: author name (case-insensitive; ~= is a regex), e.g. --where 'author~=John'",
+                'email': '--where field: author email (case-insensitive; ~= is a regex)',
+                'message': '--where field: commit message (~= is a regex)',
+                'hash': '--where field: short hash (the 7-character hash, compared whole; a prefix is hash~=^PREFIX)',
+                'date': "--where field: commit date — supports =, !=, >, <, >=, <= and a range =a..b with an ISO date or timestamp (e.g. --where 'date>2026-01-01'). A year, month or day bound is the whole period: date=2026-01-31 is any commit that day, date>2026-01 excludes January, date>=P and date<=P include it. A timestamp may use a space or T, and a zone (Z, +02:00) is converted to local time. --since YYYY-MM-DD (or YYYY-MM) is date>=. A where term on a field commits do not have (authr=x) exits 2 naming the fields.",
+                'timestamp': "--where field: commit time in epoch seconds (e.g. --where 'timestamp>1767225600')",
+                'content~': "Pickaxe search (--where 'content~=TEXT'): only commits where the diff added or removed the given string. Works on file history (--view history) and repo-wide (reveal git://. --where 'content~=X'). Independent of commit message wording.",
             },
             'notes': [
                 'Requires pygit2: pip install "reveal-cli[git]"',
                 'Read-only inspection (no write operations)',
                 'Supports all Git references: commit hash, branch, tag, HEAD~N, etc.',
                 'Use @ for ref specification: git://path@ref',
-                'Use ? for query parameters: git://path?type=history',
+                'Options are flags after the resource: reveal git://path --view history',
                 'Overview (git://.) shows 10 most recent items per category',
-                'Use ?limit=N on history/element queries for more results (element history default: 50; consider ?limit=20 for deep histories)',
+                'Use --limit N on history/element queries for more results (element history default: 50; consider --limit 20 for deep histories)',
                 'Commit filtering: Use =, ~=, >, <, >=, <=, != operators',
-                'Multiple filters use AND logic: ?author=John&message~=bug',
-                '~= uses substring regex match (e.g. ?message~=fix matches "fixes", "prefix-fix"). Use ?message~=\\bfix\\b for word-boundary match.',
-                'For file-scoped history, use: reveal \'git://path/to/file.py?type=history\' (not --log flag)',
+                "Repeated --where terms AND: --where author=John --where 'message~=bug'",
+                '~= uses substring regex match (e.g. message~=fix matches "fixes", "prefix-fix"). Use message~=\\bfix\\b for word-boundary match.',
+                'For file-scoped history, use: reveal git://path/to/file.py --view history (not --log)',
             ],
             'see_also': [
                 'reveal help://ast - Query code structure by complexity/size',
