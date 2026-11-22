@@ -19,6 +19,7 @@ reader than being absent, since nothing in the output says which sections are
 complete. This makes it one call.
 """
 
+from itertools import chain
 from typing import Any, Dict, List, Optional
 
 from reveal.utils.results import RESULT_CONTROL_WARNINGS
@@ -123,6 +124,6 @@ def rule_text_lines(
         pointer += '; --detail for full text'
     lines = [pointer]
     if detail:
-        lines.extend(text for texts in rules.values() for text in texts)
+        lines.extend(chain.from_iterable(rules.values()))
         lines.extend(f"⚠ {w['message']}" for w in caveats if w.get('message'))
     return lines
