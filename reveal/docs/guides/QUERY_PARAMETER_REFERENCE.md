@@ -15,13 +15,13 @@ Query parameters allow filtering, formatting, and modifying adapter behavior usi
 
 | Adapter | Query Params | Example |
 |---------|--------------|---------|
-| **imports://** | `unused`, `circular`, `violations`, `importers`, `sort`, `limit`, `entrypoints`, `components`, `external`, `detail`, `lazy`, `scope`, `tests`, `root`, `scan-limit`, `format` (retired, with a note: `rank`, `top`, `verbose`, `max_files`) | `imports://.?unused` |
+| **imports://** | `unused`, `circular`, `violations`, `importers`, `sort`, `limit`, `entrypoints`, `components`, `external`, `detail`, `lazy`, `scope`, `tests`, `root`, `scan-limit`, `format`, `exclude` (retired, with a note: `rank`, `top`, `verbose`, `max_files`) | `imports://.?unused` |
 | **git://** | `view`, `where` (fields `author`, `email`, `message`, `hash`, `date`, `timestamp`, `content`), `detail`, `merges`, `element`, `bucket`, `ignore`, `context`, `since`, `until`, `ref`, `sort`, `limit`, `scan-limit`, `offset` (retired, with a note: `type`, `no_merges`, `raw`) | `reveal git://file.py --view history` |
 | **json://** | `view` (`value`, `schema`, `flatten`, `type`, `keys`, `length`), `where` (field filters), `detail`, `sort`, `limit`, `offset` (retired, with a note: the first bare words `schema`, `flatten`, `gron`, `type`, `keys`, `length`) | `json://data.json?view=schema` |
 | **markdown://** | `where` (front-matter fields), `match`, `view` (`list`, `links`, `aggregate`, `lint`), `field`, `backlinks`, `columns`, `lint-fields`, `explain`, `sort`, `limit`, `offset` (retired, with a note: `body-contains`, `fields`, `link-graph`, `lint`, `aggregate`) | `markdown://docs/?status=draft` |
 | **metrics://** | `view` (`hotspots`, `provenance`), `where` (field filters), `code-only`, `churn`, `merges`, `since`, `tests`, `detail`, `exclude`, `sort`, `limit`, `offset` (retired, with a note: `hotspots`, `top`, `min_lines`, `max_lines`, `min_complexity`, `max_complexity`, `min_functions`, `no_merges`, `summary_only`) | `metrics://.?view=hotspots` |
 | **ast://** | `kind`, `where` (fields `name`, `complexity`, `lines`, `nesting_depth`, `decorator`, `param_type`, `return_type`, `has_annotations`, `callers`, `kind`), `view` (`dict-heatmap`, `dict-schemas`), `reveal-type`, `builtins`, `sort`, `limit`, `offset` (noted legacy words: `type`, `depth`, `show`; retired, with a note: `calls`, `callee_of`, `show=calls`) | `reveal ast src --where 'complexity>10'` |
-| **calls://** | `callers`, `callees`, `detail`, `rank`, `top`, `depth`, `format`, `builtins`, `modules`, `external` (retired, with a note: `uncalled`, `target`, `root`) | `calls://src?callers=fn` |
+| **calls://** | `callers`, `callees`, `detail`, `rank`, `top`, `depth`, `format`, `builtins`, `modules`, `external`, `exclude` (retired, with a note: `uncalled`, `target`, `root`) | `calls://src?callers=fn` |
 | **claude://** | `view`, `detail`, `errors`, `tools`, `match`, `where`, `sort`, `offset`, `limit`, `tokens` | `claude://session/NAME?detail=summary` |
 | **codex://** | `where` (`session~=TEXT`), `match`, `matches`, `since`, `until`, `view`, `detail`, `key`, `limit`, `offset` (retired, with a note: `filter`, `search`, `full`, `last`, `tokens`, `goal`) | `codex://sessions/?match=auth-refactor` |
 | **depends://** (retired, with a note: use `imports://?importers`) | `top`, `format` | `depends://src?top=10` |
@@ -49,6 +49,14 @@ on a Git blame, a Markdown link view or a JSON key listing) exits 2 naming the a
 ([output contract](../development/OUTPUT_CONTRACT.md#ignored-inputs)); other adapters answer
 `Unknown query param ... ignored`.
 Every adapter that walks a directory also takes `respect_gitignore=false` (the same as `--respect-gitignore off`).
+
+**`exclude` is the walk control of every noun that walks a directory.** `?exclude=PATTERN` answers as
+`--exclude PATTERN` (the same JSON and exit) on `imports://`, `calls://`, `surface://`, `contracts://`, `patches://`,
+`metrics://`, `overview://` and `pack://`: patterns use `.gitignore` syntax, repeat or join with commas, and combine with
+`REVEAL_IGNORE` and config `ignore`. A file target needs no pruning and answers as without it, with no note. An empty
+pattern (`--exclude ''`, `?exclude=`) exits 2 with `SPELLING needs a pattern: --exclude PATTERN`. On `ast://` and
+`markdown://`, whose `where` fields come from the data, a bare `?exclude=V` is still the field filter
+`--where 'exclude=V'` (with a note) until 1.0; use `--exclude PATTERN` for their walk.
 
 ## Detailed Documentation
 

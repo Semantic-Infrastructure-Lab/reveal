@@ -766,6 +766,7 @@ Use `?flag` syntax for operations:
 | `format=text\|json\|dot` | Output override for `?importers` on a directory: `dot` (`--format dot` on the subcommand) draws one importer -> module edge per listed importer as Graphviz | `imports://src?importers&format=dot` |
 | `detail=normal\|full` | `full` shows everything instead of a summary: every file in a cycle group, all unused imports, all violations, every package; JSON adds `"verbose": true` (`--detail full` on the subcommand; the global `--verbose` means `full`) | `imports://src?circular&detail=full` |
 | `scan-limit=N` | Source files the walk may keep (default 20000, minimum 1): an input budget, not a row cap. A cut is incomplete analysis (exit 3), `meta.scan_budget.capped` and a `scan_capped` warning (`scan_limit` is the same key) | `imports://.?importers&scan-limit=50000` |
+| `exclude=PATTERN` | The the walk's scope, the same as `--exclude PATTERN`: matching files and directories are not scanned, combined with `REVEAL_IGNORE` and config `ignore`; a file target needs no pruning and answers as without it; an empty pattern exits 2; repeatable, comma-separated (`.gitignore` syntax) | `imports://src?exclude=vendor` |
 
 **Note**: the view flags (`unused`, `circular`, `violations`, `entrypoints`, `components`, `external`) need
 no `=value`; `=false` selects nothing. A request takes one view: two (`?circular&unused`, or `?importers`

@@ -33,6 +33,7 @@ reveal contracts . --implementations off
 | `abstract_only` | `true`, `false` (default) | Show only ABCs/Protocols/interfaces/traits — skip TypedDicts, dataclasses, path-heuristic bases. |
 | `implementations` | `on` (default), `off` | Show which classes/types implement each contract; `true`/`false` are accepted too. |
 | `implementations_limit` | whole number >= 0, default `5` | Implementers listed per contract in text output; `0` lists all. JSON always carries every implementer. |
+| `exclude` | pattern, repeatable (comma-separated, `.gitignore` syntax) | The the walk's scope, the same as `--exclude PATTERN`: matching files and directories are not scanned, combined with `REVEAL_IGNORE` and config `ignore`; a file target needs no pruning and answers as without it; an empty pattern exits 2. |
 
 Both spellings use the same declarations. `--abstract-only` sets
 `abstract_only=true`; `--implementations off` sets `implementations=off`.

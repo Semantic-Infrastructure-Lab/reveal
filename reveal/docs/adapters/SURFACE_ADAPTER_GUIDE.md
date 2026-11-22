@@ -106,6 +106,7 @@ Each is a flag of `reveal surface` (`--kind env`, `--dir-depth 2`).
 | `dir-depth` | integer >= 0 (default `0`) | With `--view dir` only: keep the first N path segments of each directory, so `--dir-depth 2` folds `app/api/util` into `app/api`. `0` keeps the full directory. Any other answer exits 2. |
 | `limit` | integer >= 0 (default: no cap) | Rows per category, and directories in `--view dir`, in JSON and text; `0` is no cap. A cut list is marked (`meta.warnings` `truncated`, and one line after the text); `total` stays the uncut count. `--all` is `--limit 0`. |
 | `top` | integer >= 0 | Retired: replaced by `limit`. Text entries per category until 1.0; JSON stays complete; never with `--limit` or `--all`. |
+| `exclude` | pattern, repeatable (comma-separated, `.gitignore` syntax) | The the walk's scope, the same as `--exclude PATTERN`: matching files and directories are not scanned, combined with `REVEAL_IGNORE` and config `ignore`; a file target needs no pruning and answers as without it; an empty pattern exits 2. |
 
 The subcommand and the retired `surface://` spelling share parameter declarations, validation,
 result identity (`surface_scan`) and output handling. Unknown categories, fractional/negative depths

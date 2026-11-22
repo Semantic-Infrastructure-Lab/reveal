@@ -203,6 +203,7 @@ callee → [(file, caller_func, line), ...]
 | `modules` | boolean | `false` | Retired: a module-level graph, one edge per import that resolves under the path (`imports://<path>?importers&scope=path`, no call count; see [Retired spellings](#retired-spellings)) |
 | `external` | boolean | `false` | Retired, with `modules`: importers from the whole project root (`scope=root`) |
 | `test-framework` | boolean | `false` | Include test-framework entrypoints as callers in `?sort=-callers`, and as dead-code candidates in `?uncalled` |
+| `exclude` | pattern, repeatable | — | The the walk's scope, the same as `--exclude PATTERN`: matching files and directories are not scanned, combined with `REVEAL_IGNORE` and config `ignore`; a file target needs no pruning and answers as without it; an empty pattern exits 2. |
 
 > Exactly one of `callers`, `callees`, `sort`, `uncalled` or `modules` per request (the retired
 > `root` counts as a selector too; the retired `target` is `callers` under its older name). The `path:name` shorthand is the

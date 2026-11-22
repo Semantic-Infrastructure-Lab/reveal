@@ -54,6 +54,7 @@ Configured selectors are literal files or subtrees; see the
 | `target` | string or glob | Keep only patch targets matching the substring or glob. |
 | `private` | `true`, `false` | Keep only patches of private/internal targets. |
 | `suppress` | `on` (default), `off` | When on, hides `sys.stdout`, `sys.stderr`, `sys.stdin`, `builtins.print`, and `builtins.input` from grouped output. These are always infrastructure noise. Raw scan totals always include them. |
+| `exclude` | pattern, repeatable (comma-separated, `.gitignore` syntax) | The the walk's scope, the same as `--exclude PATTERN`: matching files and directories are not scanned, combined with `REVEAL_IGNORE` and config `ignore`; a file target needs no pruning and answers as without it; an empty pattern exits 2. |
 
 ## Detected Forms
 

@@ -137,6 +137,12 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 - An empty or blank match term is an invalid request on every noun: `--match ''`, `--where ''` (also `session~=` with no text), `?match=`, `?search=`, `?filter=`, `?contains=`, `?body-contains=`, Claude `--name ''`, and `claude://search` or `--view search` with no term exit 2 with `SPELLING needs a term: --match TEXT`. Markdown listed every document; Claude matched every message or listed every session (or said "search selector is unsupported"); Codex listed every session or said "not read by this answer"; a blank term matched every row holding a space (BACK-2736).
 
+- `?exclude=PATTERN` is the walk exclusion on every noun that walks a directory: `calls://`, `imports://`, `surface://`, `contracts://` and `patches://` now answer it as `--exclude PATTERN` (the same JSON and exit, on the CLI, `api.query` and MCP), where it exited 2 "unsupported control 'exclude'". On `ast://` and `markdown://` a bare `?exclude=V` is still the field filter `--where 'exclude=V'`, now with a replaced-by note, until 1.0; use `--exclude` for their walk (BACK-2730).
+
+- `--exclude` on a file target is satisfied quietly: `metrics`, `overview`, `ast` and `surface FILE --exclude X` no longer print "Input --exclude has no effect", and `metrics://FILE?exclude=X` answers as the flag does instead of exiting 2 "not read by this answer". `metrics://DIR?view=provenance&exclude=X` excludes as `--exclude X` did instead of exiting 2 (BACK-2730).
+
+- An empty or blank exclusion pattern exits 2 on every walking noun: `--exclude ''` (alone or beside a real pattern), `?exclude=` and `exclude=''` say `SPELLING needs a pattern: --exclude PATTERN`, where the flag answered as no exclusion and the URI said "exclude must be a valid string" (BACK-2730).
+
 ### Added
 
 - `reveal.api.query(NOUN, TARGET, **keywords)` asks a noun as its subcommand does: `api.query('calls', 'src', callers='main')` returns the JSON document `reveal calls src --callers main --format json` prints, each keyword the noun's flag with `-` as `_`. A request the subcommand exits 2 on raises `RequestValidationError` with its message (a missing path and a target that matches nothing included, which the URI form returned as answers), and a failed analysis raises its cause or the new `reveal.errors.AnalysisFailedError`. Resource URIs answer as before; a word that is neither a noun nor a URI still raises `ValueError`, now naming the nouns instead of "missing scheme" (BACK-2717).
