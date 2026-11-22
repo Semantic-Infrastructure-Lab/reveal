@@ -41,15 +41,15 @@ Guides >200 lines show the first section by default (progressive disclosure). Ap
 
 **This is the start of a long reference (`reveal help://agent/full`). You do not need the rest upfront:** the table below covers the common tasks, and `reveal help://quick` routes everything else.
 
-**Quote every URI** (`reveal 'ast://src/?complexity>10'`): `>`, `<`, `&` and `|` are shell operators.
+**Quote every URI and every `--where` expression** (`reveal ast src/ --where 'complexity>10'`): `>`, `<`, `&` and `|` are shell operators.
 
 | Task | Command |
 |------|---------|
 | Orient in an unfamiliar repo | `reveal overview://src/` |
 | Outline a file | `reveal src/app.py` |
 | Read one function or class | `reveal src/app.py load_config` (also `Class.method`, `:120-160`) |
-| Riskiest code | `reveal metrics src/ --view hotspots` (files) and `reveal 'ast://src/?complexity>=10&sort=-complexity&limit=10'` (functions) |
-| Query functions by complexity/size/type | `reveal 'ast://src/?kind=function&complexity>10&sort=-complexity&limit=10'` |
+| Riskiest code | `reveal metrics src/ --view hotspots` (files) and `reveal ast src/ --where 'complexity>=10' --sort=-complexity --limit 10` (functions) |
+| Query functions by complexity/size/type | `reveal ast src/ --where 'complexity>10' --kind function --sort=-complexity --limit 10` |
 | Who calls a function | `reveal 'calls://src/?callers=my_fn'` |
 | What a function calls, level by level | `reveal 'calls://src/?callees=my_fn&depth=2'` |
 | A function's inputs, side effects, exits | `reveal src/app.py my_fn --boundary` (or `--effects`, `--exits`) |
@@ -198,8 +198,8 @@ reveal help://examples/sessions --format=json        # Claude Code and Codex CLI
 ```json
 {
   "adapter": "ast",
-  "uri_syntax": "ast://<path>?<filter1>&<filter2>&...",
-  "query_params": {
+  "uri_syntax": "ast://<path> [--where EXPR]... [--kind KIND] [--view VIEW] [--reveal-type NAME] [--sort FIELD] [--limit N]",
+  "filter_fields": {
     "lines": {
       "type": "integer",
       "operators": [">", "<", ">=", "<=", "=="],
@@ -213,15 +213,15 @@ reveal help://examples/sessions --format=json        # Claude Code and Codex CLI
   },
   "example_queries": [
     {
-      "uri": "ast://./src?complexity>10",
+      "uri": "ast://./src --where 'complexity>10'",
       "description": "Find complex functions",
       "output_type": "ast_query"
     }
   ],
   "notes": [
-    "Quote URIs with > or < operators: 'ast://path?lines>50' (shell interprets > as redirect)",
+    "Quote --where expressions with > or < operators: --where 'lines>50' (shell interprets > as redirect)",
     "Operators: = (equals), != (not equals), > < (numeric), ~= (regex/glob), .. (range)",
-    "Result control: sort=field, sort=-field (descending), limit=N, offset=M"
+    "Result control: --sort FIELD, --sort=-FIELD (descending), --limit N, --offset M"
   ]
 }
 ```
@@ -358,16 +358,16 @@ These answer different questions. The element-level mode is the entry point to a
 **Pattern:**
 ```bash
 # Find functions by name pattern
-reveal 'ast://./src?name=*authenticate*'
+reveal ast ./src --where 'name=*authenticate*'
 
 # Find complex code (likely buggy)
-reveal 'ast://./src?complexity>10'
+reveal ast ./src --where 'complexity>10'
 
 # Find long functions (refactor candidates)
-reveal 'ast://./src?lines>50'
+reveal ast ./src --where 'lines>50'
 
 # Combine filters
-reveal 'ast://./src?complexity>10&lines>50'
+reveal ast ./src --where 'complexity>10' --where 'lines>50'
 ```
 
 **Why this works:** AST queries search across entire codebase without reading files. A metadata query returns names, locations and metrics without printing function bodies, so it uses few tokens.
@@ -395,19 +395,19 @@ reveal 'ast://./src?complexity>10&lines>50'
 **Filter combinations:**
 ```bash
 # Complex AND long (refactor targets)
-reveal 'ast://./src?complexity>10&lines>50'
+reveal ast ./src --where 'complexity>10' --where 'lines>50'
 
 # Short AND simple (good examples)
-reveal 'ast://./src?complexity<3&lines<20'
+reveal ast ./src --where 'complexity<3' --where 'lines<20'
 
 # All async functions
-reveal 'ast://./src?kind=async_function'
+reveal ast ./src --kind async_function
 
 # All properties
-reveal 'ast://./src?decorator=property'
+reveal ast ./src --where decorator=property
 
 # Test functions (by name pattern)
-reveal 'ast://./tests?name=test_*'
+reveal ast ./tests --where 'name=test_*'
 ```
 
 **Pattern matching rules:**
@@ -440,11 +440,11 @@ File: src/processor/main.py
 ```bash
 # Find functions by name pattern (simple)
 reveal file.py --name connection
-# Same as: reveal 'ast://file.py?name~=connection'
+# Same as: reveal ast file.py --where 'name~=connection'
 
 # Filter by element type
 reveal file.py --type function
-# Same as: reveal 'ast://file.py?kind=function'
+# Same as: reveal ast file.py --kind function
 
 # Sort results
 reveal file.py --sort complexity          # Ascending
@@ -452,7 +452,7 @@ reveal file.py --sort=-complexity         # Descending (note the = sign)
 
 # Combine flags
 reveal file.py --name test --type function --sort=-complexity
-# Same as: reveal 'ast://file.py?name~=test&kind=function&sort=-complexity'
+# Same as: reveal ast file.py --where 'name~=test' --kind function --sort=-complexity
 ```
 
 **Why use convenience flags?**
@@ -482,13 +482,13 @@ reveal file.py --name get_repository
 reveal file.py --name get_repository --sort=-line_count
 ```
 
-**Matching syntax:** `--name auth` uses a regular expression, like `ast://...?name~=auth`. URI `name=*auth*` uses a glob. Quote patterns containing shell operators.
+**Matching syntax:** `--name auth` uses a regular expression, like `reveal ast PATH --where 'name~=auth'`; `--where 'name=*auth*'` uses a glob. Quote patterns containing shell operators.
 
 **Scope of `--name`:** matches named code elements only — functions, classes, structs, imports. It does **not** search text content. For text search, use `--grep`. (`--search` is a deprecated alias; it emits a replacement note.)
 
 ```bash
 reveal file.py --name LIVE_SIGNALS        # ← finds nothing (LIVE_SIGNALS is a variable)
-reveal 'ast://file.py?reveal_type=LIVE_SIGNALS'  # ← correct path for variables/constants
+reveal ast file.py --reveal-type LIVE_SIGNALS  # ← correct path for variables/constants
 reveal file.py --grep LIVE_SIGNALS        # ← finds every line containing the text
 ```
 
@@ -1169,7 +1169,7 @@ reveal check src/changed_file.py
 reveal src/changed_file.py changed_function
 ```
 
-**`reveal check --changed RANGE` output:** the same report as `reveal check <dir>`, over the files the range changed under PATH (default `.`). `scope.changed` in JSON, and a `Scope:` line in text, name the range and how many files git listed, so a clean result cannot be read as a whole-tree pass. Hotspots and complexity: `reveal metrics <path> --view hotspots` and `reveal 'ast://<path>?complexity>10&sort=-complexity'`.
+**`reveal check --changed RANGE` output:** the same report as `reveal check <dir>`, over the files the range changed under PATH (default `.`). `scope.changed` in JSON, and a `Scope:` line in text, name the range and how many files git listed, so a clean result cannot be read as a whole-tree pass. Hotspots and complexity: `reveal metrics <path> --view hotspots` and `reveal ast <path> --where 'complexity>10' --sort=-complexity`.
 
 **`reveal check --changed` is a CI gate.** Exit codes are `check`'s: `0` no findings, `1` findings, `2` an unusable range (unknown revision such as `main..nosuchbranch`, not inside a git repository), `3` a file could not be checked, so an empty result is not proof of a clean change. `--fail-on none` reports findings without failing.
 ```bash
@@ -1282,7 +1282,7 @@ reveal contracts src/
 reveal 'imports://src/?sort=-fan-in'
 
 # Named functions in the tree
-reveal 'ast://src/?kind=function'
+reveal ast src/ --kind function
 
 # Module edges: each module under src/ with the files that import it (calls ?modules is its retired spelling)
 reveal 'imports://src/?importers&scope=path'
@@ -1345,14 +1345,14 @@ so), a scanned call-source language with no recall snapshot (Elixir, Objective-C
 | `calls://src/?callers=fn` | Cross-file, whole project | "Who calls fn anywhere?" (reverse) |
 | `calls://src/?callees=fn` | Cross-file, whole project | "What does fn call?" (forward, builtins hidden; add `&builtins=true` to include) |
 | `calls://src/?sort=-callers` | Cross-file, whole project | "Which functions are called most?" (coupling metrics) |
-| `ast://src/?kind=function` | Per file | Each function's `calls`/`called_by` lists (JSON) |
+| `reveal ast src/ --kind function` | Per file | Each function's `calls`/`called_by` lists (JSON) |
 
 The `ast://` call filters `calls=`, `callee_of=` and `show=calls` are retired: each still answers with
 a note naming `calls://?callers=`/`?callees=` (or `--grep` for a `calls=*pattern*`).
 
 **JSON output — call fields per function:**
 ```bash
-reveal 'ast://src/auth.py?kind=function' --format=json | \
+reveal ast src/auth.py --kind function --format=json | \
   jq '.results[] | {name, calls, called_by}'
 ```
 
@@ -1494,8 +1494,8 @@ Output: one line per violation with file, line, and direction. Clean output = �
 reveal metrics . --view hotspots                         # Worst 10 files by hotspot score
 reveal metrics ./src --view hotspots --limit 20            # Top 20 files
 reveal metrics . --view hotspots --fail-on findings      # CI gate: exit 1 on quality <70 or complexity >20
-reveal 'ast://.?complexity>=10&sort=-complexity&limit=10' --format json   # Most complex functions
-reveal 'ast://.?complexity>=15&sort=-complexity&limit=10' --format json   # Raise the threshold
+reveal ast . --where 'complexity>=10' --sort=-complexity --limit 10 --format json   # Most complex functions
+reveal ast . --where 'complexity>=15' --sort=-complexity --limit 10 --format json   # Raise the threshold
 ```
 
 **Output:** `metrics --view hotspots` ranks files by hotspot score (low quality, high average complexity,
@@ -2891,7 +2891,7 @@ reveal file.py --format text         # an explicit --format always wins
 **Token budget flags (URI adapters — limits list fields like items/results/checks/commits):**
 ```bash
 # Stop after N results (text and JSON both respect this)
-reveal 'ast://./src?complexity>5' --max-items 20
+reveal ast ./src --where 'complexity>5' --max-items 20
 
 # Truncate long string values to N chars (useful for calls:// call lists, git messages, etc.)
 reveal 'calls://./src?sort=-callers' --max-snippet-chars 80
@@ -3045,7 +3045,7 @@ reveal check src/ --severity high
 
 ```bash
 # Method 1: AST query (fastest)
-reveal 'ast://./src?complexity>10'
+reveal ast ./src --where 'complexity>10'
 
 # Method 2: Pipeline with jq (more control)
 find src/ -name "*.py" | reveal --stdin --format=json | \
@@ -3224,7 +3224,7 @@ reveal file.txt --explain-file
 
 ```bash
 # 1. Find auth-related code
-reveal 'ast://./src?name=*auth*'
+reveal ast ./src --where 'name=*auth*'
 
 # Output:
 # Found 8 functions:
@@ -3255,7 +3255,7 @@ reveal check src/auth/handler.py --select B,S
 
 ```bash
 # 1. Find complex functions across codebase
-reveal 'ast://./src?complexity>10&lines>50'
+reveal ast ./src --where 'complexity>10' --where 'lines>50'
 
 # Output:
 # Found 5 functions:
@@ -3458,7 +3458,7 @@ The error message itself lists available names — use one directly and skip the
 3. **Element in different file**
    ```bash
    # Search across codebase
-   reveal 'ast://./src?name=*missing_function*'
+   reveal ast ./src --where 'name=*missing_function*'
    ```
 
 4. **Element is private/internal**
@@ -3562,7 +3562,7 @@ reveal deep_dir/
    ```bash
    # Don't traverse directory
    # Instead, query directly
-   reveal 'ast://./deep_dir?name=target*'
+   reveal ast ./deep_dir --where 'name=target*'
    ```
 
 5. **Exclude large subdirectories**
@@ -3765,7 +3765,7 @@ CMD ["python", "app.py"]
 - Complexity > 10 suggests function is too complex
 - Consider breaking into smaller functions
 - Default threshold 10 (override in `.reveal.yaml`: `rules: {C901: {threshold: 15}}`); `reveal --explain C901` describes the rule but does not print the threshold
-- One shared score: C901, `ast://?complexity` and `metrics://` (its `--view hotspots` ranking included) report the same number for every language — `if`/loops/`catch`, `&&`/`||`/`??`/`?:`, and match/switch arms count (a catch-all `default`/`else`/`_` arm does not); Rust `?` and Zig `try` count as early exits
+- One shared score: C901, `reveal ast --where complexity` and `metrics://` (its `--view hotspots` ranking included) report the same number for every language — `if`/loops/`catch`, `&&`/`||`/`??`/`?:`, and match/switch arms count (a catch-all `default`/`else`/`_` arm does not); Rust `?` and Zig `try` count as early exits
 
 **C902: Function too long**
 - Function exceeds maximum line count
@@ -4015,7 +4015,7 @@ def save_user(data: UserRecord) -> None: ...
 Fires on params annotated `dict`/`Dict[...]`/`Mapping`/`Any`/a dict alias whose key reads
 (`d['k']`, `d.get('k')`, `'k' in d`) a TypedDict covers: 3+ shared keys for one in the same
 module, 4+ for one elsewhere. Loop variables and locals don't fire — see
-`ast://<path>?show=dict-schemas` for those. The project scan is capped by
+`reveal ast <path> --view dict-schemas` for those. The project scan is capped by
 `REVEAL_T006_MAX_FILES` (default 5000); past it, only same-module TypedDicts match and the
 skip is reported in `scan_disclosures`.
 
@@ -4282,7 +4282,7 @@ git diff --name-only | grep "\.py$" | reveal --stdin --check
 # Track complexity over time
 git log --oneline | head -10 | while read commit _; do
   git checkout $commit
-  reveal 'ast://./src?complexity>10' | wc -l
+  reveal ast ./src --where 'complexity>10' | wc -l
 done
 ```
 
@@ -4314,7 +4314,7 @@ reveal app.py --format=json | jq -r '.structure.functions[]? | "\(.name) (\(.lin
    - Use --head/--tail for large files
 
 3. **Use AST queries** - Don't grep when you can query
-   - `reveal 'ast://./src?name=*auth*'` vs `grep -r "def.*auth"`
+   - `reveal ast ./src --where 'name=*auth*'` vs `grep -r "def.*auth"`
    - Semantic search vs text search
    - Structural matching reduces text-only noise; parser recovery and heuristics can still produce false matches
 
@@ -4369,12 +4369,12 @@ reveal app.py --format=json | jq -r '.structure.functions[]? | "\(.name) (\(.lin
 | Quality check | `reveal check file.py` |
 | Security check only | `reveal check file.py --select S` |
 | Find hotspots | `reveal metrics . --view hotspots` |
-| Find by name | `reveal 'ast://./src?name=*pattern*'` |
-| Find complex code | `reveal 'ast://./src?complexity>10'` |
-| Find long functions | `reveal 'ast://./src?lines>50'` |
-| Unannotated functions | `reveal 'ast://./src?has_annotations=false'` |
-| Heavily-called functions | `reveal 'ast://./src?callers>5'` |
-| Type evidence for var | `reveal 'ast://file.py?reveal_type=result'` |
+| Find by name | `reveal ast ./src --where 'name=*pattern*'` |
+| Find complex code | `reveal ast ./src --where 'complexity>10'` |
+| Find long functions | `reveal ast ./src --where 'lines>50'` |
+| Unannotated functions | `reveal ast ./src --where has_annotations=false` |
+| Heavily-called functions | `reveal ast ./src --where 'callers>5'` |
+| Type evidence for var | `reveal ast file.py --reveal-type result` |
 | Navigate JSON | `reveal json://file.json/path/to/key` |
 | JSONL records | `reveal file.jsonl --head 10` |
 | Check changes | `git diff --name-only \| reveal --stdin --check` |
@@ -4484,13 +4484,13 @@ Run `reveal help://quick` for "which tool for which question". It is the routing
 ### Mistake 2: Using grep for structured data
 ```bash
 ❌ grep -n "class" *.py        # Text matching, false positives
-✅ reveal 'ast://.?kind=class' # Semantic search, accurate
+✅ reveal ast . --kind class # Semantic search, accurate
 ```
 
 ### Mistake 3: Not using wildcards
 ```bash
 ❌ grep -r "test_login\|test_logout\|test_signup"
-✅ reveal 'ast://tests/?name=test_*'
+✅ reveal ast tests/ --where 'name=test_*'
 ```
 
 ### Mistake 4: Ignoring breadcrumbs
@@ -4504,7 +4504,7 @@ Use that guidance - it tells you exactly what to do next!
 ```
 Use `--grep` for any text or identifier that isn't a named element `ast://` can filter on
 (constants, string literals, config keys). For a *definition* by name, use `ast://?name=X`
-(e.g. `reveal 'ast://src/?name=load_config'`) — both beat `grep -rn`.
+(e.g. `reveal ast src/ --where name=load_config`) — both beat `grep -rn`.
 
 ### Mistake 6: Using sed/grep line-windows instead of resolving the semantic unit
 ```bash

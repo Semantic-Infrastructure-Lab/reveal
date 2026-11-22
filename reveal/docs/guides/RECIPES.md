@@ -167,7 +167,7 @@ reveal src/app.py
 reveal src/app.py handle_request
 
 # Check complexity of changed functions
-reveal 'ast://src/?complexity>10'
+reveal ast src/ --where 'complexity>10'
 ```
 
 ### PR Review Workflow
@@ -222,16 +222,16 @@ reveal src/app.py create_app
 
 ```bash
 # Find all authentication-related code
-reveal 'ast://./src?name=*auth*'
+reveal ast ./src --where 'name=*auth*'
 
 # Find complex functions (likely important or buggy)
-reveal 'ast://./src?complexity>10'
+reveal ast ./src --where 'complexity>10'
 
 # Find long functions (refactor candidates)
-reveal 'ast://./src?lines>50'
+reveal ast ./src --where 'lines>50'
 
 # Combine filters (complex AND long)
-reveal 'ast://./src?complexity>10&lines>50'
+reveal ast ./src --where 'complexity>10' --where 'lines>50'
 ```
 
 ### Understand architecture
@@ -254,15 +254,15 @@ reveal metrics://./src
 
 ```bash
 # Find all get_* methods across entire project
-reveal 'ast://.?name=get_*' --format=json | \
+reveal ast . --where 'name=get_*' --format=json | \
   jq -r '.results[] | "\(.file):\(.line) \(.name)"'
 
 # Count functions per file
-reveal 'ast://./src?kind=function' --format=json | \
+reveal ast ./src --kind function --format=json | \
   jq -r '.results[].file' | sort | uniq -c | sort -rn
 
 # Find largest classes (potential god objects)
-reveal 'ast://./src?kind=class' --format=json | \
+reveal ast ./src --kind class --format=json | \
   jq -r '[.results[] | {name, file, lines: .line_count}] |
          sort_by(.lines) | reverse | .[0:10][] |
          "\(.file) - \(.name) (\(.lines) lines)"'
@@ -284,8 +284,8 @@ grep -n "raise ValueError" src/app.py
 reveal src/app.py :73               # jump to that element
 
 # Locate error handling by name
-reveal 'ast://src?name=*error*'
-reveal 'ast://src?name=*exception*'
+reveal ast src --where 'name=*error*'
+reveal ast src --where 'name=*exception*'
 
 # Find specific handler
 reveal src/handlers.py error_handler
@@ -369,13 +369,13 @@ branch, variable, or range that matters.
 reveal metrics ./src --view hotspots
 
 # Complex functions across codebase
-reveal 'ast://./src?complexity>10'
+reveal ast ./src --where 'complexity>10'
 
 # Long functions
-reveal 'ast://./src?lines>100'
+reveal ast ./src --where 'lines>100'
 
 # Code golf (complex but short - suspicious)
-reveal 'ast://./src?complexity>10&lines<50'
+reveal ast ./src --where 'complexity>10' --where 'lines<50'
 ```
 
 ### Find testability pressure
@@ -410,41 +410,41 @@ reveal 'calls://src?callees=function_name'
 
 ```bash
 # Find complex functions (industry standard: >10 needs refactoring)
-reveal 'ast://./src?complexity>10'
+reveal ast ./src --where 'complexity>10'
 
 # The danger zone - extremely complex functions
-reveal 'ast://./src?complexity>20'
+reveal ast ./src --where 'complexity>20'
 
 # Find functions that are BOTH complex AND long (prime refactoring targets)
-reveal 'ast://./src?complexity>15&lines>100'
+reveal ast ./src --where 'complexity>15' --where 'lines>100'
 
 # Top 10 most complex functions in your codebase
-reveal 'ast://./src?kind=function' --format=json | \
+reveal ast ./src --kind function --format=json | \
   jq -r '[.results[] | {name, file, complexity, lines: .line_count}] |
          sort_by(.complexity) | reverse | .[0:10][] |
          "\(.file) - \(.name) (complexity: \(.complexity), lines: \(.lines))"'
 
 # Find god functions (both metrics high)
-reveal 'ast://./src?complexity>30&lines>150'
+reveal ast ./src --where 'complexity>30' --where 'lines>150'
 
 # Simple but long - candidate for splitting or inlining
-reveal 'ast://./src?complexity<5&lines>50'
+reveal ast ./src --where 'complexity<5' --where 'lines>50'
 ```
 
 ### Combined AST filters
 
 ```bash
 # Name glob + complexity — find complex handlers specifically
-reveal 'ast://src/?name=*handle*&complexity>10'
+reveal ast src/ --where 'name=*handle*' --where 'complexity>10'
 
 # Name glob + type — find all test functions
-reveal 'ast://tests/?name=test_*&kind=function'
+reveal ast tests/ --where 'name=test_*' --kind function
 
 # Decorator + complexity — complex cached functions (may be hiding cost)
-reveal 'ast://src/?decorator=*cache*&complexity>5'
+reveal ast src/ --where 'decorator=*cache*' --where 'complexity>5'
 
 # Name + lines — large parse/render functions
-reveal 'ast://src/?name=*parse*&lines>50&sort=-complexity'
+reveal ast src/ --where 'name=*parse*' --where 'lines>50' --sort=-complexity
 ```
 
 ### Extract a raw line range
@@ -462,19 +462,19 @@ reveal src/auth.py MyClass.validate :45-70  # not valid — use range on file di
 
 ```bash
 # Find all @property methods
-reveal 'ast://.?decorator=property'
+reveal ast . --where decorator=property
 
 # Find all cached functions (wildcards work!)
-reveal 'ast://.?decorator=*cache*'
+reveal ast . --where 'decorator=*cache*'
 
 # Find abstract interface methods
-reveal 'ast://.?decorator=abstractmethod'
+reveal ast . --where decorator=abstractmethod
 
 # Find complex properties (code smell - properties should be simple)
-reveal 'ast://.?decorator=property&lines>10'
+reveal ast . --where decorator=property --where 'lines>10'
 
 # Find all @dataclass classes
-reveal 'ast://.?decorator=dataclass&kind=class'
+reveal ast . --where decorator=dataclass --kind class
 
 # Analyze decorator usage across your codebase
 reveal src/ --decorator-stats
@@ -598,7 +598,7 @@ Functions imported under aliases are resolved — `from utils import helper as h
 reveal 'calls://src/?callees=process&depth=2'
 # Each function's calls/called_by lists for one file (the ast:// calls=, callee_of= and
 # show=calls filters are retired and print a note naming calls://)
-reveal 'ast://src/auth.py?kind=function' --format json
+reveal ast src/auth.py --kind function --format json
 ```
 
 ---
@@ -1251,7 +1251,7 @@ git diff --name-only origin/main | reveal --stdin --check --format=grep
 reveal src/app.py --format=json | jq '.structure.functions'
 
 # Find large functions
-reveal 'ast://src?kind=function&lines>100' --format=json | jq '.results[] | {file, name, line_count}'
+reveal ast src --where 'lines>100' --kind function --format=json | jq '.results[] | {file, name, line_count}'
 
 # Get complexity metrics
 reveal metrics://src/ --format=json | jq '.summary.avg_quality_score'
@@ -1371,8 +1371,8 @@ reveal app.py process_data
 
 ```bash
 # AST queries
-reveal ast://./src            # All structure (~500 tokens)
-reveal 'ast://./src?complexity>10'  # Just complex ones (~100 tokens)
+reveal ast ./src            # All structure (~500 tokens)
+reveal ast ./src --where 'complexity>10'  # Just complex ones (~100 tokens)
 ```
 
 ### Semantic slicing
@@ -1392,13 +1392,13 @@ reveal conversation.jsonl --range 48-52
 
 ```bash
 # Find relevant code without reading everything
-reveal 'ast://./src?name=*config*'
+reveal ast ./src --where 'name=*config*'
 
 # Filter by complexity
-reveal 'ast://./src?complexity>5'
+reveal ast ./src --where 'complexity>5'
 
 # Get structured output for parsing
-reveal 'ast://./src?name=*auth*' --format=json
+reveal ast ./src --where 'name=*auth*' --format=json
 ```
 
 ---
@@ -1501,7 +1501,7 @@ reveal analysis.ipynb --format=json
 reveal metrics ./src --view hotspots
 
 # 2. Identify complex functions in hotspot
-reveal 'ast://src/hotspot.py?complexity>10'
+reveal ast src/hotspot.py --where 'complexity>10'
 
 # 3. Compare to previous version (did we make it worse?)
 reveal diff://git://HEAD~10/src/hotspot.py:src/hotspot.py
@@ -1518,8 +1518,8 @@ reveal 'git://src/hotspot.py?type=blame&element=complex_function'
 reveal 'imports://src?circular'
 
 # 2. Identify functions involved in cycle
-reveal 'ast://src/module_a.py?kind=function'
-reveal 'ast://src/module_b.py?kind=function'
+reveal ast src/module_a.py --kind function
+reveal ast src/module_b.py --kind function
 
 # 3. When was the cycle introduced?
 reveal 'git://src/module_a.py?type=history'
@@ -1597,7 +1597,7 @@ Each layer costs hundreds of tokens instead of whole files; measured savings are
 
 ```bash
 # "What are the most complex functions?"
-reveal 'ast://./src?complexity>15' --format=json
+reveal ast ./src --where 'complexity>15' --format=json
 
 # "Are there circular dependencies?"
 reveal 'imports://src?circular'
@@ -1646,7 +1646,7 @@ reveal app.py --format=json | \
 ```bash
 reveal metrics://./src > due_diligence/stats.txt
 reveal metrics ./src --view hotspots > due_diligence/hotspots.txt
-reveal 'ast://./src?complexity>20' > due_diligence/complex_functions.txt
+reveal ast ./src --where 'complexity>20' > due_diligence/complex_functions.txt
 reveal 'imports://src?circular' > due_diligence/circular_deps.txt
 find src/ -name "*.py" | reveal --stdin --check --select=B,S > due_diligence/security.txt
 reveal mysql://prod > due_diligence/db_health.txt
@@ -1659,10 +1659,10 @@ reveal git://.
 
 ```bash
 # Find complexity hotspots
-reveal 'ast://./src?complexity>20'
+reveal ast ./src --where 'complexity>20'
 
 # Find long functions
-reveal 'ast://./src?lines>100'
+reveal ast ./src --where 'lines>100'
 
 # Track improvement
 reveal metrics://./src --format=json > perf_before.json
@@ -1690,8 +1690,8 @@ reveal git://.                                  # maintainer activity
 ```bash
 reveal .                                 # Map directory structure
 reveal src/                              # Explore subdirectory
-reveal 'ast://./src?name=*pattern*'      # Find by name
-reveal 'ast://./src?complexity>10'       # Find by complexity
+reveal ast ./src --where 'name=*pattern*'      # Find by name
+reveal ast ./src --where 'complexity>10'       # Find by complexity
 reveal 'imports://src?circular'          # Find circular imports
 reveal metrics ./src --view hotspots         # Find technical debt
 reveal 'calls://src/?callers=fn'          # Who calls fn? (cross-file reverse)

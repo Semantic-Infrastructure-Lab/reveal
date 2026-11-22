@@ -9,17 +9,18 @@ category: guide
 
 ```bash
 reveal ast src/ --kind function --where 'complexity>10' --sort=-complexity --limit 10
-reveal 'ast://src/?kind=function&where=complexity%3E10&sort=-complexity&limit=10'
+reveal ast src/ --where 'complexity>10' --kind function --sort=-complexity --limit 10
 ```
 
-Repeat `--where` or `where=` to AND expressions, including two bounds on the same
-field. Legacy inline expressions retain their existing parsing. `kind` names the
-element type; `view` selects `dict-heatmap`, `dict-schemas` or the legacy `calls` view.
-`type`, `show` and `reveal_type` remain input aliases for `kind`, `view` and
-`reveal-type`; mixing two spellings of one control is rejected. The Calls noun
-remains the home for call-graph questions.
+Repeat `--where` to AND expressions, including two bounds on the same field. `--kind` names the element
+type (`kind` is also the where field; `type` is its legacy word, noted). `--view` selects `dict-heatmap` or
+`dict-schemas`; `--reveal-type NAME` gives one variable's type evidence. Those three Python-evidence answers
+read no row control: `--where`, `--kind`, `--sort`, `--limit`, `--offset` or `--builtins` beside them exits 2.
+The legacy `show=` is noted as `--view`; `show=calls`/`--view calls` is retired to the Calls noun, the home
+for call-graph questions. Mixing two spellings of one control is rejected, and an option given with no value
+(a bare `limit` in a URI's query string) exits 2.
 
-`limit=0` is no cap: every result, past the 200-result automatic cap (it used to return an empty page); negative
+`--limit 0` (or `--all`) is no cap: every result, past the 200-result automatic cap; negative
 limit/offset values reject before analysis. Typed API keyword controls now apply
 after validated URI controls, including zero and false; unsupported keywords reject.
 Typed filenames keep literal `?` and percent signs, while URI resources retain
@@ -55,34 +56,34 @@ The AST adapter lets you query code as a database - find functions, classes, and
 
 ```bash
 # 1. Find all code structure in a directory
-reveal 'ast://./src'
+reveal ast ./src
 
 # 2. Find functions with more than 50 lines (refactor candidates)
-reveal 'ast://./src?lines>50'
+reveal ast ./src --where 'lines>50'
 
 # 3. Find complex functions (industry threshold: >10 needs refactoring)
-reveal 'ast://./src?complexity>10'
+reveal ast ./src --where 'complexity>10'
 
 # 4. Find functions by name pattern
-reveal 'ast://./src?name=*authenticate*'
+reveal ast ./src --where 'name=*authenticate*'
 
 # 5. Find all @property decorated methods
-reveal 'ast://.?decorator=property'
+reveal ast . --where decorator=property
 
 # 6. Combine filters: complex AND long functions
-reveal 'ast://./src?complexity>10&lines>50'
+reveal ast ./src --where 'complexity>10' --where 'lines>50'
 
 # 7. Top 10 most complex functions (NEW: sort + limit)
-reveal 'ast://./src?complexity>5&sort=-complexity&limit=10'
+reveal ast ./src --where 'complexity>5' --sort=-complexity --limit 10
 
 # 8. Get JSON output for scripting
-reveal 'ast://./src?complexity>10' --format=json
+reveal ast ./src --where 'complexity>10' --format=json
 ```
 
-**Note**: Quote URIs containing `>` or `<` to prevent shell redirection.
+**Note**: Quote `--where` expressions containing `>` or `<` to prevent shell redirection.
 
 URI resource paths use existing-path-first decoding. For example,
-`ast://src%20tree?kind=function` targets `src tree`; encode a literal `?` in a
+`ast://src%20tree --kind function` targets `src tree`; encode a literal `?` in a
 filename as `%3F` so it stays separate from the query. An existing literal percent
 path wins; otherwise an existing path is decoded once. `+` stays literal, malformed
 percent escapes stay literal, and invalid encoded UTF-8 or NUL is rejected before
@@ -128,10 +129,10 @@ Extract complete code structure from files or directories:
 
 ```bash
 # All functions, classes, methods in a file
-reveal ast://app.py
+reveal ast app.py
 
 # All code in a directory (recursive)
-reveal 'ast://./src'
+reveal ast ./src
 ```
 
 **Output includes:**
@@ -148,13 +149,13 @@ Find code that needs refactoring using McCabe cyclomatic complexity:
 
 ```bash
 # Industry threshold: >10 needs attention
-reveal 'ast://./src?complexity>10'
+reveal ast ./src --where 'complexity>10'
 
 # Danger zone: >20 is high risk
-reveal 'ast://./src?complexity>20'
+reveal ast ./src --where 'complexity>20'
 
 # Prime refactoring targets: complex AND long
-reveal 'ast://./src?complexity>15&lines>100'
+reveal ast ./src --where 'complexity>15' --where 'lines>100'
 ```
 
 **Complexity thresholds:**
@@ -169,16 +170,16 @@ Find oversized functions that violate single-responsibility principle:
 
 ```bash
 # Functions with >50 lines
-reveal 'ast://./src?lines>50'
+reveal ast ./src --where 'lines>50'
 
 # Functions with >100 lines (likely doing too much)
-reveal 'ast://./src?lines>100'
+reveal ast ./src --where 'lines>100'
 
 # Range queries: functions between 50-200 lines
-reveal 'ast://./src?lines=50..200'
+reveal ast ./src --where lines=50..200
 
 # Simple but long (splitting candidates)
-reveal 'ast://./src?complexity<5&lines>50'
+reveal ast ./src --where 'complexity<5' --where 'lines>50'
 ```
 
 ### 4. **Name Pattern Matching**
@@ -187,13 +188,13 @@ Find code elements by name using wildcards or regex:
 
 ```bash
 # Wildcard matching (glob-style)
-reveal 'ast://./src?name=test_*'           # Starts with test_
-reveal 'ast://./src?name=*helper*'         # Contains "helper"
-reveal 'ast://./src?name=get_?'            # get_ + one char
+reveal ast ./src --where 'name=test_*'           # Starts with test_
+reveal ast ./src --where 'name=*helper*'         # Contains "helper"
+reveal ast ./src --where 'name=get_?'            # get_ + one char
 
 # Regex matching (NEW: ~= operator)
-reveal 'ast://./src?name~=^test_'          # Regex: starts with test_
-reveal 'ast://./src?name~=.*Manager$'      # Regex: ends with Manager
+reveal ast ./src --where 'name~=^test_'          # Regex: starts with test_
+reveal ast ./src --where 'name~=.*Manager$'      # Regex: ends with Manager
 ```
 
 ### 5. **Type Filtering**
@@ -202,20 +203,20 @@ Filter by code element type:
 
 ```bash
 # Functions, methods included (not classes)
-reveal 'ast://./src?kind=function'
+reveal ast ./src --kind function
 
 # Only methods (functions that belong to a class, struct or impl)
-reveal 'ast://./src?kind=method'
+reveal ast ./src --kind method
 
 # Only classes
-reveal 'ast://./src?kind=class'
+reveal ast ./src --kind class
 
 # Multiple types (OR logic)
-reveal 'ast://./src?kind=class|function'
-reveal 'ast://./src?kind=class,function'   # Comma also works
+reveal ast ./src --kind 'class|function'
+reveal ast ./src --kind class,function   # Comma also works
 
 # Everything except functions (NEW: != operator)
-reveal 'ast://./src?kind!=function'
+reveal ast ./src --where 'kind!=function'
 ```
 
 **Valid types:**
@@ -232,29 +233,29 @@ Find functions/classes by their decorators:
 
 ```bash
 # Find all @property methods
-reveal 'ast://.?decorator=property'
+reveal ast . --where decorator=property
 
 # Find all cached functions (wildcard matching)
-reveal 'ast://.?decorator=*cache*'
+reveal ast . --where 'decorator=*cache*'
 # Matches: @lru_cache, @cached_property, @cache, etc.
 
 # Find static methods
-reveal 'ast://.?decorator=staticmethod'
+reveal ast . --where decorator=staticmethod
 
 # Find abstract methods
-reveal 'ast://.?decorator=abstractmethod'
+reveal ast . --where decorator=abstractmethod
 
 # Find complex properties (code smell - properties should be simple)
-reveal 'ast://.?decorator=property&lines>10'
+reveal ast . --where decorator=property --where 'lines>10'
 
 # Exclude specific decorators
-reveal 'ast://.?decorator!=property'
+reveal ast . --where 'decorator!=property'
 
 # Annotations and bracket attributes match by name the same way
-reveal 'ast://.?decorator=Override'      # Java/Kotlin @Override
-reveal 'ast://.?decorator=HttpGet'       # C# [HttpGet], [HttpGet("{id}"), Authorize]
-reveal 'ast://.?decorator=Route'         # PHP #[Route("/x")], C# [Route("api/x")]
-reveal 'ast://.?decorator=derive'        # Rust #[derive(Debug)]; *Debug* globs its arguments
+reveal ast . --where decorator=Override      # Java/Kotlin @Override
+reveal ast . --where decorator=HttpGet       # C# [HttpGet], [HttpGet("{id}"), Authorize]
+reveal ast . --where decorator=Route         # PHP #[Route("/x")], C# [Route("api/x")]
+reveal ast . --where decorator=derive        # Rust #[derive(Debug)]; *Debug* globs its arguments
 ```
 
 ### 7. **Combined Filters**
@@ -263,23 +264,23 @@ Stack multiple filters with AND logic:
 
 ```bash
 # Complex AND long functions
-reveal 'ast://./src?complexity>10&lines>50'
+reveal ast ./src --where 'complexity>10' --where 'lines>50'
 
 # Long but simple (good splitting candidates)
-reveal 'ast://./src?complexity<5&lines>50'
+reveal ast ./src --where 'complexity<5' --where 'lines>50'
 
 # Complex properties (code smell)
-reveal 'ast://.?decorator=property&lines>10'
+reveal ast . --where decorator=property --where 'lines>10'
 
 # Test functions that are too long
-reveal 'ast://./tests?name=test_*&lines>100'
+reveal ast ./tests --where 'name=test_*' --where 'lines>100'
 
 # Entry points that are complex
-reveal 'ast://./src?name=main*&complexity>10'
+reveal ast ./src --where 'name=main*' --where 'complexity>10'
 
 # A key may repeat; every condition applies
-reveal 'ast://./src?kind=function&kind!=method'   # functions that are not methods
-reveal 'ast://./src?lines>20&lines<50'            # same as lines=20..50 but exclusive
+reveal ast ./src --where 'kind!=method' --kind function   # functions that are not methods
+reveal ast ./src --where 'lines>20' --where 'lines<50'            # same as lines=20..50 but exclusive
 ```
 
 ---
@@ -379,7 +380,7 @@ The AST adapter supports three output formats:
 Human-readable output with color coding:
 
 ```bash
-reveal 'ast://./src?complexity>10'
+reveal ast ./src --where 'complexity>10'
 ```
 
 **Output** (run against reveal's own `adapters/ast`):
@@ -410,7 +411,7 @@ another file shows as `name (→ file.py::name)`).
 Structured data for programmatic processing:
 
 ```bash
-reveal 'ast://./src?complexity>10' --format=json
+reveal ast ./src --where 'complexity>10' --format=json
 ```
 
 **Output structure:**
@@ -464,7 +465,7 @@ reveal 'ast://./src?complexity>10' --format=json
 - `displayed_results`: Number of results in output
 - `results`: Array of matched code elements — each has `name` (not `symbol`), `category` (not `type`; the plural of the element kind: `functions`, `classes`, `imports`, `structs`, `interfaces`, `modules`, `namespaces`, `tests`; methods are `functions` with an `owner`; an owned function that is not a method, such as a Rust `mod` member or a function nested in a method, also has `method: false`), and `line_count` (not `lines`). Functions also carry `signature`, `depth`, `calls` and `called_by`; classes carry `bases`. Import rows have no `complexity`.
 - `meta`: Trust metadata (parse mode, confidence) and `warnings`. When `results` holds fewer
-  than `total_results` (`?limit=`, `?offset=`, the 200-result cap on any query without `limit=`,
+  than `total_results` (`--limit`, `--offset`, the 200-result cap on any query without `--limit`,
   `--max-items`, `--head`), one warning says so: `{"type": "truncated", "field": "results",
   "shown", "total", "exact", "cause", "message"}`. Text output prints the same message last.
   When the query filters on `complexity`, a `complexity_is_unweighted` warning is there too.
@@ -474,7 +475,7 @@ reveal 'ast://./src?complexity>10' --format=json
 Machine-readable format for piping to other tools:
 
 ```bash
-reveal 'ast://./src?complexity>10' --format=grep
+reveal ast ./src --where 'complexity>10' --format=grep
 ```
 
 **Output:**
@@ -534,7 +535,7 @@ See [CALLS_ADAPTER_GUIDE.md](CALLS_ADAPTER_GUIDE.md) for full `calls://` documen
 ### JSON output — call fields
 
 ```bash
-reveal 'ast://src/auth.py?kind=function' --format=json | \
+reveal ast src/auth.py --kind function --format=json | \
   jq '.results[] | {name, calls, called_by}'
 ```
 
@@ -559,16 +560,16 @@ Which file `validate_token` is: `reveal 'calls://src/?callees=auth.py:authentica
 
 ```bash
 # Step 1: Find complex functions (industry threshold: >10)
-reveal 'ast://./src?complexity>10'
+reveal ast ./src --where 'complexity>10'
 
 # Step 2: Find oversized functions (>100 lines)
-reveal 'ast://./src?lines>100'
+reveal ast ./src --where 'lines>100'
 
 # Step 3: Find the worst offenders (complex AND long)
-reveal 'ast://./src?complexity>15&lines>100'
+reveal ast ./src --where 'complexity>15' --where 'lines>100'
 
 # Step 4: Sort by complexity to prioritize
-reveal 'ast://./src?complexity>10&sort=-complexity&limit=10'
+reveal ast ./src --where 'complexity>10' --sort=-complexity --limit 10
 
 # Step 5: Drill into a specific problem file
 reveal src/problem_file.py --outline
@@ -585,17 +586,17 @@ reveal src/problem_file.py big_function
 
 ```bash
 # Step 1: Find entry points
-reveal 'ast://.?name=main*'
-reveal 'ast://.?name=*main*'
+reveal ast . --where 'name=main*'
+reveal ast . --where 'name=*main*'
 
 # Step 2: Find CLI handlers
-reveal 'ast://.?name=*cli*|*command*'
+reveal ast . --where 'name=*cli*|*command*'
 
 # Step 3: Survey class hierarchy
-reveal 'ast://.?kind=class'
+reveal ast . --kind class
 
 # Step 4: Find configuration loading
-reveal 'ast://.?name=*config*'
+reveal ast . --where 'name=*config*'
 
 # Step 5: Drill into a key file
 reveal src/core.py --outline
@@ -610,11 +611,11 @@ reveal src/core.py --outline
 ```bash
 # Check complexity of changed files
 git diff --name-only | grep '\.py$' | \
-  xargs -I{} reveal 'ast://{}?complexity>10'
+  xargs -I{} reveal ast {} --where 'complexity>10'
 
 # Find long functions in changed files
 git diff --name-only | grep '\.py$' | \
-  xargs -I{} reveal 'ast://{}?lines>50'
+  xargs -I{} reveal ast {} --where 'lines>50'
 
 # Run full quality checks on changed files
 git diff --name-only | xargs -I{} reveal check {}
@@ -628,23 +629,23 @@ git diff --name-only | xargs -I{} reveal check {}
 
 ```bash
 # Step 1: Find all properties
-reveal 'ast://.?decorator=property'
+reveal ast . --where decorator=property
 
 # Step 2: Find all cached/memoized functions
-reveal 'ast://.?decorator=*cache*'
+reveal ast . --where 'decorator=*cache*'
 # Matches: @lru_cache, @cached_property, @cache
 
 # Step 3: Find static methods (might not need class)
-reveal 'ast://.?decorator=staticmethod'
+reveal ast . --where decorator=staticmethod
 
 # Step 4: Find abstract interface
-reveal 'ast://.?decorator=abstractmethod'
+reveal ast . --where decorator=abstractmethod
 
 # Step 5: Find code smells (complex properties)
-reveal 'ast://.?decorator=property&lines>10'
+reveal ast . --where decorator=property --where 'lines>10'
 
 # Step 6: Get JSON for analysis
-reveal 'ast://.?decorator=*cache*' --format=json | \
+reveal ast . --where 'decorator=*cache*' --format=json | \
   jq -r '.results[] | "\(.file):\(.line) \(.name)"'
 ```
 
@@ -656,16 +657,16 @@ reveal 'ast://.?decorator=*cache*' --format=json | \
 
 ```bash
 # Step 1: Find all test functions
-reveal 'ast://./tests?name=test_*'
+reveal ast ./tests --where 'name=test_*'
 
 # Step 2: Find long tests (>100 lines = potential issues)
-reveal 'ast://./tests?name=test_*&lines>100'
+reveal ast ./tests --where 'name=test_*' --where 'lines>100'
 
 # Step 3: Find complex tests (hard to maintain)
-reveal 'ast://./tests?name=test_*&complexity>10'
+reveal ast ./tests --where 'name=test_*' --where 'complexity>10'
 
 # Step 4: Count tests per file
-reveal 'ast://./tests?name=test_*' --format=json | \
+reveal ast ./tests --where 'name=test_*' --format=json | \
   jq -r '.results[].file' | sort | uniq -c | sort -rn
 ```
 
@@ -677,17 +678,17 @@ reveal 'ast://./tests?name=test_*' --format=json | \
 
 ```bash
 # Step 1: Find all public classes
-reveal 'ast://./src?kind=class' --format=json
+reveal ast ./src --kind class --format=json
 
 # Step 2: Find all public functions (not starting with _)
-reveal 'ast://./src?kind=function' --format=json | \
+reveal ast ./src --kind function --format=json | \
   jq '.results[] | select(.name | startswith("_") | not)'
 
 # Step 3: Find all @property methods (getters/setters)
-reveal 'ast://./src?decorator=property' --format=json
+reveal ast ./src --where decorator=property --format=json
 
 # Step 4: Create API index
-reveal 'ast://./src?kind=class|function' --format=json | \
+reveal ast ./src --kind 'class|function' --format=json | \
   jq -r '.results[] | "\(.file):\(.line) [\(.category)] \(.name)"' | \
   sort > api_index.txt
 ```
@@ -709,7 +710,7 @@ reveal 'calls://src/?callers=validate_token'
 reveal 'calls://src/?callers=validate_token&depth=2'
 
 # Step 4: Extract call data for a specific function (JSON)
-reveal 'ast://src/auth.py?name=authenticate' --format=json | \
+reveal ast src/auth.py --where name=authenticate --format=json | \
   jq '.results[0] | {calls, called_by}'
 
 # Step 5: Generate a visual graph
@@ -780,19 +781,19 @@ Sort output by any field:
 
 ```bash
 # Sort by complexity (ascending)
-reveal 'ast://./src?complexity>5&sort=complexity'
+reveal ast ./src --where 'complexity>5' --sort complexity
 
 # Sort by complexity (descending - most complex first)
-reveal 'ast://./src?complexity>5&sort=-complexity'
+reveal ast ./src --where 'complexity>5' --sort=-complexity
 
 # Sort by lines (shortest first)
-reveal 'ast://./src?sort=lines'
+reveal ast ./src --sort lines
 
 # Sort by lines (longest first)
-reveal 'ast://./src?sort=-lines'
+reveal ast ./src --sort=-lines
 
 # Sort by name (alphabetical)
-reveal 'ast://./src?sort=name'
+reveal ast ./src --sort name
 ```
 
 **Sortable fields:**
@@ -807,13 +808,13 @@ Restrict output to first N results:
 
 ```bash
 # Top 10 most complex functions
-reveal 'ast://./src?sort=-complexity&limit=10'
+reveal ast ./src --sort=-complexity --limit 10
 
 # Top 5 longest functions
-reveal 'ast://./src?sort=-lines&limit=5'
+reveal ast ./src --sort=-lines --limit 5
 
 # First 20 results
-reveal 'ast://./src?limit=20'
+reveal ast ./src --limit 20
 ```
 
 ### Offset Results
@@ -822,13 +823,13 @@ Skip first N results (pagination):
 
 ```bash
 # Skip first 10 results
-reveal 'ast://./src?offset=10'
+reveal ast ./src --offset 10
 
 # Pagination: skip 10, take 10 (results 11-20)
-reveal 'ast://./src?offset=10&limit=10'
+reveal ast ./src --limit 10 --offset 10
 
 # Next page (results 21-30)
-reveal 'ast://./src?offset=20&limit=10'
+reveal ast ./src --limit 10 --offset 20
 ```
 
 ### Combined Result Control
@@ -837,10 +838,10 @@ All three can be combined:
 
 ```bash
 # Most complex functions, paginated
-reveal 'ast://./src?complexity>5&sort=-complexity&limit=20&offset=10'
+reveal ast ./src --where 'complexity>5' --sort=-complexity --limit 20 --offset 10
 
 # Longest functions, top 10
-reveal 'ast://./src?kind=function&sort=-lines&limit=10'
+reveal ast ./src --kind function --sort=-lines --limit 10
 ```
 
 **Performance note**: Result control happens **after** filtering, so:
@@ -849,7 +850,7 @@ reveal 'ast://./src?kind=function&sort=-lines&limit=10'
 3. Results are sorted/limited/offset
 4. Output is generated
 
-This means `limit=10` still scans all files but only returns 10 results.
+This means `--limit 10` still scans all files but only returns 10 results.
 
 ---
 
@@ -871,25 +872,25 @@ AST queries require parsing source code, so they're slower than text search but 
 1. **Narrow the path**: Query specific directories instead of entire codebase
    ```bash
    # ❌ Slow: scans entire codebase
-   reveal 'ast://.?complexity>10'
+   reveal ast . --where 'complexity>10'
 
    # ✅ Fast: only scans src/
-   reveal 'ast://./src?complexity>10'
+   reveal ast ./src --where 'complexity>10'
    ```
 
 2. **Use result control**: Limit output for large codebases
    ```bash
-   reveal 'ast://./src?complexity>10&limit=20'
+   reveal ast ./src --where 'complexity>10' --limit 20
    ```
 
 3. **Cache results**: For repeated queries, save JSON output
    ```bash
-   reveal 'ast://./src?kind=function&limit=100000' --format=json > structure_cache.json
+   reveal ast ./src --kind function --all --format=json > structure_cache.json
    jq '.results[] | select(.complexity > 10)' structure_cache.json
    ```
 
-An `ast://` query without `limit=` is capped at 200 results, filtered or not (`meta.warnings` entry with
-`cause: auto_cap`); pass `limit=` (or `--all`) whenever the output feeds a script or export.
+An `ast` query without `--limit` is capped at 200 results, filtered or not (`meta.warnings` entry with
+`cause: auto_cap`); pass `--all` (or `--limit N`) whenever the output feeds a script or export.
 
 ### Large Codebase Strategies
 
@@ -899,25 +900,25 @@ For projects with 1000+ files:
 ```bash
 # Query subdirectories separately
 for dir in src/*; do
-  reveal "ast://$dir?complexity>10"
+  reveal ast "$dir" --where "complexity>10"
 done
 ```
 
 **Strategy 2: Progressive filtering**
 ```bash
 # First pass: find problem files
-reveal 'ast://./src?complexity>15' --format=json | \
+reveal ast ./src --where 'complexity>15' --format=json | \
   jq -r '.results[].file' | sort -u
 
 # Second pass: deep dive into problem files
-reveal ast://src/problem_file.py
+reveal ast src/problem_file.py
 ```
 
 **Strategy 3: Use CI/CD for incremental analysis**
 ```bash
 # Only analyze changed files
 git diff --name-only origin/main | grep '\.py$' | \
-  xargs -I{} reveal 'ast://{}?complexity>10'
+  xargs -I{} reveal ast {} --where 'complexity>10'
 ```
 
 ### Caching and Pre-computation
@@ -925,8 +926,8 @@ git diff --name-only origin/main | grep '\.py$' | \
 For very large codebases, consider pre-computing structure:
 
 ```bash
-# Generate structure cache (run nightly); limit= lifts the 200-result cap
-reveal 'ast://./src?kind=function&limit=100000' --format=json > structure_cache.json
+# Generate structure cache (run nightly); --all lifts the 200-result cap
+reveal ast ./src --kind function --all --format=json > structure_cache.json
 
 # Query cache with jq (instant)
 jq '.results[] | select(.complexity > 10)' structure_cache.json
@@ -1050,13 +1051,13 @@ Start broad, then narrow:
 
 ```bash
 # 1. Survey entire codebase
-reveal 'ast://./src'
+reveal ast ./src
 
 # 2. Filter by complexity
-reveal 'ast://./src?complexity>10'
+reveal ast ./src --where 'complexity>10'
 
 # 3. Sort and limit to top offenders
-reveal 'ast://./src?complexity>10&sort=-complexity&limit=10'
+reveal ast ./src --where 'complexity>10' --sort=-complexity --limit 10
 
 # 4. Drill into specific file
 reveal src/problem_file.py --outline
@@ -1071,23 +1072,23 @@ reveal src/problem_file.py problematic_function
 
 ```bash
 # Find authentication-related code
-reveal 'ast://./src?name=*auth*'
+reveal ast ./src --where 'name=*auth*'
 
 # Find all test setup functions
-reveal 'ast://./tests?name=setup_*'
+reveal ast ./tests --where 'name=setup_*'
 
 # Find all getter methods
-reveal 'ast://./src?name=get_*'
+reveal ast ./src --where 'name=get_*'
 ```
 
 **Use regex for precision:**
 
 ```bash
 # Only functions starting with test_ (not contains)
-reveal 'ast://./tests?name~=^test_'
+reveal ast ./tests --where 'name~=^test_'
 
 # Only Manager classes (not ManagerFactory)
-reveal 'ast://./src?name~=.*Manager$&kind=class'
+reveal ast ./src --where 'name~=.*Manager$' --kind class
 ```
 
 ### Filter Combination Strategies
@@ -1096,27 +1097,27 @@ reveal 'ast://./src?name~=.*Manager$&kind=class'
 
 ```bash
 # Complex AND long
-reveal 'ast://./src?complexity>10&lines>100'
+reveal ast ./src --where 'complexity>10' --where 'lines>100'
 
 # Properties that are too complex
-reveal 'ast://.?decorator=property&lines>10'
+reveal ast . --where decorator=property --where 'lines>10'
 ```
 
 **OR logic** (only for type parameter):
 
 ```bash
 # Classes OR functions (methods are functions, so they are included)
-reveal 'ast://./src?kind=class|function'
+reveal ast ./src --kind 'class|function'
 ```
 
 **Negation** (exclude matching):
 
 ```bash
 # Everything except functions
-reveal 'ast://./src?kind!=function'
+reveal ast ./src --where 'kind!=function'
 
 # Everything not decorated with @property (undecorated elements included)
-reveal 'ast://.?decorator!=property'
+reveal ast . --where 'decorator!=property'
 ```
 
 ### Quote Consistently
@@ -1125,16 +1126,16 @@ reveal 'ast://.?decorator!=property'
 
 ```bash
 # ✅ GOOD: Quoted
-reveal 'ast://./src?complexity>10'
+reveal ast ./src --where 'complexity>10'
 
 # ❌ BAD: Unquoted (shell redirects > to file)
-reveal 'ast://./src?complexity>10'
+reveal ast ./src --where 'complexity>10'
 
 # ✅ GOOD: Quoted with wildcards
-reveal 'ast://./src?name=test_*'
+reveal ast ./src --where 'name=test_*'
 
 # ❌ BAD: Unquoted (shell expands * to files)
-reveal 'ast://./src?name=test_*'
+reveal ast ./src --where 'name=test_*'
 ```
 
 ### Use JSON for Scripting
@@ -1143,15 +1144,15 @@ When piping to other tools, use JSON output:
 
 ```bash
 # Count functions per file
-reveal 'ast://./src?kind=function' --format=json | \
+reveal ast ./src --kind function --format=json | \
   jq -r '.results[].file' | sort | uniq -c | sort -rn
 
 # Find top 10 most complex functions
-reveal 'ast://./src?kind=function&sort=-complexity&limit=10' --format=json | \
+reveal ast ./src --kind function --sort=-complexity --limit 10 --format=json | \
   jq -r '.results[] | {name, file, complexity, line_count}'
 
-# Generate CSV report (limit= lifts the 200-result cap)
-reveal 'ast://./src?kind=function&limit=100000' --format=json | \
+# Generate CSV report (--all lifts the 200-result cap)
+reveal ast ./src --kind function --all --format=json | \
   jq -r '.results[] | [.file, .name, .complexity, .line_count] | @csv' \
   > code_metrics.csv
 ```
@@ -1162,16 +1163,16 @@ Use industry-standard thresholds:
 
 ```bash
 # Low complexity (1-5): good examples
-reveal 'ast://./src?complexity<=5'
+reveal ast ./src --where 'complexity<=5'
 
 # Moderate (6-10): acceptable
-reveal 'ast://./src?complexity>5&complexity<=10'
+reveal ast ./src --where 'complexity>5' --where 'complexity<=10'
 
 # Needs attention (11-20): refactor soon
-reveal 'ast://./src?complexity>10&complexity<=20'
+reveal ast ./src --where 'complexity>10' --where 'complexity<=20'
 
 # High risk (21+): refactor now
-reveal 'ast://./src?complexity>20'
+reveal ast ./src --where 'complexity>20'
 ```
 
 ### Don't Query What You Don't Need
@@ -1179,13 +1180,13 @@ reveal 'ast://./src?complexity>20'
 **Bad: Query everything, filter later**
 ```bash
 # ❌ Slow: scans all files, returns everything (and only the first 200 rows)
-reveal 'ast://.' --format=json | jq '.results[] | select(.complexity > 10)'
+reveal ast . --format=json | jq '.results[] | select(.complexity > 10)'
 ```
 
 **Good: Filter at query time**
 ```bash
 # ✅ Fast: only returns complex functions
-reveal 'ast://.?complexity>10' --format=json
+reveal ast . --where 'complexity>10' --format=json
 ```
 
 ---
@@ -1196,16 +1197,16 @@ reveal 'ast://.?complexity>10' --format=json
 
 ```bash
 # Top 10 most complex functions
-reveal 'ast://./src?kind=function&sort=-complexity&limit=10' --format=json | \
+reveal ast ./src --kind function --sort=-complexity --limit 10 --format=json | \
   jq '[.results[] | {name, complexity}]'
 
 # Functions by file with complexity
-reveal 'ast://./src?complexity>10' --format=json | \
+reveal ast ./src --where 'complexity>10' --format=json | \
   jq -r '.results | group_by(.file) |
          .[] | "\(.[0].file): \(length) complex functions"'
 
-# Generate HTML report (limit= lifts the 200-result cap)
-reveal 'ast://./src?kind=function&limit=100000' --format=json | \
+# Generate HTML report (--all lifts the 200-result cap)
+reveal ast ./src --kind function --all --format=json | \
   jq -r '.results[] |
          "<tr><td>\(.name)</td><td>\(.complexity)</td></tr>"' \
   > report.html
@@ -1219,7 +1220,7 @@ reveal 'ast://./src?kind=function&limit=100000' --format=json | \
 - name: Check code complexity
   run: |
     # Fail if any function has complexity >20
-    if reveal 'ast://./src?complexity>20' --format=json | \
+    if reveal ast ./src --where 'complexity>20' --format=json | \
        jq -e '.total_results > 0' > /dev/null; then
       echo "::error::Found functions with complexity >20"
       exit 1
@@ -1231,7 +1232,7 @@ reveal 'ast://./src?kind=function&limit=100000' --format=json | \
 ```yaml
 code_quality:
   script:
-    - reveal 'ast://./src?complexity>15' --format=json > complexity.json
+    - reveal ast ./src --where 'complexity>15' --format=json > complexity.json
     - |
       if [ $(jq '.total_results' complexity.json) -gt 0 ]; then
         echo "Warning: Found complex functions"
@@ -1248,7 +1249,7 @@ code_quality:
   hooks:
     - id: complexity-check
       name: Check code complexity
-      entry: bash -c 'reveal "ast://.?complexity>15" --format=json |
+      entry: bash -c 'reveal ast . --where "complexity>15" --format=json |
                       jq -e ".total_results == 0"'
       language: system
       types: [python]
@@ -1262,7 +1263,7 @@ import json
 
 # Run ast query
 result = subprocess.run(
-    ["reveal", "ast://./src?complexity>10", "--format=json"],
+    ["reveal", "ast", "./src", "--where", "complexity>10", "--format=json"],
     capture_output=True,
     text=True
 )
@@ -1283,9 +1284,9 @@ import subprocess
 import json
 import pandas as pd
 
-# Get every function (limit= lifts the 200-result cap)
+# Get every function (--all lifts the 200-result cap)
 result = subprocess.run(
-    ["reveal", "ast://./src?kind=function&limit=100000", "--format=json"],
+    ["reveal", "ast", "./src", "--kind", "function", "--all", "--format=json"],
     capture_output=True,
     text=True
 )
@@ -1302,8 +1303,8 @@ print(df.nlargest(10, "complexity"))
 ### With SQLite (code database)
 
 ```bash
-# Export to CSV (limit= lifts the 200-result cap)
-reveal 'ast://./src?limit=100000' --format=json | \
+# Export to CSV (--all lifts the 200-result cap)
+reveal ast ./src --all --format=json | \
   jq -r '.results[] | [.file, .name, .category, .line, .line_count, .complexity] | @csv' \
   > code_structure.csv
 
@@ -1383,7 +1384,7 @@ A: `name=test_*` uses glob-style wildcards (simpler), `name~=^test_` uses regex 
 
 **Q: Why are my results slow?**
 
-A: AST queries parse all source files. Narrow your path (`ast://./src` instead of `ast://.`) or use result control (`limit=20`).
+A: AST queries parse all source files. Narrow your path (`reveal ast ./src` instead of `reveal ast .`) or use result control (`--limit 20`).
 
 **Q: Can I query across multiple languages?**
 
@@ -1406,13 +1407,13 @@ See [CALLS_ADAPTER_GUIDE.md](CALLS_ADAPTER_GUIDE.md) for full documentation.
 
 **Q: How do I exclude test files?**
 
-A: Query a specific directory: `ast://./src` (not `ast://.`), or filter results with `jq`.
+A: Query a specific directory: `reveal ast ./src` (not `reveal ast .`), or filter results with `jq`.
 
 **Q: Can I save queries as shortcuts?**
 
 A: Yes! Create shell aliases:
 ```bash
-alias reveal-complex="reveal 'ast://./src?complexity>10&sort=-complexity&limit=20'"
+alias reveal-complex="reveal ast ./src --where 'complexity>10' --sort=-complexity --limit 20"
 ```
 
 ---

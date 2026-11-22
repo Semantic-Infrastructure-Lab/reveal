@@ -20,7 +20,7 @@ Query parameters allow filtering, formatting, and modifying adapter behavior usi
 | **json://** | `view` (`value`, `schema`, `flatten`, `type`, `keys`, `length`), `where` (field filters), `detail`, `sort`, `limit`, `offset` (retired, with a note: the first bare words `schema`, `flatten`, `gron`, `type`, `keys`, `length`) | `json://data.json?view=schema` |
 | **markdown://** | field filters (frontmatter), `aggregate`, `body-contains`, `sort`, `limit`, `offset` | `markdown://docs/?status=draft` |
 | **metrics://** | `view` (`hotspots`, `provenance`), `where` (field filters), `code-only`, `churn`, `merges`, `since`, `tests`, `detail`, `exclude`, `sort`, `limit`, `offset` (retired, with a note: `hotspots`, `top`, `min_lines`, `max_lines`, `min_complexity`, `max_complexity`, `min_functions`, `no_merges`, `summary_only`) | `metrics://.?view=hotspots` |
-| **ast://** | `type`, `name`, `complexity`, `lines`, `depth`, `decorator`, `show`, `sort`, `limit`, `offset`, `param_type`, `return_type`, `has_annotations`, `callers`, `reveal_type` (retired, with a note: `calls`, `callee_of`, `show=calls`) | `ast://src?complexity>10` |
+| **ast://** | `kind`, `where` (fields `name`, `complexity`, `lines`, `nesting_depth`, `decorator`, `param_type`, `return_type`, `has_annotations`, `callers`, `kind`), `view` (`dict-heatmap`, `dict-schemas`), `reveal-type`, `builtins`, `sort`, `limit`, `offset` (noted legacy words: `type`, `depth`, `show`; retired, with a note: `calls`, `callee_of`, `show=calls`) | `reveal ast src --where 'complexity>10'` |
 | **calls://** | `callers`, `callees`, `detail`, `rank`, `top`, `depth`, `format`, `builtins`, `modules`, `external` (retired, with a note: `uncalled`, `target`, `root`) | `calls://src?callers=fn` |
 | **claude://** | `view`, `detail`, `errors`, `tools`, `match`, `where`, `sort`, `offset`, `limit`, `tokens` | `claude://session/NAME?detail=summary` |
 | **codex://** | `search`, `filter`, `since`, `until` | `codex://sessions/?search=auth-refactor` |
@@ -311,42 +311,42 @@ reveal 'metrics://.?view=hotspots&code-only=true'
 
 **Query Parameters**:
 
-- **`type`** - Filter by element type (`function`, `class`, `method`)
+- **`--kind`** - Filter by element type (`function`, `class`, `method`; `type` is its noted legacy word)
   ```bash
-  reveal 'ast://src?kind=function'
-  reveal 'ast://src?kind=class'
+  reveal ast src --kind function
+  reveal ast src --kind class
   ```
 
-- **`name`** / **`name~=`** - Filter by element name (exact or substring)
+- **`--where name=`** / **`name~=`** - Filter by element name (exact or substring)
   ```bash
-  reveal 'ast://src?name=validate_item'
-  reveal 'ast://src?name~=auth'          # name contains "auth"
-  reveal 'ast://src?name=*handler*'      # wildcard match
+  reveal ast src --where name=validate_item
+  reveal ast src --where 'name~=auth'          # name contains "auth"
+  reveal ast src --where 'name=*handler*'      # wildcard match
   ```
 
-- **`complexity>`** - Filter by cyclomatic complexity
+- **`--where 'complexity>N'`** - Filter by cyclomatic complexity
   ```bash
-  reveal 'ast://src?complexity>10'       # complexity over 10
-  reveal 'ast://src?complexity>5&kind=function'
+  reveal ast src --where 'complexity>10'       # complexity over 10
+  reveal ast src --where 'complexity>5' --kind function
   ```
 
-- **`lines`** / **`lines>`** - Filter by element length in lines
+- **`--where 'lines>N'`** - Filter by element length in lines
   ```bash
-  reveal 'ast://src?lines>50'            # functions longer than 50 lines
-  reveal 'ast://src?lines=20..50'        # functions that are 20–50 lines long
+  reveal ast src --where 'lines>50'            # functions longer than 50 lines
+  reveal ast src --where lines=20..50        # functions that are 20–50 lines long
   ```
 
-- **`depth>`** - Filter by nesting depth, in `where` (a bare `depth` is the shared depth control, never a field)
+- **`--where 'nesting_depth>N'`** - Filter by nesting depth (`depth` in `where` is its noted legacy word; a bare `depth` is the shared depth control, never a field)
   ```bash
-  reveal 'ast://src?where=depth>3'       # deeply nested code
+  reveal ast src --where 'nesting_depth>3'       # deeply nested code
   ```
 
-- **`decorator`** - Filter by decorator, annotation or attribute name
+- **`--where decorator=`** - Filter by decorator, annotation or attribute name
   ```bash
-  reveal 'ast://src?decorator=property'
-  reveal 'ast://src?decorator=staticmethod'
-  reveal 'ast://src?decorator=HttpGet'         # C# [HttpGet], [HttpGet("{id}"), Authorize]
-  reveal 'ast://src?decorator=derive'          # Rust #[derive(Debug, Clone)]
+  reveal ast src --where decorator=property
+  reveal ast src --where decorator=staticmethod
+  reveal ast src --where decorator=HttpGet         # C# [HttpGet], [HttpGet("{id}"), Authorize]
+  reveal ast src --where decorator=derive          # Rust #[derive(Debug, Clone)]
   ```
   Bracket attributes match by name like at-style decorators; each attribute of a group such as
   `[HttpGet, Authorize]` matches on its own. A qualified name matches by its trailing segments
@@ -373,38 +373,38 @@ reveal 'metrics://.?view=hotspots&code-only=true'
   reveal ast src --view dict-schemas
   ```
 
-- **`sort`** - Sort by a field descending with `-` prefix (e.g., `sort=-complexity`)
+- **`--sort`** - Sort by a field, descending with a `-` prefix (`--sort=-complexity`); text keeps the sorted order
   ```bash
-  reveal 'ast://src?sort=-complexity'    # most complex first
-  reveal 'ast://src?sort=-lines'         # longest first
+  reveal ast src --sort=-complexity    # most complex first
+  reveal ast src --sort=-lines         # longest first
   ```
 
-- **`param_type=`** - Filter functions by parameter annotation (glob and regex supported)
+- **`--where param_type=`** - Filter functions by parameter annotation (glob and regex supported)
   ```bash
-  reveal 'ast://src?param_type=str'
-  reveal 'ast://src?param_type=List*'    # glob
+  reveal ast src --where param_type=str
+  reveal ast src --where 'param_type=List*'    # glob
   ```
 
-- **`return_type=`** - Filter functions by return annotation (glob and regex supported)
+- **`--where return_type=`** - Filter functions by return annotation (glob and regex supported)
   ```bash
-  reveal 'ast://src?return_type=bool'
-  reveal 'ast://src?return_type=Optional*'
+  reveal ast src --where return_type=bool
+  reveal ast src --where 'return_type=Optional*'
   ```
 
-- **`has_annotations=`** - Filter by annotation presence (`true` = fully annotated, `false` = fully unannotated)
+- **`--where has_annotations=`** - Filter by annotation presence (`true` = fully annotated, `false` = fully unannotated)
   ```bash
-  reveal 'ast://src?has_annotations=false'   # find unannotated functions
-  reveal 'ast://src?has_annotations=true'    # only annotated functions
-  reveal 'ast://src?kind=function&has_annotations=false'  # annotation coverage audit
+  reveal ast src --where has_annotations=false   # find unannotated functions
+  reveal ast src --where has_annotations=true    # only annotated functions
+  reveal ast src --where has_annotations=false --kind function  # annotation coverage audit
   ```
 
-- **`callers>N`** - Filter by inbound caller count
+- **`--where 'callers>N'`** - Filter by inbound caller count
   ```bash
-  reveal 'ast://src?callers>5'               # called by more than 5 functions
-  reveal 'ast://src?callers>5&complexity>10' # hot + complex = prime refactor targets
+  reveal ast src --where 'callers>5'               # called by more than 5 functions
+  reveal ast src --where 'callers>5' --where 'complexity>10' # hot + complex = prime refactor targets
   ```
 
-- **`reveal_type=`** - Query type evidence for a variable without editing source
+- **`--reveal-type NAME`** (was `reveal_type=`) - Query type evidence for a variable without editing source
   ```bash
   reveal ast src/file.py --reveal-type x   # type evidence for 'x'; a name with no occurrence exits 2
   ```
