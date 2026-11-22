@@ -28,7 +28,7 @@ reveal markdown docs/ --backlinks guide.md
 | `field` | Field counted by `view=aggregate` |
 | `backlinks` | Existing reverse-link target lookup |
 | `columns` | Additional frontmatter columns; `fields=` remains a URI alias |
-| `explain` | Per-term evidence for body relevance scores |
+| `explain` | Per-term evidence for body relevance scores; needs `match` (without one it exits 2) |
 | `sort` | Frontmatter field; prefix `-` for descending |
 | `limit` | Answer rows; `0` = no cap, every row (it used to return an empty page) |
 | `offset` | Answer rows skipped after sorting |

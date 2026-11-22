@@ -59,8 +59,9 @@ LINT_FIELDS = ParamSpec('lint-fields', 'array', 'Required frontmatter fields for
                         aliases=('lint_fields',), cli=CliBinding(('--lint-fields',)), answers=(_LINT,))
 FIELDS = ParamSpec('columns', 'array', 'Additional frontmatter fields displayed as listing columns', None, fields,
                    legacy=(LegacySpelling('fields'),), cli=CliBinding(('--columns',)), answers=(_LIST,))
+# explain is evidence of the body match's ranking: without a match there is nothing to explain (COMMAND_MODEL "Applicability").
 EXPLAIN = ParamSpec('explain', 'boolean', 'Include per-term body relevance evidence', False, boolean_value,
-                    cli=CliBinding(('--explain',), action='store_true'), answers=(_LIST,))
+                    cli=CliBinding(('--explain',), action='store_true'), answers=(_LIST,), requires=('match',))
 SORT = ParamSpec('sort', 'string', 'Frontmatter field; prefix - for descending', None, str,
                  cli=CliBinding(('--sort',)), answers=(_LIST,))
 LIMIT = ParamSpec('limit', 'integer', 'Answer rows; 0 = no cap', None, int, minimum=0,

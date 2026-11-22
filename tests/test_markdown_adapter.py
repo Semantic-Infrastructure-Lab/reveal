@@ -622,11 +622,13 @@ Nothing about the topic here.
         titles = [r['title'] for r in result['results']]
         assert titles == sorted(titles)
 
-    def test_explain_without_body_contains_is_a_noop(self, ranked_docs):
-        """?explain has no effect when there's no body-contains search to score."""
-        adapter = MarkdownQueryAdapter(str(ranked_docs), query='explain')
-        result = adapter.get_structure()
-        assert all('relevance_score' not in r for r in result['results'])
+    def test_explain_without_body_contains_is_refused(self, ranked_docs):
+        """?explain needs a body match to explain: without one the request exits 2 naming match (BACK-2614 B7; it used
+        to be a silent no-op)."""
+        from reveal import api
+        from reveal.errors import UnreadControlError
+        with pytest.raises(UnreadControlError, match='requires match'):
+            api.query(f'markdown://{ranked_docs.as_posix()}?explain')
 
 
 @pytest.fixture
