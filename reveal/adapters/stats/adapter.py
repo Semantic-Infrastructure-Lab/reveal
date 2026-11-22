@@ -223,8 +223,9 @@ _OFFSET = ParamSpec('offset', 'integer', 'Skip this many rows before the first o
                     _count('offset'), ('offset=5',), minimum=0, role='analysis',
                     cli=CliBinding(('--offset',), metavar='N'), answers=(_DIRECTORY, 'view=hotspots'))
 # The walk's scope, from the URI or the global --exclude/--no-gitignore (overview composes them); declared so
-# where does not take them for filters. No subcommand flag: the global flags carry them.
-_EXCLUDE = replace(exclude_param(), answers=(_DIRECTORY,))
+# where does not take them for filters. No subcommand flag: the global flags carry them. exclude is the shared walk
+# control as declared (BACK-2730): every answer's walk applies it (provenance's too), and a file target satisfies it.
+_EXCLUDE = exclude_param()
 _RESPECT_GITIGNORE = ParamSpec('respect_gitignore', 'string', 'false includes files git ignores; --respect-gitignore '
                                'off fills it', None, lambda value: value, role='scope')
 

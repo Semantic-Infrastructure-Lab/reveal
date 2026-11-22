@@ -72,14 +72,11 @@ _FILE, _FILE_LEGACY, _FILE_HOT = 'stats_file, default', 'stats_file, hotspots', 
     (('metrics://.?view=hotspots&detail=summary',), "'detail'", _HOT),     # silent before: the ranking is the rows
     (('metrics://.?view=provenance&limit=2',), "'limit'", _PROV),
     (('metrics://.?view=provenance&code-only',), "'code-only'", _PROV),
-    (('metrics://.?view=provenance&exclude=tests',), "'exclude'", _PROV),
     (('metrics://.?view=provenance&lines>5',), "'where' (lines>5)", _PROV),  # silent before
     (('metrics://app.py?limit=2',), "'limit'", _FILE),
     (('metrics://app.py?offset=1',), "'offset'", _FILE),
-    (('metrics://app.py?exclude=tests',), "'exclude'", _FILE),
     (('metrics://conf.yaml?code-only',), "'code-only'", _FILE),             # silent before: a file is not walked
     (('metrics://app.py?hotspots&limit=2',), "'limit'", _FILE_LEGACY),
-    (('metrics://app.py?view=hotspots&exclude=tests',), "'exclude'", _FILE_HOT),
     (('metrics', '.', '--top', '3'), "'top'", _DIR),                         # the subcommand
     (('metrics', '.', '--no-churn'), "'churn'", _DIR),                       # a legacy spelling names its control
     (('metrics', '.', '--view', 'provenance', '--sort', 'lines'), "'sort'", _PROV),
@@ -89,6 +86,20 @@ _FILE, _FILE_LEGACY, _FILE_HOT = 'stats_file, default', 'stats_file, hotspots', 
 ])
 def test_metrics_refuses_a_control_its_answer_does_not_read(proj, argv, control, answer):
     _refused(argv, control, answer)
+
+
+@pytest.mark.parametrize('uri,answer', [
+    ('metrics://.?view=provenance&exclude=tests', 'classify_report'),
+    ('metrics://app.py?exclude=tests', 'stats_file'),
+    ('metrics://app.py?view=hotspots&exclude=tests', 'stats_file'),
+])
+def test_metrics_exclude_is_the_walk_control_on_every_answer(proj, uri, answer):
+    """Moved from the refusals above (BACK-2730): exclude is the shared walk control, declared as every walking noun
+    declares it, so no answer refuses it as unread. The provenance walk applies it as --exclude did, and a file target
+    satisfies it (D-2730-2 (a)): metrics answers alike on the flag and the URI."""
+    run, doc = _run(uri)
+    assert run.returncode == 0, (run.returncode, run.stderr)
+    assert doc['type'] == answer
 
 
 def test_metrics_api_refuses_the_same_request(proj):
