@@ -5,7 +5,9 @@ declarations that follow cannot change an answer by accident. The fixtures are a
 test sets itself (never HOME, USER or another variable the host owns, V042).
 """
 import json
+import os
 import sqlite3
+import sys
 
 import pytest
 
@@ -151,3 +153,62 @@ def test_api_env_listing_is_unchanged(variables):
     doc = api.query('env://')
     assert doc['type'] == 'environment'
     assert {v['name'] for rows in doc['categories'].values() for v in rows} >= {TOKEN, PLAIN}
+
+
+# --- sqlite under its declarations (ruled: Q4 --view health with --check its translated legacy spelling; B10) -------
+# Red until the declarations land: reveal sqlite is generated from them, typed keywords bind, health is a view.
+
+def _answer(doc):
+    from conftest import without_request_notes
+    doc = without_request_notes(doc)
+    doc.get('execution', {}).pop('command', None)
+    return doc
+
+
+@pytest.mark.parametrize('sub, uri', [(['app.db'], 'sqlite://app.db'), (['app.db/users'], 'sqlite://app.db/users'),
+                                      (['app.db/v_titles'], 'sqlite://app.db/v_titles')])
+def test_sqlite_subcommand_answers_as_the_resource_uri(db, sub, uri):
+    sub_run, sub_doc = _json('sqlite', *sub)
+    uri_run, uri_doc = _json(uri)
+    assert (sub_run.returncode, uri_run.returncode) == (0, 0)
+    assert _answer(sub_doc) == _answer(uri_doc)
+
+
+def test_sqlite_view_health_is_the_health_answer_and_check_its_legacy_spelling(db):
+    view_run, view_doc = _json('sqlite', 'app.db', '--view', 'health')
+    check_run, check_doc = _json('sqlite', 'app.db', '--check')
+    uri_run, uri_doc = _json('sqlite://app.db', '--view', 'health')
+    assert (view_run.returncode, check_run.returncode, uri_run.returncode) == (1, 1, 1)  # BACK-2753 owns the codes
+    assert view_doc['type'] == 'sqlite_health' and view_doc['foreign_key_violations'] == 1
+    assert _answer(view_doc)['foreign_key_violations'] == _answer(check_doc)['foreign_key_violations']
+    notes = [w for w in check_doc['meta']['warnings'] if '--check' in w.get('message', '')]
+    assert notes and '--view health' in notes[0]['message']
+    assert not [w for w in view_doc['meta']['warnings'] if '--check' in w.get('message', '')]
+
+
+def test_sqlite_typed_api_binds_its_controls(db):
+    from reveal.errors import UnsupportedOverrideError
+    assert api.query('sqlite', 'app.db')['type'] == 'sqlite_database'
+    assert api.query('sqlite', 'app.db', view='health')['type'] == 'sqlite_health'
+    with pytest.raises(UnsupportedOverrideError):
+        api.query('sqlite://app.db', bogus_kw=1)
+
+
+def test_sqlite_unknown_query_key_is_refused(db):
+    run = _run_reveal_direct('sqlite://app.db?bogus=1')
+    assert run.returncode == 2 and 'bogus' in run.stderr
+
+
+@pytest.mark.skipif(sys.platform == 'win32' or getattr(os, 'geteuid', lambda: 1)() == 0,
+                    reason='chmod 000 does not make a file unreadable on Windows or for root')
+def test_sqlite_health_of_an_unreadable_database_is_incomplete_exit_3(db, tmp_path):
+    locked = tmp_path / 'locked.db'
+    locked.write_bytes((tmp_path / db).read_bytes())
+    locked.chmod(0)
+    try:
+        for argv in (['sqlite://locked.db', '--check'], ['sqlite', 'locked.db', '--view', 'health']):
+            run = _run_reveal_direct(*argv)
+            assert run.returncode == 3, (argv, run.returncode, run.stderr)  # B10: --check exited 1
+        assert _run_reveal_direct('sqlite://locked.db').returncode == 3  # control: the plain read already exits 3
+    finally:
+        locked.chmod(0o600)
