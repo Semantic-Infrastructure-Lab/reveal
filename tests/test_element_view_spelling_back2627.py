@@ -297,7 +297,7 @@ def test_depth_without_transitive_exits_2_naming_what_it_requires(copies):
 
 
 @pytest.mark.parametrize('flags,name', [(['--boundary', '--limit', '2'], '--limit'), (['--exits', '--files'], '--files'),
-                                        (['--view', 'flow', '--meta'], '--meta')])
+                                        (['--view', 'flow', '--max-items', '3'], '--max-items')])
 def test_a_main_parser_control_no_element_view_reads_exits_2_as_unsupported(copies, flags, name):
     """D3 (U1): an element request takes the globals, its declarations and the measured reads; any other given
     main-parser control is an unsupported control (D18), exit 2 naming it."""
