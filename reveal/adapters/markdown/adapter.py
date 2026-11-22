@@ -18,8 +18,8 @@ from . import operations
 from . import files
 from . import filtering
 from .results import BodySearchAnalysis, valid_source_analysis
-from ...utils.query_parser import QueryParams, ResourceSpec, param_schema, parse_query_params
-from ...utils.query_binding import bind_declared_params
+from ...utils.query_parser import QueryParams, ResourceSpec, param_schema
+from ...utils.query_binding import bind_declared_params, prepare_declared_params
 from .params import (PARAM_SPECS, MATCH, BACKLINKS, AGGREGATE, FIELD, LINT_FIELDS, FIELDS, EXPLAIN,
                      selected_view, result_type, result_control, filter_state, describe_request, validate_request)
 from ...errors import RequestValidationError
@@ -166,8 +166,8 @@ class MarkdownQueryAdapter(ResourceAdapter):
 
     @staticmethod
     def uri_result_type(resource):
-        params = parse_query_params(resource.partition('?')[2])
-        return result_type(params)
+        # Bound, so a legacy selector reads as the view it spells (?link-graph is view=links).
+        return result_type(prepare_declared_params(PARAM_SPECS, resource.partition('?')[2], 'uri'))
 
     @staticmethod
     def execution_facts(result):

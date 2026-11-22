@@ -270,7 +270,7 @@ def test_failed_frontmatter_read_is_not_a_negative_filter_decision(tmp_path, mon
 
 def test_healthy_missing_field_retains_its_existing_meaning(tmp_path):
     document(tmp_path, content=b'No frontmatter\n')
-    answer = api.query(uri(tmp_path))
+    answer = api.query(uri(tmp_path, 'view=aggregate&field=kind'))  # the canonical spelling: no legacy row (BACK-2614)
     assert answer['matched_files'] == 1
     assert answer['files_missing_field'] == 1
     assert answer['aggregate'] == []

@@ -395,6 +395,10 @@ PRODUCTION_CASES = {
     'param:ast.depth': lambda f: [f'ast://{f}?depth=0'],
     'param:markdown.body-contains': lambda f: [f'markdown://{Path(f).parent}?body-contains=auth'],
     'param:markdown.fields': lambda f: [f'markdown://{Path(f).parent}?fields=title'],
+    # BACK-2614: the legacy selectors are --view links / --view lint; aggregate is a standalone legacy word.
+    'param:markdown.link-graph': lambda f: [f'markdown://{Path(f).parent}?link-graph'],
+    'param:markdown.lint': lambda f: [f'markdown://{Path(f).parent}?lint'],
+    'param:markdown.aggregate': lambda f: [f'markdown://{Path(f).parent}?aggregate=title'],
     'param:ast.callee_of': lambda f: [f'ast://{f}?callee_of=auth_gate'],
     'value:ast.show=calls': lambda f: [f'ast://{f}?show=calls'],
     # BACK-2613: show is --view; the calls view is a retired value on both spellings.

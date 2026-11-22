@@ -36,7 +36,8 @@ def test_retirement_inventory_matches_the_shipped_migrations():
     BACK-2622 adds Overview's top (a standalone legacy cap) and no_imports (--imports off).
     BACK-2725 adds JSON's data-only (a standalone legacy setting: the bare lines array).
     BACK-2616 adds Git's type, no_merges and raw (--view, --merges off, --detail raw) and its view=log and
-    detail=summary values (--view history, --detail normal). BACK-2626 adds SQLite's check (--view health).
+    detail=summary values (--view history, --detail normal). BACK-2626 adds SQLite's check (--view health). BACK-2614 adds
+    Markdown's link-graph and lint (--view links, --view lint) and its standalone aggregate (--view aggregate --field FIELD).
     """
     generated = [f'flag:{noun}.{flag}' for noun, flags in LEGACY_CLI_MODIFIERS.items() for flag in flags]  # BACK-2673
     assert sorted(RETIREMENTS) == sorted(generated + ['flag:--also-json', 'flag:--calls', 'flag:--catchmap', 'flag:--check', 'flag:--deps',
@@ -51,7 +52,8 @@ def test_retirement_inventory_matches_the_shipped_migrations():
                                    'param:json.data-only', 'param:json.flatten', 'param:json.gron', 'param:json.keys', 'param:json.length', 'param:json.schema', 'param:json.type',
                                    'param:hotspots.files_only', 'param:hotspots.functions_only', 'param:hotspots.verbose',
                                    'param:imports.max_files', 'param:imports.rank', 'param:imports.top', 'param:imports.verbose',
-                                   'param:markdown.body-contains', 'param:markdown.fields',
+                                   'param:markdown.aggregate', 'param:markdown.body-contains', 'param:markdown.fields', 'param:markdown.link-graph',
+                                    'param:markdown.lint',
                                    'param:metrics.hotspots', 'param:metrics.max_complexity', 'param:metrics.max_lines',
                                    'param:metrics.min_complexity', 'param:metrics.min_functions', 'param:metrics.min_lines',
                                    'param:metrics.no_churn', 'param:metrics.no_merges', 'param:metrics.summary_only',

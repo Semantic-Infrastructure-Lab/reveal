@@ -44,11 +44,11 @@ _LINKS, _LINT = 'markdown_link_graph', 'markdown_frontmatter_lint'
     (('markdown://.?view=links&limit=1',), 'limit', f'{_LINKS}, view, view=links'),     # the ledger's note before
     (('markdown://.?view=lint&sort=title',), 'sort', f'{_LINT}, view, view=lint'),
     (('markdown://.?view=aggregate&field=status&limit=1',), 'limit', 'markdown_aggregate, view, view=aggregate'),
-    (('markdown://.?backlinks=b.md&where=title=A',), 'where', 'markdown_backlinks, default'),  # silent before
+    (('markdown://.?backlinks=b.md&where=title=A',), 'where', 'markdown_backlinks, backlinks, backlinks=b.md'),  # silent before
     (('markdown://.?view=links&columns=title',), 'columns', f'{_LINKS}, view, view=links'),   # silent before
-    (('markdown://.?lint&explain',), 'explain', f'{_LINT}, default'),                          # silent before
+    (('markdown://.?lint&explain',), 'explain', f'{_LINT}, view, view=lint'),                          # silent before
     (('markdown://.?view=list&lint-fields=title',), 'lint-fields', 'markdown_query, view, view=list'),  # silent
-    (('markdown://.?link-graph&match=Body',), 'match', f'{_LINKS}, default'),                  # silent before
+    (('markdown://.?link-graph&match=Body',), 'match', f'{_LINKS}, view, view=links'),                  # silent before
     (('markdown://.?view=links&where=title=A',), 'where', f'{_LINKS}, view, view=links'),     # its own check before
     (('markdown://.?field=status',), 'field', 'markdown_query, default'),                     # its own check before
     (('markdown', '.', '--view', 'links', '--limit', '1'), 'limit', f'{_LINKS}, view, view=links'),  # subcommand
