@@ -20,7 +20,7 @@ Usage::
     result = query("calls", "myproject", callers="main")
 
     # A resource is named by its URI and takes the same keywords
-    history = query("git://myfile.py", limit=5)
+    history = query("git://myfile.py", view="history", limit=5)
 
     # Check code quality — returns list of Detection objects
     findings = check("myfile.py", select=["C", "M"])
@@ -262,7 +262,8 @@ def query(
     ``query("calls", "src", callers="main")`` is ``reveal calls src --callers main --format json``: the same
     answer, run through the CLI's own dispatch, returned instead of printed (BACK-2717). Each keyword is the
     noun's long flag with ``-`` written as ``_`` (``test_framework=``; ``--from`` is ``**{"from": NAME}``); a
-    flag that takes no value takes True. ``query("git://app.py@main", limit=5)`` names a resource by its URI.
+    flag that takes no value takes True. ``query("git://app.py@main", view="history", limit=5)`` names a resource by
+    its URI.
 
     Args:
         uri: A noun (``"calls"``, ``"imports"``, ``"ast"``, ``"metrics"``, ``"overview"``...), or the URI of a
@@ -320,7 +321,7 @@ def query(
         callers = query("calls", "src", callers="process_order", depth=2)
         biggest = query("ast", "src", kind="function", sort="-lines", limit=5)
         sessions = query("claude", "sessions")
-        history = query("git://app.py", limit=5)
+        history = query("git://app.py", view="history", limit=5)
     """
     from . import adapters as _adapters  # noqa: F401 — triggers adapter registrations
     from .adapters.base import _default_from_uri, get_adapter_class
