@@ -159,6 +159,18 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _uri_check_spelling(uri: str) -> str:
+    """How a URI's noun spells its own check: the declared control its legacy ``--check`` stands for (sqlite's
+    ``--view health``, BACK-2626), else ``--check``."""
+    from ..routing.declared import declared_adapter_class
+    adapter = declared_adapter_class(uri.partition('://')[0])
+    for spec in getattr(adapter, 'PARAM_SPECS', ()):
+        entry = spec.legacy_entry('--check')
+        if entry is not None and entry.flag_value is not None and spec.cli is not None:
+            return f'{spec.cli.flags[0]} {entry.translate(entry.flag_value)[spec.name]}'
+    return '--check'
+
+
 def _resolve_check_path(args: Namespace) -> Path:
     """The path ``run_check`` checks, or exit 2: required, not a URI, existing, and a directory
     when ``--changed`` bounds it to a git range (BACK-2068)."""
@@ -173,7 +185,7 @@ def _resolve_check_path(args: Namespace) -> Path:
     import re as _re
     if _re.match(r'^[a-z][a-z0-9+\-.]+://', path_str):
         print(f"Error: '{path_str}' looks like a URI, not a file path.", file=sys.stderr)
-        print(f"  Did you mean: reveal {path_str} --check", file=sys.stderr)
+        print(f"  Did you mean: reveal {path_str} {_uri_check_spelling(path_str)}", file=sys.stderr)
         sys.exit(2)
 
     path = Path(path_str)
