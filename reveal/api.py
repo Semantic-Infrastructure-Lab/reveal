@@ -243,11 +243,28 @@ def _note_uri_request(scheme: str, uri: str, overrides: Dict[str, Any]) -> None:
         return  # no canonical form (a control no flag spells, or one binding rejects): the answer says why, not this note
 
 
+def _refuse_removed_controls(scheme: str, uri: str, overrides: Dict[str, Any]) -> None:
+    """A control whose RETIREMENTS row says it was removed (no adapter reads it any more) is an unsupported control, and
+    the refusal says why in the row's words (plan rule 7, BACK-2752): a URI key raises ``RequestValidationError`` and a
+    typed keyword ``UnsupportedOverrideError``, as any key or keyword the noun does not declare does, before the request
+    binds or names an element, so the generic list of supported controls never stands in for the reason. The CLI
+    already refuses such a URI key with the row's text (``_note_retired_spellings``); no CLI flag spells a typed one."""
+    from .cli.invocation import RETIREMENTS, uri_retirement_keys
+    from .errors import RequestValidationError, UnsupportedOverrideError
+    keys = [(key, RequestValidationError) for key in uri_retirement_keys(uri) if key.startswith('param:')]
+    keys += [(f'param:{scheme.lower()}.{word}', UnsupportedOverrideError) for word in overrides]
+    for key, error in keys:
+        entry = RETIREMENTS.get(key)
+        if entry is not None and entry.removed:
+            raise error(f"unsupported control {key.partition('.')[2]!r}: {entry.text}")
+
+
 def _query_noun(noun: str, target: Optional[str], controls: Dict[str, Any]) -> Dict[str, Any]:
     """The noun form, in one host request and invocation log as the URI form (and an MCP tool call) is."""
     from .cli.routing.typed import answer_typed_request
     from .utils.invocation_log import log_scope
     from .utils.request_cache import host_request
+    _refuse_removed_controls(noun, f'{noun}://', controls)
     with host_request(), log_scope(to_stderr=False):
         return answer_typed_request(noun, target, controls)
 
@@ -343,6 +360,7 @@ def query(
             f"Supported schemes: {supported}"
         )
 
+    _refuse_removed_controls(scheme, uri, kwargs)
     from .adapters.factory import _canonical_init, uses_bound_query_call
     if element_name and uses_bound_query_call(adapter_class):
         # A declared noun reads no positional element: the CLI's refusal, before the adapter is built, never in
