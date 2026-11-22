@@ -42,7 +42,11 @@ def test_codex_default_keeps_three_and_names_the_knob(codex_db):
     assert len(result["sessions"][0]["matches"]) == 3
     (note,) = truncations_of(result)
     assert (note["shown"], note["total"]) == (3, 6)
-    assert "?matches=" in note["message"]
+    # the cut names the flag that widens it, never the retiring query spelling (BACK-2618 teaching, D20)
+    assert "--matches N" in note["message"] and "?matches" not in note["message"], note["message"]
+    canonical = _search("match=needle")
+    (match_note,) = truncations_of(canonical)
+    assert match_note["message"] == note["message"]
 
 
 def test_codex_matches_param_widens_and_zero_keeps_all(codex_db):
