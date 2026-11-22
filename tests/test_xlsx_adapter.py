@@ -1848,15 +1848,15 @@ class TestWorkbookOverviewExtras:
 
     def test_render_overview_shows_powerquery_line(self):
         assert 'Power Query' in self._adv_rendered
-        assert '?powerquery=list' in self._adv_rendered
+        assert '--powerquery list' in self._adv_rendered
 
     def test_render_overview_shows_connections_line(self):
         assert 'connection' in self._adv_rendered.lower()
-        assert '?connections=list' in self._adv_rendered
+        assert '--connections list' in self._adv_rendered
 
     def test_render_overview_shows_named_ranges_line(self):
         assert 'named range' in self._adv_rendered.lower()
-        assert '?names=list' in self._adv_rendered
+        assert '--names list' in self._adv_rendered
 
     def test_plain_file_has_none_banner_or_no_extras(self):
         """A file with no model/PQ/connections/names may have no banner or empty banner."""
