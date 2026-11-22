@@ -199,6 +199,7 @@ def aggregate_field_values(
     analyzed = len(all_files) - len(candidates) - len(failed)
     counts: Counter = Counter()
     matched = missing = 0
+    seen_fields: set = set()
     for path in candidates:
         try:
             frontmatter, selected = _aggregate_candidate(path, filters, body_contains)
@@ -207,6 +208,7 @@ def aggregate_field_values(
             unreadable.append((to_posix(path), failure_of(exc).cause))
             continue
         analyzed += 1
+        seen_fields.update(frontmatter or {})
         if selected:
             matched += 1
             missing += _count_aggregate_value(counts, (frontmatter or {}).get(field))
@@ -225,6 +227,10 @@ def aggregate_field_values(
     note_warning(result, worker_lost_warning(lost, "they were not searched, so counts may be low", base_path))
     warning = traversal_failed_warning(discovery, base_path)
     note_warning(result, dict(warning) if warning else None)
+    # A field no scanned document's front matter has may be a typo, not a genuine "every file lacks it" (ruling Q5): the
+    # shared open-field disclosure, as a where field gets; an empty tree scanned nothing to tell.
+    if seen_fields and field not in seen_fields:
+        note_warning(result, unknown_filter_field_warning([field], "file's front matter", 'markdown'))
     return result
 
 
