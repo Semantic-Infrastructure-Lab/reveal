@@ -11,6 +11,7 @@ Effect on every noun: one seam, so every declared noun's parser (subcommand and 
 mode for "a value flag missing its value, followed by ``--format json``". Requests whose value comes last, explicit
 ``--flag=VALUE`` spellings, a negative number value and text mode are unchanged (controls below).
 """
+import argparse
 import json
 
 import pytest
@@ -101,3 +102,15 @@ def test_a_negative_number_value_is_still_read_as_the_value(workspace):
     run = _run('ast', 'proj', '--limit', '-1', '--format', 'json')
     doc = json.loads(run.out)
     assert run.rc == 2 and 'limit must be >= 0' in doc['error']
+
+
+def test_typed_defaults_leave_out_suppressed_defaults_as_argparse_does():
+    """A request whose own usage error stops the tolerant re-read is read over the parser's defaults; an option whose
+    default is ``argparse.SUPPRESS`` is absent from argparse's namespace, never the string '==SUPPRESS==' (which read
+    as a given element control and named the wrong answer in the path read's document, BACK-2756)."""
+    parser = _parser()
+    parser.add_argument('--view', default=argparse.SUPPRESS)
+    parser._argv = ['proj', '--limit']
+    args = parser._typed_defaults()
+    assert not hasattr(args, 'view') and args.path == 'proj' and args.limit is None
+    assert not hasattr(parser.parse_args(['proj']), 'view')  # the oracle
