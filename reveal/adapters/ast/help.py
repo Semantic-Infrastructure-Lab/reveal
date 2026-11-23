@@ -514,8 +514,8 @@ def get_help() -> Dict[str, Any]:
         'description': 'Query code as an AST database - find functions by complexity, size, type',
         'syntax': 'reveal ast <path> [--where EXPR]... [--kind KIND] [--sort [-]FIELD] [--limit N|--all] [--offset N] '
                   '| --view dict-heatmap|dict-schemas | --reveal-type NAME',
-        'epilog': ('URI: ast://<path> names the same resource and takes the same flags; its legacy query string '
-                   '(?complexity>10&kind=function) still works with a replaced-by note.'),
+        'epilog': ('The deprecated ast:// URI takes the same flags until 1.0, with a replaced-by note; so does its '
+                   'legacy query string (?complexity>10&kind=function).'),
         'operators': {
             '>': 'Greater than',
             '<': 'Less than',

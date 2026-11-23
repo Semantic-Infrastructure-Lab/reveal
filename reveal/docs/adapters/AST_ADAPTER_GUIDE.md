@@ -5,7 +5,7 @@ category: guide
 # AST Adapter Guide
 
 **Status**: 🟢 Stable - Production Ready
-**Adapter**: `reveal ast PATH` and `ast://PATH` share declared controls.
+**Adapter**: `reveal ast PATH` (the deprecated `ast://` URI takes the same declared controls until 1.0).
 
 ```bash
 reveal ast src/ --kind function --where 'complexity>10' --sort=-complexity --limit 10
@@ -82,8 +82,8 @@ reveal ast ./src --where 'complexity>10' --format=json
 
 **Note**: Quote `--where` expressions containing `>` or `<` to prevent shell redirection.
 
-URI resource paths use existing-path-first decoding. For example,
-`ast://src%20tree --kind function` targets `src tree`; encode a literal `?` in a
+The deprecated `ast://` URI decodes its resource path existing-path-first. For example,
+`src%20tree` in it targets `src tree`; encode a literal `?` in a
 filename as `%3F` so it stays separate from the query. An existing literal percent
 path wins; otherwise an existing path is decoded once. `+` stays literal, malformed
 percent escapes stay literal, and invalid encoded UTF-8 or NUL is rejected before
