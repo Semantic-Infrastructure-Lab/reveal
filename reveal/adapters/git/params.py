@@ -55,7 +55,7 @@ def commit_prefixes(value: Any) -> list[str]:
         raise ParamValueError(f'ignore-commits must be commit hash prefixes, got {value!r}')
     prefixes = [part.strip() for item in values for part in item.split(',') if part.strip()]
     if not prefixes:
-        raise ParamValueError(f'ignore-commits needs a commit hash prefix, got {value!r}: --ignore-commits SHA[,SHA...]')
+        raise ParamValueError('ignore-commits needs a commit hash prefix: --ignore-commits SHA[,SHA...]')
     return list(dict.fromkeys(prefixes))
 
 
