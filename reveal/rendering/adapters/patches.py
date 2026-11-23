@@ -28,7 +28,7 @@ class PatchesRenderer(BaseRenderer):
                  f"Patch uses: {result.get('total_uses', 0)}  Targets: {result.get('total_targets', 0)}",
                  _scope_line(result.get('test_scope'))]
         if query.get('suppress', True):
-            lines.append('(sys.stdout/stderr and builtins suppressed — use suppress=false to include)')
+            lines.append('(sys.stdout/stderr and builtins suppressed — use --suppress off to include)')
         lines.append('')
         groups = result.get('groups', [])
         if not groups:

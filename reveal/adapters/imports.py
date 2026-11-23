@@ -14,6 +14,7 @@ Usage:
 
 import difflib
 import os
+import shlex
 import sys
 from pathlib import Path
 from typing import Callable, Dict, Any, List, Optional, Tuple, cast
@@ -975,12 +976,12 @@ class ImportsRenderer:
         ImportsRenderer._render_outside_failures(metadata, 'these imports')
         # The scanned path, not the renderer's `resource` argument, which reaches
         # here as '.' and widened a copy-pasted query to the whole cwd (BACK-1508).
-        scope = cwd_path('', str(display_path))
-        print("Query options:")
-        print(f"  reveal 'imports://{scope}?unused'       - Find unused imports")
-        print(f"  reveal 'imports://{scope}?circular'     - Detect circular deps")
-        print(f"  reveal 'imports://{scope}?violations'   - Check layer violations")
-        print(f"  reveal 'imports://{scope}?sort=-fan-in'  - Rank files by fan-in (core abstractions)")
+        command = f"reveal imports {shlex.quote(cwd_path('', str(display_path)))}"
+        print("Next steps:")
+        print(f"  {command} --unused        # Find unused imports")
+        print(f"  {command} --circular      # Detect circular deps")
+        print(f"  {command} --violations    # Check layer violations")
+        print(f"  {command} --sort=-fan-in  # Rank files by fan-in (core abstractions)")
         print()
 
     @staticmethod
@@ -1854,7 +1855,7 @@ class ImportsAdapter(ResourceAdapter):
     def _format_fan_in(self) -> Dict[str, Any]:
         data = self._analysis_view(include_top=True).fan_in()
         response = self._build_response('fan_in_ranking', **data)
-        note_truncation(response, 'entries', len(data['entries']), data['total'], 'limit', hint='raise ?limit=N (--limit N; 0 = all)')
+        note_truncation(response, 'entries', len(data['entries']), data['total'], 'limit', hint='raise --limit N (0 = all)')
         return response
 
     def _format_entrypoints(self) -> Dict[str, Any]:

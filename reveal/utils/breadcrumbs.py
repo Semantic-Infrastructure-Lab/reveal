@@ -480,13 +480,13 @@ def _suggest_ordinal_extraction(path, structure, hints_shown):
 
 
 def _suggest_imports_analysis(path, file_type, structure):
-    """Suggest imports:// for files with many imports."""
+    """Suggest reveal imports for files with many imports."""
     if 'imports' not in structure:
         return
 
     import_count = len(structure.get('imports', []))
     if import_count > 5 and file_type in ('python', 'javascript', 'typescript'):
-        _emit(f"      reveal 'imports://{path}'   # ({import_count} imports)")
+        _emit(f"      reveal imports {path}   # ({import_count} imports)")
 
 
 def _suggest_ast_queries_for_large_file(path, file_type, structure):
@@ -503,8 +503,8 @@ def _suggest_ast_queries_for_large_file(path, file_type, structure):
 
     if total > 20 and file_type in large_file_types:
         _show_hint_once('large_file_ast_queries', [
-            f"      reveal 'ast://{path}?complexity>10'   # Find complex functions",
-            f"      reveal 'ast://{path}?lines>50'        # Find large elements",
+            f"      reveal ast {path} --where 'complexity>10'   # Find complex functions",
+            f"      reveal ast {path} --where 'lines>50'        # Find large elements",
             f"      reveal {path} --check      # Check code quality",
         ])
         return True
@@ -569,7 +569,7 @@ def _handle_quality_check(path, file_type, **kwargs):
         ])
 
     _show_hint_once('quality_check_trailer', [
-        f"      reveal metrics://{path}      # Analyze complexity trends",
+        f"      reveal metrics {path}      # Analyze complexity trends",
         "      reveal help://rules        # Learn about rules",
     ])
 
@@ -600,7 +600,7 @@ def _handle_directory_check(path, file_type, **kwargs):
             "Pre-Commit Workflow:",
             f"  1. Fix the {total_issues} issues above",
             "  2. reveal diff://git://HEAD/.:.     # Review all changes",
-            f"  3. reveal metrics://{path}            # Check complexity trends",
+            f"  3. reveal metrics {path}            # Check complexity trends",
         ])
     else:
         _show_hint_once('directory_check_workflow_clean', [

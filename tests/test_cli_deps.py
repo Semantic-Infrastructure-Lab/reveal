@@ -806,5 +806,5 @@ class TestHonestSummaryAndRunnableNextSteps:
         with patch('sys.stdout', buf):
             print("\n".join(_render_next_steps(tmp_path)))
         out = buf.getvalue()
-        assert f"imports://{tmp_path}?circular" in out
-        assert 'imports://. ' not in out
+        assert f"reveal imports {tmp_path.as_posix()} --circular" in out
+        assert 'reveal imports . ' not in out

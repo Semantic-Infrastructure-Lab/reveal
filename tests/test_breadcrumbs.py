@@ -673,7 +673,7 @@ class TestPrintBreadcrumbsLargeFile:
             'structure', 'large.py', 'python',
             config=mock_config, structure=structure
         )
-        assert "ast://" in output
+        assert "reveal ast " in output
         assert "complexity>10" in output
         assert "lines>50" in output
 
@@ -705,7 +705,7 @@ class TestPrintBreadcrumbsLargeFile:
             'structure', 'small.py', 'python',
             config=mock_config, structure=structure
         )
-        assert "ast://" not in output
+        assert "reveal ast " not in output
         assert '--outline' in output  # Standard suggestion
 
     def test_large_file_detection_for_typescript(self):
@@ -721,7 +721,7 @@ class TestPrintBreadcrumbsLargeFile:
             'structure', 'large.ts', 'typescript',
             config=mock_config, structure=structure
         )
-        assert "ast://" in output
+        assert "reveal ast " in output
 
     def test_large_file_detection_not_for_markdown(self):
         """Large file detection doesn't apply to markdown."""
@@ -736,7 +736,7 @@ class TestPrintBreadcrumbsLargeFile:
             'structure', 'large.md', 'markdown',
             config=mock_config, structure=structure
         )
-        assert "ast://" not in output
+        assert "reveal ast " not in output
         assert '--links' in output  # Standard markdown suggestion
 
     def test_large_file_ast_queries_second_call_is_silent(self):
@@ -749,10 +749,10 @@ class TestPrintBreadcrumbsLargeFile:
         first = capture_breadcrumbs('structure', 'first.py', 'python', config=mock_config, structure=structure)
         second = capture_breadcrumbs('structure', 'second.py', 'python', config=mock_config, structure=structure)
 
-        assert 'ast://' in first
+        assert 'reveal ast ' in first
         # The per-file extraction hint (`reveal second.py func_0`) is specific to
         # each file and still shows; the generic AST-query block does not repeat.
-        assert 'ast://' not in second
+        assert 'reveal ast ' not in second
 
 
 # ==============================================================================
@@ -966,7 +966,7 @@ class TestPrintBreadcrumbsImports:
     """Tests for import analysis breadcrumbs."""
 
     def test_many_imports_suggests_imports_adapter(self):
-        """Files with >5 imports suggest imports:// adapter."""
+        """Files with >5 imports suggest reveal imports."""
         mock_config = Mock()
         mock_config.is_breadcrumbs_enabled.return_value = True
 
@@ -979,11 +979,11 @@ class TestPrintBreadcrumbsImports:
             'structure', 'test.py', 'python',
             config=mock_config, structure=structure
         )
-        assert "imports://" in output
+        assert "reveal imports " in output
         assert "(10 imports)" in output
 
     def test_few_imports_no_suggestion(self):
-        """Files with <=5 imports don't suggest imports:// adapter."""
+        """Files with <=5 imports don't suggest reveal imports."""
         mock_config = Mock()
         mock_config.is_breadcrumbs_enabled.return_value = True
 
@@ -996,7 +996,7 @@ class TestPrintBreadcrumbsImports:
             'structure', 'test.py', 'python',
             config=mock_config, structure=structure
         )
-        assert "imports://" not in output
+        assert "reveal imports " not in output
 
     def test_imports_suggestion_for_javascript(self):
         """Import suggestion works for JavaScript."""
@@ -1011,7 +1011,7 @@ class TestPrintBreadcrumbsImports:
             'structure', 'index.js', 'javascript',
             config=mock_config, structure=structure
         )
-        assert "imports://" in output
+        assert "reveal imports " in output
 
     def test_imports_suggestion_not_for_go(self):
         """Import suggestion doesn't apply to Go (not in supported list)."""
@@ -1026,7 +1026,7 @@ class TestPrintBreadcrumbsImports:
             'structure', 'main.go', 'go',
             config=mock_config, structure=structure
         )
-        assert "imports://" not in output
+        assert "reveal imports " not in output
 
 
 # ==============================================================================
@@ -1262,7 +1262,7 @@ class TestPrintBreadcrumbsQualityCheck:
             'quality-check', 'test.py', 'python',
             config=mock_config, detections=[mock_detection]
         )
-        assert 'metrics://test.py' in output
+        assert 'reveal metrics test.py' in output
         assert 'help://rules' in output
 
     def test_complexity_issues_suggest_function(self):
@@ -1318,7 +1318,7 @@ class TestPrintBreadcrumbsQualityCheck:
         assert '# See structure' in output
 
     def test_quality_check_trailer_second_call_is_silent_but_complex_function_stays_dynamic(self):
-        """The metrics://+help://rules trailer is identical every call —
+        """The reveal metrics + help://rules trailer is identical every call —
         boilerplate, shown once. The named complex function is real,
         file-specific data from this call's own detections — never throttled."""
         mock_config = Mock()
@@ -1340,7 +1340,7 @@ class TestPrintBreadcrumbsQualityCheck:
             config=mock_config, detections=[second_detection],
         )
 
-        assert 'metrics://' not in second
+        assert 'reveal metrics' not in second
         assert 'help://rules' not in second
         assert 'reveal test.py second_complex' in second
 
@@ -1367,7 +1367,7 @@ class TestPrintBreadcrumbsDirectoryCheck:
         assert 'Pre-Commit Workflow:' in output
         assert 'Fix the 5 issues' in output
         assert 'diff://git://HEAD/.:.' in output
-        assert 'metrics://src/' in output
+        assert 'reveal metrics src/' in output
 
     def test_no_issues_shows_clean_workflow(self):
         """When no issues, shows clean pre-commit workflow."""
@@ -1478,7 +1478,7 @@ class TestBlockLead:
         _isolated_hint_store.add('quality_check_see_structure')
         out = capture_breadcrumbs('quality-check', 'a.py', 'python', config=self._config(),
                                   detections=[Mock(rule_code='E501', context='')])
-        assert out.splitlines()[1] == 'Next: reveal metrics://a.py      # Analyze complexity trends'
+        assert out.splitlines()[1] == 'Next: reveal metrics a.py      # Analyze complexity trends'
 
     def test_element_block_has_no_lead(self):
         out = self._twice('element', 'a.py', 'python', element_name='f', line_count=3,

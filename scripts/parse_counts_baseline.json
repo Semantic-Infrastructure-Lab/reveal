@@ -1511,27 +1511,27 @@
           },
           "next_steps": [
             {
-              "command": "reveal 'imports://<corpus>?sort=-fan-in&scope=path'",
+              "command": "reveal imports <corpus> --sort=-fan-in --scope path",
               "question": "Full observed fan-in ranking (subject to scan coverage)"
             },
             {
-              "command": "reveal 'imports://<corpus>?components&scope=path'",
+              "command": "reveal imports <corpus> --components --scope path",
               "question": "All observed component relationships"
             },
             {
-              "command": "reveal 'imports://<corpus>?entrypoints&scope=path'",
+              "command": "reveal imports <corpus> --entrypoints --scope path",
               "question": "All observed entrypoint candidates; apply the stated active predicate"
             },
             {
-              "command": "reveal 'imports://<corpus>?circular&scope=path'",
+              "command": "reveal imports <corpus> --circular --scope path",
               "question": "Full observed cycle groups and witness paths (subject to scan coverage)"
             },
             {
-              "command": "reveal metrics://<corpus>",
+              "command": "reveal metrics <corpus>",
               "question": "Detailed file measurements"
             },
             {
-              "command": "reveal 'ast://<corpus>?kind=function&sort=-complexity'",
+              "command": "reveal ast <corpus> --kind function --sort=-complexity",
               "question": "Function complexity ranking"
             },
             {

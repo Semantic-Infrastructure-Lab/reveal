@@ -56,10 +56,10 @@ def _calls_depth(value: Any) -> int:
 
 def _calls_top(value: Any) -> int:
     if isinstance(value, bool):
-        raise ValueError('top requires a whole number, not a boolean')
+        raise ValueError('limit requires a whole number, not a boolean')
     try:
-        return nonnegative_display_limit(value)
-    except ValueError as exc:  # its message names top and the rule (BACK-1839)
+        return nonnegative_display_limit(value, 'limit')
+    except ValueError as exc:  # its message names limit and the rule (BACK-1839)
         raise ParamValueError(str(exc)) from None
 
 
@@ -473,7 +473,7 @@ _SCHEMA: Dict[str, Any] = {
         'Every callers and callees answer carries walk_rule (its counting rule; text is the Rule: line); '
         'callers measure levels 1 and 2, callees level 1.',
         '?callees=X scans all definitions of X — useful when the name appears in multiple files.',
-        '?callees hides Python builtins by default (len, str, sorted, ValueError, etc.); use ?builtins=true to include them.',
+        '--callees hides Python builtins by default (len, str, sorted, ValueError, etc.); --builtins includes them.',
         '?root (retired; ?callees=X&depth=N is the same walk): every call site of an expanded definition is an '
         'edge with call_expr; expanded is false when its '
         'target was already reached at a shallower or earlier level. total_edges = total_resolved + total_unresolved; '
@@ -885,7 +885,7 @@ class CallsAdapter(ResourceAdapter):
         result = self._answer('calls_ranking', data)
         # BACK-1543: 'top'/'total_unique_callees' said it; the marker is what gets printed.
         note_truncation(result, 'entries', len(data['entries']), data['total_unique_callees'], 'limit',
-                        hint='raise ?top=N')
+                        hint='raise --limit N (0 = all)')
         return result
 
     def _uncalled(self) -> RevealResult:
@@ -896,7 +896,7 @@ class CallsAdapter(ResourceAdapter):
                              include_test_framework=_TEST_FRAMEWORK.read(params))
         result = self._answer('calls_uncalled', data, query_format=_FORMAT.read(params) or '', uncalled=True)
         note_truncation(result, 'entries', len(data['entries']), data['total_uncalled'], 'limit',
-                        hint='raise ?top=N')
+                        hint='raise --limit N (0 = all)')
         return result
 
     def _callee_walk(self, root: str) -> RevealResult:

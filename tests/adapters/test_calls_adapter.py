@@ -1140,7 +1140,7 @@ class TestCallsRendererBuiltinsFooter(unittest.TestCase):
         }
         out = self._capture(data, 'text')
         self.assertIn('3 builtin(s) hidden', out)
-        self.assertIn('?builtins=true', out)
+        self.assertIn('use --builtins to include', out)
 
     def test_footer_absent_when_none_hidden(self):
         data = {

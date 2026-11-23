@@ -76,8 +76,8 @@ def lost_evidence(warnings: Any) -> bool:
 # How to see what a cut left out, by what cut it. An adapter names the cause; the
 # URI router prints the message once (cli/routing/uri._emit_result).
 _TRUNCATION_HINTS = {
-    'limit': 'raise ?limit=N or page with ?offset=N',
-    'auto_cap': 'add filters, or set ?limit=N',
+    'limit': 'raise --limit N or page with --offset N',
+    'auto_cap': 'add filters, or set --limit N',
     'max_items': 'raise --max-items',
     'display_cap': 'use --all for everything, or --max-items N',
     'sample': 'choose others with --head/--tail/--range',
@@ -373,7 +373,7 @@ def relabel_truncations(result: Any, field: str, hint: str) -> None:
     """Restate a composed child's cuts as the parent's (``ResourceAdapter.compose``).
 
     overview:// shows ast://'s ``results`` as its ``complex_functions``, cut by its own
-    ``?top=N``; the child's "results ... raise ?limit=N" names a list and a knob the
+    ``?top=N``; the child's "results ... raise --limit N" names a list and a knob the
     parent's reader doesn't have.
     """
     for entry in truncations_of(result):

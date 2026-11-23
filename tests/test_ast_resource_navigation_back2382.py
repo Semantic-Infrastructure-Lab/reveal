@@ -1,7 +1,6 @@
-"""Overview emits executable AST navigation for URI-escaped target paths."""
+"""Overview emits executable AST navigation for target paths a URI would escape (space, #, %, ?): a quoted subcommand word."""
 import json
 import shlex
-from urllib.parse import quote
 
 import pytest
 
@@ -9,7 +8,7 @@ from conftest import _run_reveal_direct as run
 
 
 @pytest.mark.parametrize('name', ['project space #雪%', 'project?space'])
-def test_overview_ast_hint_uses_encoded_resource_and_preserves_scope(tmp_path, name):
+def test_overview_ast_hint_quotes_the_path_and_preserves_scope(tmp_path, name):
     from filename_fixture import require_filename
     root = tmp_path / name
     require_filename(root)
@@ -23,7 +22,7 @@ def test_overview_ast_hint_uses_encoded_resource_and_preserves_scope(tmp_path, n
              if step['question'] == 'Function complexity ranking']
     assert len(steps) == 1
     command, = steps
-    assert command[1] == 'ast://' + quote(root.as_posix(), safe='/.:') + '?kind=function&sort=-complexity'
+    assert command[1:6] == ['ast', root.as_posix(), '--kind', 'function', '--sort=-complexity']
     assert 'cannot represent' not in answer['reading_note']
     response = run(*command[1:], '--format', 'json')
     assert response.returncode == 0, (response.stdout, response.stderr)

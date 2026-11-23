@@ -1038,8 +1038,7 @@ def test_next_step_hints_in_recipe_output_run(harness):
         argv = shlex.split(command)[1:]
         code, _, err, _ = harness.run_subcommand(argv[0], *argv[1:])
         problems = [line for line in err.splitlines()
-                    if PROBLEM_LINE.search(line) and not any(n in line for n in ENVIRONMENT_NOISE)
-                    and not REQUEST_NOTE.search(line)]  # reveal's own hints still teach URI forms (BACK-2713)
+                    if PROBLEM_LINE.search(line) and not any(n in line for n in ENVIRONMENT_NOISE)]
         if code not in (0, 1) or problems:
             failures.append(f'{command} (hinted after {source}): exit {code} {problems[:1]}')
     assert not failures, failures

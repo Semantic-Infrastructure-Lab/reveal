@@ -32,7 +32,7 @@ def test_text_footer_says_it_once_in_reader_terms(broken_tree, top):
     assert result.returncode == 3, result.stderr  # files parsed with errors: incomplete
     cuts = [line for line in result.stdout.splitlines() if line.startswith('⚠ Truncated')]
     assert cuts == ['⚠ Truncated files named in diagnostics: showing 5 of 13 — '
-                    'imports:// on the same path with --format json names every file'], result.stdout
+                    'reveal imports on the same path with --format json names every file'], result.stdout
     assert 'map.metadata' not in result.stdout and 'meta.warnings' not in result.stdout
 
 

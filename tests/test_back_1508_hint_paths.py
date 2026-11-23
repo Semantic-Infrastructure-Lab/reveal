@@ -29,5 +29,4 @@ def test_overview_navigation_keeps_the_target_path(tmp_path, monkeypatch):
     (pkg / 'mod.py').write_text('x = 1\n', encoding='utf-8')
     monkeypatch.chdir(tmp_path)
     body = OverviewAdapter('pkg').get_structure()
-    target = shlex.split(body['next_steps'][0]['command'])[1].partition('?')[0]
-    assert target == 'imports://pkg'
+    assert shlex.split(body['next_steps'][0]['command'])[1:3] == ['imports', 'pkg']

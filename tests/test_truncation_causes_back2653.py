@@ -16,7 +16,7 @@ from reveal.utils.results import note_truncation, truncations_of
 
 pytestmark = pytest.mark.component
 
-LIMIT_HINT = 'raise ?limit=N or page with ?offset=N'
+LIMIT_HINT = 'raise --limit N or page with --offset N'  # the flags, not URI query fragments (BACK-2713)
 
 
 def test_single_cut_is_unchanged():

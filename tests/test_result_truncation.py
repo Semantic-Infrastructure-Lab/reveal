@@ -34,7 +34,7 @@ def test_note_truncation_records_one_entry():
     assert cut == {
         'type': 'truncated', 'field': 'results', 'shown': 2, 'total': 9, 'exact': True,
         'cause': 'limit',
-        'message': 'results: showing 2 of 9 — raise ?limit=N or page with ?offset=N',
+        'message': 'results: showing 2 of 9 — raise --limit N or page with --offset N',
     }
 
 
@@ -45,7 +45,7 @@ def test_a_walk_that_stopped_early_records_a_lower_bound():
     note_truncation(result, 'commits', 50, 51, 'limit', exact=False)
     [cut] = truncations_of(result)
     assert (cut['shown'], cut['total'], cut['exact']) == (50, 51, False)
-    assert cut['message'] == 'commits: showing 50 of 51+ — raise ?limit=N or page with ?offset=N'
+    assert cut['message'] == 'commits: showing 50 of 51+ — raise --limit N or page with --offset N'
     assert outcome_of(result) == 'truncated'
 
 
@@ -104,7 +104,7 @@ def test_a_second_cut_of_one_field_updates_its_entry():
     assert (cut['shown'], cut['total'], cut['cause']) == (3, 45, 'max_items')
     # Both cuts are named, the binding one first (BACK-2653): raising --max-items alone reaches 10.
     assert cut['causes'] == ['max_items', 'limit']
-    assert cut['message'] == 'results: showing 3 of 45 — raise --max-items; raise ?limit=N or page with ?offset=N'
+    assert cut['message'] == 'results: showing 3 of 45 — raise --max-items; raise --limit N or page with --offset N'
 
 
 def test_cuts_of_different_fields_are_separate():
@@ -416,7 +416,7 @@ def test_emit_subcommand_result_prints_a_cut_after_the_render(capsys):
     note_truncation(result, 'items', 1, 5, 'limit')
     code, out, err, rendered = _emit(result, 'text', capsys)
     assert (code, rendered) == (0, [result])
-    assert out.strip().startswith('⚠ Truncated items: showing 1 of 5 — raise ?limit=N')
+    assert out.strip().startswith('⚠ Truncated items: showing 1 of 5 — raise --limit N or page with --offset N')
     code, out, err, rendered = _emit(result, 'grep', capsys)
     assert (code, out.strip()) == (0, '')
     assert '⚠ Truncated items: showing 1 of 5' in err

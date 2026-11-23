@@ -172,9 +172,9 @@ def build_testability_report(
     }
     # BACK-1543: 'testability://src?top=3' showed 3 of 75 patch hotspots as all of them.
     note_truncation(report, 'patch_hotspots', len(target_rows), len(all_targets), 'limit',
-                    hint='raise ?top=N')
+                    hint='raise --limit N')
     note_truncation(report, 'boundary_hotspots', len(profile_rows), len(all_profiles), 'limit',
-                    hint='raise ?top=N')
+                    hint='raise --limit N')
     return report
 
 

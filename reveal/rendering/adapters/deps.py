@@ -1,5 +1,6 @@
 """Returned text sections for deps://; emission and diagnostics use the shared boundary."""
 
+import shlex
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -7,7 +8,7 @@ from ..base import BaseRenderer, capped_section
 from ...analyzers.imports.classify import package_table
 from ...analyzers.imports.service import edge_rule_lines
 from ...analyzers.imports.unused import describe_unused
-from ...utils.path_utils import to_relative_display
+from ...utils.path_utils import to_posix, to_relative_display
 from ...utils.results import outcome_of
 
 # ── Renderers ──────────────────────────────────────────────────────────────────
@@ -122,7 +123,7 @@ def _render_circular(cycles: List, cycle_count: int, base_path: Path, top: int) 
     lines += capped_section(
         cycles, top,
         lambda cycle: f"  ❌ {' → '.join(to_relative_display(fp, base_path) for fp in cycle)}",
-        indent='  ', suffix=f"  (run: reveal '{_imports_uri(base_path)}?circular')")
+        indent='  ', suffix=f"  (run: {_imports_command(base_path)} --circular)")
     return lines
 
 
@@ -138,7 +139,7 @@ def _render_unused(unused: List[Dict[str, Any]], base_path: Path, top: int) -> L
 
     lines += capped_section(
         unused, top, unused_line, indent='  ',
-        suffix=f"  (run: reveal '{_imports_uri(base_path)}?unused')")
+        suffix=f"  (run: {_imports_command(base_path)} --unused)")
     return lines
 
 
@@ -160,18 +161,18 @@ def _render_top_importers(analysis: Dict[str, Any], top: int) -> List[str]:
     return lines
 
 
-def _imports_uri(path: Path) -> str:
-    """The imports:// URI for the scanned path, runnable from any cwd (BACK-1420)."""
-    return f"imports://{path}"
+def _imports_command(path: Path) -> str:
+    """The imports subcommand for the scanned path, runnable from any cwd (BACK-1420)."""
+    return f"reveal imports {shlex.quote(to_posix(path))}"
 
 
 def _render_next_steps(path: Path) -> List[str]:
     lines: List[str] = []
-    uri = _imports_uri(path)
+    command = _imports_command(path)
     lines.append("\nNext steps")
-    lines.append(f"  reveal '{uri}?circular'    # Full circular dep list")
-    lines.append(f"  reveal '{uri}?unused'      # All unused imports")
-    lines.append(f"  reveal '{uri}?violations'  # Layer violation check")
+    lines.append(f"  {command} --circular    # Full circular dep list")
+    lines.append(f"  {command} --unused      # All unused imports")
+    lines.append(f"  {command} --violations  # Layer violation check")
     lines.append("")
     return lines
 

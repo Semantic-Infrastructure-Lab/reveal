@@ -5,7 +5,6 @@ import logging
 import shlex
 from pathlib import Path
 from typing import Any, Dict, List, Optional, cast
-from urllib.parse import quote
 
 from reveal.capabilities import scope_dict_for_path
 from reveal.config import RevealConfig
@@ -36,7 +35,7 @@ logger = logging.getLogger(__name__)
 # Reader terms for the cut-list note: the fields are internal key paths (map.metadata.files_failed,
 # meta.warnings.0.files), and the old hint's 'at most 50' beside 'showing 5' read as a contradiction
 # of its own cap (BACK-2537).
-DIAGNOSTIC_CUT_HINT = 'imports:// on the same path with --format json names every file'
+DIAGNOSTIC_CUT_HINT = 'reveal imports on the same path with --format json names every file'
 _DIAGNOSTIC_LABELS = {'files': 'files named in diagnostics', 'directories': 'directories named in diagnostics'}
 
 
@@ -192,7 +191,7 @@ def _obsolete_git(value: Any) -> bool:
 
 
 def _obsolete_tests(value: Any) -> str:
-    raise ParamValueError('overview no longer ranks complexity or hotspots; omit tests and use metrics:// or ast:// with kind=function')
+    raise ParamValueError('overview no longer ranks complexity or hotspots; omit tests and use reveal metrics, or reveal ast --kind function')
 
 
 # The map sections are the answer's rows, so --limit caps them (COMMAND_MODEL "Caps", Scott 2026-11-20 BACK-2622 B):
@@ -248,21 +247,21 @@ _AGAINST = ParamSpec('against', 'string', 'Compare the live working tree against
 
 
 def _next_steps(path: str, exclude_patterns: List[str], respect_gitignore: bool) -> List[dict]:
-    target = quote(path, safe='/.:')
-    questions = (
-        ('Full observed fan-in ranking (subject to scan coverage)', f'imports://{target}?sort=-fan-in&scope=path'),
-        ('All observed component relationships', f'imports://{target}?components&scope=path'),
-        ('All observed entrypoint candidates; apply the stated active predicate', f'imports://{target}?entrypoints&scope=path'),
-        ('Full observed cycle groups and witness paths (subject to scan coverage)', f'imports://{target}?circular&scope=path'),
-        ('Detailed file measurements', f'metrics://{target}'),
+    steps = (
+        ('Full observed fan-in ranking (subject to scan coverage)', ['imports', path, '--sort=-fan-in', '--scope', 'path']),
+        ('All observed component relationships', ['imports', path, '--components', '--scope', 'path']),
+        ('All observed entrypoint candidates; apply the stated active predicate',
+         ['imports', path, '--entrypoints', '--scope', 'path']),
+        ('Full observed cycle groups and witness paths (subject to scan coverage)',
+         ['imports', path, '--circular', '--scope', 'path']),
+        ('Detailed file measurements', ['metrics', path]),
+        ('Function complexity ranking', ['ast', path, '--kind', 'function', '--sort=-complexity']),
+        ('Concrete rule findings', ['check', path]),
     )
     flags = [] if respect_gitignore else ['--respect-gitignore', 'off']
     for pattern in exclude_patterns:
         flags += ['--exclude', pattern]
-    steps = [(question, ['reveal', uri]) for question, uri in questions]
-    steps.append(('Function complexity ranking', ['reveal', f'ast://{target}?kind=function&sort=-complexity']))
-    steps.append(('Concrete rule findings', ['reveal', 'check', path]))
-    return [{'question': question, 'command': shlex.join(tokens + flags)} for question, tokens in steps]
+    return [{'question': question, 'command': shlex.join(['reveal', *tokens, *flags])} for question, tokens in steps]
 
 
 def _navigation_exclusions(path: Path, requested: List[str]) -> List[str]:

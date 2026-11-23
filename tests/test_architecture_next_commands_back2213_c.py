@@ -1,6 +1,5 @@
 """Canonical navigation preserves the target once for retired architecture requests."""
 import shlex
-from urllib.parse import quote
 
 from conftest import _run_reveal_direct as run
 from reveal.adapters.architecture import ArchitectureAdapter
@@ -27,5 +26,5 @@ def test_absolute_target_navigation_remains_executable(tmp_path):
     assert report['path'] == tmp_path.as_posix()
     assert report['map']['components']['rows'][0]['component'] == '.'
     command = report['next_steps'][0]['command']
-    assert 'imports://' + quote(tmp_path.as_posix(), safe='/.:') in shlex.split(command)[1]
+    assert shlex.split(command)[1:3] == ['imports', tmp_path.as_posix()]
     assert run(*shlex.split(command)[1:], '--format', 'json').returncode == 0

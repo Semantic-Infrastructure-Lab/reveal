@@ -701,7 +701,7 @@ class MetricsAdapter(ResourceAdapter):
             offset = _OFFSET.read(self.query_params) or 0
             page = ranked[offset:]
             shown = page[:limit] if limit > 0 else page
-            note_truncation(result, 'hotspots', len(shown), len(ranked), 'limit', hint='raise ?limit=N')
+            note_truncation(result, 'hotspots', len(shown), len(ranked), 'limit', hint='raise --limit N')
             return shown
         top = self.int_param('top', 10)
         shown = ranked[:top] if top > 0 else ranked

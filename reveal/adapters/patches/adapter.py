@@ -369,5 +369,5 @@ class PatchesAdapter(ResourceAdapter):
             },
         )
         # BACK-1543: '?limit=3&group=file' showed 3 of 124 groups as all of them.
-        note_truncation(result, 'groups', len(groups), len(ranked), 'limit', hint='raise ?limit=N')
+        note_truncation(result, 'groups', len(groups), len(ranked), 'limit', hint='raise --limit N')
         return result

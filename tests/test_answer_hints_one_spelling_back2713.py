@@ -14,6 +14,7 @@ import sys
 from contextlib import redirect_stdout
 from io import StringIO
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -203,7 +204,8 @@ def every_hint(monkeypatch):
 def test_file_breadcrumbs_are_subcommands(every_hint):
     text = _printed(breadcrumbs._suggest_imports_analysis, 'app.py', 'python', {'imports': [{}] * 6})
     text += _printed(breadcrumbs._suggest_ast_queries_for_large_file, 'app.py', 'python', {'functions': [{}] * 21})
-    text += _printed(breadcrumbs._handle_quality_check, 'app.py', 'python', detections=[])
+    text += _printed(breadcrumbs._handle_quality_check, 'app.py', 'python',
+                     detections=[SimpleNamespace(rule_code='E501', context='')])
     text += _printed(breadcrumbs._handle_directory_check, 'src', None, total_issues=2, files_checked=3)
     _assert_names_flags(text, ['imports://', 'ast://', 'metrics://'],
                         ['reveal imports app.py', "reveal ast app.py --where 'complexity>10'",

@@ -217,7 +217,7 @@ def _render_callees_text(data: Dict[str, Any]) -> None:
     print(f"Project:    {path}")
     print(f"Total:      {total} call(s) across {len(matches)} definition(s)")
     if builtins_hidden:
-        print(f"            ({builtins_hidden} builtin(s) hidden — use ?builtins=true to include)")
+        print(f"            ({builtins_hidden} builtin(s) hidden — use --builtins to include)")
     print()
 
     if not matches:
@@ -253,7 +253,7 @@ def _render_callee_walk_text(data: Dict[str, Any]) -> None:
           f"({data.get('total_ambiguous', 0)} ambiguous), {data.get('total_unresolved', 0)} external/unresolved, "
           f"from {len(roots)} definition(s)")
     if data.get('_builtins_hidden'):
-        print(f"            ({data['_builtins_hidden']} builtin(s) hidden at level 1 — use ?builtins=true to include)")
+        print(f"            ({data['_builtins_hidden']} builtin(s) hidden at level 1 — use --builtins to include)")
     for line in meta_warning_lines({'meta': {'warnings': _text_warnings(data)}}):
         print(line)
     print()
