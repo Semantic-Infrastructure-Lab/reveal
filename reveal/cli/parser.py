@@ -853,19 +853,17 @@ def create_argument_parser(
     return parser
 
 
-def validate_navigation_args(args):
-    """Validate and parse navigation arguments (--head, --tail, --range) and the element views' variable names.
-
-    An invalid value is an invalid request: exit 2 (D6), as every other invalid invocation (BACK-2627 E5, E9).
-
-    Args:
-        args: Parsed argument namespace
+def check_navigation_args(args) -> None:
+    """Check and parse the navigation arguments (--head, --tail, --range, --limit) and the element views' variable
+    names, raising instead of printing: the one check every reader of the path read runs (the CLI prints it,
+    ``validate_navigation_args``; the Python API raises it, BACK-2325). ``--range`` is stored parsed, as (start, end).
 
     Raises:
-        SystemExit: If validation fails
-        NavRequestValidationError: If an element view names an empty variable
+        NavRequestValidationError: an element view names an empty variable.
+        RequestValidationError: two of --head/--tail/--range, a negative count or a malformed range; the message is
+            the CLI's text without its ``Error: `` prefix, a malformed range's expected format on its second line.
     """
-    from ..errors import NavRequestValidationError
+    from ..errors import NavRequestValidationError, RequestValidationError
 
     # Given and empty is not absent: `--varflow ''` used to drop the view and print the element's source.
     for option in ('varflow', 'keys', 'narrow'):
@@ -876,25 +874,46 @@ def validate_navigation_args(args):
     nav_args = [args.head, args.tail, args.range]
     nav_count = sum(1 for arg in nav_args if arg is not None)
     if nav_count > 1:
-        print("Error: --head, --tail, and --range are mutually exclusive", file=sys.stderr)
-        sys.exit(2)
+        raise RequestValidationError("--head, --tail, and --range are mutually exclusive")
 
     # A negative count slices from the wrong end (--head -1 = all but the last,
     # --limit -1 on hotspots:// = top=-1 = drops each list's last item).
     for option, value in (('--head', args.head), ('--tail', args.tail),
                           ('--limit', getattr(args, 'limit', None))):
         if value is not None and value < 0:
-            print(f"Error: {option} must be 0 or more, got {value}", file=sys.stderr)
-            sys.exit(2)
+            raise RequestValidationError(f"{option} must be 0 or more, got {value}")
 
     # Parse and validate range if provided
     if args.range:
         try:
             args.range = line_range(args.range)  # stored parsed, as (start, end)
         except ValueError as e:
-            print(f"Error: Invalid range format '{args.range}': {e}", file=sys.stderr)
-            print("Expected format: START-END or START- for open-ended (e.g., 10-20, 300-, 1-indexed)", file=sys.stderr)
-            sys.exit(2)
+            raise RequestValidationError(
+                f"Invalid range format '{args.range}': {e}\n"
+                "Expected format: START-END or START- for open-ended (e.g., 10-20, 300-, 1-indexed)") from e
+
+
+def validate_navigation_args(args):
+    """Validate and parse navigation arguments (--head, --tail, --range) and the element views' variable names
+    (``check_navigation_args``), printing the CLI's error.
+
+    An invalid value is an invalid request: exit 2 (D6), as every other invalid invocation (BACK-2627 E5, E9).
+
+    Args:
+        args: Parsed argument namespace
+
+    Raises:
+        SystemExit: If validation fails
+        NavRequestValidationError: If an element view names an empty variable
+    """
+    from ..errors import NavRequestValidationError, RequestValidationError
+    try:
+        check_navigation_args(args)
+    except NavRequestValidationError:
+        raise  # the element view's refusal, answered by its owner
+    except RequestValidationError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(2)
 
 
 # Backward compatibility aliases (private names)
