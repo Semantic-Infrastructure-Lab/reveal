@@ -841,15 +841,22 @@ def reveal_run(args: list[str]) -> str:
     Args:
         args: The command line after 'reveal', e.g. ['imports', '<dir>', '--importers', '<dir>/app.py']
     """
+    if not isinstance(args, list) or not all(isinstance(word, str) for word in args):
+        return _tool_failure("args is the command line after 'reveal' as a list of strings, "
+                             "e.g. ['calls', 'src', '--callers', 'main']")
+    return _run_command(args)
+
+
+def _run_command(args: list[str]) -> str:
+    """Run one CLI command line (the words after ``reveal``) through the CLI's own dispatch and return its outcome as
+    an MCP result: the one entry for every tool that is a command line (reveal_run, and the path tools that build
+    one), so their answer and failure meaning are the CLI's."""
     from .cli.invocation import Invocation, invocation_scope
     from .main import _dispatch_and_run
     from .utils.gitignore import set_gitignore_enabled
     from .utils.invocation_log import current_log
     from .utils.json_utils import set_provenance_enabled
 
-    if not isinstance(args, list) or not all(isinstance(word, str) for word in args):
-        return _tool_failure("args is the command line after 'reveal' as a list of strings, "
-                             "e.g. ['calls', 'src', '--callers', 'main']")
     invocation = Invocation.parse(['reveal', *args])
     with _capture_lock, invocation_scope(invocation, retirements_to_stderr=False, form='mcp'):
         try:
