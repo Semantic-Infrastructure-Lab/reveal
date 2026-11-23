@@ -17,7 +17,7 @@ from typing import Optional
 # Module-level imports so callers can mock reveal.cli.routing.file.handle_uri
 # and reveal.cli.routing.file.handle_file in tests.
 from .uri import handle_uri  # noqa: E402
-from .declared import is_path_read  # noqa: E402
+from .declared import invalid_path_read, is_path_read  # noqa: E402
 from .formats import (  # noqa: E402
     DEFAULT_OUTPUT_FORMATS, reject_unhonored_also_json, require_supported_format,
 )
@@ -709,12 +709,29 @@ def _reject_unread_element(path: Path, path_str: str, element: Optional[str], ar
 
 
 def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
-    """Handle regular file or directory path.
+    """Handle regular file or directory path. A refusal of the request (``RequestValidationError``: the binder, the
+    element request's own checks, the configuration it reads) in a JSON request answers with the path read's
+    invalid-request document, exit 2, as a declared noun's does (BACK-2756 cell 21j); in text mode the refusal goes on
+    to the process's ``error:`` line unchanged.
 
     Args:
         path_str: Path string to file or directory
         args: Parsed arguments
     """
+    from ...errors import RequestValidationError
+    try:
+        _handle_file_or_directory(path_str, args)
+    except RequestValidationError as exc:
+        if getattr(args, 'format', None) != 'json':
+            raise
+        answer = invalid_path_read(path_str, str(exc), args, error=exc)
+        if answer is None:
+            raise
+        answer.emit()
+        sys.exit(2)  # emit exits with the answer's outcome; this is the usage exit if it did not
+
+
+def _handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
     request = _element_request(path_str, args)
 
     if getattr(args, 'check', False):
