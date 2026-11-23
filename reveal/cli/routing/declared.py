@@ -17,6 +17,7 @@ from ...errors import ConfigLoadError
 from ...utils.severity import CHECK_GATES
 from ...utils.path_utils import to_posix
 from ...adapters.factory import predicted_result_type, scope_path_of
+from ...registry import get_markdown_extensions
 from ...utils.query_parser import ParamSpec
 from ..invocation import typed_spelling
 
@@ -246,11 +247,24 @@ def path_read_flag_message(args, message: str) -> Optional[str]:
     from ...nav_params import ELEMENT_VIEW_SPECS, element_request_given
     from ...utils.query_binding import unsupported_controls_message
     flags = [token for token in message.partition(':')[2].split() if token.startswith('-')]
-    if not is_path_read(getattr(args, 'path', None)) or not message.startswith('unrecognized arguments:') or not flags:
+    path = getattr(args, 'path', None)
+    if not is_path_read(path) or not message.startswith('unrecognized arguments:') or not flags:
         return None
-    if not element_request_given(typed_source(ELEMENT_VIEW_SPECS, args)[0]):
+    if not element_request_given(element_request_source(path, getattr(args, 'element', None), args)[0]):
         return None
     return unsupported_controls_message(ELEMENT_VIEW_SPECS, flags)
+
+
+def element_request_source(path: str, element: Optional[str], args) -> tuple:
+    """(source, spelled): the element declarations a path read gives (``typed_source`` over ``ELEMENT_VIEW_SPECS``),
+    the one reading of whether a path read is an element request (``file_handler.element_request_of`` binds it, the
+    main parser's error names its controls). The code-element ``--outline`` is its legacy view word only for an
+    element of a non-Markdown file (its ``target:nav.outline`` row)."""
+    from ...nav_params import ELEMENT_VIEW_SPECS
+    source, spelled = typed_source(ELEMENT_VIEW_SPECS, args)
+    if peek(args, 'outline') and element and Path(path).suffix.lower() not in get_markdown_extensions():
+        source['outline'], spelled['outline'] = True, '--outline'
+    return source, spelled
 
 
 def _main_option_arity() -> Dict[str, int]:

@@ -188,17 +188,14 @@ def element_request_of(path: str, element: Optional[str], args, *, before_bindin
     """The element request *args* give for *path* (``nav_params.bind_element_request``), or None. The one reading of the
     element declarations off a namespace (``declared.typed_source``): the file route binds through it at its entry, and
     a library caller of ``handle_file`` that passes a namespace only binds here. The code-element ``--outline`` is its
-    legacy view word only for an element of a non-Markdown file (its ``target:nav.outline`` row). *before_binding* runs
-    once the request is known to be an element request (the route's path and unsupported-control checks)."""
-    from .cli.routing.declared import typed_source
-    from .cli.routing.ledger import peek
-    from .nav_params import ELEMENT_VIEW_SPECS, bind_element_request, element_request_given
-    from .registry import get_markdown_extensions
+    legacy view word only for an element of a non-Markdown file (its ``target:nav.outline`` row,
+    ``declared.element_request_source``). *before_binding* runs once the request is known to be an element request
+    (the route's path and unsupported-control checks)."""
+    from .cli.routing.declared import element_request_source
+    from .nav_params import bind_element_request, element_request_given
     if args is None:
         return None
-    source, spelled = typed_source(ELEMENT_VIEW_SPECS, args)
-    if peek(args, 'outline') and element and Path(path).suffix.lower() not in get_markdown_extensions():
-        source['outline'], spelled['outline'] = True, '--outline'
+    source, spelled = element_request_source(path, element, args)
     if not element_request_given(source):
         return None
     if before_binding is not None:

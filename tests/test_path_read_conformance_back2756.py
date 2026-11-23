@@ -76,7 +76,8 @@ def test_a_declared_uri_keeps_its_noun_message(element_workspace):
 
 
 def test_mcp_reveal_run_gives_the_same_teaching(element_workspace):
-    from mcp.server.fastmcp.exceptions import ToolError
+    pytest.importorskip('mcp')
+    from mcp.server.mcpserver.exceptions import ToolError
     from reveal.mcp_server import reveal_run
     with pytest.raises(ToolError) as raised:
         reveal_run([ELEMENT_FILE, ELEMENT, *VIEW, '--offset', '1'])
@@ -94,14 +95,16 @@ def _reread(*argv):
 @pytest.mark.parametrize('argv, message, taught', [
     ((ELEMENT_FILE, ELEMENT, *VIEW), 'unrecognized arguments: --zz 1', True),            # an element request
     ((ELEMENT_FILE, ELEMENT, '--varflow', 'order'), 'unrecognized arguments: --zz', True),
+    ((ELEMENT_FILE, ELEMENT, '--outline'), 'unrecognized arguments: --zz', True),         # the code-element outline
     ((ELEMENT_FILE, ELEMENT), 'unrecognized arguments: --zz', False),                     # element extraction
+    (('proj/README.md', 'Intro', '--outline'), 'unrecognized arguments: --zz', False),    # a Markdown outline
     ((ELEMENT_FILE,), 'unrecognized arguments: --zz', False),                             # the file view
     (('proj',), 'unrecognized arguments: --zz', False),                                   # a directory
     (('ast://proj', ELEMENT, *VIEW), 'unrecognized arguments: --zz', False),              # a URI: its noun's message
     (('@targets.txt', *VIEW), 'unrecognized arguments: --zz', False),                     # an @file list
     ((ELEMENT_FILE, ELEMENT, *VIEW), 'argument --head: expected one argument', False),    # another usage error
     ((ELEMENT_FILE, ELEMENT, *VIEW), 'unrecognized arguments: extra', False),             # an extra positional
-], ids=['element-view', 'varflow', 'extraction', 'file', 'directory', 'uri', 'at-file', 'other-error', 'positional'])
+], ids=['element-view', 'varflow', 'code-element-outline', 'extraction', 'markdown-outline', 'file', 'directory', 'uri', 'at-file', 'other-error', 'positional'])
 def test_path_read_flag_message_answers_only_element_requests(argv, message, taught):
     from reveal.cli.routing.declared import path_read_flag_message
     flags = [word for word in message.partition(':')[2].split() if word.startswith('-')]
