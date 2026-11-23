@@ -16,7 +16,8 @@ from .argparsing import RevealArgumentParser
 from .global_flags import add_exclude_argument, add_gitignore_arguments, add_switch_argument, rule_patterns
 from ..utils.query_binding import ScalarOnceAction, is_legacy_flag_action
 from ..utils.query_parser import line_range
-from .routing.declared import JsonUsageParser, invalid_uri_request, path_read_flag_message, uri_flag_message
+from .routing.declared import (JsonUsageParser, invalid_path_read, invalid_uri_request, path_read_flag_message,
+                               uri_flag_message)
 from ..rules.base import category_legend
 
 
@@ -717,7 +718,8 @@ class _ScopedErrorArgumentParser(JsonUsageParser):
     """
 
     def invalid_request(self, message: str, args):
-        return invalid_uri_request(getattr(args, 'path', None), message, args)
+        target = getattr(args, 'path', None)  # a declared noun's URI, else a path read (BACK-2756), else none
+        return invalid_uri_request(target, message, args) or invalid_path_read(target, message, args)
 
     def error(self, message: str) -> None:
         self.stop_tolerant_reread(message)

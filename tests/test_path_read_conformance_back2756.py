@@ -128,7 +128,9 @@ from test_vocabulary_conformance_back2654 import _invalid_document  # noqa: E402
 INVALID_IN_JSON = [
     # refused by the main parser (argparse): cell 3's teaching, choices, a missing value, an extra argument
     ('element unknown flag', (ELEMENT_FILE, ELEMENT, *VIEW, '--zz-unknown'), 'element_view', "'--zz-unknown'"),
-    ('element missing value', (ELEMENT_FILE, ELEMENT, *VIEW, '--varflow'), 'element_view', '--varflow'),
+    # a missing value stops argparse's re-read: the request is read from its positionals, format and output, so the
+    # document names the answer the positionals select, as a noun's names its default answer (``_typed_defaults``)
+    ('element missing value', (ELEMENT_FILE, ELEMENT, *VIEW, '--varflow'), 'code_element', '--varflow'),
     ('element extra argument', (ELEMENT_FILE, ELEMENT, *VIEW, 'extra'), 'element_view', 'extra'),
     ('extraction unknown flag', (ELEMENT_FILE, ELEMENT, '--zz-unknown'), 'code_element', '--zz-unknown'),
     ('file unknown flag', (ELEMENT_FILE, '--zz-unknown'), 'file_structure', '--zz-unknown'),
