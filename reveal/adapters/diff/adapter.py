@@ -1,17 +1,19 @@
 """Core diff adapter for comparing two reveal resources."""
 
-from pathlib import Path
-from reveal.errors import MissingResourceError
-from typing import Dict, Any, Optional, Tuple, cast
+import os
+from reveal.errors import ElementNotFoundError
+from typing import Dict, Any, Optional, Tuple
 from reveal.reveal_types import CONTRACT_VERSION
 from reveal.utils.path_utils import failure_records
 
 from .parsing import parse_diff_uris, split_trailing_element
 from .resolution import (resolve_uri, extract_metadata, find_element, element_names,
                          read_element_source, read_source_text)
-from .help import get_schema as _get_schema, get_help as _get_help
+from .help import PARAM_SPECS, RESOURCE_SPEC, get_schema as _get_schema, get_help as _get_help
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from .renderer import DiffRenderer
+from ...utils.query_binding import bind_declared_params
+from ...utils.query_parser import QueryParams
 from ...utils.results import (AnalysisCompleteness, FailureCause, ResultBuilder,
                               result_execution_facts)
 
@@ -21,12 +23,12 @@ from ...utils.results import (AnalysisCompleteness, FailureCause, ResultBuilder,
 class DiffAdapter(ResourceAdapter):
     """Compare two reveal-compatible resources.
 
-    URI Syntax:
-        diff://<left-uri>:<right-uri>[/element]
+    Usage:
+        reveal diff LEFT RIGHT[/ELEMENT]          # or diff://LEFT:RIGHT[/ELEMENT]
 
     Examples:
-        diff://app.py:backup/app.py               # File comparison
-        diff://app.py:old.py/handle_request       # Element-specific diff
+        reveal diff app.py backup/app.py          # File comparison
+        reveal diff app.py old.py/handle_request  # Element-specific diff
 
     Compares every element category the analyzer emits: functions, classes, imports,
     and interfaces, structs, enums, types... by name (BACK-1732). A pair of files that
@@ -37,6 +39,7 @@ class DiffAdapter(ResourceAdapter):
     """
     HELP_CLUSTER = 'Code Analysis'
 
+    resource: str
     left_uri: str
     right_uri: str
     left_structure: Optional[Dict[str, Any]]
@@ -46,25 +49,59 @@ class DiffAdapter(ResourceAdapter):
     ELEMENT_RESULT_TYPE = 'diff_element'  # verdict lives in 'change' (BACK-1637)
 
     LEGACY_INIT = False
-    HONORS_RESULT_CONTROL = False  # no sort=/limit=/offset= handling (BACK-1385)
     CLI_QUERY_FLAGS = {'respect_gitignore': 'respect_gitignore=false'}  # directory diffs walk (BACK-1386)
     CANONICAL_EMPTY_RESOURCE = ''
-
+    # The declaration `reveal diff` and diff:// are both generated from (D20, BACK-2214): the resource is the pair,
+    # ``reveal diff LEFT RIGHT`` or diff://LEFT:RIGHT, each side a path or a URI, with an optional /ELEMENT after the
+    # right side; diff takes no control. A directory pair walks (the walk policy and --exclude apply).
+    # diff's one control is the walk's exclude: any other keyword, URI key or flag is an invalid request naming it.
+    BOUND_QUERY_CALL = True
+    PARAM_SPECS: tuple = PARAM_SPECS
+    RESOURCE_SPEC = RESOURCE_SPEC
     RESULT_TYPE = 'diff_comparison'
+    # The pair's request answers the element its resource names (diff://L:R/ELEMENT): the type follows the resource,
+    # which the scope path (``resource_path``) no longer spells, so the comparison's request admits the element's type.
+    RESULT_TYPE_VARIANTS = {RESULT_TYPE: (ELEMENT_RESULT_TYPE,)}
     DEFAULT_FAIL_ON = 'none'
+    FINDINGS_POLICIES = ('none',)
 
     @classmethod
     def uri_execution_facts(cls, resource: str):
-        """Qualify direct local single-file pairs; composed and directory views stay legacy."""
-        try:
-            left, right = parse_diff_uris(resource)
-            right, element = split_trailing_element(right)
-        except ValueError:
-            return None
-        paths = [uri.removeprefix('file://') for uri in (left, right)]
-        if element or any('://' in path or Path(path).is_dir() for path in paths):
-            return None
+        """Every pair shares D6: a side that does not exist, or an element neither side has, is an invalid request
+        (exit 2); a side that could not be read is a failed analysis (exit 3)."""
         return cls.execution_facts
+
+    @classmethod
+    def uri_result_type(cls, resource: str) -> str:
+        """The element's diff when the resource names one after its right side, else the comparison."""
+        try:
+            _, right = parse_diff_uris(resource.partition('?')[0])
+        except ValueError:
+            return cls.RESULT_TYPE
+        return cls.ELEMENT_RESULT_TYPE if split_trailing_element(right)[1] else cls.RESULT_TYPE
+
+    @classmethod
+    def resource_path(cls, resource: str) -> str:
+        """The filesystem path the pair names, for the walk's scope (--exclude, REVEAL_IGNORE) and the project config:
+        the directory both local sides sit under, or the left local file when every local side is a file (a file pair
+        has nothing to prune). A URI side (git://) names no working-tree path; a pair with no local side names none."""
+        try:
+            left, right = parse_diff_uris(resource.partition('?')[0])
+        except ValueError:
+            return resource
+        right = split_trailing_element(right)[0]
+        local = [side.removeprefix('file://') for side in (left, right)]
+        local = [os.path.expanduser(side) for side in local if '://' not in side]
+        if not local:
+            return ''
+        if all(os.path.isfile(side) for side in local):
+            return local[0]
+        absolute = any(os.path.isabs(side) for side in local)
+        try:
+            return os.path.commonpath([os.path.abspath(side) if absolute else os.path.normpath(side)
+                                       for side in local]) or '.'
+        except ValueError:  # sides on two Windows drives share no directory: the walk has no one root
+            return ''
 
     @staticmethod
     def execution_facts(result):
@@ -75,65 +112,38 @@ class DiffAdapter(ResourceAdapter):
         return result_execution_facts(result, completeness=AnalysisCompleteness.COMPLETE,
                                       failure_cause=cause)
 
-    def __init__(self, resource: Optional[str] = None, right_uri: Optional[str] = None):
-        """Initialize with either a combined resource string or two URIs.
+    def __init__(self, resource: str = '', query: Optional[str] = None, *,
+                 params: Optional[Dict[str, Any]] = None):
+        """Initialize from the pair diff://LEFT:RIGHT[/ELEMENT] (``reveal diff LEFT RIGHT[/ELEMENT]``) names.
 
         Args:
-            resource: Either combined "left:right" string or left_uri
-            right_uri: Right URI (if resource is left_uri)
-
-        The adapter supports two initialization styles:
-        1. DiffAdapter("left:right") - single combined string (new style, for generic handler)
-        2. DiffAdapter("left", "right") - two separate URIs (old style, backward compatibility)
+            resource: ``LEFT:RIGHT``, each side a path or a URI, with an optional ``/ELEMENT`` after the right side
+            query: The URI query, bound through the declaration: diff takes no control, so any key is an invalid request
+            params: Already-bound or typed controls, in place of *query*
 
         Raises:
-            TypeError: When called with no arguments (wrong initialization pattern)
-            ValueError: When resource format is invalid
+            TypeError: When no pair is given (the generic handler's no-argument pattern, V019)
+            ValueError: When the pair has no ``:`` between two sides, or a control is given
         """
-        # No args provided - wrong initialization pattern
-        if resource is None and right_uri is None:
-            raise TypeError(
-                "DiffAdapter requires arguments. "
-                "Use DiffAdapter('left:right') or DiffAdapter('left', 'right')"
-            )
-
-        if right_uri is not None:
-            # Old style: two arguments
-            self.left_uri = cast(str, resource)  # resource must be provided with right_uri
-            self.right_uri = right_uri
-        elif resource:
-            # New style: parse combined resource string
-            # parse_diff_uris handles Windows drive letters and all URI schemes
-            try:
-                self.left_uri, self.right_uri = parse_diff_uris(resource)
-                self.right_uri, self.embedded_element = split_trailing_element(self.right_uri)
-            except ValueError:
-                raise ValueError(
-                    "DiffAdapter requires 'left:right' format. "
-                    "Got: {!r}. Example: diff://app.py:backup/app.py".format(resource)
-                )
+        if params is not None:
+            self.query_params = params if isinstance(params, QueryParams) else bind_declared_params(
+                PARAM_SPECS, params, transport='typed')
         else:
-            # Resource provided but invalid format
+            self.query_params = bind_declared_params(PARAM_SPECS, query or '', transport='uri')
+        if not resource:
+            raise TypeError("diff requires a pair: reveal diff LEFT RIGHT, or diff://LEFT:RIGHT")
+        self.resource = resource
+        # parse_diff_uris handles Windows drive letters and all URI schemes
+        try:
+            self.left_uri, self.right_uri = parse_diff_uris(resource)
+            self.right_uri, self.embedded_element = split_trailing_element(self.right_uri)
+        except ValueError:
             raise ValueError(
-                "DiffAdapter requires 'left:right' format. "
-                "Got: {!r}. Example: diff://app.py:backup/app.py".format(resource)
+                "diff requires 'left:right' format (reveal diff LEFT RIGHT). "
+                "Got: {!r}. Example: reveal diff app.py backup/app.py".format(resource)
             )
         self.left_structure = None
         self.right_structure = None
-
-    @classmethod
-    def from_uri(cls, scheme: str, resource: str, element: Optional[str]) -> 'DiffAdapter':
-        """Build from ``LEFT:RIGHT[/ELEMENT][?QUERY]``. diff:// reads no query key, and its constructor's second
-        argument is the right side (``DiffAdapter('a.py', 'b.py')``), so the canonical ``(resource, query)`` call read
-        ``?bogus=1`` as the right side ("File not found: a.py:b.py"). An unknown key is disclosed, as every adapter
-        that reads no query discloses it, and the comparison runs (BACK-2768)."""
-        path, sep, query = resource.partition('?')
-        if sep:
-            from ...utils.query_parser import parse_query_params, warn_unknown_query_params
-            known = set(_get_schema()['query_params']) | {
-                fragment.partition('=')[0] for fragment in cls.CLI_QUERY_FLAGS.values()}
-            warn_unknown_query_params(parse_query_params(query), known, adapter=scheme)
-        return cls(path)
 
     @staticmethod
     def _parse_diff_uris(resource: str) -> Tuple[str, str]:
@@ -200,8 +210,11 @@ class DiffAdapter(ResourceAdapter):
             # get_element (BACK-2764; the API answered the whole comparison).
             element = self.get_element(self.embedded_element, **kwargs)
             if element is None:
-                raise MissingResourceError(f"Element '{self.embedded_element}' not found")
-            return element
+                raise ElementNotFoundError(self.embedded_element)
+            # The element envelope the generic URI route gave it (``_element_envelope``): reveal diff and diff:// answer
+            # through the declared route, which requires a complete answer (BACK-2214).
+            return {'contract_version': CONTRACT_VERSION, 'type': self.ELEMENT_RESULT_TYPE,
+                    'source': f'diff://{self.resource}', 'source_type': 'runtime', **element}
 
         # Resolve both URIs using existing adapter infrastructure
         left_struct = resolve_uri(self.left_uri, **kwargs)

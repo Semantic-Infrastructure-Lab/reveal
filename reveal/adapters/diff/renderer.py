@@ -15,6 +15,9 @@ class DiffRenderer:
             result: Diff result from adapter
             format: Output format (text, json, grep)
         """
+        if result.get('type') == 'diff_element':  # the element diff://LEFT:RIGHT/ELEMENT names (BACK-2214)
+            DiffRenderer.render_element(result, format)
+            return
         render_diff(result, format, is_element=False)
         if format != 'json':
             # What the comparison could not see (BACK-1732); JSON carries it in meta.

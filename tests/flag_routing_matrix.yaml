@@ -386,11 +386,11 @@ adapters:
       review: not-applicable
       via: []
     verbose:
-      reason: 'get_structure(**kwargs) has no query-string splitting; confirmed live:
-        ''?verbose=1'' glued onto the literal path and fails as a nonexistent file
-        (adapter.py:118)'
-      review: not-applicable
-      via: []
+      reason: 'BACK-2654 rule 4 (declared since BACK-2214): --verbose is --detail full, bound from the declarations;
+        diff declares no detail, so it exits 2 naming detail and its controls'
+      review: honored
+      via:
+      - declared-binding
   domain:
     all:
       reason: single-domain detail view; only per-field string previews exist, not

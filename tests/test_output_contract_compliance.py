@@ -175,6 +175,7 @@ SUBCOMMAND_ARGV = {
     'sqlite': ['proj/app.db'],
     'xlsx': ['proj/data.xlsx'],
     'env': [],  # the listing, as env:// (FIXTURE_URIS): the empty HOME keeps it hermetic
+    'diff': ['proj/app_old.py', 'proj/app.py'],  # the pair FIXTURE_URIS names, one word per side (BACK-2214)
     'markdown': ['proj'],
     'architecture': ['proj'],
     'calls': ['proj', '--target', 'main'],

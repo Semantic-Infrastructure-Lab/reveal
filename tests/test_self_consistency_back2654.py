@@ -341,11 +341,43 @@ def _query(noun, query):
     return '&'.join(pairs)
 
 
+_DIFF_ELEMENT = re.compile(r'^(.*\.\w{1,4}|<[^>]*>|[A-Z][A-Z_-]*)/([\w.<>-]+)$')
+
+
+def _diff_side(side):
+    """A printed diff side as the fixture's: a file (proj/app.py, or git://proj/app.py@v1 for a git side) or a directory
+    (proj); a placeholder (LEFT, <left-uri>, <file>) is a file. The kind is kept; the names are the fixture's."""
+    git = side.startswith('git://')
+    path = side.removeprefix('git://').partition('@')[0]
+    directory = path.endswith(('/', '.')) or not re.search(r'\.\w{1,4}$|^<[^>]*>$|^[A-Z][A-Z_-]*$', path.split('/')[-1])
+    if directory:
+        return 'proj'
+    return 'git://proj/app.py@v1' if git else 'proj/app.py'
+
+
+def _diff_sides(left, right):
+    """(left, right) on the fixture, the element after the right side kept as the fixture's function (BACK-2214)."""
+    left, right = (side.replace('[', '').replace(']', '') for side in (left, right))
+    element = _DIFF_ELEMENT.match(right.removeprefix('git://').partition('@')[0]) if not right.startswith('git://') \
+        else None
+    if element:
+        right = element.group(1)
+    return _diff_side(left), _diff_side(right) + ('/main' if element else '')
+
+
 def _uri_argv(printed):
     scheme, _, rest = printed.partition('://')
     rest = rest.replace('[', '').replace(']', '').rstrip('\\')
     if rest.startswith((')', '*', '?*')) or '\\' in rest:  # a syntax pattern quoted in prose, not a request
         return None
+    if scheme == 'diff':  # a pair of sides, each a path or a URI with its own '://', ':' and '@' (BACK-2214)
+        from reveal.adapters.diff.parsing import parse_diff_uris
+        pair, _, query = rest.partition('?')
+        try:
+            left, right = parse_diff_uris(pair)
+        except ValueError:
+            return None  # a pattern quoted in prose (diff://LEFT), not a request
+        return ['diff://' + ':'.join(_diff_sides(left, right)) + (f'?{_query(scheme, query)}' if query else '')]
     path, _, query = rest.partition('?')
     path, _, ref = path.partition('@')
     if scheme in ('claude', 'codex') and re.search(r'[<{]', path):
@@ -371,9 +403,21 @@ def _command_argv(printed):
     noun, rest = tokens[0], tokens[1:]
     if not rest or rest[0].startswith('[') or rest[0] in ('is', 'was'):
         return None  # the noun named in a sentence or a usage line, not a request
+    if noun == 'diff':  # reveal diff LEFT RIGHT: two positionals, the pair (BACK-2214)
+        sides = [token for token in rest[:2] if not token.startswith('-')]
+        if len(sides) < 2:
+            return None  # a sentence or a usage line naming the noun, not a request
+        rest = [*rest[2:]]
+        return [noun, *_diff_sides(*sides), *_command_flags(noun, rest)]
     path = '' if rest[0].startswith('-') else rest.pop(0)
     path, _, ref = path.partition('@') if noun == 'git' else (path, '', '')
-    argv, flag = [noun, *(target + ('@v1' if ref else '') for target in _cli_target(noun, _target(noun, path)))], None
+    return [noun, *(target + ('@v1' if ref else '') for target in _cli_target(noun, _target(noun, path))),
+            *_command_flags(noun, rest)]
+
+
+def _command_flags(noun, rest):
+    """The printed flags after the positionals, with runnable values."""
+    argv, flag = [], None
     for token in rest:
         if token.startswith('['):
             break

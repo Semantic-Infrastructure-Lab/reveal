@@ -11,6 +11,7 @@ import json
 import pytest
 
 from conftest import _run_reveal_direct, without_retirement_notes
+from undeclared_plugin import undeclared_plugin  # noqa: F401  (a fixture: the plugin that declares nothing)
 from reveal.adapters.base import get_adapter_class
 from reveal.cli.invocation import COMMANDS, RETIREMENTS
 from reveal.cli.routing.declared import declared_adapter_class
@@ -204,12 +205,11 @@ def test_a_noun_without_detail_names_it(capped):
     assert result.returncode == 2 and "'detail'" in result.stderr and 'supported controls' in result.stderr
 
 
-def test_an_undeclared_scheme_keeps_its_own_verbose(tmp_path, monkeypatch):
+def test_an_undeclared_scheme_keeps_its_own_verbose(monkeypatch, undeclared_plugin):
     """Negative control: a scheme with no declarations is not a noun; --verbose stays its own business. env:// is
-    declared since BACK-2626 and refuses it naming detail, as every noun without one does."""
-    for name in ('a.py', 'b.py'):  # diff:// is undeclared; reveal:// is declared since BACK-2767 and refuses it
-        (tmp_path / name).write_text('def f():\n    return 1\n', encoding='utf-8')
-    result = _run_reveal_direct(f"diff://{(tmp_path / 'a.py').as_posix()}:{(tmp_path / 'b.py').as_posix()}", '--verbose')
+    declared since BACK-2626 and refuses it naming detail, as every noun without one does. The undeclared scheme is a
+    plugin (tests/undeclared_plugin.py): reveal:// and diff:// are declared since BACK-2767 and BACK-2214."""
+    result = _run_reveal_direct(f'{undeclared_plugin}://x', '--verbose')
     assert result.returncode == 0 and 'detail' not in result.stderr
     refused = _run_reveal_direct('reveal://', '--verbose')
     assert refused.returncode == 2 and "'detail'" in refused.stderr

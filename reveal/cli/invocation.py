@@ -103,6 +103,8 @@ COMMANDS: Dict[str, CommandSpec] = {
                      'reveal deps [path]',
                      'Retired: use reveal imports <path> --external, --circular or --unused (one graph build); '
                      'dependency health: external packages, circular deps, unused imports'),
+    'diff':         _declared('diff', 'reveal diff LEFT RIGHT[/ELEMENT]',
+                     'Compare the structure of two files, directories or git versions, or one element across them'),
     'dev':          _spec('dev',
                      'reveal dev <command>',
                      'Scaffold adapters/analyzers/rules; inspect effective `.reveal.yaml` config',
@@ -142,7 +144,7 @@ COMMANDS: Dict[str, CommandSpec] = {
                      'Mock/patch pressure in tests, grouped by target; --view pressure joins it with production boundary fan-out'),
     'review':       _spec('review',
                      'reveal review <path>',
-                     'Retired: use reveal check --changed RANGE and the diff:// adapter',
+                     'Retired: use reveal check --changed RANGE and reveal diff',
                      ('text', 'json'), help_guide=_SUBCOMMANDS_GUIDE),
     'scaffold':     _spec('scaffold',
                      'reveal scaffold <kind>',
@@ -171,7 +173,7 @@ COMMANDS: Dict[str, CommandSpec] = {
 
 # Order of the `--help-all` subcommand listing: task entry points first, tooling last.
 EPILOG_ORDER = ('ast', 'overview', 'imports', 'deps', 'hotspots', 'git', 'claude', 'codex', 'json', 'sqlite', 'xlsx', 'env', 'markdown', 'metrics', 'contracts', 'surface',
-                'patches', 'testability', 'calls', 'trace', 'check', 'review', 'health', 'pack', 'dev',
+                'patches', 'testability', 'calls', 'trace', 'diff', 'check', 'review', 'health', 'pack', 'dev',
                 'scaffold', 'offline', 'architecture')
 
 
@@ -402,7 +404,7 @@ RETIREMENTS: Dict[str, Retirement] = {
     # cut. Its hotspots and complexity sections have no new home until stats becomes metrics (BACK-2069);
     # the MCP tool reveal_review keeps its name until Phase 7.
     'subcommand:review': Retirement('reveal review', 'reveal check --changed RANGE (rules) and '
-                                    "reveal 'diff://git://A/.:git://B/.' (structure); a directory: reveal check DIR"),
+                                    'reveal diff git://A/. git://B/. (structure); a directory: reveal check DIR'),
     # health is the ops entry point (P3-1, BACK-2068 slice 3c): a local code target still answers until the cut
     # (D5), but code quality is check's. An .conf nginx file is an ops target and stays.
     'target:health.code': Retirement('reveal health on a code path', 'reveal check <path>; health keeps ssl://, '

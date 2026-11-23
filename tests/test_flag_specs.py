@@ -28,6 +28,8 @@ def _declarations():
             yield scheme, dest, fragment
 
 
+from undeclared_plugin import undeclared_plugin  # noqa: E402,F401  (a fixture: the plugin that declares nothing)
+
 def _inject(uri_resource, scheme, **flags):
     err = io.StringIO()
     with redirect_stderr(err):
@@ -76,7 +78,9 @@ def test_declared_fragment_is_accepted_by_its_adapter_without_warning(scheme, de
     err = io.StringIO()
     with redirect_stderr(err), caplog.at_level(logging.WARNING):
         # Session catalog dates are scoped to a semantic resource, not a filesystem path.
-        cls('sessions' if scheme == 'claude' else _workbook(tmp_path) if scheme == 'xlsx' else str(REPO), query)
+        # diff's resource is a pair of sides (BACK-2214).
+        resource = {'claude': 'sessions', 'diff': f'{REPO}:{REPO}'}.get(scheme, str(REPO))
+        cls(_workbook(tmp_path) if scheme == 'xlsx' else resource, query)
     seen = err.getvalue() + caplog.text
     assert 'nknown query param' not in seen, f'{scheme}:// warns on its own {fragment!r}: {seen}'
 
@@ -122,13 +126,14 @@ def test_no_gitignore_injects_the_declared_fragment():
     assert _inject('.', 'overview', respect_gitignore=False)[0] == '.?respect_gitignore=false'
 
 
-def test_unsupported_flag_gets_a_note_naming_the_supporting_schemes():
-    """An undeclared scheme keeps the note; a declared noun exits 2 naming its controls (BACK-2654 rule 3)."""
-    out, err = _inject('.', 'diff', since='2026-01-01')  # undeclared (env://, help://, reveal:// are declared)
+def test_unsupported_flag_gets_a_note_naming_the_supporting_schemes(undeclared_plugin):
+    """An undeclared scheme keeps the note; a declared noun exits 2 naming its controls (BACK-2654 rule 3). The
+    undeclared one is a plugin: every core noun is declared since diff:// (BACK-2214, tests/undeclared_plugin.py)."""
+    out, err = _inject('.', undeclared_plugin, since='2026-01-01')
     assert out == '.'
     # Not a fixed list -- schemes gain since/until support over time (BACK-1379);
-    # just confirm the note names diff:// and includes a real supporting scheme.
-    assert '--since has no effect on diff://' in err and 'git://' in err
+    # just confirm the note names the plugin and includes a real supporting scheme.
+    assert '--since has no effect on undeclared://' in err and 'git://' in err
     from reveal.errors import RequestValidationError
     with pytest.raises(RequestValidationError, match=r"'--since'; supported controls: \(none\)"):
         _inject('.', 'reveal', since='2026-01-01')  # declared with no control (BACK-2767)
@@ -143,10 +148,10 @@ def test_note_lists_every_declaring_scheme():
     assert 'overview://' in err and 'stats://' in err and 'ast://' in err
 
 
-def test_all_and_verbose_stay_silent_on_adapters_without_a_declaration():
+def test_all_and_verbose_stay_silent_on_adapters_without_a_declaration(undeclared_plugin):
     """Many adapters honor --all/--verbose themselves (claude, nginx, overview), so a
     missing declaration is not evidence the flag is ignored: no note."""
-    assert _inject('.', 'diff', all=True, verbose=True) == ('.', '')  # undeclared (env://, help://, reveal:// are declared)
+    assert _inject('.', undeclared_plugin, all=True, verbose=True) == ('.', '')  # a plugin (every core noun is declared)
 
 
 def test_all_and_verbose_inject_where_declared():
@@ -167,13 +172,13 @@ def test_sort_and_desc_inject_on_schemes_that_honor_result_control():
     assert _inject('ast://.', 'ast', sort='name', desc=True)[0] == 'ast://.?sort=-name'
 
 
-def test_sort_is_not_injected_where_the_adapter_ignores_it():
-    # BACK-1385: env:// read no sort=; gluing `?sort=name` onto it made it "Element not found". diff:// is an
-    # undeclared adapter that opts out now (env://, help:// and reveal:// are declared and refuse --sort: BACK-2626,
-    # BACK-2767).
-    resource, err = _inject('diff://a.py:b.py', 'diff', sort='name', desc=True)
-    assert resource == 'diff://a.py:b.py'
-    assert 'has no effect on diff://' in err
+def test_sort_is_not_injected_where_the_adapter_ignores_it(undeclared_plugin):
+    # BACK-1385: env:// read no sort=; gluing `?sort=name` onto it made it "Element not found". A plugin that declares
+    # nothing opts out (env://, help://, reveal:// and diff:// are declared and refuse --sort: BACK-2626, BACK-2767,
+    # BACK-2214).
+    resource, err = _inject('undeclared://a', undeclared_plugin, sort='name', desc=True)
+    assert resource == 'undeclared://a'
+    assert 'has no effect on undeclared://' in err
 
 
 def test_sort_already_negated_is_not_double_negated():

@@ -89,7 +89,7 @@ def bar():
         path1 = self.create_file(content, "v1.py")
         path2 = self.create_file(content, "v2.py")
 
-        adapter = DiffAdapter(path1, path2)
+        adapter = DiffAdapter(f'{path1}:{path2}')
         result = adapter.get_structure()
 
         # Verify no changes
@@ -114,7 +114,7 @@ def bar():
         path1 = self.create_file(v1, "v1.py")
         path2 = self.create_file(v2, "v2.py")
 
-        adapter = DiffAdapter(path1, path2)
+        adapter = DiffAdapter(f'{path1}:{path2}')
         result = adapter.get_structure()
 
         # Verify function added
@@ -144,7 +144,7 @@ def foo():
         path1 = self.create_file(v1, "v1.py")
         path2 = self.create_file(v2, "v2.py")
 
-        adapter = DiffAdapter(path1, path2)
+        adapter = DiffAdapter(f'{path1}:{path2}')
         result = adapter.get_structure()
 
         # Verify function removed
@@ -171,7 +171,7 @@ def foo(x, y):
         path1 = self.create_file(v1, "v1.py")
         path2 = self.create_file(v2, "v2.py")
 
-        adapter = DiffAdapter(path1, path2)
+        adapter = DiffAdapter(f'{path1}:{path2}')
         result = adapter.get_structure()
 
         # Verify function modified
@@ -205,7 +205,7 @@ def process(x):
         path1 = self.create_file(v1, "v1.py")
         path2 = self.create_file(v2, "v2.py")
 
-        adapter = DiffAdapter(path1, path2)
+        adapter = DiffAdapter(f'{path1}:{path2}')
         result = adapter.get_structure()
 
         # Verify complexity increase detected
@@ -236,7 +236,7 @@ class MyClass:
         path1 = self.create_file(v1, "v1.py")
         path2 = self.create_file(v2, "v2.py")
 
-        adapter = DiffAdapter(path1, path2)
+        adapter = DiffAdapter(f'{path1}:{path2}')
         result = adapter.get_structure()
 
         # Verify class added
@@ -262,7 +262,7 @@ import json
         path1 = self.create_file(v1, "v1.py")
         path2 = self.create_file(v2, "v2.py")
 
-        adapter = DiffAdapter(path1, path2)
+        adapter = DiffAdapter(f'{path1}:{path2}')
         result = adapter.get_structure()
 
         # Verify import changes
@@ -288,7 +288,7 @@ def bar():
         path1 = self.create_file(v1, "v1.py")
         path2 = self.create_file(v2, "v2.py")
 
-        adapter = DiffAdapter(path1, path2)
+        adapter = DiffAdapter(f'{path1}:{path2}')
         result = adapter.get_element('foo')
 
         # Verify element diff
@@ -309,7 +309,7 @@ def bar():
         path1 = self.create_file(v1, "v1.py")
         path2 = self.create_file(v2, "v2.py")
 
-        adapter = DiffAdapter(path1, path2)
+        adapter = DiffAdapter(f'{path1}:{path2}')
 
         # Neither side has it: a failed lookup the router reports (BACK-1639)
         self.assertIsNone(adapter.get_element('baz'))
@@ -331,7 +331,7 @@ def bar():
         path1 = self.create_file(v1, "v1.py")
         path2 = self.create_file(v2, "v2.py")
 
-        adapter = DiffAdapter(path1, path2)
+        adapter = DiffAdapter(f'{path1}:{path2}')
         result = adapter.get_element('bar')
 
         # Verify added
@@ -354,7 +354,7 @@ def foo():
         path1 = self.create_file(v1, "v1.py")
         path2 = self.create_file(v2, "v2.py")
 
-        adapter = DiffAdapter(path1, path2)
+        adapter = DiffAdapter(f'{path1}:{path2}')
         result = adapter.get_element('bar')
 
         # Verify removed
@@ -376,7 +376,7 @@ class MyClass:
         path1 = self.create_file(v1, "v1.py")
         path2 = self.create_file(v2, "v2.py")
 
-        adapter = DiffAdapter(path1, path2)
+        adapter = DiffAdapter(f'{path1}:{path2}')
         result = adapter.get_element('method_one')
 
         # Verify found and modified
@@ -448,7 +448,7 @@ class TestDirectoryDiff(unittest.TestCase):
         (left_dir / "module.py").write_text("def foo(): pass")
         (right_dir / "module.py").write_text("def foo(): pass\ndef bar(): pass")
 
-        adapter = DiffAdapter(str(left_dir), str(right_dir))
+        adapter = DiffAdapter(f'{left_dir}:{right_dir}')
         result = adapter.get_structure()
 
         self.assertEqual(result['type'], 'diff_comparison')
@@ -469,7 +469,7 @@ class TestDirectoryDiff(unittest.TestCase):
         # File only in right
         (right_dir / "new_module.py").write_text("def new_func(): pass")
 
-        adapter = DiffAdapter(str(left_dir), str(right_dir))
+        adapter = DiffAdapter(f'{left_dir}:{right_dir}')
         result = adapter.get_structure()
 
         # Should show function added
@@ -485,7 +485,7 @@ class TestDirectoryDiff(unittest.TestCase):
         # File only in left
         (left_dir / "old_module.py").write_text("def old_func(): pass")
 
-        adapter = DiffAdapter(str(left_dir), str(right_dir))
+        adapter = DiffAdapter(f'{left_dir}:{right_dir}')
         result = adapter.get_structure()
 
         # Should show function removed
@@ -501,7 +501,7 @@ class TestDirectoryDiff(unittest.TestCase):
         (left_dir / "a.py").write_text("def foo(x): pass")
         (right_dir / "a.py").write_text("def foo(x, y): pass")
 
-        adapter = DiffAdapter(str(left_dir), str(right_dir))
+        adapter = DiffAdapter(f'{left_dir}:{right_dir}')
         result = adapter.get_structure()
 
         # Find the modified function
@@ -524,7 +524,7 @@ class TestDirectoryDiff(unittest.TestCase):
         (left_dir / "subdir" / "module.py").write_text("def foo(): pass")
         (right_dir / "subdir" / "module.py").write_text("def foo(): pass\ndef bar(): pass")
 
-        adapter = DiffAdapter(str(left_dir), str(right_dir))
+        adapter = DiffAdapter(f'{left_dir}:{right_dir}')
         result = adapter.get_structure()
 
         # Should detect changes in nested files
@@ -542,7 +542,7 @@ class TestDirectoryDiff(unittest.TestCase):
         left_dir.mkdir()
         right_dir.mkdir()
 
-        adapter = DiffAdapter(str(left_dir), str(right_dir))
+        adapter = DiffAdapter(f'{left_dir}:{right_dir}')
         result = adapter.get_structure()
 
         # Should show no changes
@@ -560,7 +560,7 @@ class TestDirectoryDiff(unittest.TestCase):
         (left_dir / "module.py").write_text("import os\nimport sys\ndef foo(): pass")
         (right_dir / "module.py").write_text("import os\nimport json\ndef foo(): pass")
 
-        adapter = DiffAdapter(str(left_dir), str(right_dir))
+        adapter = DiffAdapter(f'{left_dir}:{right_dir}')
         result = adapter.get_structure()
 
         # Should detect import changes
@@ -585,7 +585,7 @@ class TestDirectoryDiff(unittest.TestCase):
         (left_dir / "a.py").write_text("def foo(x): pass\n")
         (right_dir / "b.py").write_text("def foo(x, y, z): return x + y + z\n")
 
-        adapter = DiffAdapter(str(left_dir), str(right_dir))
+        adapter = DiffAdapter(f'{left_dir}:{right_dir}')
         result = adapter.get_structure()
 
         self.assertEqual(result['summary']['functions'],
@@ -605,7 +605,7 @@ class TestDirectoryDiff(unittest.TestCase):
             "class Foo(Base):\n    def bar(self): pass\n"
         )
 
-        adapter = DiffAdapter(str(left_dir), str(right_dir))
+        adapter = DiffAdapter(f'{left_dir}:{right_dir}')
         result = adapter.get_structure()
 
         self.assertEqual(result['summary']['classes'],
@@ -615,7 +615,7 @@ class TestDirectoryDiff(unittest.TestCase):
 
     def test_directory_not_found_error(self):
         """Test error when directory doesn't exist."""
-        adapter = DiffAdapter("/nonexistent/path", str(self.temp_dir))
+        adapter = DiffAdapter(f"/nonexistent/path:{self.temp_dir}")
         with self.assertRaises(ValueError) as ctx:
             adapter.get_structure()
         # A side that does not exist is an absent target whatever its name, an invalid request (BACK-2214): it was
@@ -661,7 +661,7 @@ class TestGitDiff(unittest.TestCase):
 
         # Test diff
         os.chdir(self.git_dir)
-        adapter = DiffAdapter('git://HEAD~1/file.py', 'git://HEAD/file.py')
+        adapter = DiffAdapter('git://HEAD~1/file.py:git://HEAD/file.py')
         result = adapter.get_structure()
 
         self.assertEqual(result['summary']['functions']['added'], 1)
@@ -679,7 +679,7 @@ class TestGitDiff(unittest.TestCase):
 
         # Compare HEAD vs working tree
         os.chdir(self.git_dir)
-        adapter = DiffAdapter('git://HEAD/module.py', 'module.py')
+        adapter = DiffAdapter('git://HEAD/module.py:module.py')
         result = adapter.get_structure()
 
         self.assertEqual(result['summary']['functions']['added'], 1)
@@ -703,7 +703,7 @@ class TestGitDiff(unittest.TestCase):
 
         # Test directory diff
         os.chdir(self.git_dir)
-        adapter = DiffAdapter('git://HEAD~1/src/', 'git://HEAD/src/')
+        adapter = DiffAdapter('git://HEAD~1/src/:git://HEAD/src/')
         result = adapter.get_structure()
 
         # Should detect added functions (new_foo in a.py, baz in c.py)
@@ -717,7 +717,7 @@ class TestGitDiff(unittest.TestCase):
 
         try:
             os.chdir(temp_not_git)
-            adapter = DiffAdapter('git://HEAD/test.py', 'test.py')
+            adapter = DiffAdapter('git://HEAD/test.py:test.py')
             with self.assertRaises(ValueError) as ctx:
                 adapter.get_structure()
             self.assertIn("Not in a git repository", str(ctx.exception))
@@ -733,7 +733,7 @@ class TestGitDiff(unittest.TestCase):
                       cwd=self.git_dir, check=True, capture_output=True)
 
         os.chdir(self.git_dir)
-        adapter = DiffAdapter('git://HEAD/nonexistent.py', 'exists.py')
+        adapter = DiffAdapter('git://HEAD/nonexistent.py:exists.py')
         with self.assertRaises(ValueError) as ctx:
             adapter.get_structure()
         self.assertIn("Path not found", str(ctx.exception))
@@ -746,7 +746,7 @@ class TestGitDiff(unittest.TestCase):
                       cwd=self.git_dir, check=True, capture_output=True)
 
         os.chdir(self.git_dir)
-        adapter = DiffAdapter('git://HEAD', 'test.py')  # Missing path
+        adapter = DiffAdapter('git://HEAD:test.py')  # Missing path
         with self.assertRaises(ValueError) as ctx:
             adapter.get_structure()
         self.assertIn("Git URI must be in format", str(ctx.exception))
@@ -783,7 +783,7 @@ class TestDiffAdapterInit(unittest.TestCase):
         path1 = self.create_file(v1, "v1.py")
         path2 = self.create_file(v2, "v2.py")
 
-        adapter = DiffAdapter(path1, path2)
+        adapter = DiffAdapter(f'{path1}:{path2}')
         self.assertEqual(adapter.left_uri, path1)
         self.assertEqual(adapter.right_uri, path2)
 
@@ -798,16 +798,18 @@ class TestDiffAdapterInit(unittest.TestCase):
         self.assertEqual(adapter.left_uri, path1)
         self.assertEqual(adapter.right_uri, path2)
 
-    def test_init_with_explicit_right_uri(self):
-        """Should accept left URI as resource and right_uri parameter."""
-        v1 = "def foo(): pass"
-        v2 = "def bar(): pass"
-        path1 = self.create_file(v1, "v1.py")
-        path2 = self.create_file(v2, "v2.py")
+    def test_the_second_argument_is_the_query_not_the_right_side(self):
+        """diff constructs as every declared noun does, (resource, query) (BACK-2214): the old two-argument spelling
+        DiffAdapter(left, right) read its right side as a query and is refused; the pair is one resource."""
+        from reveal.errors import RequestValidationError
+        path1 = self.create_file("def foo(): pass", "v1.py")
+        path2 = self.create_file("def bar(): pass", "v2.py")
 
-        adapter = DiffAdapter(path1, right_uri=path2)
-        self.assertEqual(adapter.left_uri, path1)
-        self.assertEqual(adapter.right_uri, path2)
+        with self.assertRaises(RequestValidationError) as ctx:
+            DiffAdapter(path1, path2)
+        self.assertIn('unsupported control', str(ctx.exception))
+        adapter = DiffAdapter(f"{path1}:{path2}")
+        self.assertEqual((adapter.left_uri, adapter.right_uri), (path1, path2))
 
     def test_init_with_file_scheme(self):
         """Should handle file:// scheme in URIs."""
@@ -835,7 +837,7 @@ class TestDiffAdapterInit(unittest.TestCase):
         os.makedirs(dir1)
         os.makedirs(dir2)
 
-        adapter = DiffAdapter(dir1, dir2)
+        adapter = DiffAdapter(f'{dir1}:{dir2}')
         self.assertEqual(adapter.left_uri, dir1)
         self.assertEqual(adapter.right_uri, dir2)
 
@@ -927,7 +929,7 @@ class TestDiffRenderer(unittest.TestCase):
         path1 = self.create_file(v1, "v1.py")
         path2 = self.create_file(v2, "v2.py")
 
-        adapter = DiffAdapter(path1, path2)
+        adapter = DiffAdapter(f'{path1}:{path2}')
         result = adapter.get_structure()
 
         # Capture stdout
@@ -955,7 +957,7 @@ class TestDiffRenderer(unittest.TestCase):
         path1 = self.create_file(v1, "v1.py")
         path2 = self.create_file(v2, "v2.py")
 
-        adapter = DiffAdapter(path1, path2)
+        adapter = DiffAdapter(f'{path1}:{path2}')
         result = adapter.get_element('foo')
 
         # Capture stdout
@@ -982,7 +984,7 @@ class TestDiffRenderer(unittest.TestCase):
         path1 = self.create_file(v1, "v1.py")
         path2 = self.create_file(v2, "v2.py")
 
-        adapter = DiffAdapter(path1, path2)
+        adapter = DiffAdapter(f'{path1}:{path2}')
         result = adapter.get_structure()
 
         # Capture stdout
@@ -1028,7 +1030,7 @@ class TestDiffAdapterEdgeCases(unittest.TestCase):
         path2 = self.create_file("def foo(): pass", "v2.py")
         nonexistent = os.path.join(self.temp_dir, "nonexistent.py")
 
-        adapter = DiffAdapter(nonexistent, path2)
+        adapter = DiffAdapter(f'{nonexistent}:{path2}')
         with self.assertRaises(FileNotFoundError):
             adapter.get_structure()
 
@@ -1037,7 +1039,7 @@ class TestDiffAdapterEdgeCases(unittest.TestCase):
         path1 = self.create_file("def foo(): pass", "v1.py")
         nonexistent = os.path.join(self.temp_dir, "nonexistent.py")
 
-        adapter = DiffAdapter(path1, nonexistent)
+        adapter = DiffAdapter(f'{path1}:{nonexistent}')
         with self.assertRaises(FileNotFoundError):
             adapter.get_structure()
 
@@ -1046,7 +1048,7 @@ class TestDiffAdapterEdgeCases(unittest.TestCase):
         path1 = self.create_file("", "empty1.py")
         path2 = self.create_file("", "empty2.py")
 
-        adapter = DiffAdapter(path1, path2)
+        adapter = DiffAdapter(f'{path1}:{path2}')
         result = adapter.get_structure()
 
         # Should complete without error
@@ -1062,7 +1064,7 @@ class TestDiffAdapterEdgeCases(unittest.TestCase):
         path1 = self.create_file(v1_content, "large1.py")
         path2 = self.create_file(v2_content, "large2.py")
 
-        adapter = DiffAdapter(path1, path2)
+        adapter = DiffAdapter(f'{path1}:{path2}')
         result = adapter.get_structure()
 
         # Should detect all removals and additions
@@ -1079,7 +1081,7 @@ class TestDiffAdapterEdgeCases(unittest.TestCase):
         with open(path2, 'wb') as f:
             f.write(b'\x04\x05\x06\x07')
 
-        adapter = DiffAdapter(path1, path2)
+        adapter = DiffAdapter(f'{path1}:{path2}')
 
         # Binary files with no analyzer should raise ValueError
         with self.assertRaises(ValueError) as ctx:
@@ -1091,7 +1093,7 @@ class TestDiffAdapterEdgeCases(unittest.TestCase):
         path1 = self.create_file("def foo(): pass", "code.py")
         path2 = self.create_file("Hello World", "text.txt")
 
-        adapter = DiffAdapter(path1, path2)
+        adapter = DiffAdapter(f'{path1}:{path2}')
 
         # Non-Python file should raise ValueError
         with self.assertRaises(ValueError) as ctx:
@@ -1104,7 +1106,7 @@ class TestDiffAdapterEdgeCases(unittest.TestCase):
         path1 = self.create_file(content, "v1.py")
         path2 = self.create_file(content, "v2.py")
 
-        adapter = DiffAdapter(path1, path2)
+        adapter = DiffAdapter(f'{path1}:{path2}')
         result = adapter.get_structure()
 
         # Should show no changes
@@ -1145,7 +1147,7 @@ class TestDiffMetadata(unittest.TestCase):
         path1 = self.create_file(v1, "v1.py")
         path2 = self.create_file(v2, "v2.py")
 
-        adapter = DiffAdapter(path1, path2)
+        adapter = DiffAdapter(f'{path1}:{path2}')
         metadata = adapter.get_metadata()
 
         self.assertEqual(metadata['type'], 'diff')
@@ -1184,7 +1186,7 @@ class TestComplexityDeltaFields(unittest.TestCase):
         v2 = "def foo(): pass\n\ndef bar(): pass\n"
         p1 = self.create_file(v1, 'v1.py')
         p2 = self.create_file(v2, 'v2.py')
-        result = DiffAdapter(p1, p2).get_structure()
+        result = DiffAdapter(f'{p1}:{p2}').get_structure()
         added = [f for f in result['diff']['functions'] if f['type'] == 'added']
         self.assertEqual(len(added), 1)
         fn = added[0]
@@ -1198,7 +1200,7 @@ class TestComplexityDeltaFields(unittest.TestCase):
         v2 = "def foo(): pass\n"
         p1 = self.create_file(v1, 'v1.py')
         p2 = self.create_file(v2, 'v2.py')
-        result = DiffAdapter(p1, p2).get_structure()
+        result = DiffAdapter(f'{p1}:{p2}').get_structure()
         removed = [f for f in result['diff']['functions'] if f['type'] == 'removed']
         self.assertEqual(len(removed), 1)
         fn = removed[0]
@@ -1218,7 +1220,7 @@ class TestComplexityDeltaFields(unittest.TestCase):
               "    return 0\n")
         p1 = self.create_file(v1, 'v1.py')
         p2 = self.create_file(v2, 'v2.py')
-        result = DiffAdapter(p1, p2).get_structure()
+        result = DiffAdapter(f'{p1}:{p2}').get_structure()
         modified = [f for f in result['diff']['functions'] if f['type'] == 'modified']
         self.assertEqual(len(modified), 1)
         fn = modified[0]
@@ -1238,7 +1240,7 @@ class TestComplexityDeltaFields(unittest.TestCase):
               "    return 0\n")
         p1 = self.create_file(v1, 'v1.py')
         p2 = self.create_file(v2, 'v2.py')
-        result = DiffAdapter(p1, p2).get_structure()
+        result = DiffAdapter(f'{p1}:{p2}').get_structure()
         modified = [f for f in result['diff']['functions'] if f['type'] == 'modified']
         self.assertGreater(modified[0]['complexity_delta'], 0)
 
@@ -1249,7 +1251,7 @@ class TestComplexityDeltaFields(unittest.TestCase):
         v2 = "def foo(x):\n    y = x + 1\n    return y\n"
         p1 = self.create_file(v1, 'v1.py')
         p2 = self.create_file(v2, 'v2.py')
-        result = DiffAdapter(p1, p2).get_structure()
+        result = DiffAdapter(f'{p1}:{p2}').get_structure()
         modified = [f for f in result['diff']['functions'] if f['type'] == 'modified']
         if modified:  # only assert if modification was detected
             self.assertEqual(modified[0]['complexity_delta'], 0)
@@ -1260,7 +1262,7 @@ class TestComplexityDeltaFields(unittest.TestCase):
         v2 = "def bar(): pass\n\ndef keep(): pass\n"
         p1 = self.create_file(v1, 'v1.py')
         p2 = self.create_file(v2, 'v2.py')
-        result = DiffAdapter(p1, p2).get_structure()
+        result = DiffAdapter(f'{p1}:{p2}').get_structure()
         for fn in result['diff']['functions']:
             self.assertIn('complexity_before', fn, f"missing field on {fn['type']} {fn['name']}")
             self.assertIn('complexity_after', fn, f"missing field on {fn['type']} {fn['name']}")

@@ -25,8 +25,8 @@ def _uri(noun):
     return f"{noun}://{TARGETS.get(noun, 'proj')}"
 
 
-def test_only_help_and_reveal_keep_an_element():
-    assert KEEPS_ELEMENT == {'help', 'reveal'}
+def test_only_help_reveal_and_diff_keep_an_element():
+    assert KEEPS_ELEMENT == {'diff', 'help', 'reveal'}  # diff's positional element is noted since BACK-2768
 
 
 @pytest.mark.parametrize('noun', sorted(set(NOUNS) - KEEPS_ELEMENT))

@@ -2,7 +2,14 @@
 
 from typing import Dict, Any
 from ..help_data import load_help_data
+from ...utils.query_parser import ResourceSpec, exclude_param, param_schema
 from reveal.reveal_types import CONTRACT_VERSION
+
+# The declaration `reveal diff` and diff:// are both generated from (BACK-2214): the resource is the pair, a path or a
+# URI per side, with an optional /ELEMENT after the right side; the one control is the walk's exclude.
+PARAM_SPECS: tuple = (exclude_param(),)
+RESOURCE_SPEC = ResourceSpec(name='pair', cli_default=None, uri_default='', required=True, walks=True,
+                             filesystem=False, parts=('left', 'right'), joiner=':')
 
 _SCHEMA_COMPARISON_TYPES = [
     'File to file comparison',
@@ -98,13 +105,15 @@ _SCHEMA_EXAMPLE_QUERIES = [
 ]
 
 _SCHEMA_NOTES = [
-    'Supports any two reveal URIs that resolve to comparable structures',
+    'reveal diff LEFT RIGHT (diff://LEFT:RIGHT): each side a path or a reveal URI that resolves to a comparable structure',
+    'One element across both sides: reveal diff LEFT RIGHT/ELEMENT (diff://LEFT:RIGHT/ELEMENT); a name neither side has exits 2 listing the names both sides have',
+    'A side that does not exist exits 2; diff takes one control, --exclude (a directory pair walks both sides)',
     'Automatically detects resource types and adapts comparison strategy',
     'Element-specific diffs extract and compare individual functions/classes',
     'Compares every element category the analyzer emits: functions, classes and imports, plus interfaces, structs, enums, types and the rest by element name (summary and diff gain one key per category either side has)',
     'Never a silent clean: a pair of files that differ in nothing compared (e.g. a Python module-level constant), or in a category whose items have no name, carries a meta.warnings entry of type not_compared',
     'A resource whose structure has no functions, classes or imports (env://, sqlite://, mysql://, JSON/YAML files) is declined as not applicable (exit 0, applicable=false); compare those with the shell diff of each adapter\'s own output',
-    'Git URIs use path@ref format: git://file.py@HEAD~1 (not git://HEAD~1:file.py)',
+    'Git sides use path@ref format: git://file.py@HEAD~1 (the ref follows the @)',
     'Git ref format matches git adapter syntax, not git CLI show command'
 ]
 
@@ -117,8 +126,9 @@ def get_schema() -> Dict[str, Any]:
     return {
         'adapter': 'diff',
         'description': 'Compare two reveal-compatible resources to detect structural changes (functions, classes, imports, interfaces, structs, types, ...)',
-        'uri_syntax': 'diff://<left-uri>:<right-uri>[/element]',
-        'query_params': {},
+        'uri_syntax': 'diff://LEFT:RIGHT[/ELEMENT] (reveal diff LEFT RIGHT[/ELEMENT])',
+        'query_params': param_schema(PARAM_SPECS),
+        'resource': RESOURCE_SPEC.schema(),
         'elements': {},
         'cli_flags': [],
         'supports_batch': False,

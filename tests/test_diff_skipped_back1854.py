@@ -17,7 +17,7 @@ def _struct(funcs, skipped=None):
 def _run(left, right):
     sides = {'git://HEAD~1/pkg': left, 'git://HEAD/pkg': right}
     with patch('reveal.adapters.diff.adapter.resolve_uri', side_effect=lambda uri, **kw: sides[uri]):
-        return DiffAdapter('git://HEAD~1/pkg', 'git://HEAD/pkg').get_structure()
+        return DiffAdapter('git://HEAD~1/pkg:git://HEAD/pkg').get_structure()
 
 
 def _failed(result):

@@ -27,13 +27,13 @@ def _reveal(cwd, *args):
 
 
 def test_adapter_answers_none_and_lists_both_sides(pair):
-    adapter = DiffAdapter(str(pair / 'a.py'), str(pair / 'b.py'))
+    adapter = DiffAdapter(f"{pair / 'a.py'}:{pair / 'b.py'}")
     assert adapter.get_element('nope') is None
     assert adapter.list_elements() == ['foo', 'only_left', 'only_right']
 
 
 def test_one_sided_element_is_still_a_verdict(pair):
-    adapter = DiffAdapter(str(pair / 'a.py'), str(pair / 'b.py'))
+    adapter = DiffAdapter(f"{pair / 'a.py'}:{pair / 'b.py'}")
     assert adapter.get_element('only_left')['change'] == 'removed'
     assert adapter.get_element('only_right')['change'] == 'added'
 

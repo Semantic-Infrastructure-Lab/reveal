@@ -854,7 +854,8 @@ def _named_fixture_skip(tokens, fixture_names=None):
         return 'writes generated files into the tree'
     paths, refs = _fixture_names() if fixture_names is None else fixture_names
     if stage[1] in SUBCOMMANDS:
-        args = [t for t in stage[2:3] if not t.startswith('-')]
+        # reveal diff LEFT RIGHT names two targets, one per side (BACK-2214); every other subcommand one.
+        args = [t for t in stage[2:4 if stage[1] == 'diff' else 3] if not t.startswith('-')]
         targets = []
         for arg in args or ['.']:
             if '..' in arg and stage[1] == 'review':

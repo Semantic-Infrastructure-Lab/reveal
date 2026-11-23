@@ -6,7 +6,7 @@ the "has no effect" note.
 
 Effect on every noun: only a class whose own ``PARAM_SPECS`` is empty changes, and the one such class is
 ``reveal://`` (declared by BACK-2767); every noun with controls already took these branches, and an undeclared adapter
-(``diff://``, no ``PARAM_SPECS``) keeps its note.
+(no ``PARAM_SPECS``: a plugin since diff:// was declared, BACK-2214) keeps its note.
 """
 import io
 from contextlib import redirect_stderr
@@ -19,6 +19,7 @@ from reveal.adapters.reveal.adapter import RevealAdapter
 from reveal.cli.defaults import _default_args
 from reveal.cli.routing.flag_specs import inject_query_flags
 from reveal.errors import RequestValidationError
+from undeclared_plugin import undeclared_plugin  # noqa: F401  (a fixture: the plugin that declares nothing)
 
 pytestmark = [pytest.mark.unit]
 
@@ -49,10 +50,10 @@ def test_all_is_satisfied_quietly(empty):
     assert _inject('config', 'reveal', all=True) == ('config', '')
 
 
-def test_an_undeclared_adapter_keeps_its_note():
-    assert getattr(get_adapter_class('diff'), 'PARAM_SPECS', None) is None
-    out, err = _inject('a.py:b.py', 'diff', since='2026-01-01')
-    assert out == 'a.py:b.py' and '--since has no effect on diff://' in err
+def test_an_undeclared_adapter_keeps_its_note(undeclared_plugin):
+    assert getattr(get_adapter_class(undeclared_plugin), 'PARAM_SPECS', None) is None
+    out, err = _inject('x', undeclared_plugin, since='2026-01-01')
+    assert out == 'x' and '--since has no effect on undeclared://' in err
 
 
 def test_only_reveal_declares_no_control():

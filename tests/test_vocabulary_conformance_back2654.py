@@ -115,7 +115,7 @@ from functools import partial
 import pytest
 
 from conftest import _run_reveal_direct
-from test_declared_parity_back2053 import APP, CASES, ENV_VARIABLE
+from test_declared_parity_back2053 import APP, CASES, DIFF_PAIR, ENV_VARIABLE
 from test_retirements_back2066 import PRODUCTION_CASES, SOURCE, _renders, commit_sample, sample_database, sample_workbook
 from reveal.adapters.base import get_adapter_class, list_supported_schemes
 from reveal.adapters.factory import uses_bound_query_call
@@ -144,7 +144,7 @@ BASE = {**CASES, 'stats': (None, ''), 'help': (None, ''), 'reveal': (None, '')}
 # Targets that are not the fixture project directory. reveal://analyzers, not config: config reports the REVEAL_*
 # variables it is run under, so rule 14's REVEAL_FORMAT probe would see its own setting in the answer.
 TARGETS = {'claude': 'sessions', 'codex': 'sessions', 'json': 'proj/data.json', 'sqlite': 'app.db', 'xlsx': 'book.xlsx',
-           'env': ENV_VARIABLE, 'help': 'quick', 'reveal': 'analyzers'}
+           'env': ENV_VARIABLE, 'help': 'quick', 'reveal': 'analyzers', 'diff': DIFF_PAIR}
 # A control that answers only on another target than its noun's default (Claude's turn slice reads one session):
 # the legacy-word probes (1b, 6, 16) send its spellings there, so they compare answers rather than two rejections.
 CONTROL_TARGETS = {('claude', 'tail'): 'session/my-session', ('git', 'detail'): 'proj/app.py', ('git', 'raw'): 'proj/app.py',
@@ -253,6 +253,23 @@ EXEMPT = {
         ('24', 'no subcommand and no request spelling that retires: the URI is the resource spelling (COMMAND_MODEL rule '
                '2), so it says no request note'),
         ('28', 'no subcommand: no declared parser whose --help could list a legacy flag'))},
+    # diff (BACK-2214): the resource names both sides and the element; its one control is the walk's exclude (a
+    # directory pair walks both sides). Rules 1a, 1d, 3, 3b, 4, 10, 12, 14, 18, 21j, 22, 23, 24, 26 and 28 conform; each
+    # probe below finds nothing to give. Its only row is target:diff.element (a positional element, not a control).
+    **{('diff', rule): reason for rule, reason in (
+        ('1b', _NO_ALIAS),
+        ('1c', 'declares no scalar control: exclude is repeatable, so there is no scalar spelling to give twice'),
+        ('2', 'no note-stage param: or value: row: its only note row is target:diff.element (a positional element, not a '
+              'control)'),
+        ('5', 'no note-stage param: row whose replacement is a control of this noun'),
+        ('6', 'declares no alias: nothing to note or keep note-free'),
+        ('8a', 'no where expression: a bare key is never read as a field'),
+        ('8b', 'declares no where control: there are no field filters'),
+        ('16', 'no legacy word and no standalone legacy parameter: nothing to translate or mark'),
+        ('17', 'no control selects the answer: the resource does (the comparison, or the element it names)'),
+        ('20', 'declares no control an answer could leave unread (exclude is the walk scope, read by every answer)'),
+        ('25', 'declares no since/until: no time window to check (a git side names its ref in the resource)'),
+        ('27', 'declares no match or where, and no text-valued standalone word: no term to be empty'))},
     **{('reveal', rule): reason for rule, reason in (
         ('1c', 'declares no control: no scalar spelling to give twice'),
         ('10', 'declares no control with an alias or a legacy entry'),

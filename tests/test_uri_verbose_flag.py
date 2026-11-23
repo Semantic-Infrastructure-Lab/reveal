@@ -18,6 +18,7 @@ import pytest
 
 from reveal.adapters import base as adapters_base
 from reveal.cli.routing.flag_specs import inject_query_flags
+from undeclared_plugin import undeclared_plugin  # noqa: F401  (a fixture: the plugin that declares nothing)
 
 pytestmark = pytest.mark.component
 
@@ -61,8 +62,8 @@ def test_without_verbose_flag_nothing_changes():
     assert inject_query_flags('src?circular', 'imports', _args()) == 'src?circular'
 
 
-@pytest.mark.parametrize('scheme', ['diff', 'nosuchscheme'])  # env, help, reveal are declared (no detail: refused)
-def test_adapters_without_declaration_untouched(scheme):
+@pytest.mark.parametrize('scheme', ['undeclared', 'nosuchscheme'])  # a plugin: every core noun is declared (BACK-2214)
+def test_adapters_without_declaration_untouched(scheme, undeclared_plugin):
     assert inject_query_flags('src', scheme, _args(verbose=True)) == 'src'
 
 

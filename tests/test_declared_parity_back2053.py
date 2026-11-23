@@ -25,6 +25,7 @@ CASES = {
     'codex': ([], ''),
     'contracts': ([], ''),
     'deps': ([], ''),
+    'diff': ([], ''),
     'env': ([], ''),
     'hotspots': ([], ''),
     'imports': ([], ''),
@@ -44,6 +45,10 @@ CASES = {
 NOUNS = sorted(CASES)
 # env's resource: a variable the fixture sets, never one the host owns (V042, BACK-2678).
 ENV_VARIABLE = 'REVEAL_PARITY_VARIABLE'
+# diff's resource: a pair of the project's directories that differ, so it walks as the other walking nouns' targets do
+# (BACK-2214). One word on the subcommand, as its URI spells it (``reveal diff LEFT:RIGHT``);
+# test_diff_vocabulary_back2214 holds the two-word ``reveal diff LEFT RIGHT`` and a file pair to it.
+DIFF_PAIR = 'proj:proj/tests'
 # A noun whose default answer is not a findings view gates the view that is (imports: BACK-1054 S4;
 # metrics: the hotspots ranking, BACK-2149).
 FINDINGS_VIEWS = {'imports': (['--unused'], '?unused'), 'metrics': (['--hotspots'], '?hotspots=true'),
@@ -190,6 +195,8 @@ def argv_for(noun, spelling, resource='proj'):
         resource = 'book.xlsx'
     if noun == 'env' and resource == 'proj':
         resource = ENV_VARIABLE
+    if noun == 'diff':
+        resource = DIFF_PAIR if resource == 'proj' else f'{resource}:{resource}'
     if noun == 'json':
         resource += '/data.json'
     if spelling == 'cli':
@@ -335,7 +342,7 @@ def test_fail_on_means_the_same_before_after_and_on_a_uri(project, noun, gate):
     """The project carries an unused import and a branchy function, so a declared gate has something to match."""
     cli, query = FINDINGS_VIEWS.get(noun, CASES[noun])
     target = {'json': 'proj/data.json', 'claude': 'sessions', 'codex': 'sessions', 'sqlite': 'app.db', 'env': ENV_VARIABLE,
-              'xlsx': 'book.xlsx'}.get(noun, 'proj')
+              'xlsx': 'book.xlsx', 'diff': DIFF_PAIR}.get(noun, 'proj')
     walk_flags = ['--respect-gitignore=off'] if declared_adapter_class(noun).RESOURCE_SPEC.walks else []
     spellings = {
         'after': [noun, target, *cli, '--fail-on', gate],

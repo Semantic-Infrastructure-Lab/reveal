@@ -5,8 +5,9 @@ Shared owners: ``cli/invocation.py`` (the rows and ``element_retirement``), the 
 also classifies a bound constructor's refusal as the request's fault) and ``api.query``. Effect on every noun: only
 ``help://``, ``reveal://`` and ``diff://`` have a row; every other bound noun (env, stats, sqlite, json, the analysis
 nouns...) refuses an element exactly as before. The row is read whether or not the scheme binds its query (BACK-2768):
-``diff://`` binds nothing and its element answered unnoted; every other unbound adapter and plugin has no row, so its
-element answers exactly as before.
+``diff://`` bound nothing then; it is a declared noun since BACK-2214, so no unbound scheme has a row now, and the seam is
+held by a plugin given a row (tests/undeclared_plugin.py). On the declared route (``reveal diff://L:R NAME`` is read by
+diff's own parser) the row's element joins the resource (``declared.legacy_element_resource``).
 """
 import json
 import sys
@@ -16,6 +17,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent))
 from conftest import _run_reveal_direct  # noqa: E402
+from undeclared_plugin import undeclared_plugin  # noqa: E402,F401  (a fixture: the plugin that declares nothing)
 
 from reveal.cli.invocation import RETIREMENTS, element_retirement  # noqa: E402
 
@@ -38,14 +40,24 @@ def test_the_notes_name_the_replacement():
                                                       'use diff://LEFT:RIGHT/ELEMENT.')
 
 
-def test_of_the_unbound_schemes_only_diff_has_a_row():
-    """Effect on every noun of reading the row for an unbound scheme too (BACK-2768): diff:// alone gains a note."""
+def test_no_unbound_scheme_has_a_row():
+    """Effect on every noun of reading the row for an unbound scheme too (BACK-2768): diff:// was the one, and it binds
+    its query since its declaration (BACK-2214), so no unbound scheme gains a note."""
     import reveal.adapters  # noqa: F401
     from reveal.adapters.base import get_adapter_class, list_supported_schemes
     from reveal.adapters.factory import uses_bound_query_call
     unbound = [s for s in list_supported_schemes() if not uses_bound_query_call(get_adapter_class(s))]
-    assert 'diff' in unbound and 'domain' in unbound
-    assert [s for s in unbound if element_retirement(s)] == ['diff']
+    assert 'diff' not in unbound and 'domain' in unbound
+    assert [s for s in unbound if element_retirement(s)] == []
+
+
+@pytest.fixture
+def plugin_with_a_row(undeclared_plugin, monkeypatch):  # noqa: F811
+    """The seam for an unbound scheme: a plugin that declares nothing, given a target:SCHEME.element row."""
+    from reveal.cli.invocation import Retirement
+    monkeypatch.setitem(RETIREMENTS, f'target:{undeclared_plugin}.element',
+                        Retirement(f'{undeclared_plugin}://X NAME', f'{undeclared_plugin}://X/NAME'))
+    return f'{undeclared_plugin}://x'
 
 
 def _diff_pair(tmp_path):
@@ -59,36 +71,51 @@ def _noted(doc):
     return [w['field'] for w in (doc.get('meta') or {}).get('warnings') or [] if w.get('code') == 'retired_spelling']
 
 
-def test_cli_an_unbound_scheme_with_a_row_answers_its_element_with_the_note(tmp_path, monkeypatch):
-    uri = _diff_pair(tmp_path)
-    run = _run_reveal_direct(uri, 'ok', '--format', 'json')
+def test_cli_an_unbound_scheme_with_a_row_answers_its_element_with_the_note(plugin_with_a_row, monkeypatch):
+    run = _run_reveal_direct(plugin_with_a_row, 'ok', '--format', 'json')
     assert run.returncode == 0, run.stderr
-    assert _noted(json.loads(run.stdout)) == ['target:diff.element']
-    monkeypatch.delitem(RETIREMENTS, 'target:diff.element')  # the row is the whole switch: without it, no note
-    run = _run_reveal_direct(uri, 'ok', '--format', 'json')
+    doc = json.loads(run.stdout)
+    assert doc['name'] == 'ok' and _noted(doc) == ['target:undeclared.element']
+    monkeypatch.delitem(RETIREMENTS, 'target:undeclared.element')  # the row is the whole switch: without it, no note
+    run = _run_reveal_direct(plugin_with_a_row, 'ok', '--format', 'json')
     assert run.returncode == 0 and _noted(json.loads(run.stdout)) == [], run.stderr
 
 
-def test_api_an_unbound_scheme_with_a_row_answers_its_element_with_the_note(tmp_path, monkeypatch):
+def test_api_an_unbound_scheme_with_a_row_answers_its_element_with_the_note(plugin_with_a_row, monkeypatch):
     from reveal import api
+    doc = api.query(plugin_with_a_row, 'ok')
+    assert doc['name'] == 'ok' and _noted(doc) == ['target:undeclared.element']
+    monkeypatch.delitem(RETIREMENTS, 'target:undeclared.element')
+    doc = api.query(plugin_with_a_row, 'ok')
+    assert doc['name'] == 'ok' and _noted(doc) == []
+
+
+def test_cli_diff_declared_route_joins_the_element_and_notes_it(tmp_path, monkeypatch):
+    """diff's positional element is read by its own parser (a declared noun with a subcommand): the row's element joins
+    the resource, so ``reveal diff://L::R ok`` answers as ``diff://L::R/ok`` with one note; without the row, diff refuses
+    the element as every declared noun does (BACK-2214)."""
     uri = _diff_pair(tmp_path)
-    doc = api.query(uri, 'ok')
+    run = _run_reveal_direct(uri, 'ok', '--format', 'json')
+    assert run.returncode == 0, run.stderr
+    doc = json.loads(run.stdout)
     assert doc['type'] == 'diff_element' and _noted(doc) == ['target:diff.element']
+    embedded = json.loads(_run_reveal_direct(f'{uri}/ok', '--format', 'json').stdout)
+    assert {k: v for k, v in doc.items() if k != 'meta'} == {k: v for k, v in embedded.items() if k != 'meta'}
     monkeypatch.delitem(RETIREMENTS, 'target:diff.element')
-    doc = api.query(uri, 'ok')
-    assert doc['type'] == 'diff_element' and _noted(doc) == []
+    run = _run_reveal_direct(uri, 'ok', '--format', 'json')
+    assert run.returncode == 2 and "takes no positional element ('ok')" in run.stdout + run.stderr, run.stderr
 
 
 # --- the CLI's URI route (uri._resolve) ------------------------------------------------------------------------------
 
 def test_every_other_bound_noun_has_no_row():
-    """Effect on every noun: of the schemes that bind their query, only help:// and reveal:// keep an element."""
+    """Effect on every noun: of the schemes that bind their query, only help://, reveal:// and diff:// keep an element."""
     import reveal.adapters  # noqa: F401
     from reveal.adapters.base import get_adapter_class, list_supported_schemes
     from reveal.adapters.factory import uses_bound_query_call
     bound = [s for s in list_supported_schemes() if uses_bound_query_call(get_adapter_class(s))]
     assert {'env', 'stats', 'metrics', 'json', 'sqlite'} <= set(bound)
-    assert [s for s in bound if element_retirement(s) and s not in ('help', 'reveal')] == []
+    assert [s for s in bound if element_retirement(s) and s not in ('help', 'reveal', 'diff')] == []
 
 
 def test_cli_a_bound_noun_without_a_row_still_refuses_the_element():

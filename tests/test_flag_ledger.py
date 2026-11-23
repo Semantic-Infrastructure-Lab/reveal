@@ -38,7 +38,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from conftest import production_schemes, without_request_notes
+from conftest import _run_reveal_direct, production_schemes, without_request_notes
+from undeclared_plugin import undeclared_plugin  # noqa: F401  (a fixture: the plugin that declares nothing)
 from reveal.cli.defaults import _default_args
 from reveal.cli.routing.ledger import FlagLedger, TrackedArgs, delegate, mark, peek
 from reveal.cli.routing.uri import handle_uri
@@ -241,16 +242,15 @@ def db(tmp_path):
     return tmp_path
 
 
-def test_sqlite_limit_is_named_not_dropped(db):
+def test_sqlite_limit_is_named_not_dropped(db, undeclared_plugin):
     """The BACK-1514 repro (all tables listed, and no word about --limit): since sqlite is declared (BACK-2626) the
-    unsupported control is refused by name, before any answer; an undeclared adapter still notes it."""
+    unsupported control is refused by name, before any answer; an undeclared adapter still notes it. The undeclared one
+    is a plugin (tests/undeclared_plugin.py): every core noun is declared since diff:// (BACK-2214)."""
     proc = _cli('sqlite://t.db', '--limit', '2', cwd=db)
     assert proc.returncode == 2 and not proc.stdout
     assert "unsupported control '--limit'; supported controls: view" in proc.stderr
-    for name in ('a.py', 'b.py'):  # diff:// is undeclared (help:// is declared since BACK-2767 and refuses it)
-        (db / name).write_text('def f():\n    return 1\n', encoding='utf-8')
-    proc = _cli('diff://a.py:b.py', '--limit', '2', cwd=db)
-    assert proc.returncode == 0 and 'Note: --limit has no effect on diff://' in proc.stderr
+    proc = _run_reveal_direct(f'{undeclared_plugin}://x', '--limit', '2')
+    assert proc.returncode == 0 and 'Note: --limit has no effect on undeclared://' in proc.stderr
 
 
 def test_unread_query_key_is_named(db):
@@ -369,7 +369,10 @@ KNOWN_SILENT: dict = {}
 # (scheme, dest) -> the request a probe and its baseline run on, where the default answer has no cap for the flag to
 # lift: Metrics' per-file rows are uncapped, so --all (limit there) is judged on the ranking view it caps
 # (BACK-2654 Step 5; it used to inject top, which the per-file answer never reads, and pass on that note).
-PROBE_URIS = {('metrics', 'all'): 'metrics://proj?view=hotspots', ('stats', 'all'): 'stats://proj?view=hotspots'}
+PROBE_URIS = {('metrics', 'all'): 'metrics://proj?view=hotspots', ('stats', 'all'): 'stats://proj?view=hotspots',
+              # diff's fixture pair is two files, which --exclude has nothing to prune in (satisfied quietly, D-2730-2):
+              # a directory pair walks both sides (BACK-2214).
+              ('diff', 'exclude'): 'diff://proj:proj/tests'}
 
 # The cap --all lifts belongs to the text renderer (ACCEPTS_TOP); the JSON result already lists
 # every item, so these pairs are judged on the text view (BACK-1538).
@@ -658,6 +661,8 @@ WALKERS = {
     'check': ['proj'],
     'contracts': ['proj'],
     'deps': ['proj'],
+    # A directory pair walks both sides; the right side has no skipme/, so pruning it changes the comparison (BACK-2214).
+    'diff': ['proj', 'proj/many'],
     'hotspots': ['proj'],
     'imports': ['proj'],
     'markdown': ['proj'],

@@ -265,6 +265,36 @@ subcommands:
         it loudly (unrecognized arguments), not a silent gap
       review: not-applicable
       via: []
+  diff:
+    all:
+      reason: 'BACK-2654 item 1c: accepted as on the URI form; diff declares no --all (no cap it lifts: the comparison
+        lists every change), so the flag ledger names it unused on both forms (unused_flag)'
+      review: not-applicable
+      via:
+      - declared-unused
+    respect_gitignore:
+      reason: 'BACK-1386: a directory pair walks both sides through the shared walk, which reads the policy
+        (declared since BACK-2214); tests/test_diff_vocabulary_back2214.py proves an output diff'
+      review: honored
+      via:
+      - declared-global
+    since:
+      reason: --since is not declared on `reveal diff`'s own parser -- argparse rejects
+        it loudly (unrecognized arguments), not a silent gap
+      review: not-applicable
+      via: []
+    until:
+      reason: --until is not declared on `reveal diff`'s own parser -- argparse rejects
+        it loudly (unrecognized arguments), not a silent gap
+      review: not-applicable
+      via: []
+    verbose:
+      reason: 'BACK-2654 rule 4: --verbose is --detail full, bound from the
+        declarations; this noun declares no detail, so it exits 2 naming detail and its
+        controls.'
+      review: honored
+      via:
+      - declared-read
   env:
     all:
       reason: 'BACK-2654 item 1c: accepted as on the URI form; env declares no --all and no cap (the listing is

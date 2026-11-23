@@ -6,6 +6,7 @@ import pytest
 from reveal.adapters.git.params import MERGES
 from reveal.cli.invocation import RETIREMENTS
 from reveal.utils.query_binding import switch_value
+from undeclared_plugin import undeclared_plugin  # noqa: F401  (a fixture: the plugin that declares nothing)
 
 
 @pytest.mark.parametrize('value, expected', [
@@ -328,12 +329,12 @@ def test_typed_spellings_skip_a_value_and_read_attached_and_clustered_forms():
     (['a.py', 'f', '-i'], 'Note: -i has no effect on the file view'),
     (['a.py', 'f', '-r'], 'Note: -r has no effect on the file view'),
     (['a.py', 'f', '-v'], 'Note: -v has no effect on the file view'),
-    (['diff://a.py:long.py', '-v'], 'Note: -v has no effect on diff:// queries'),  # undeclared (reveal:// is, BACK-2767)
+    (['undeclared://x', '-v'], 'Note: -v has no effect on undeclared:// queries'),  # a plugin (every core noun is declared)
     (['a.py', 'long.py', '--search', 'f'], "Error: --search answers for the whole of a.py"),
     (['a.py', 'f', '--lint'], 'Error: --lint reads no element'),
     (['a.py', 'f', '--ignore-case'], 'Note: --ignore-case has no effect on the file view'),  # control: first spelling
 ])
-def test_notes_and_refusals_name_an_aliased_flag_as_typed(project, argv, says):
+def test_notes_and_refusals_name_an_aliased_flag_as_typed(project, undeclared_plugin, argv, says):
     from conftest import _run_reveal_direct
     err = _run_reveal_direct(*argv).stderr
     assert says in err, err

@@ -62,7 +62,7 @@ Guides >200 lines show the first section by default (progressive disclosure). Ap
 | Text search, grouped by enclosing function | `reveal src/ --grep 'pattern'` (Python regex syntax) |
 | File history / commit search | `reveal git src/app.py --view history`, `reveal git . --view history --where 'message~=fix'` |
 | One section of a markdown doc | `reveal doc.md "Heading"` |
-| Review a commit range | `reveal check --changed main..HEAD` (rules on the files the range changed); structure: `reveal 'diff://git://main/.:git://HEAD/.'` |
+| Review a commit range | `reveal check --changed main..HEAD` (rules on the files the range changed); structure: `reveal diff git://main/. git://HEAD/.` |
 | Prior Claude sessions | `reveal claude://sessions/ --match auth-refactor` |
 | Databases, env, SSL, nginx, other resources | `reveal help://adapters` |
 
@@ -277,8 +277,9 @@ Reveal has both a **path-based interface** (`reveal <path>` + flags) and a set o
 | `reveal testability [path]` | Retired: use reveal patches <path> --view pressure (the same answer); test patch pressure joined with production boundary fan-out | `reveal testability --help` |
 | `reveal calls --callers FUNC` | Call graph: callers, callees (--depth N, --detail), --sort=-callers | `reveal calls --help` |
 | `reveal trace --from FUNC` | Retired: use reveal calls --callees FUNC --depth N --detail (the same walk); depth-indented narrative with side effects | `reveal trace --help` |
+| `reveal diff LEFT RIGHT[/ELEMENT]` | Compare the structure of two files, directories or git versions, or one element across them | `reveal diff --help` |
 | `reveal check <path>` | Run quality rules on a file or directory | `reveal check --help` |
-| `reveal review <path>` | Retired: use reveal check --changed RANGE and the diff:// adapter (structure: reveal 'diff://git://A/.:git://B/.'); still answers and prints a replaced-by note | `reveal review --help` |
+| `reveal review <path>` | Retired: use reveal check --changed RANGE and reveal diff (structure: reveal diff git://A/. git://B/.); still answers and prints a replaced-by note | `reveal review --help` |
 | `reveal health [URI...]` | Ops health: SSL + databases + DNS + nginx | `reveal health --help` |
 | `reveal pack <path>` | Token-budgeted context snapshot for LLM consumption (use `--budget`, `--focus`, `--since`) | `reveal pack --help` |
 | `reveal dev <command>` | Scaffold adapters/analyzers/rules; inspect effective `.reveal.yaml` config | `reveal dev --help` |
@@ -1152,7 +1153,7 @@ json.database.credentials.user = "admin"
 
 ### Task: "Review pull request / git changes"
 
-**Pattern (`reveal review` is retired into `check --changed` plus the `diff://` adapter):**
+**Pattern (`reveal review` is retired into `check --changed` plus `reveal diff`):**
 ```bash
 # Rules on the files a range changed
 reveal check --changed main..feature
@@ -1161,7 +1162,7 @@ reveal check --changed HEAD              # Uncommitted changes
 reveal check ./src                       # A directory, whole tree
 
 # Structure of the same range
-reveal 'diff://git://main/.:git://feature/.'
+reveal diff git://main/. git://feature/.
 
 # Manual approach (more control)
 git diff --name-only | reveal --stdin --outline   # Structure of changed files

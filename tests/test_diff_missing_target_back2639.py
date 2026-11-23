@@ -48,7 +48,8 @@ def test_successful_pair_is_complete(tmp_path):
     right = tmp_path / 'right.py'
     for path in (left, right):
         path.write_text('def stable(): pass\n', encoding='utf-8')
-    result = DiffAdapter(str(left), str(right)).get_structure()
+    result = DiffAdapter(f'{left}:{right}').get_structure()
     assert DiffAdapter.execution_facts(result).completeness is AnalysisCompleteness.COMPLETE
     assert DiffAdapter.uri_execution_facts(f'{left}:{right}') is not None
-    assert DiffAdapter.uri_execution_facts('git://HEAD/src:other.py') is None
+    # Every pair is qualified since diff is a declared noun (BACK-2214): a composed or directory pair was legacy.
+    assert DiffAdapter.uri_execution_facts('git://HEAD/src:other.py') is DiffAdapter.execution_facts
