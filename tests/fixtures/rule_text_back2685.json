@@ -88,7 +88,8 @@
       "uri": "metrics://proj?view=hotspots",
       "exit": 0,
       "fields": [
-        "meta.issue_count.rule"
+        "meta.issue_count.rule",
+        "summary.findings_rule"
       ],
       "standing": [],
       "detail_supported": false
