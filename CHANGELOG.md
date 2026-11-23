@@ -143,6 +143,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 - An empty or blank exclusion pattern exits 2 on every walking noun: `--exclude ''` (alone or beside a real pattern), `?exclude=` and `exclude=''` say `SPELLING needs a pattern: --exclude PATTERN`, where the flag answered as no exclusion and the URI said "exclude must be a valid string" (BACK-2730).
 
+- Git blame's `--ignore` is two controls: `--ignore-commits SHA[,SHA...]` (repeat it to add more) suppresses those commits and `--auto-ignore on|off` switches `.git-blame-ignore-revs` and the noise heuristic, on the subcommand, `git://F?view=blame&ignore-commits=`, `api.query` and MCP, so `--ignore-commits SHA --auto-ignore off` asks what no spelling could. `--ignore off` and `--ignore SHA` (`?ignore=`) answer as before with a note until 1.0; `--ignore SHA --ignore off` now answers as both instead of exiting 2, `--ignore off --auto-ignore on` exits 2 naming both, and blame text says "--auto-ignore off includes them" (BACK-2733).
+
 ### Added
 
 - `reveal.api.query(NOUN, TARGET, **keywords)` asks a noun as its subcommand does: `api.query('calls', 'src', callers='main')` returns the JSON document `reveal calls src --callers main --format json` prints, each keyword the noun's flag with `-` as `_`. A request the subcommand exits 2 on raises `RequestValidationError` with its message (a missing path and a target that matches nothing included, which the URI form returned as answers), and a failed analysis raises its cause or the new `reveal.errors.AnalysisFailedError`. Resource URIs answer as before; a word that is neither a noun nor a URI still raises `ValueError`, now naming the nouns instead of "missing scheme" (BACK-2717).
@@ -153,7 +155,7 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 - The json, imports, calls, claude, metrics, contracts and patches guides teach `reveal NOUN PATH --flags` (`reveal metrics ./src --sort=-complexity --limit 5`), and the resource URI followed by flags where the URI names more than a path (`reveal json://data.json/users --where 'age>25'`, `reveal claude://session/NAME --errors`) (BACK-2726).
 
-- The git guide and the git lines of the shared guides teach the subcommand with flags (`reveal git src/app.py --view history --where 'author~=John'`), keeping the resource URI where it names a ref (`reveal git://src/app.py@abc1234 --view diff`), and the README, AGENT_HELP and `help://quick` first screens teach `reveal git . --view history`. Git's help and schema examples, hints and error messages name flags too (`--view blame --detail full`, `--ignore off`, `--detail raw`) (BACK-2616).
+- The git guide and the git lines of the shared guides teach the subcommand with flags (`reveal git src/app.py --view history --where 'author~=John'`), keeping the resource URI where it names a ref (`reveal git://src/app.py@abc1234 --view diff`), and the README, AGENT_HELP and `help://quick` first screens teach `reveal git . --view history`. Git's help and schema examples, hints and error messages name flags too (`--view blame --detail full`, `--auto-ignore off`, `--detail raw`) (BACK-2616).
 
 - The markdown guide and the markdown lines of the shared guides teach `reveal markdown DIR --flags` (`reveal markdown docs/ --where type=guide --match nginx`, `--view links`, `--backlinks auth.md`), as do `help://markdown`, `help://schemas/markdown` (examples as `markdown://DIR --flags`, query parameters from the declarations) and the recipe list (BACK-2614).
 
