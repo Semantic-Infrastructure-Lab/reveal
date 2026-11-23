@@ -1379,7 +1379,9 @@ class TestHelpQuickIndex(unittest.TestCase):
 
     def _get_index_output(self):
         from reveal.adapters.help import HelpAdapter
-        adapter = HelpAdapter('help://')
+        # The resource is the topic: '' is the index (a resource of 'help://' names a topic that does not exist,
+        # which the structure call now refuses as the CLI does, BACK-2764).
+        adapter = HelpAdapter('')
         result = adapter.get_structure()
         return capture_stdout(render_help, result, 'text', True)
 

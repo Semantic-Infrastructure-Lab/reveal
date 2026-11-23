@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from .base import ResourceAdapter, Stability, register_adapter, register_renderer, _ADAPTER_REGISTRY, list_public_schemes
 from .registry import OPS_SCHEMES, _SCAFFOLD_SCHEMES, is_internal_scheme
+from ..errors import MissingResourceError
 from ..utils.formatting import shell_command
 from ..utils.query_parser import ParamSpec, param_schema, whole_number
 from ..utils.results import ResultBuilder, note_truncation, note_warning
@@ -643,9 +644,11 @@ class HelpAdapter(ResourceAdapter):
 
         Args:
             resource: Specific help topic to display ('' = list all)
-            query: Unused, accepted for canonical signature conformance.
+            query: The topic's own query (help://search?search=TERM), split off by canonical construction; the
+                structure call gives it back to the topic it belongs to.
         """
         self.topic = resource or None
+        self._topic_query = query
         # Merge auto-discovered guides with manual STATIC_HELP entries
         # STATIC_HELP takes precedence (allows aliases and special mappings)
         self.help_topics = self._discover_and_merge_guides()
@@ -775,7 +778,13 @@ class HelpAdapter(ResourceAdapter):
         ]
 
     def get_structure(self, **kwargs) -> Dict[str, Any]:
-        """Get help structure (list of available topics)."""
+        """The list of available topics, or the topic the resource names (help://quick), as the CLI answers it.
+
+        The CLI router reads the resource as the topic (``ELEMENT_NAMESPACE_ADAPTER``); a structure call answers it the
+        same way, so ``api.query('help://quick')`` is the quick reference, not the index, and a topic that does not
+        exist is the invalid request the CLI exits 2 on (BACK-2764, the env precedent of BACK-2626)."""
+        if self.topic:
+            return self._topic_answer()
         return ResultBuilder.create(
             result_type='help',
             source='help://',
@@ -797,6 +806,14 @@ class HelpAdapter(ResourceAdapter):
                 'static_guides': self._indexed_static_guides(),
             }
         )
+
+    def _topic_answer(self) -> Dict[str, Any]:
+        """The topic this adapter was built for, with the query canonical construction split off (``search?search=``)."""
+        topic = f'{self.topic}?{self._topic_query}' if self._topic_query else str(self.topic)
+        result = self.get_element(topic)
+        if result is None:
+            raise MissingResourceError(f"Element '{topic}' not found")
+        return result
 
     def get_element(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:
         """Get help for a specific topic.
