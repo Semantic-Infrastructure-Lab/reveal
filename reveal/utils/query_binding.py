@@ -1262,15 +1262,8 @@ def add_declared_arguments(parser: argparse.ArgumentParser, specs: Iterable[Para
     gets one positional each, the first required as the resource is; *joined* (a URI request's parser, which reads the
     URI's path) gives it the one positional named ``resource.name`` instead. A control whose flags the parser already
     owns keeps that argument (``_owned_by_parser``); a declared noun's parser owns none of its controls' flags."""
-    if resource is not None and resource.parts and not joined:
-        first, *rest = resource.parts
-        parser.add_argument(first, nargs=None if resource.required else '?', default=resource.cli_default,
-                            metavar=first.upper())
-        for part in rest:
-            parser.add_argument(part, nargs='?', default=None, metavar=part.upper())
-    elif resource is not None:
-        parser.add_argument(resource.name, nargs=None if resource.required else '?',
-                            default=resource.cli_default)
+    if resource is not None:
+        _add_resource_arguments(parser, resource, joined)
     groups: Dict[str, Any] = {}
     for spec in specs:
         _add_legacy_cli_arguments(parser, spec)
@@ -1290,6 +1283,19 @@ def add_declared_arguments(parser: argparse.ArgumentParser, specs: Iterable[Para
         owner.add_argument(*(flag for flag in cli.flags if flag not in separate), **options)
         _add_legacy_rider_arguments(parser, spec, cli, options, separate)
         _add_legacy_flag_arguments(parser, spec)
+
+
+def _add_resource_arguments(parser: argparse.ArgumentParser, resource: ResourceSpec, joined: bool) -> None:
+    """The resource's positionals: one per word of ``resource.parts`` (the first required as the resource is), or the
+    one named ``resource.name`` (no parts, or *joined*: a URI request's parser)."""
+    nargs = None if resource.required else '?'
+    if resource.parts and not joined:
+        first, *rest = resource.parts
+        parser.add_argument(first, nargs=nargs, default=resource.cli_default, metavar=first.upper())
+        for part in rest:
+            parser.add_argument(part, nargs='?', default=None, metavar=part.upper())
+        return
+    parser.add_argument(resource.name, nargs=nargs, default=resource.cli_default)
 
 
 def typed_resource(resource: ResourceSpec, args: Any) -> Any:
