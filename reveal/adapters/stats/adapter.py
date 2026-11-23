@@ -184,8 +184,9 @@ _CODE_ONLY = ParamSpec('code-only', 'boolean', 'Exclude data/config files (xml, 
                        'from the walk; totals describe the code files', False, boolean_value, ('--code-only',),
                        role='analysis', aliases=('code_only',),
                        cli=CliBinding(('--code-only',), dest='code_only', action='store_true'), answers=(_DIRECTORY,))
-_CHURN = ParamSpec('churn', 'boolean', 'Fold commit-touch counts into the hotspot score: on (default in a git '
-                   'repository; silently off elsewhere) or off for complexity-only scoring',
+_CHURN = ParamSpec('churn', 'boolean', 'Fold commit-touch counts into the hotspot score: on (the default; outside a '
+                   'git repository it counts no churn, and a churn_unavailable warning says when the history could '
+                   'not be read) or off for complexity-only scoring',
                    True, switch_value, ('--view hotspots --churn off',), role='analysis',
                    cli=CliBinding(('--churn',), metavar='on|off'),
                    legacy=(LegacySpelling('no_churn', codec=legacy_switch('no_churn', 'off', 'on'),
