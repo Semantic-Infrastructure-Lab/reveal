@@ -146,6 +146,13 @@ def _patterns(key):
         return [_health_names_a_code_path]
     if kind == 'target' and key == 'target:nav.outline':
         return [_outline_names_a_code_element]
+    if kind == 'target' and rest.endswith('.element'):  # SCHEME:// ELEMENT, the positional after a resource URI
+        scheme = rest[:-len('.element')]
+        # The element word ends the command (end of line, a comment, a flag, a pipe or the closing backtick); a prose
+        # word after a URI (``reveal help://agent/full for all``) is not one.
+        return [re.compile(rf"reveal[ \t]+['\"]?{re.escape(scheme)}://[^\s'\"`]*['\"]?[ \t]+"
+                           rf"(?![-|#&>(<\\]|\S*://|(?:or|and|for|to|with|then|in)\b)[\w\"'.][^\s`]*[ \t]*(?:$|#|--|`|\|)",
+                           re.MULTILINE)]
     return []
 
 
@@ -176,6 +183,9 @@ def _sample(key):
         return 'reveal health ./src'
     if key == 'target:nav.outline':
         return 'reveal app.py work --outline'
+    if kind == 'target' and rest.endswith('.element'):
+        return {'help': 'reveal help:// quick', 'reveal': 'reveal reveal://adapters/env.py EnvAdapter'}.get(
+            rest[:-len('.element')], f"reveal {rest[:-len('.element')]}://x NAME")
     raise AssertionError(f'no sample for {key}')
 
 
