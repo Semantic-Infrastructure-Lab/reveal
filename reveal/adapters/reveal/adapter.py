@@ -1,7 +1,8 @@
 """Reveal meta-adapter (reveal://) - Self-inspection and validation."""
 
 from pathlib import Path
-from typing import Dict, List, Any, Optional, cast
+from typing import Dict, List, Any, NoReturn, Optional, cast
+from reveal.errors import MissingResourceError
 from reveal.reveal_types import CONTRACT_VERSION, RevealResult
 
 from ..base import ResourceAdapter, Stability, register_adapter, register_renderer
@@ -53,6 +54,11 @@ class RevealAdapter(ResourceAdapter):
         """Get help documentation for reveal:// adapter."""
         return get_help()
 
+    @staticmethod
+    def uri_result_type(resource: str) -> str:
+        """Every section answers ``reveal_structure``, so a section the router answers as failed keeps it."""
+        return 'reveal_structure'
+
     def __init__(self, resource: str = '', query: Optional[str] = None, **kwargs: Any):
         """Initialize reveal adapter.
 
@@ -90,7 +96,7 @@ class RevealAdapter(ResourceAdapter):
             Filtered by self.component if specified.
         """
         if self.component and self.component.lower() not in SECTIONS:
-            return self._unknown_section()
+            self._unknown_section()
         result = structure.get_structure(self.reveal_root, self.component, **kwargs)
         return ResultBuilder.create(
             result_type='reveal_structure',
@@ -100,20 +106,18 @@ class RevealAdapter(ResourceAdapter):
             data=result,
         )
 
-    def _unknown_section(self) -> RevealResult:
-        """An unknown section fails, naming the real ones (BACK-1521).
+    def _unknown_section(self) -> NoReturn:
+        """An unknown section is an invalid resource, exit 2 (D6), naming the real ones (BACK-1521, BACK-2761).
 
         It fell through to the full view with exit 0, so a typo (``reveal://analyzer``)
-        answered a different question as if it were the one asked.
+        answered a different question as if it were the one asked; then it was a failed answer, exit 1.
         """
         message = (f"Unknown reveal:// section '{self.component}'. "
                    f"Sections: {', '.join(SECTIONS)}.")
         source_file = self.reveal_root / str(self.component)
         if source_file.is_file():
             message += f" To read that source file: reveal {to_posix(source_file)}"
-        return ResultBuilder.create_error(
-            result_type='reveal_structure', source=f'reveal://{self.component}',
-            error=message, contract_version=CONTRACT_VERSION, source_type='runtime')
+        raise MissingResourceError(message)
 
     def check(self, select: Optional[List[str]] = None, ignore: Optional[List[str]] = None) -> Dict[str, Any]:
         """Run validation rules on reveal itself.
