@@ -1558,7 +1558,8 @@ class TestImportsAdapterSchema:
         assert schema['adapter'] == 'imports'
         assert 'description' in schema
         assert 'uri_syntax' in schema
-        assert 'imports://' in schema['uri_syntax']
+        # the subcommand, the spelling the imports:// request's note names (BACK-2769: the bare URI exits 2 at the cut)
+        assert schema['uri_syntax'].startswith('reveal imports <path>')
 
     def test_schema_query_params(self):
         """Schema should document query parameters."""

@@ -27,6 +27,7 @@ import pytest
 from conftest import _run_reveal_direct
 
 from reveal.adapters.base import _ADAPTER_REGISTRY
+from teaching_patterns import ANALYSIS_ONLY
 
 # BACK-1149: guards an internal invariant/output-contract (registry, schema, or cross-module consistency)
 pytestmark = pytest.mark.contract
@@ -57,6 +58,28 @@ QUERY_ADAPTERS = ("ast", "calls", "imports", "metrics", "git", "diff")
 
 def _run(*args):
     return _run_reveal_direct(*args)
+
+
+def _is_adapter_request(adapter, uri):
+    """An advertised example is this adapter's own request, in the spelling an agent should copy: an analysis-only
+    noun's subcommand (``reveal imports src --unused``: its bare URI exits 2 at the cut, D20; BACK-2769), every other
+    adapter's bare ``adapter://`` URI. Never another adapter's request, a pipeline, or a CLI line wrapped round a URI
+    (``reveal cpanel://x --flag``, BACK-432)."""
+    if adapter in ANALYSIS_ONLY:
+        words = uri.split()
+        return words[:2] == ["reveal", adapter] and len(words) > 2 and "://" not in words[2] and "|" not in uri
+    return uri.startswith(f"{adapter}://")
+
+
+def test_the_example_shape_check_bites():
+    """Controls for _is_adapter_request: each noun's own spelling passes, the other one and a neighbour's fail."""
+    assert "imports" in ANALYSIS_ONLY and "git" not in ANALYSIS_ONLY
+    assert _is_adapter_request("imports", "reveal imports src --unused")
+    for wrong in ("imports://src --unused", "reveal imports://src", "reveal ast src", "reveal imports src | head"):
+        assert not _is_adapter_request("imports", wrong), wrong
+    assert _is_adapter_request("git", "git://src/app.py")
+    for wrong in ("reveal git src/app.py", "reveal git://src/app.py"):
+        assert not _is_adapter_request("git", wrong), wrong
 
 
 def _assert_sane(result, desc):
@@ -144,9 +167,10 @@ def test_discover_entries_conform_to_the_discovery_api_shape():
             f"({entry['description']!r}) — reads as broken to a discovering agent"
         )
         # The dump's example URIs are the ones an agent copy-pastes first; they
-        # must be bare `scheme://...` URIs, not CLI lines or pipelines (BACK-471).
+        # must be bare `scheme://...` URIs, not CLI lines or pipelines (BACK-471),
+        # except that an analysis-only noun's are its subcommand (BACK-2769).
         for uri in entry["example_queries"]:
-            assert isinstance(uri, str) and "://" in uri and not uri.startswith("reveal "), (
+            assert isinstance(uri, str) and _is_adapter_request(scheme, uri), (
                 f"--discover entry {scheme!r} has a malformed example URI: {uri!r}"
             )
 
@@ -194,14 +218,15 @@ def test_schema_is_valid_and_names_itself(adapter):
 @pytest.mark.parametrize("adapter", QUERY_ADAPTERS)
 def test_schema_example_queries_are_well_formed(adapter):
     """Advertised example queries must actually be for this adapter (uri starts
-    with `<adapter>://`) — an agent copies these verbatim as a starting point."""
+    with `<adapter>://`, or `reveal <adapter> ` for an analysis-only noun) — an
+    agent copies these verbatim as a starting point."""
     schema = _schema(adapter)
     examples = schema.get("example_queries", [])
     assert examples, f"{adapter} schema advertises no example_queries for agents"
     for ex in examples:
         assert "uri" in ex, f"{adapter} example query missing 'uri': {ex}"
-        assert ex["uri"].startswith(f"{adapter}://"), (
-            f"{adapter} example query uri {ex['uri']!r} is not a {adapter}:// URI — "
+        assert _is_adapter_request(adapter, ex["uri"]), (
+            f"{adapter} example query uri {ex['uri']!r} is not a {adapter} request — "
             f"an agent building on it would target the wrong adapter"
         )
 
@@ -237,10 +262,10 @@ def test_every_public_adapter_example_queries_are_well_formed(adapter):
     assert examples, f"{adapter} schema advertises no example_queries for agents"
     for ex in examples:
         assert "uri" in ex, f"{adapter} example query missing 'uri': {ex}"
-        assert ex["uri"].startswith(f"{adapter}://"), (
+        assert _is_adapter_request(adapter, ex["uri"]), (
             f"{adapter} example query uri {ex['uri']!r} is not a bare {adapter}:// "
-            f"URI — an agent building on it would get a malformed query or target "
-            f"the wrong adapter"
+            f"URI (or, for an analysis-only noun, its subcommand) — an agent building "
+            f"on it would get a malformed query or target the wrong adapter"
         )
 
 

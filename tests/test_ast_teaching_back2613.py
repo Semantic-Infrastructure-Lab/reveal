@@ -55,12 +55,13 @@ def test_help_pages_teach_no_ast_query_string(tree, argv):
     assert not found, found
 
 
-def test_schema_examples_are_uris_with_flags(tree):
+def test_schema_examples_are_subcommands_with_flags(tree):
+    # The subcommand, as the ast:// request's own note names it (BACK-2769: the URI form retires too, D20).
     code, out, _ = run(tree, 'help://schemas/ast', '--format', 'json')
     schema = json.loads(out)
-    assert '?' not in schema['uri_syntax'], schema['uri_syntax']
+    assert '?' not in schema['uri_syntax'] and schema['uri_syntax'].startswith('reveal ast '), schema['uri_syntax']
     uris = [example['uri'] for example in schema['example_queries']]
-    assert uris and all(uri.startswith('ast://') and '?' not in uri.split()[0] for uri in uris), uris
+    assert uris and all(uri.startswith('reveal ast ') and '?' not in uri for uri in uris), uris
     assert any('--view dict-heatmap' in uri for uri in uris), uris
 
 

@@ -26,7 +26,6 @@ shared-control keys on the open-field nouns (``param:NOUN.NAME``: ``markdown://d
 (``invocation.generated_retirements``).
 """
 import asyncio
-import functools
 import json
 import re
 import shlex
@@ -34,7 +33,6 @@ import shlex
 import pytest
 
 from conftest import is_request_note
-from teaching_patterns import ANALYSIS_ONLY
 from test_example_recipes_run import PLACEHOLDERS, harness  # noqa: F401  (the module-scoped fixture)
 from claude_session_fixture import SESSION_NAMES
 from reveal.adapters.base import get_adapter_class, list_supported_schemes
@@ -545,30 +543,9 @@ def _judge(harness, found, examples=False):
     return failures, len(ran)
 
 
-# PENDING the manager's ruling (BACK-2713 step T6b): help://schemas/<noun> ``example_queries[].uri`` and ``uri_syntax``
-# are bare ``scheme://`` URIs by contract (BACK-432/BACK-471, test_agent_workflow.py: an agent copies them as URIs),
-# while an analysis-only scheme's URI request is deprecated (D20), so the two rules conflict for those nouns. Until the
-# ruling, the URI request's note on exactly those strings, on that page, is no fault; nor is a missing mode there, since
-# the collector reads a ``calls://src/ --callers NAME`` example's URI word without its flags. Every other field stays judged.
-@functools.lru_cache(maxsize=1)
-def _schema_uri_strings():
-    found = set()
-    for scheme in ANALYSIS_ONLY:
-        schema = get_adapter_class(scheme).get_schema() or {}
-        for text in (schema.get('uri_syntax') or '', *(ex.get('uri', '') for ex in schema.get('example_queries', []))):
-            found.update(command.rstrip('.:;,)') for command in _found_in(text))
-    return frozenset(found)
-
-
-def _pending_schema_uri(printed, surface, problem):
-    return (problem.startswith(('request note', 'invalid request')) and surface.startswith(('help://schemas/', 'help://schemas '))
-            and printed in _schema_uri_strings())
-
-
 def _verdict(printed, surface, line, candidates, ran):
     """The failure lines of one printed command on one surface."""
-    judged = [(argv, [f'{p[0]}: {p[2]}' for p in ran[tuple(argv)] if not _excused(p, surface)
-                      and not _pending_schema_uri(printed, surface, p[0])])
+    judged = [(argv, [f'{p[0]}: {p[2]}' for p in ran[tuple(argv)] if not _excused(p, surface)])
               for argv in candidates]
     argv, problems = next(((a, p) for a, p in judged if not any(x.startswith('invalid') for x in p)), judged[0])
     return [f'{surface} prints {printed!r} (ran {" ".join(argv)}): {problem}' for problem in problems
@@ -800,11 +777,6 @@ def test_the_collector_reads_hints_and_maps_placeholders():
         'reveal claude session/infernal-earth-0118/messages --detail raw'
     assert _example_request('imports', 'reveal imports src --unused') == 'reveal imports src --unused'
     assert _candidates('reveal codex://sessions/ --matches 2', examples=True) == [['codex://sessions', '--matches', '2']]
-    # the pending schema-URI exemption is exactly the schema's own URI words, on its own page
-    assert _pending_schema_uri('imports://src', 'help://schemas/imports --format json', 'request note')
-    assert not _pending_schema_uri('imports://src', 'help://imports', 'request note')
-    assert not _pending_schema_uri('imports://src?unused', 'help://schemas/imports --format json', 'request note')
-    assert not _pending_schema_uri('imports://src', 'help://schemas/imports --format json', 'note')
     assert _candidates('reveal calls src --depth 2', examples=True)[:2] == [
         ['calls', 'proj', '--callers', 'main', '--depth', '2'], ['calls', 'proj', '--callees', 'main', '--depth', '2']]
     assert _candidates('reveal calls src --callees x --depth 2', examples=True) == [
@@ -825,6 +797,11 @@ def test_the_judge_bites(harness):
         assert any(p.startswith('request note:') for p in _problems(harness, ['ast://proj?kind=function'], surface))
         assert any(p.startswith('request note:') for p in _problems(harness, ['ast://proj?type=function'], surface))
         assert _problems(harness, ['ast', 'proj', '--kind', 'function'], surface) == []
+    # an analysis noun's bare URI is a fault on its own schema page too: example_queries and uri_syntax teach the
+    # subcommand (BACK-2769, ruled option A: the bare URI exits 2 at the cut, D20)
+    assert any(p.startswith('request note:')
+               for p in _problems(harness, ['imports://proj'], 'help://schemas/imports --format json'))
+    assert _problems(harness, ['imports', 'proj'], 'help://schemas/imports --format json') == []
     # the generated family: a bare shared-control key on an open-field noun notes where= (now the URI request's one
     # note, which names --where, BACK-2716)
     _, out, _, _ = harness.run_subcommand(*_json_argv(['ast://proj?depth>1']))
