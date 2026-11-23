@@ -3274,16 +3274,12 @@ ELEMENT_EXEMPT = {
     '26': 'a path read of one element walks no tree: no walk to exclude from',
 }
 ELEMENT_NOT_YET = {
-    '3': 'a shared control the main parser has no flag for (--offset, --where, --match, --detail, --tests, --against) '
-         'and an unknown flag exit 2 with argparse\'s usage error before the element request binds, not the shared '
-         'unsupported-controls message (--limit and --since do teach it): the main parser\'s unrecognized-argument path '
-         'is the shared owner',
     '21j': 'an invalid path read in --format json (unknown flag, a value outside --view\'s choices, a missing value, an '
            'extra argument, a malformed --output) exits 2 with stdout empty, not the invalid-request JSON document',
     '22': 'REVEAL_CONFIG naming no file exits 2 on the answers that read configuration (--transitive walks), but the '
           'other element views read none and answer exit 0, as every plain path read does; the row says every noun',
 }
-ELEMENT_NOT_YET_BASELINE = 3
+ELEMENT_NOT_YET_BASELINE = 2
 
 
 @pytest.fixture
