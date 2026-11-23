@@ -1190,8 +1190,10 @@ def test_batch_answers_like_the_uri(harness, scheme):
             assert entry.get('data') == legacy
         else:
             assert entry.get('data') == payload, f'{uri}: --batch answered differently from the URI form'
-        assert batch_code == (2 if expected == 'error' else 0), (
-            f'{uri}: --batch exited {batch_code} for a {expected!r} entry')
+        # Every entry exits as its direct request does (COMMAND_MODEL 'Transports', Scott 2026-11-17, BACK-2660): a
+        # legacy entry exited 2 for a failed answer whose URI form exits 1, and carried no exit_code.
+        assert entry.get('exit_code') == code, f'{uri}: --batch entry exit {entry.get("exit_code")}, URI form {code}'
+        assert batch_code == code, f'{uri}: --batch exited {batch_code} for a {expected!r} entry, the URI form {code}'
 
 
 def test_the_batch_invariant_bites(harness):
