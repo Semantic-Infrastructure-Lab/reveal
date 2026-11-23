@@ -63,7 +63,7 @@ what Reveal does that normal code utilities do not.
 
 ```bash
 reveal calls src/ --sort=-callers --limit 20
-reveal calls src/ --callers main --format dot | dot -Tsvg > callgraph.svg
+reveal calls src/ --callers main --format dot   # Graphviz: | dot -Tsvg > callgraph.svg
 ```
 
 **Why this matters:** `reveal calls` gives you coupling hotspots, impact radius,
@@ -583,8 +583,8 @@ reveal calls src/ --callers validate_item --depth 2
 reveal calls src/ --sort=-callers
 reveal calls src/ --sort=-callers --limit 20
 
-# Generate Graphviz call graph (pipe to dot)
-reveal calls src/ --callers main --format dot | dot -Tsvg > callgraph.svg
+# Generate Graphviz call graph (pipe it to dot for SVG: | dot -Tsvg > callgraph.svg)
+reveal calls src/ --callers main --format dot
 ```
 
 **Before refactoring a function:** run `--callers fn` to see impact radius — everything that calls it.

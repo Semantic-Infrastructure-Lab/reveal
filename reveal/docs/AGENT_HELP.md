@@ -1316,8 +1316,8 @@ reveal calls src/ --callees validate_item --builtins
 # Transitive: callers-of-callers (2 levels)
 reveal calls src/ --callers validate_item --depth 2
 
-# Graphviz: pipe to dot for SVG
-reveal calls src/ --callers main --format dot | dot -Tsvg > callgraph.svg
+# Graphviz dot output (pipe it to dot for SVG: | dot -Tsvg > callgraph.svg)
+reveal calls src/ --callers main --format dot
 
 # Coupling metrics: rank all functions by how many unique callers they have
 reveal calls src/ --sort=-callers             # Top 10 most-called functions
