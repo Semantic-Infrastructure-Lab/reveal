@@ -756,9 +756,8 @@ reveal diff://git://abc123/app.py:app.py
 # Compare function across files
 reveal diff://app.py:old.py/handle_request
 
-# Compare function across git versions (with a git:// right side,
-# pass the element as a separate argument)
-reveal diff://git://main/app.py:git://feature/app.py handle_request
+# Compare function across git versions (the element follows a git:// right side too)
+reveal diff://git://main/app.py:git://feature/app.py/handle_request
 
 # Compare function in working tree vs HEAD
 reveal diff://git://HEAD/app.py:app.py/process_data
@@ -848,7 +847,7 @@ reveal diff://git://HEAD~1/models.py:models.py/UserModel
 reveal diff://api.py:old_api.py/APIHandler.process_request
 
 # Compare method across branches
-reveal diff://git://main/api.py:git://refactor/api.py API.handle
+reveal diff://git://main/api.py:git://refactor/api.py/API.handle
 ```
 
 **Example output** (`reveal diff://a.py:b.py/UserModel.save`, trimmed):
@@ -1161,7 +1160,7 @@ reveal diff://git://main/.:git://feature/.
 reveal diff://git://main/src/core/:git://feature/src/core/
 
 # Step 3: Review specific function changes
-reveal diff://git://main/app.py:git://feature/app.py process_data
+reveal diff://git://main/app.py:git://feature/app.py/process_data
 
 # Step 4: Verify complexity improvements
 reveal diff://git://main/.:git://feature/. --format json | \
@@ -1519,7 +1518,7 @@ reveal diff://old_system/:new_system/ --format json | \
 
 ```bash
 # ✅ Focus on specific function
-reveal diff://git://main/app.py:git://feature/app.py critical_handler
+reveal diff://git://main/app.py:git://feature/app.py/critical_handler
 
 # Review only changed logic
 ```
