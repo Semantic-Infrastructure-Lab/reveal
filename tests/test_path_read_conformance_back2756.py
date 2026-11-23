@@ -76,13 +76,12 @@ def test_a_declared_uri_keeps_its_noun_message(element_workspace):
 
 
 def test_mcp_reveal_run_gives_the_same_teaching(element_workspace):
+    """reveal_run answers a refused request as its error text (a tool error on the registered tool)."""
     pytest.importorskip('mcp')
-    from mcp.server.mcpserver.exceptions import ToolError
     from reveal.mcp_server import reveal_run
-    with pytest.raises(ToolError) as raised:
-        reveal_run([ELEMENT_FILE, ELEMENT, *VIEW, '--offset', '1'])
-    text = str(raised.value)
-    assert unsupported_controls_message(ELEMENT_VIEW_SPECS, ['--offset']) in text and 'usage:' not in text
+    text = reveal_run([ELEMENT_FILE, ELEMENT, *VIEW, '--offset', '1'])
+    assert text.startswith('[reveal error:') and 'usage:' not in text
+    assert unsupported_controls_message(ELEMENT_VIEW_SPECS, ['--offset']) in text
 
 
 # The owner of cell 3's message (beside the URI's, uri_flag_message), unit by unit: one answer per route the main parser's error reaches.
