@@ -3,9 +3,12 @@
 
 import os
 import re
-from typing import Optional, Tuple
+from typing import Callable, Optional, Tuple
+
+from .git import names_git_file
 
 _ELEMENT_NAME = re.compile(r'^[A-Za-z_][\w.]*$')
+_GIT = 'git://'
 
 
 def split_trailing_element(right: str) -> Tuple[str, Optional[str]]:
@@ -14,12 +17,26 @@ def split_trailing_element(right: str) -> Tuple[str, Optional[str]]:
     The documented ``diff://a.py:b.py/element`` form glues the element onto the right
     path, and a path can legitimately contain ``/``, so the suffix is an element only
     when the whole string is not an existing path but its parent is an existing file.
-    Plain file paths only: a URI right side (``git://f@ref``) is never split.
+    A ``git://`` right side is split the same way against the repository, since a ref
+    may contain ``/`` too: ``m.py@HEAD/ok`` is not a file at a ref but ``m.py@HEAD`` is
+    (BACK-2768). Other URI right sides are never split.
     """
-    if '://' in right or '/' not in right or os.path.exists(right):
+    if right.startswith(_GIT):
+        def at_ref(side: str) -> bool:  # a directory side is no file, so its last word is tried: it never names a file
+            return names_git_file(side[len(_GIT):])
+        return _split(right, names_file=at_ref, exists=at_ref)
+    if '://' in right:
+        return right, None
+    return _split(right, names_file=os.path.isfile, exists=os.path.exists)
+
+
+def _split(right: str, *, names_file: Callable[[str], bool],
+           exists: Callable[[str], bool]) -> Tuple[str, Optional[str]]:
+    """``(side, element)`` when ``right`` does not exist but its parent names a file, else ``(right, None)``."""
+    if '/' not in right or exists(right):
         return right, None
     parent, _, element = right.rpartition('/')
-    if _ELEMENT_NAME.match(element) and os.path.isfile(parent):
+    if _ELEMENT_NAME.match(element) and names_file(parent):
         return parent, element
     return right, None
 

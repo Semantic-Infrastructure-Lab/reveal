@@ -75,23 +75,47 @@ def _read_blob_text(repo, commit, path: str) -> str:
     return normalize_newlines(blob.data.decode('utf-8', errors='replace'))
 
 
+def _ref_and_path(resource: str) -> Optional[Tuple[str, str]]:
+    """``(REF, path)`` of a ``git://`` diff resource: ``path@REF``, or the legacy ``REF/path``; None for a bare ref."""
+    if '@' in resource:
+        path, git_ref = resource.rsplit('@', 1)
+        return git_ref, path
+    if '/' in resource:
+        git_ref, path = resource.split('/', 1)
+        return git_ref, path
+    return None
+
+
 def read_git_text(resource: str) -> Optional[str]:
     """Return the file text a ``git://`` diff URI points at, or None.
 
     Accepts ``path@REF`` and the legacy ``REF/path`` form. Directories,
     repository overviews and unresolvable refs return None.
     """
-    if '@' in resource:
-        path, git_ref = resource.rsplit('@', 1)
-    elif '/' in resource:
-        git_ref, path = resource.split('/', 1)
-    else:
+    parts = _ref_and_path(resource)
+    if parts is None:
         return None
+    git_ref, path = parts
     try:
         repo = _open_repo()
         return _read_blob_text(repo, _resolve_commit(repo, git_ref), path)
     except (ValueError, ImportError, KeyError):
         return None
+
+
+def names_git_file(resource: str) -> bool:
+    """Whether a ``git://`` diff resource (``path@REF`` or ``REF/path``) names a file at its ref: False for a
+    directory, a ref or path that does not resolve, outside a repository and without pygit2. The embedded element's
+    split asks it (``parsing.split_trailing_element``, BACK-2768)."""
+    parts = _ref_and_path(resource)
+    if parts is None:
+        return False
+    git_ref, path = parts
+    try:
+        entry = _resolve_commit(_open_repo(), git_ref).tree[path]
+    except (ValueError, ImportError, KeyError):
+        return False
+    return bool(entry.type_str == 'blob')
 
 
 def resolve_git_ref(git_ref: str, path: str) -> Dict[str, Any]:
