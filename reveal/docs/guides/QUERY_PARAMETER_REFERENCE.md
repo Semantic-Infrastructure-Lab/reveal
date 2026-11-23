@@ -29,7 +29,7 @@ Query parameters allow filtering, formatting, and modifying adapter behavior usi
 | **help://** | `search`, `top` (only on `help://search`, another topic exits 2 naming them; `top` caps hits, default 20, `0` = all; any other key exits 2) | `help://search?search=find callers&top=50` |
 | **cpanel://** | `domain_type`, `dns-verified`, `check-live` | `cpanel://USER/ssl?domain_type=addon` |
 | **ssl://** | `expiring-within` (implies `--check`), `summary` (batch and nginx views) | `ssl://host?expiring-within=30` |
-| **diff://** | none (an unknown key is disclosed as `unknown_query_param` and the comparison runs) | N/A |
+| **diff://** | `--exclude` (a directory pair walks both sides; any other key exits 2 naming it) | `reveal diff src/ backup/src/ --exclude tests` |
 | **env://** | none | N/A |
 | **sqlite://** | none | N/A |
 | **mysql://** | none | N/A |
@@ -686,7 +686,7 @@ The following adapters use **element paths** for navigation — query params are
 - **sqlite://** - `sqlite://db.sqlite/table_name` (element = table)
 - **mysql://** - `mysql://host/element` (element = connections, innodb, errors, databases, etc.)
 - **reveal://** - `reveal://adapters` (element = topic)
-- **diff://** - `diff://LEFT:RIGHT/ELEMENT` (element = the function, class or `Class.method` compared, after a plain-file or `git://` right side)
+- **diff://** - `diff://LEFT:RIGHT/ELEMENT`, or `reveal diff LEFT RIGHT/ELEMENT` (element = the function, class or `Class.method` compared, after a plain-file or `git://` right side)
 
 The following adapters use CLI flags that switch routing mode (not URI filters) — they are documented in `--discover` under `cli_only_flags` but do not support query params:
 

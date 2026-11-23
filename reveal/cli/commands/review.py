@@ -27,7 +27,7 @@ def create_review_parser() -> argparse.ArgumentParser:
     parser = RevealArgumentParser(
         prog='reveal review',
         parents=[_build_global_options_parser()],
-        description='Retired: use `reveal check --changed RANGE` for the rules and the diff:// adapter '
+        description='Retired: use `reveal check --changed RANGE` for the rules and `reveal diff` '
                     'for structure. This command still answers until the cut release. '
                     'Assess code quality and structural changes before a PR merge. '
                     'A large range can take minutes.\n\n' + exit_codes_text('review'),

@@ -1586,8 +1586,7 @@ reveal check reveal/adapters/myadapter.py --select V023
 - [CONFIGURATION_GUIDE.md](../guides/CONFIGURATION_GUIDE.md) - Configuring output format and rules
 - [QUICK_START.md](../QUICK_START.md) - Getting started with reveal
 
-Direct local single-file `diff://` pairs (BACK-2639) use complete 0, absent requested
-file 2, and required read/analysis/output loss 3. Both plain paths and `file://`
-sides qualify. Git/adapter sides, directories, element views, stdin and mixed
-batches retain their existing policy; a proven missing local target is an invalid
-resource there too. Python callers retain `FileNotFoundError` compatibility.
+Every `diff://` pair (`reveal diff LEFT RIGHT`; BACK-2639, BACK-2214) uses complete 0,
+an absent side or an element neither side has 2, and required read/analysis/output
+loss 3: plain paths, `file://` and git sides, directories and element views alike.
+Python callers retain `FileNotFoundError` compatibility for an absent side.

@@ -62,7 +62,7 @@ The **diff://** adapter provides semantic structural comparison between two reve
 ### 1. Compare Two Files
 
 ```bash
-reveal diff://app.py:backup/app.py
+reveal diff app.py backup/app.py
 ```
 
 **Returns**: Structural differences (functions added/removed/modified, complexity changes)
@@ -70,7 +70,7 @@ reveal diff://app.py:backup/app.py
 ### 2. Compare Current File to Git Version
 
 ```bash
-reveal diff://git://HEAD~1/app.py:app.py
+reveal diff git://HEAD~1/app.py app.py
 ```
 
 **Returns**: Changes since last commit (pre-commit validation)
@@ -78,7 +78,7 @@ reveal diff://git://HEAD~1/app.py:app.py
 ### 3. Compare Two Git Branches
 
 ```bash
-reveal diff://git://main/app.py:git://feature/app.py
+reveal diff git://main/app.py git://feature/app.py
 ```
 
 **Returns**: Changes between branches (code review)
@@ -86,7 +86,7 @@ reveal diff://git://main/app.py:git://feature/app.py
 ### 4. Compare Directories
 
 ```bash
-reveal diff://src/:backup/src/
+reveal diff src/ backup/src/
 ```
 
 **Returns**: Aggregated changes across all files in both directories
@@ -94,7 +94,7 @@ reveal diff://src/:backup/src/
 ### 5. Compare Specific Function
 
 ```bash
-reveal diff://app.py:old.py/handle_request
+reveal diff app.py old.py/handle_request
 ```
 
 **Returns**: Changes to specific function across versions
@@ -102,7 +102,7 @@ reveal diff://app.py:old.py/handle_request
 ### 6. Compare Git Branches (Full)
 
 ```bash
-reveal diff://git://main/.:git://feature/.
+reveal diff git://main/. git://feature/.
 ```
 
 **Returns**: All changes between branches (merge impact assessment)
@@ -150,7 +150,7 @@ Works with any resource whose structure has functions, classes or imports (see [
 | `git://HEAD~1/app.py` | `app.py` | Pre-commit validation |
 | `git://main/.` | `git://feature/.` | Branch comparison |
 
-**Pattern**: `diff://<left-resource>:<right-resource>`
+**Pattern**: `reveal diff LEFT RIGHT`, one word per side (the URI `diff://LEFT:RIGHT` names the same pair)
 
 ---
 
@@ -163,19 +163,19 @@ Compare across git commits, branches, working tree:
 **Examples**:
 ```bash
 # Current file vs last commit
-reveal diff://git://HEAD~1/app.py:app.py
+reveal diff git://HEAD~1/app.py app.py
 
 # Current file vs HEAD (uncommitted changes)
-reveal diff://git://HEAD/app.py:app.py
+reveal diff git://HEAD/app.py app.py
 
 # Branch comparison
-reveal diff://git://main/app.py:git://feature/app.py
+reveal diff git://main/app.py git://feature/app.py
 
 # Full directory across branches
-reveal diff://git://main/.:git://develop/.
+reveal diff git://main/. git://develop/.
 
 # File 3 commits ago vs current
-reveal diff://git://HEAD~3/app.py:app.py
+reveal diff git://HEAD~3/app.py app.py
 ```
 
 **Note**: Git URIs use `path@ref` format internally but are written as `git://ref/path` in diff:// adapter
@@ -185,7 +185,7 @@ reveal diff://git://HEAD~3/app.py:app.py
 ### 4. Two-Level Output
 
 **Level 1: Summary** (counts per element kind, `+added -removed ~modified`), then
-**Level 2: Details** (one entry per change), for example `reveal diff://a.py:b.py`:
+**Level 2: Details** (one entry per change), for example `reveal diff a.py b.py`:
 ```
 ======================================================================
 Structure Diff: a.py → b.py
@@ -240,13 +240,13 @@ Compare individual functions, classes, or methods:
 
 ```bash
 # Compare specific function
-reveal diff://app.py:old.py/handle_request
+reveal diff app.py old.py/handle_request
 
 # Compare specific class
-reveal diff://models.py:backup/models.py/UserModel
+reveal diff models.py backup/models.py/UserModel
 
 # Compare method in class
-reveal diff://api.py:old_api.py/APIHandler.process_request
+reveal diff api.py old_api.py/APIHandler.process_request
 ```
 
 **Use when**:
@@ -273,7 +273,7 @@ also fires on any new function above the threshold; add `.type == "modified"` to
 **Filter by complexity spike in JSON output**:
 ```bash
 # Functions that got >5 more complex (CI gate pattern)
-reveal diff://git://main/.:git://HEAD/. --format json | \
+reveal diff git://main/. git://HEAD/. --format json | \
   jq '.diff.functions[] | select(.complexity_delta > 5)'
 
 # The rules on the same range's changed files
@@ -305,7 +305,7 @@ reveal check --changed main..feature
 Compare entire directories, aggregates all changes:
 
 ```bash
-reveal diff://src/:backup/src/
+reveal diff src/ backup/src/
 ```
 
 **How it works**:
@@ -349,13 +349,18 @@ reveal diff://src/:backup/src/
 ### Basic Syntax
 
 ```
-diff://<left-uri>:<right-uri>[/element]
+reveal diff LEFT RIGHT[/ELEMENT]
 ```
 
+The URI `diff://LEFT:RIGHT[/ELEMENT]` names the same pair as one resource, with the same answer and exit code.
+
 **Components**:
-- **left-uri**: First resource to compare
-- **right-uri**: Second resource to compare
-- **element** (optional): Specific element to compare (function, class, method)
+- **LEFT**: First resource to compare (a path or a reveal URI)
+- **RIGHT**: Second resource to compare
+- **ELEMENT** (optional): Specific element to compare (function, class, method), after the right side
+
+A side that does not exist exits 2, and so does an element neither side has (the answer lists the names both sides
+have). diff takes one option, `--exclude PATTERN`, which prunes a directory pair's walk on both sides.
 
 ---
 
@@ -365,13 +370,13 @@ diff://<left-uri>:<right-uri>[/element]
 
 ```bash
 # Relative paths
-reveal diff://app.py:backup/app.py
+reveal diff app.py backup/app.py
 
 # Absolute paths
-reveal diff:///home/user/app.py:/home/user/backup/app.py
+reveal diff /home/user/app.py /home/user/backup/app.py
 
 # Mixed paths
-reveal diff://./src/main.py:/opt/legacy/main.py
+reveal diff ./src/main.py /opt/legacy/main.py
 ```
 
 ---
@@ -380,13 +385,13 @@ reveal diff://./src/main.py:/opt/legacy/main.py
 
 ```bash
 # Relative directories
-reveal diff://src/:backup/src/
+reveal diff src/ backup/src/
 
 # Absolute directories
-reveal diff:///home/user/project/src/:/home/user/backup/src/
+reveal diff /home/user/project/src/ /home/user/backup/src/
 
 # Current directory
-reveal diff://./:backup/.
+reveal diff ./ backup/.
 ```
 
 **Note**: Trailing slashes optional but recommended for clarity
@@ -397,16 +402,16 @@ reveal diff://./:backup/.
 
 ```bash
 # Current file vs git ref
-reveal diff://git://HEAD~1/app.py:app.py
+reveal diff git://HEAD~1/app.py app.py
 
 # Two git refs
-reveal diff://git://main/app.py:git://feature/app.py
+reveal diff git://main/app.py git://feature/app.py
 
 # Full directory
-reveal diff://git://HEAD/.:git://main/.
+reveal diff git://HEAD/. git://main/.
 
 # Specific commit
-reveal diff://git://abc123/file.py:file.py
+reveal diff git://abc123/file.py file.py
 ```
 
 **Git ref syntax**:
@@ -430,13 +435,13 @@ applicable; see [What diff:// does not compare](#what-diff-does-not-compare).
 
 ```bash
 # Function in file
-reveal diff://app.py:old.py/handle_request
+reveal diff app.py old.py/handle_request
 
 # Class in file
-reveal diff://models.py:backup/models.py/UserModel
+reveal diff models.py backup/models.py/UserModel
 
 # Method in class
-reveal diff://api.py:old_api.py/APIHandler.process_request
+reveal diff api.py old_api.py/APIHandler.process_request
 ```
 
 **Element path syntax**: `<file-uri>/<element-path>`
@@ -454,7 +459,7 @@ reveal diff://api.py:old_api.py/APIHandler.process_request
 
 **Syntax**:
 ```bash
-reveal diff://file1.py:file2.py
+reveal diff file1.py file2.py
 ```
 
 **Use cases**:
@@ -466,7 +471,7 @@ reveal diff://file1.py:file2.py
 ```bash
 echo 'def foo(): return 42' > v1.py
 printf 'def foo(): return 42\ndef bar(): return 99\n' > v2.py
-reveal diff://v1.py:v2.py
+reveal diff v1.py v2.py
 ```
 
 **Output**:
@@ -489,7 +494,7 @@ reveal diff://v1.py:v2.py
 
 **Syntax**:
 ```bash
-reveal diff://dir1/:dir2/
+reveal diff dir1/ dir2/
 ```
 
 **Use cases**:
@@ -499,7 +504,7 @@ reveal diff://dir1/:dir2/
 
 **Example**:
 ```bash
-reveal diff://src/:backup/src/
+reveal diff src/ backup/src/
 ```
 
 **Output**: Aggregated changes across all files
@@ -510,7 +515,7 @@ reveal diff://src/:backup/src/
 
 **Syntax**:
 ```bash
-reveal diff://git://ref1/path:git://ref2/path
+reveal diff git://ref1/path git://ref2/path
 ```
 
 **Use cases**:
@@ -521,10 +526,10 @@ reveal diff://git://ref1/path:git://ref2/path
 **Example**:
 ```bash
 # Compare file across commits
-reveal diff://git://HEAD~1/app.py:git://HEAD/app.py
+reveal diff git://HEAD~1/app.py git://HEAD/app.py
 
 # Compare branches
-reveal diff://git://main/src/:git://feature/src/
+reveal diff git://main/src/ git://feature/src/
 ```
 
 ---
@@ -533,7 +538,7 @@ reveal diff://git://main/src/:git://feature/src/
 
 **Syntax**:
 ```bash
-reveal diff://git://HEAD/path:path
+reveal diff git://HEAD/path path
 ```
 
 **Use cases**:
@@ -544,10 +549,10 @@ reveal diff://git://HEAD/path:path
 **Example**:
 ```bash
 # Check uncommitted changes
-reveal diff://git://HEAD/app.py:app.py
+reveal diff git://HEAD/app.py app.py
 
 # Full project check
-reveal diff://git://HEAD/.:./
+reveal diff git://HEAD/. ./
 ```
 
 ---
@@ -626,13 +631,13 @@ Check what will be committed:
 
 ```bash
 # Single file
-reveal diff://git://HEAD/app.py:app.py
+reveal diff git://HEAD/app.py app.py
 
 # Full project
-reveal diff://git://HEAD/.:./
+reveal diff git://HEAD/. ./
 
 # Specific directory
-reveal diff://git://HEAD/src/:src/
+reveal diff git://HEAD/src/ src/
 ```
 
 **Use in pre-commit hook**:
@@ -640,7 +645,7 @@ reveal diff://git://HEAD/src/:src/
 #!/bin/bash
 # .git/hooks/pre-commit
 
-reveal diff://git://HEAD/.:. --format json | \
+reveal diff git://HEAD/. . --format json | \
   jq -e '.summary.functions.modified + .summary.classes.modified < 50' >/dev/null
 if [ $? -ne 0 ]; then
   echo "Too many elements modified (>50), breaking into smaller commits"
@@ -656,13 +661,13 @@ Compare feature branch to main:
 
 ```bash
 # Full comparison
-reveal diff://git://main/.:git://feature/.
+reveal diff git://main/. git://feature/.
 
 # Specific file
-reveal diff://git://main/app.py:git://feature/app.py
+reveal diff git://main/app.py git://feature/app.py
 
 # Specific directory
-reveal diff://git://main/src/:git://feature/src/
+reveal diff git://main/src/ git://feature/src/
 ```
 
 ---
@@ -673,10 +678,10 @@ Compare releases to verify changes:
 
 ```bash
 # Compare release tags
-reveal diff://git://v1.0.0/.:git://v1.1.0/.
+reveal diff git://v1.0.0/. git://v1.1.0/.
 
 # Compare release to main
-reveal diff://git://v1.0.0/src/:git://main/src/
+reveal diff git://v1.0.0/src/ git://main/src/
 ```
 
 ---
@@ -687,10 +692,10 @@ Compare current version to older version:
 
 ```bash
 # Compare to 10 commits ago
-reveal diff://git://HEAD~10/.:./
+reveal diff git://HEAD~10/. ./
 
 # Compare to specific old commit
-reveal diff://git://abc123/app.py:app.py
+reveal diff git://abc123/app.py app.py
 ```
 
 ---
@@ -700,28 +705,28 @@ reveal diff://git://abc123/app.py:app.py
 1. **Use relative paths when possible**:
    ```bash
    # ✅ Good
-   reveal diff://git://HEAD/app.py:app.py
+   reveal diff git://HEAD/app.py app.py
 
    # ❌ Verbose
-   reveal diff://git://HEAD/app.py:./app.py
+   reveal diff git://HEAD/app.py ./app.py
    ```
 
 2. **Compare same path across refs**:
    ```bash
    # ✅ Clear
-   reveal diff://git://main/app.py:git://feature/app.py
+   reveal diff git://main/app.py git://feature/app.py
 
    # ❌ Confusing (different files)
-   reveal diff://git://main/app.py:git://feature/utils.py
+   reveal diff git://main/app.py git://feature/utils.py
    ```
 
 3. **Use meaningful refs**:
    ```bash
    # ✅ Clear intent
-   reveal diff://git://main/.:git://feature/.
+   reveal diff git://main/. git://feature/.
 
    # ❌ Unclear
-   reveal diff://git://abc123/.:git://def456/.
+   reveal diff git://abc123/. git://def456/.
    ```
 
 ---
@@ -754,16 +759,16 @@ reveal diff://git://abc123/app.py:app.py
 
 ```bash
 # Compare function across files
-reveal diff://app.py:old.py/handle_request
+reveal diff app.py old.py/handle_request
 
 # Compare function across git versions (the element follows a git:// right side too)
-reveal diff://git://main/app.py:git://feature/app.py/handle_request
+reveal diff git://main/app.py git://feature/app.py/handle_request
 
 # Compare function in working tree vs HEAD
-reveal diff://git://HEAD/app.py:app.py/process_data
+reveal diff git://HEAD/app.py app.py/process_data
 ```
 
-**Example output** (`reveal diff://old.py:app.py/handle_request`):
+**Example output** (`reveal diff old.py app.py/handle_request`):
 ```
 ~ Element 'handle_request' was MODIFIED
 
@@ -808,10 +813,10 @@ with the other changes.
 
 ```bash
 # Compare class across files
-reveal diff://models.py:backup/models.py/UserModel
+reveal diff models.py backup/models.py/UserModel
 
 # Compare class across git versions
-reveal diff://git://HEAD~1/models.py:models.py/UserModel
+reveal diff git://HEAD~1/models.py models.py/UserModel
 ```
 
 **Example output** (a class diff lists each changed field, then a unified diff of the class body):
@@ -844,13 +849,13 @@ reveal diff://git://HEAD~1/models.py:models.py/UserModel
 
 ```bash
 # Compare method across files
-reveal diff://api.py:old_api.py/APIHandler.process_request
+reveal diff api.py old_api.py/APIHandler.process_request
 
 # Compare method across branches
-reveal diff://git://main/api.py:git://refactor/api.py/API.handle
+reveal diff git://main/api.py git://refactor/api.py/API.handle
 ```
 
-**Example output** (`reveal diff://a.py:b.py/UserModel.save`, trimmed):
+**Example output** (`reveal diff a.py b.py/UserModel.save`, trimmed):
 ```
 ~ Element 'UserModel.save' was MODIFIED
 
@@ -919,7 +924,7 @@ reveal diff://git://main/api.py:git://refactor/api.py/API.handle
 ### Example Directory Diff
 
 ```bash
-reveal diff://src/:backup/src/
+reveal diff src/ backup/src/
 ```
 
 **Output**: the same layout as a file diff, one aggregated list per element kind, each
@@ -1020,7 +1025,7 @@ There is no per-file count; group the JSON entries by `file` for one
 ### JSON Output Format
 
 ```bash
-reveal diff://app.py:old.py --format json
+reveal diff app.py old.py --format json
 ```
 
 **Actual structure** (`type` is `diff_comparison`; there is no unified top-level `changes` array — added/removed/modified entries are split into `diff.functions`, `diff.classes`, and `diff.imports`, and `summary` is nested per element kind rather than a flat `{added, removed, modified, unchanged}`):
@@ -1070,7 +1075,7 @@ reveal diff://app.py:old.py --format json
 }
 ```
 
-An **element diff** (`reveal diff://app.py:old.py/process --format json`) has `type`
+An **element diff** (`reveal diff app.py old.py/process --format json`) has `type`
 `diff_element`; the verdict is `change` (`added`, `removed`, `modified` or `unchanged`). An
 element on neither side is a failed lookup: an `error` with `available_elements`, exit 1.
 `modified` carries `changes` (`{field: {old, new}}`, including `body` when
@@ -1109,14 +1114,14 @@ something no category covers, `meta.warnings` carries `{"type": "not_compared", 
 
 ```bash
 # Step 1: Check what changed
-reveal diff://git://HEAD/src/:src/
+reveal diff git://HEAD/src/ src/
 
 # Step 2: Review complexity changes
-reveal diff://git://HEAD/src/:src/ --format json | \
+reveal diff git://HEAD/src/ src/ --format json | \
   jq '.diff.functions[] | select(.complexity_delta > 5)'
 
 # Step 3: Verify specific files
-reveal diff://git://HEAD/app.py:app.py
+reveal diff git://HEAD/app.py app.py
 
 # Step 4: Commit if acceptable
 git add .
@@ -1129,7 +1134,7 @@ git commit -m "Refactored app logic"
 # .git/hooks/pre-commit
 
 # Check if complexity increased significantly
-RESULT=$(reveal diff://git://HEAD/.:. --format json)
+RESULT=$(reveal diff git://HEAD/. . --format json)
 COMPLEXITY_INCREASE=$(echo "$RESULT" | jq '[.diff.functions[] | select(.complexity_delta > 5)] | length')
 
 if [ "$COMPLEXITY_INCREASE" -gt 0 ]; then
@@ -1154,16 +1159,16 @@ fi
 
 ```bash
 # Step 1: Full branch comparison
-reveal diff://git://main/.:git://feature/.
+reveal diff git://main/. git://feature/.
 
 # Step 2: Check specific critical files
-reveal diff://git://main/src/core/:git://feature/src/core/
+reveal diff git://main/src/core/ git://feature/src/core/
 
 # Step 3: Review specific function changes
-reveal diff://git://main/app.py:git://feature/app.py/process_data
+reveal diff git://main/app.py git://feature/app.py/process_data
 
 # Step 4: Verify complexity improvements
-reveal diff://git://main/.:git://feature/. --format json | \
+reveal diff git://main/. git://feature/. --format json | \
   jq '.diff.functions[] | select(.type == "modified" and .complexity_delta < 0)'
 
 # Step 5: Generate review report
@@ -1171,10 +1176,10 @@ reveal diff://git://main/.:git://feature/. --format json | \
   echo "# Code Review: feature → main"
   echo ""
   echo "## Summary"
-  reveal diff://git://main/.:git://feature/.
+  reveal diff git://main/. git://feature/.
   echo ""
   echo "## Complexity Improvements"
-  reveal diff://git://main/.:git://feature/. --format json | \
+  reveal diff git://main/. git://feature/. --format json | \
     jq -r '.diff.functions[] | select(.type == "modified" and .complexity_delta < 0) | "- \(.name): complexity \(.complexity_before) → \(.complexity_after)"'
 } > review-report.md
 ```
@@ -1195,14 +1200,14 @@ cp -r src/ src.backup/
 # ... make changes ...
 
 # Step 3: Compare complexity
-reveal diff://src.backup/:src/ --format json | \
+reveal diff src.backup/ src/ --format json | \
   jq '.diff.functions[] | {name, complexity_delta}'
 
 # Step 4: Verify expected improvements
-reveal diff://src.backup/main.py:src/main.py/complex_function
+reveal diff src.backup/main.py src/main.py/complex_function
 
 # Step 5: Validate specific functions unchanged semantically
-reveal diff://src.backup/api.py:src/api.py/critical_handler
+reveal diff src.backup/api.py src/api.py/critical_handler
 ```
 
 **Success criteria**:
@@ -1221,29 +1226,29 @@ reveal diff://src.backup/api.py:src/api.py/critical_handler
 
 ```bash
 # Step 1: Compare directory structures
-reveal diff://legacy_system/:new_system/
+reveal diff legacy_system/ new_system/
 
 # Step 2: Verify all functions migrated
-reveal diff://legacy_system/:new_system/ --format json | \
+reveal diff legacy_system/ new_system/ --format json | \
   jq '.diff.functions[] | select(.type == "removed")'
 
 # Expected: Empty (no removed functions)
 
 # Step 3: Compare specific modules
-reveal diff://legacy_system/auth.py:new_system/auth.py
+reveal diff legacy_system/auth.py new_system/auth.py
 
 # Step 4: Verify critical functions
-reveal diff://legacy_system/core.py:new_system/core.py/initialize
+reveal diff legacy_system/core.py new_system/core.py/initialize
 
 # Step 5: Generate migration report
 {
   echo "# Migration Validation Report"
   echo ""
   echo "## Summary"
-  reveal diff://legacy_system/:new_system/
+  reveal diff legacy_system/ new_system/
   echo ""
   echo "## Missing Functions (CRITICAL)"
-  reveal diff://legacy_system/:new_system/ --format json | \
+  reveal diff legacy_system/ new_system/ --format json | \
     jq -r '.diff.functions[] | select(.type == "removed") | "⚠️  \(.name)"'
 } > migration-report.md
 ```
@@ -1258,17 +1263,17 @@ reveal diff://legacy_system/core.py:new_system/core.py/initialize
 
 ```bash
 # Step 1: Compare release tags
-reveal diff://git://v1.0.0/.:git://v1.1.0/.
+reveal diff git://v1.0.0/. git://v1.1.0/.
 
 # Step 2: Review breaking changes
-reveal diff://git://v1.0.0/src/api/:git://v1.1.0/src/api/
+reveal diff git://v1.0.0/src/api/ git://v1.1.0/src/api/
 
 # Step 3: Check complexity trends
-reveal diff://git://v1.0.0/.:git://v1.1.0/. --format json | \
+reveal diff git://v1.0.0/. git://v1.1.0/. --format json | \
   jq '.diff.functions[] | select(.complexity_delta > 0)'
 
 # Step 4: Verify expected features added
-reveal diff://git://v1.0.0/.:git://v1.1.0/. --format json | \
+reveal diff git://v1.0.0/. git://v1.1.0/. --format json | \
   jq '.diff.functions[] | select(.type == "added")'
 
 # Step 5: Generate release notes
@@ -1276,11 +1281,11 @@ reveal diff://git://v1.0.0/.:git://v1.1.0/. --format json | \
   echo "# Release Notes: v1.1.0"
   echo ""
   echo "## New Features"
-  reveal diff://git://v1.0.0/.:git://v1.1.0/. --format json | \
+  reveal diff git://v1.0.0/. git://v1.1.0/. --format json | \
     jq -r '.diff.functions[] | select(.type == "added") | "- \(.name)"'
   echo ""
   echo "## Improvements"
-  reveal diff://git://v1.0.0/.:git://v1.1.0/. --format json | \
+  reveal diff git://v1.0.0/. git://v1.1.0/. --format json | \
     jq -r '.diff.functions[] | select(.type == "modified" and .complexity_delta < 0) | "- \(.name): complexity reduced by \(-1 * .complexity_delta)"'
 } > RELEASE_NOTES.md
 ```
@@ -1307,10 +1312,10 @@ reveal diff://git://v1.0.0/.:git://v1.1.0/. --format json | \
 
 ```bash
 # ❌ Expensive: Compare full files
-reveal diff://app.py:old.py
+reveal diff app.py old.py
 
 # ✅ Fast: Compare specific function
-reveal diff://app.py:old.py/handle_request
+reveal diff app.py old.py/handle_request
 ```
 
 **Performance gain**: 3-5x faster
@@ -1321,10 +1326,10 @@ reveal diff://app.py:old.py/handle_request
 
 ```bash
 # ❌ Slow: Compare all files
-reveal diff://src/:backup/src/
+reveal diff src/ backup/src/
 
 # ✅ Faster: Compare specific subdirectory
-reveal diff://src/core/:backup/src/core/
+reveal diff src/core/ backup/src/core/
 ```
 
 **Performance gain**: Proportional to directory size reduction
@@ -1335,7 +1340,7 @@ reveal diff://src/core/:backup/src/core/
 
 ```bash
 # ✅ Efficient: JSON for automation
-reveal diff://app.py:old.py --format json | jq '.summary'
+reveal diff app.py old.py --format json | jq '.summary'
 ```
 
 **Benefit**: Client-side filtering, reduced output processing
@@ -1352,7 +1357,7 @@ CACHE_FILE="/tmp/git-diff-cache.json"
 CACHE_TTL=3600  # 1 hour
 
 if [ ! -f "$CACHE_FILE" ] || [ $(($(date +%s) - $(stat -c %Y "$CACHE_FILE"))) -gt $CACHE_TTL ]; then
-  reveal diff://git://main/.:git://develop/. --format json > "$CACHE_FILE"
+  reveal diff git://main/. git://develop/. --format json > "$CACHE_FILE"
 fi
 
 cat "$CACHE_FILE"
@@ -1421,7 +1426,7 @@ Printed as `Error (diff://): [Errno 2] No such file or directory: 'nope.py'` (ex
 ls -la app.py backup/app.py
 
 # Check absolute paths
-reveal diff:///home/user/app.py:/home/user/backup/app.py
+reveal diff /home/user/app.py /home/user/backup/app.py
 
 # Verify git ref
 git rev-parse HEAD~1
@@ -1489,10 +1494,10 @@ Not an error: exit 0, and JSON `{"type": "diff", "applicable": false, "reason": 
 
 ```bash
 # ✅ Before committing refactored code
-reveal diff://git://HEAD/app.py:app.py
+reveal diff git://HEAD/app.py app.py
 
 # Verify complexity improved
-reveal diff://git://HEAD/app.py:app.py --format json | \
+reveal diff git://HEAD/app.py app.py --format json | \
   jq '.diff.functions[] | select(.type == "modified" and .complexity_delta < 0)'
 ```
 
@@ -1504,7 +1509,7 @@ reveal diff://git://HEAD/app.py:app.py --format json | \
 
 ```bash
 # ✅ Ensure all functions migrated
-reveal diff://old_system/:new_system/ --format json | \
+reveal diff old_system/ new_system/ --format json | \
   jq '.diff.functions[] | select(.type == "removed")'
 
 # Expected: Empty (no removed functions)
@@ -1518,7 +1523,7 @@ reveal diff://old_system/:new_system/ --format json | \
 
 ```bash
 # ✅ Focus on specific function
-reveal diff://git://main/app.py:git://feature/app.py/critical_handler
+reveal diff git://main/app.py git://feature/app.py/critical_handler
 
 # Review only changed logic
 ```
@@ -1534,7 +1539,7 @@ reveal diff://git://main/app.py:git://feature/app.py/critical_handler
 # .git/hooks/pre-commit
 
 # Alert if complexity increased significantly
-reveal diff://git://HEAD/.:. --format json | \
+reveal diff git://HEAD/. . --format json | \
   jq -e '[.diff.functions[] | select(.complexity_delta > 10)] | length > 0' > /dev/null
 
 if [ $? -eq 0 ]; then
@@ -1551,7 +1556,7 @@ fi
 
 ```bash
 # ✅ Programmatic analysis
-reveal diff://app.py:old.py --format json | \
+reveal diff app.py old.py --format json | \
   jq '.summary.functions'
 ```
 
@@ -1563,7 +1568,7 @@ reveal diff://app.py:old.py --format json | \
 
 ```bash
 # ✅ Pre-merge validation
-reveal diff://git://main/.:git://feature/.
+reveal diff git://main/. git://feature/.
 
 # Check impact scope
 ```
@@ -1588,7 +1593,7 @@ diff <(reveal sqlite:///a.db --format json) <(reveal sqlite:///b.db --format jso
 
 ```bash
 # ✅ Automated release notes
-reveal diff://git://v1.0.0/.:git://v1.1.0/. --format json | \
+reveal diff git://v1.0.0/. git://v1.1.0/. --format json | \
   jq -r '.diff.functions[] | select(.type == "added") | "- \(.name)"' > RELEASE_NOTES.md
 ```
 
@@ -1600,7 +1605,7 @@ reveal diff://git://v1.0.0/.:git://v1.1.0/. --format json | \
 
 ```bash
 # ✅ Check specific critical functions unchanged
-reveal diff://before.py:after.py/critical_function
+reveal diff before.py after.py/critical_function
 
 # Should show: complexity reduced, but signature/behavior unchanged
 ```
@@ -1625,19 +1630,19 @@ never compares them
 
 **Extract added functions**:
 ```bash
-reveal diff://app.py:old.py --format json | \
+reveal diff app.py old.py --format json | \
   jq '.diff.functions[] | select(.type == "added")'
 ```
 
 **Count complexity improvements**:
 ```bash
-reveal diff://app.py:old.py --format json | \
+reveal diff app.py old.py --format json | \
   jq '[.diff.functions[] | select(.type == "modified" and .complexity_delta < 0)] | length'
 ```
 
 **Find functions with high complexity increase**:
 ```bash
-reveal diff://app.py:old.py --format json | \
+reveal diff app.py old.py --format json | \
   jq '.diff.functions[] | select(.complexity_delta > 5)'
 ```
 
@@ -1685,7 +1690,7 @@ print(f"Improvements: {len(diff['improvements'])}")
 
 echo "Checking code complexity..."
 
-RESULT=$(reveal diff://git://HEAD/.:. --format json)
+RESULT=$(reveal diff git://HEAD/. . --format json)
 COMPLEXITY_INCREASE=$(echo "$RESULT" | jq '[.diff.functions[] | select(.complexity_delta > 10)] | length')
 
 if [ "$COMPLEXITY_INCREASE" -gt 0 ]; then
@@ -1723,7 +1728,7 @@ jobs:
 
       - name: Compare branches
         run: |
-          reveal diff://git://origin/main/.:. --format json > diff-result.json
+          reveal diff git://origin/main/. . --format json > diff-result.json
 
       - name: Check complexity increases
         run: |
@@ -1764,18 +1769,18 @@ fi
   echo "# Release Notes: $TO_TAG"
   echo ""
   echo "## Summary"
-  reveal diff://git://$FROM_TAG/.:git://$TO_TAG/.
+  reveal diff git://$FROM_TAG/. git://$TO_TAG/.
   echo ""
   echo "## New Features"
-  reveal diff://git://$FROM_TAG/.:git://$TO_TAG/. --format json | \
+  reveal diff git://$FROM_TAG/. git://$TO_TAG/. --format json | \
     jq -r '.diff.functions[] | select(.type == "added") | "- **\(.name)**: \(.line_count) lines, complexity \(.complexity)"'
   echo ""
   echo "## Improvements"
-  reveal diff://git://$FROM_TAG/.:git://$TO_TAG/. --format json | \
+  reveal diff git://$FROM_TAG/. git://$TO_TAG/. --format json | \
     jq -r '.diff.functions[] | select(.type == "modified" and .complexity_delta < 0) | "- **\(.name)**: complexity reduced by \(-1 * .complexity_delta)"'
   echo ""
   echo "## Breaking Changes"
-  reveal diff://git://$FROM_TAG/.:git://$TO_TAG/. --format json | \
+  reveal diff git://$FROM_TAG/. git://$TO_TAG/. --format json | \
     jq -r '.diff.functions[] | select(.type == "removed") | "- ⚠️ **\(.name)** removed"'
 } > RELEASE_NOTES_$TO_TAG.md
 
@@ -1838,7 +1843,7 @@ Example: `git://HEAD~1/app.py`, `git://main/src/`, `git://abc123/file.py`
 
 **Q: How do I compare my working tree to HEAD?**
 
-A: `reveal diff://git://HEAD/file.py:file.py`
+A: `reveal diff git://HEAD/file.py file.py`
 
 This shows uncommitted changes (pre-commit validation).
 
@@ -1846,7 +1851,7 @@ This shows uncommitted changes (pre-commit validation).
 
 **Q: Can I compare two different branches?**
 
-A: Yes: `reveal diff://git://main/.:git://feature/.`
+A: Yes: `reveal diff git://main/. git://feature/.`
 
 ---
 
@@ -1860,7 +1865,7 @@ A: Git reference doesn't exist. Verify with `git branch -a` or `git tag`.
 
 **Q: How do I compare a specific function?**
 
-A: `reveal diff://app.py:old.py/function_name`
+A: `reveal diff app.py old.py/function_name`
 
 Element path: `<file-uri>/<element-name>`
 
@@ -1868,7 +1873,7 @@ Element path: `<file-uri>/<element-name>`
 
 **Q: Can I compare a method inside a class?**
 
-A: Yes: `reveal diff://api.py:old_api.py/ClassName.method_name`
+A: Yes: `reveal diff api.py old_api.py/ClassName.method_name`
 
 Use dot notation for nested elements.
 
@@ -1896,7 +1901,7 @@ A: Binary and non-analyzable files, directories on reveal's skip list (`.git`, `
 
 **Q: Can I compare specific subdirectories?**
 
-A: Yes: `reveal diff://src/core/:backup/src/core/`
+A: Yes: `reveal diff src/core/ backup/src/core/`
 
 Faster than full directory comparison.
 
@@ -1923,7 +1928,7 @@ A:
 
 **Q: How do I get JSON output?**
 
-A: `reveal diff://app.py:old.py --format json`
+A: `reveal diff app.py old.py --format json`
 
 JSON is easier to parse programmatically.
 
@@ -1949,7 +1954,7 @@ A: Git comparisons read git objects through pygit2 (no checkout), so the cost is
 
 **Q: How do I use diff:// in pre-commit hooks?**
 
-A: See [Pre-Commit Hook](#3-pre-commit-hook) example. Use `reveal diff://git://HEAD/.:./` to check uncommitted changes.
+A: See [Pre-Commit Hook](#3-pre-commit-hook) example. Use `reveal diff git://HEAD/. ./` to check uncommitted changes.
 
 ---
 

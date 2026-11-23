@@ -3,7 +3,7 @@
 
 name: diff
 description: 'Compare two reveal resources - semantic structural diff'
-syntax: 'diff://<left-uri>:<right-uri>[/element]'
+syntax: 'reveal diff LEFT RIGHT[/ELEMENT] (diff://LEFT:RIGHT[/ELEMENT])'
 
 examples:
   - uri: 'diff://app.py:backup/app.py'
@@ -34,22 +34,22 @@ workflows:
   - name: 'Pre-Commit Validation'
     scenario: 'Check uncommitted changes before commit'
     steps:
-      - "reveal diff://git://HEAD/src/:src/ --format=json  # See what changed"
+      - "reveal diff git://HEAD/src/ src/ --format=json  # See what changed"
       - "# Flag if complexity increased significantly"
   - name: 'Code Review Workflow'
     scenario: 'Review what changed in a feature branch'
     steps:
-      - "reveal diff://git://main/.:git://feature/.  # Full branch comparison"
-      - "reveal diff://git://main/app.py:git://feature/app.py process_data  # Specific function"
+      - "reveal diff git://main/. git://feature/.  # Full branch comparison"
+      - "reveal diff git://app.py@main git://app.py@feature/process_data  # Specific function"
   - name: 'Refactoring Validation'
     scenario: 'Verify refactoring improved complexity'
     steps:
-      - "reveal diff://old.py:new.py              # Check complexity delta"
+      - "reveal diff old.py new.py                # Check complexity delta"
       - "# Look for 'Complexity: 8 → 4 (-4)' in output"
   - name: 'Migration Validation'
     scenario: 'Ensure no functionality lost during migration'
     steps:
-      - "reveal diff://legacy_system/:new_system/  # Compare directory structures"
+      - "reveal diff legacy_system/ new_system/   # Compare directory structures"
       - "# Verify all functions/classes migrated"
 
 output_format:
@@ -66,13 +66,14 @@ notes:
   - 'Git URI format: git://REF/path (e.g., git://HEAD~1/file.py, git://main/src/)'
   - 'Note: diff git:// format differs from git:// adapter'
   - 'Directory diffs aggregate all analyzable files (skips .git, node_modules, etc.)'
-  - 'For complex URIs with colons, use explicit scheme://'
+  - 'reveal diff LEFT RIGHT names each side in its own word; diff://LEFT:RIGHT is the same pair as one resource (use an explicit scheme:// on a side whose path holds a colon)'
+  - 'A side that does not exist exits 2; one element neither side has exits 2 listing the names both sides have'
 
 try_now:
   - "# Create test files"
   - "echo 'def foo(): return 42' > v1.py"
   - "printf 'def foo(): return 42\\ndef bar(): return 99\\n' > v2.py"
-  - "reveal diff://v1.py:v2.py"
+  - "reveal diff v1.py v2.py"
 
 see_also:
   - 'reveal help://git - Git integration (git:// URIs used in diff:// comparisons)'
