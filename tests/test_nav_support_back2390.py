@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from conftest import _run_reveal_direct
+from conftest import _run_reveal_direct, invalid_request_document, refused_without_answer
 from test_conformance_matrix import EXPECTED, LANGUAGES, _sample_path
 
 pytestmark = pytest.mark.component
@@ -26,7 +26,7 @@ def python_file(tmp_path):
 def test_structure_only_analysis_is_rejected_instead_of_empty_success(flag, fmt):
     result = _run_reveal_direct(SQL, ':1-30', flag, '--format', fmt)
     assert result.returncode == 2, (result.stdout, result.stderr)
-    assert result.stdout == ''
+    assert refused_without_answer(result, fmt)  # JSON: the refusal's document (BACK-2756)
     assert 'structure-only' in result.stderr
     assert 'sql' in result.stderr.lower()
     assert 'reveal' in result.stderr
@@ -38,7 +38,7 @@ def test_structure_only_analysis_is_rejected_instead_of_empty_success(flag, fmt)
 def test_explicit_nonpositive_structural_depth_is_rejected(python_file, flag, depth, fmt):
     result = _run_reveal_direct(python_file, 'work', flag, '--depth', depth, '--format', fmt)
     assert result.returncode == 2, (result.stdout, result.stderr)
-    assert result.stdout == ''
+    assert refused_without_answer(result, fmt)  # JSON: the refusal's document (BACK-2756)
     assert '--depth' in result.stderr
     assert 'positive' in result.stderr
 
@@ -145,7 +145,7 @@ def test_other_explicit_structure_only_profile_rejects_analysis(tmp_path):
     path.write_text('<html><body><p>Example</p></body></html>\n', encoding='utf-8')
     result = _run_reveal_direct(path, ':1-1', '--exits', '--format', 'json')
     assert result.returncode == 2, (result.stdout, result.stderr)
-    assert result.stdout == ''
+    assert invalid_request_document(result) is not None  # the refusal's document, no answer (BACK-2756)
     assert 'structure-only' in result.stderr
 
 

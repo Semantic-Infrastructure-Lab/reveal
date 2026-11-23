@@ -52,6 +52,33 @@ def _run_reveal_direct(*args):
     return _Result(rc, buf_out.getvalue(), buf_err.getvalue())
 
 
+# The keys of the invalid-request document a refused request answers in JSON mode: the envelope and the error, no
+# answer data (declared._invalid_answer).
+_INVALID_REQUEST_KEYS = frozenset({'contract_version', 'type', 'source', 'source_type', 'meta', 'error'})
+
+
+def invalid_request_document(result):
+    """The invalid-request JSON document of a refused request (exit 2, the one ``invalid_request`` error, nothing of
+    an answer beside it), or None. A refusal answers no part of the request; in JSON mode it says so in this document
+    on stdout, on every noun and on a path read (BACK-2756), where stdout used to be empty."""
+    import json
+    if result.returncode != 2:
+        return None
+    try:
+        document = json.loads(result.stdout)
+    except ValueError:
+        return None
+    if not isinstance(document, dict) or not set(document) <= _INVALID_REQUEST_KEYS:
+        return None
+    errors = (document.get('meta') or {}).get('errors') or []
+    return document if [error.get('code') for error in errors] == ['invalid_request'] and document.get('error') else None
+
+
+def refused_without_answer(result, fmt: str) -> bool:
+    """A refused request printed no answer: empty stdout in text mode, the invalid-request document alone in JSON."""
+    return result.stdout == '' if fmt != 'json' else invalid_request_document(result) is not None
+
+
 def without_retirement_notes(answer):
     """*answer* without its ``retired_spelling`` warnings: what a legacy spelling answers besides its note.
     api.query notes legacy spellings as the CLI does (BACK-2654), so answers given in a legacy and a canonical

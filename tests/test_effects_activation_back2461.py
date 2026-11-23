@@ -4,7 +4,7 @@ from pathlib import PurePosixPath
 
 import pytest
 
-from conftest import _run_reveal_direct
+from conftest import _run_reveal_direct, invalid_request_document
 from test_conformance_matrix import EXPECTED, LANGUAGES, _sample_path
 from test_nav_traversal_consumer_back2025 import discovery_fault
 from test_nav_traversal_loss_back2025 import fault
@@ -123,7 +123,7 @@ def test_transitive_preserves_sources_and_breadth_order(project, depth):
 def test_invalid_requests_are_usage_errors_before_analysis(project, flags, diagnostic):
     result = _run(project, 'entry', *flags, '--format', 'json')
     assert result.returncode == 2
-    assert result.stdout == ''
+    assert invalid_request_document(result) is not None  # the refusal's document, no answer (BACK-2756)
     assert diagnostic in result.stderr
 
 
@@ -182,7 +182,7 @@ def test_new_transitive_keeps_file_analysis_loss(project, fault):
 def test_new_effects_reject_preempting_or_unused_views(project, extra):
     result = _run(project, None, '--effects', *extra, '--format', 'json')
     assert result.returncode == 2, (result.stdout, result.stderr)
-    assert result.stdout == ''
+    assert invalid_request_document(result) is not None  # the refusal's document, no answer (BACK-2756)
     assert extra[0].lstrip('-') in result.stderr  # named by the declarations' refusal (BACK-2627 D3/U1)
     if extra[0] in ('--head', '--tail'):
         assert 'range' in result.stderr  # the controls this answer reads
@@ -191,7 +191,7 @@ def test_new_effects_reject_preempting_or_unused_views(project, extra):
 def test_new_effects_reject_directory_view_without_changing_legacy(project):
     rejected = _run(project.parent, None, '--effects', '--in-loops', '--format', 'json')
     assert rejected.returncode == 2, (rejected.stdout, rejected.stderr)
-    assert rejected.stdout == '' and 'file' in rejected.stderr
+    assert invalid_request_document(rejected) is not None and 'file' in rejected.stderr  # BACK-2756
     legacy = _run(project.parent, None, '--fanout', '--format', 'json')
     assert legacy.returncode == 2  # BACK-2627 E13: a directory refuses every element view
 
@@ -221,7 +221,7 @@ def test_new_effects_reject_frontmatter_schema_view(tmp_path):
     schema.write_text('{"name": "Example", "required_fields": ["title"]}', encoding='utf-8')
     result = _run(path, None, '--effects', '--validate-schema', str(schema), '--format', 'json')
     assert result.returncode == 2, (result.stdout, result.stderr)
-    assert result.stdout == '' and '--validate-schema' in result.stderr
+    assert invalid_request_document(result) is not None and '--validate-schema' in result.stderr  # BACK-2756
 
 
 @pytest.mark.parametrize('flag', ['--show-ast', '--capabilities', '--explain-file', '--decorator-stats'])

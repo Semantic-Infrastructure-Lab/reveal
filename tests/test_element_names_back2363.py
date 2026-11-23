@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from conftest import _run_reveal_direct as run
+from conftest import _run_reveal_direct as run, invalid_request_document
 from reveal.cli.invocation import RETIREMENTS
 from test_conformance_matrix import EXPECTED, EXTENSIONS
 
@@ -160,8 +160,9 @@ def test_non_function_resources_preserve_existing_outcome(path, old):
     canonical = run(path, ':1-5', '--' + NAMES[old], '--format', 'json')
     legacy = run(path, ':1-5', '--' + old, '--format', 'json')
     assert canonical.returncode == legacy.returncode
-    if canonical.returncode:
-        assert canonical.stdout == legacy.stdout
+    if canonical.returncode:  # one refusal: the same invalid-request document once the legacy note is set aside
+        assert invalid_request_document(canonical) is not None  # BACK-2756
+        assert without_note(json.loads(legacy.stdout), old) == json.loads(canonical.stdout)
         assert canonical.stderr in legacy.stderr
     else:
         assert without_note(json.loads(legacy.stdout), old) == json.loads(canonical.stdout)

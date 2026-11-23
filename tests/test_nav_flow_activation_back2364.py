@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from conftest import _run_reveal_direct
+from conftest import _run_reveal_direct, invalid_request_document
 from test_conformance_matrix import EXPECTED, _sample_path
 from test_nav_flow_contract_back2364 import ROWS, _expected
 
@@ -51,7 +51,7 @@ def test_selector_union_deduplicates_full_records_in_source_order(language):
 def test_invalid_selector_rejects_before_resource_acquisition(tmp_path, value):
     result = _run_reveal_direct(tmp_path / 'missing.py', 'work', '--flow=' + value, '--format', 'json')
     assert result.returncode == 2
-    assert result.stdout == ''
+    assert invalid_request_document(result) is not None  # the refusal's document, no answer (BACK-2756)
     assert 'selector' in result.stderr
     assert 'not found' not in result.stderr
 
