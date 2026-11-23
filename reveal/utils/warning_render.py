@@ -86,9 +86,23 @@ def render_meta_warnings(
         print(line)
 
 
+def _object_sentences(value: Dict[str, Any]) -> List[str]:
+    """The sentences under a parent object, in order: an object with a ``text`` sentence (an ``edge_rule``) contributes
+    that one, otherwise each nonempty string field and each nested object's sentences."""
+    if isinstance(value.get('text'), str) and value['text']:
+        return [value['text']]
+    sentences: List[str] = []
+    for item in value.values():
+        if isinstance(item, str) and item:
+            sentences.append(item)
+        elif isinstance(item, dict):
+            sentences.extend(_object_sentences(item))
+    return sentences
+
+
 def _rule_field_values(result: Dict[str, Any], fields: tuple[str, ...]) -> Dict[str, List[str]]:
-    """Each field that holds a rule, as its lines: a nonempty string, or a nonempty list of sentences (git ownership's
-    ``_meta.known_limits``)."""
+    """Each field that holds a rule, as its lines: a nonempty string, a nonempty list of sentences (git ownership's
+    ``_meta.known_limits``), or a parent object holding sentences (overview's ``map.rules``)."""
     rules: Dict[str, List[str]] = {}
     for path in fields:
         value: Any = result
@@ -98,6 +112,8 @@ def _rule_field_values(result: Dict[str, Any], fields: tuple[str, ...]) -> Dict[
             rules[path] = [value]
         elif isinstance(value, list) and value and all(isinstance(item, str) and item for item in value):
             rules[path] = list(value)
+        elif isinstance(value, dict) and _object_sentences(value):
+            rules[path] = _object_sentences(value)
     return rules
 
 
