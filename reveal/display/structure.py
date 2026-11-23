@@ -468,6 +468,13 @@ def _enrich_structure(structure: Dict[str, Any], file_path: str) -> Dict[str, An
 
 def _render_json_output(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[str, Any]]]) -> None:
     """Render structure as JSON output (standard format)."""
+    print(safe_json_dumps(attach_invocation_warnings(structure_document(analyzer, structure))))
+
+
+def structure_document(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[str, Any]]]) -> Dict[str, Any]:
+    """The JSON document ``reveal FILE --format json`` prints for *structure* (the envelope: ``type``,
+    ``contract_version``, ``source``, ``meta``, ``structure``, ``error``, ``relationships``), before the invocation's
+    warnings are attached: built, never printed, so the Python API can return the CLI's own document (BACK-2325)."""
     is_fallback = getattr(analyzer, 'is_fallback', False)
     fallback_lang = getattr(analyzer, 'fallback_language', None)
     file_path = str(analyzer.path)
@@ -519,9 +526,8 @@ def _render_json_output(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[s
     from ..utils.results import ResultBuilder
     from ..reveal_types import CONTRACT_VERSION
     meta = result.pop('meta')
-    result = dict(ResultBuilder.create(result.pop('type'), analyzer.path, data=result,
-                                       source_type='file', contract_version=CONTRACT_VERSION, meta=meta))
-    print(safe_json_dumps(attach_invocation_warnings(result)))
+    return dict(ResultBuilder.create(result.pop('type'), analyzer.path, data=result,
+                                     source_type='file', contract_version=CONTRACT_VERSION, meta=meta))
 
 
 def _should_skip_category(category: str, items: Any) -> bool:
