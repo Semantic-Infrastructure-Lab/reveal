@@ -98,9 +98,11 @@ def test_run_reports_failed_xml_as_a_tool_error_over_stdio(files):
     assert code == 3
     assert seen['text'].is_error, _text(seen['text'])
     assert doc['error'] in _text(seen['text'])
-    # JSON mode: the failure's text is the CLI's JSON document exactly (COMMAND_MODEL "Transports").
+    # JSON mode: the failure's text is the CLI's JSON document exactly (COMMAND_MODEL "Transports"), after the SDK's
+    # own "Error executing tool" prefix.
     assert seen['json'].is_error, _text(seen['json'])
-    assert json.loads(_text(seen['json'])) == doc
+    text = _text(seen['json'])
+    assert json.loads(text[text.index('{'):text.rindex('}') + 1]) == doc
 
 
 def test_run_answers_a_good_file_over_stdio(files):

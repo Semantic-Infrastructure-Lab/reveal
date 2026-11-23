@@ -15,7 +15,7 @@ from typing import NoReturn, Optional, TYPE_CHECKING
 
 from .core import tree_root
 from .core.treesitter_compat import _zero_arg
-from .utils.results import FailureCause, NavSourceFailure, execution_exit_code, failure_execution_facts
+from .utils.results import FailureCause, NavSourceFailure, execution_exit_code, execution_failed, failure_execution_facts
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -577,7 +577,7 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
         return
 
     # Capture producer facts before display cuts and use the existing D6 output boundary.
-    from .cli.routing.uri import _emit_result, announce_outcome  # noqa: I006 — circular avoidance
+    from .cli.routing.uri import Answer, _emit_result, announce_outcome  # noqa: I006 — circular avoidance
     from .display.structure import _render_file_structure
     from argparse import Namespace
 
@@ -585,8 +585,23 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
         announce_outcome(structure, path)
         def render(result, format):
             _render_file_structure(analyzer, result, format, args, config)
-        _emit_result(structure, args or Namespace(format=output_format), 'file', render,
-                     execution_facts=facts, default_fail_on='none', announce_error=False,
-                     renderer_owns_json=True)
+        def printer(answer, **_options):
+            _emit_result(structure, args or Namespace(format=output_format), 'file', render,
+                         execution_facts=facts, execution_answer=answer, default_fail_on='none',
+                         announce_error=False, renderer_owns_json=True)
+        # Emitted as an Answer, as a URI's is: the open invocation log keeps it, so a host running the CLI's dispatch
+        # (MCP reveal_run, reveal_structure) maps the file's outcome from its facts (BACK-2762).
+        Answer(structure, 'structure', printer, execution_facts=facts,
+               public_diagnostic=_structure_failure_diagnostic(structure, facts)).emit()
 
     show_structure(analyzer, output_format, args, config=config, emit=emit)
+
+
+def _structure_failure_diagnostic(structure, facts) -> Optional[str]:
+    """What a failed file structure says to a caller: the cause it names (an XML or notebook parse error, a file that
+    is not the zip its type needs). It is about the caller's own input, so it is public, as an unreadable file's
+    ``OSError`` is; None when the structure did not fail."""
+    if facts is None or not execution_failed(facts) or not isinstance(structure, dict):
+        return None
+    error = structure.get('error')
+    return str(error) if error else None
