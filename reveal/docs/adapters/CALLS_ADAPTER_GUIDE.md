@@ -467,7 +467,7 @@ Rules: --format json (walk_rule.text, meta.warnings); --detail for full text
 Callees of: validate_item
 Project:    src/
 Total:      4 call(s) across 1 definition(s)
-            (6 builtin(s) hidden — use ?builtins=true to include)
+            (6 builtin(s) hidden — use --builtins to include)
 
   src/auth/validators.py:55  validate_item
     → check_required

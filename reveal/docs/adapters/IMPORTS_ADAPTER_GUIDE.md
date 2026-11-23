@@ -131,11 +131,11 @@ Import Analysis: src
   ⚠️  16 code file(s) skipped — no import support for: .sh (10), .ipynb (2), ...
       (these are not counted above; import graph excludes them)
 
-Query options:
-  reveal 'imports://src?unused'    - Find unused imports
-  reveal 'imports://src?circular'  - Detect circular deps
-  reveal 'imports://src?violations' - Check layer violations
-  reveal 'imports://src?sort=-fan-in' - Rank files by fan-in (core abstractions)
+Next steps:
+  reveal imports src --unused        # Find unused imports
+  reveal imports src --circular      # Detect circular deps
+  reveal imports src --violations    # Check layer violations
+  reveal imports src --sort=-fan-in  # Rank files by fan-in (core abstractions)
 ```
 
 **What you get**:
@@ -389,7 +389,7 @@ Files: 10 of 45  (fan-in = number of files that import this file)
   Note: static imports only — files loaded via dynamic dispatch
   (importlib, require(), Class.forName, autoload, etc.) show lower fan-in than actual.
 
-⚠ Truncated entries: showing 10 of 45 — raise ?limit=N (--limit N; 0 = all)
+⚠ Truncated entries: showing 10 of 45 — raise --limit N (0 = all)
 ```
 
 **Reading the output:**

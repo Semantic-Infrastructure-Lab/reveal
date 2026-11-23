@@ -282,7 +282,7 @@ Recent Commits:
     feat: Add new feature
   def5678 2025-02-11 09:12:44 -0800 Jane Smith
     fix: Bug fix in auth
-⚠ Truncated commits.recent: showing 10 of 11+ — raise ?limit=N or page with ?offset=N
+⚠ Truncated commits.recent: showing 10 of 11+ — raise --limit N or page with --offset N
 ⚠ Truncated branches.recent: showing 10 of 24 — raise --limit N, or --limit 0 for every row
 ```
 
@@ -323,7 +323,7 @@ History:
     feat: Add new feature
   def5678 2025-02-11 09:12:44 -0800 Jane Smith
     fix: Bug fix in auth module
-⚠ Truncated history: showing 20 of 21+ — raise ?limit=N or page with ?offset=N
+⚠ Truncated history: showing 20 of 21+ — raise --limit N or page with --offset N
 ```
 
 **Options**:
@@ -441,7 +441,7 @@ Commits: 50
     refactor: Extract config loading
   ...
 
-⚠ Truncated commits: showing 50 of 51+ — raise ?limit=N or page with ?offset=N
+⚠ Truncated commits: showing 50 of 51+ — raise --limit N or page with --offset N
 ```
 
 A directory target prints `Directory History: <dir> @ HEAD`. Each commit carries hash,
@@ -930,7 +930,7 @@ reveal git file --view history --all   # every commit (the same as --limit 0)
 A history cut by its limit says so, after the listing (text) or in `meta.warnings` (JSON):
 
 ```
-⚠ Truncated commits: showing 50 of 51+ — raise ?limit=N or page with ?offset=N
+⚠ Truncated commits: showing 50 of 51+ — raise --limit N or page with --offset N
 ```
 
 `51+` means at least 51. History is walked newest first and the walk stops one commit past

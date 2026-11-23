@@ -491,7 +491,7 @@ When results are limited, output includes (text output ends with the same messag
       "shown": 10,
       "total": 42,
       "cause": "limit",
-      "message": "files: showing 10 of 42 — raise ?limit=N or page with ?offset=N"
+      "message": "files: showing 10 of 42 — raise --limit N or page with --offset N"
     }]
   },
   "displayed_results": 10,

@@ -588,7 +588,7 @@ apply after this legacy outcome handling:
   router's (`--max-items`, `--head/--tail/--range`) both shorten one list, the entry keeps the smaller
   `shown` and the larger `total`; `cause` is the cut that set `shown`, `causes` lists every cut once
   with that one first (`["max_items", "limit"]`), and `message` names each cut's hint in the same
-  order (`results: showing 1 of 24 — raise --max-items; raise ?limit=N or page with ?offset=N`). A
+  order (`results: showing 1 of 24 — raise --max-items; raise --limit N or page with --offset N`). A
   list cut once has no `causes` key (BACK-2653). The router also restates the noun's rows-shown counts
   (declared in `BUDGET_COUNT_FIELDS`, e.g. Metrics `population.displayed_files`) to the rows left;
   population totals stay uncut.
@@ -622,7 +622,7 @@ apply after this legacy outcome handling:
   Renderers leave these warnings alone. An adapter that shows a
   composed child's list as its own passes `compose(..., cut_as=(field, hint))`.
 - **A cap the adapter applies itself is a cut too.** Count the whole list, then keep the top
-  N and record it with the adapter's own knob as the hint (`hint='raise ?top=N'`). Cut where
+  N and record it with the adapter's own flag as the hint (`hint='raise --limit N'`). Cut where
   the knob is read, not inside a shared helper: a helper that returns only the top N has lost
   the total (`identify_hotspots`, `group_patches` did, BACK-1543). A total field (`total`,
   `total_modules`, `count`) may stay for JSON readers, but it doesn't replace the marker for a raw list. The
