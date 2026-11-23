@@ -254,6 +254,11 @@ export REVEAL_CONFIG=/path/to/custom-config.yaml
 reveal check file.py
 ```
 
+A `REVEAL_CONFIG` that names no file is an invalid request on every command, the plain file read
+(`reveal file.py`) included: exit 2 naming the path. A file that exists but cannot be parsed exits 3 on every
+command that reads configuration.
+`REVEAL_NO_CONFIG=1` runs without any config.
+
 ### Rule Environment Variables
 
 #### `REVEAL_RULES_DISABLE`
@@ -661,7 +666,7 @@ reveal check src/
 2. Verify YAML syntax: `python -c "import yaml; yaml.safe_load(open('.reveal.yaml'))"`
 3. Check for `root: true` in parent directory stopping discovery
 4. Use `reveal reveal://config` (or the shorter `reveal dev inspect-config`) to see which config files were read; a file that exists but could not be loaded is listed under `Could Not Load` with the parse error
-5. Read the answer's own warnings: a config file (or `.reveal/stats-quality.yaml`) that could not be loaded, a missing `REVEAL_CONFIG` file, a value that fails the schema (it is ignored and its default used), a non-integer `REVEAL_*` threshold or an unknown rule setting is a `config_warning` entry in `meta.warnings` with `--format json`, and one `warning:` line on stderr after any other answer
+5. A missing `REVEAL_CONFIG` file exits 2 and a config file that could not be loaded exits 3 on every command that reads configuration (the plain file read included), naming the file; a value that fails the schema exits 2 on the commands that read that key. Read the answer's own warnings for the rest: a `.reveal/stats-quality.yaml` that could not be loaded, a non-integer `REVEAL_*` threshold or an unknown rule setting is a `config_warning` entry in `meta.warnings` with `--format json`, and one `warning:` line on stderr after any other answer
 
 ### Rule Still Running After Disable
 
