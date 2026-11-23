@@ -40,6 +40,7 @@ def test_retirement_inventory_matches_the_shipped_migrations():
     Markdown's link-graph and lint (--view links, --view lint) and its standalone aggregate (--view aggregate --field FIELD).
     BACK-2627 adds the element view flags --boundary, --effects, --flow and --exits (--view).
     BACK-2733 adds Git's ignore (--ignore-commits SHAS, or --auto-ignore off for ignore=off).
+    BACK-2767 adds the positional element of help:// and reveal:// (help://TOPIC, the path read of a source file).
     """
     generated = [f'flag:{noun}.{flag}' for noun, flags in LEGACY_CLI_MODIFIERS.items() for flag in flags]  # BACK-2673
     assert sorted(RETIREMENTS) == sorted(generated + ['flag:--also-json', 'flag:--boundary', 'flag:--calls', 'flag:--catchmap', 'flag:--check', 'flag:--deps',
@@ -61,7 +62,8 @@ def test_retirement_inventory_matches_the_shipped_migrations():
                                    'param:metrics.no_churn', 'param:metrics.no_merges', 'param:metrics.summary_only',
                                    'param:metrics.top', 'param:overview.no_imports', 'param:overview.top', 'param:overview.verbose', 'param:pack.verbose',
                                    'param:testability.verbose', 'scheme:architecture', 'scheme:classify', 'scheme:depends', 'scheme:deps', 'scheme:hotspots', 'scheme:python', 'scheme:stats', 'scheme:testability', 'scheme:trace', 'subcommand:architecture', 'subcommand:deps', 'subcommand:hotspots', 'subcommand:review', 'subcommand:scaffold', 'subcommand:testability',
-                                   'subcommand:trace', 'target:health.code', 'target:nav.outline', 'value:ast.show=calls', 'value:ast.view=calls',
+                                   'subcommand:trace', 'target:health.code', 'target:help.element', 'target:nav.outline',
+                                   'target:reveal.element', 'value:ast.show=calls', 'value:ast.view=calls',
                                     'value:git.detail=summary', 'value:git.view=log',
                                    'param:hotspots.top', 'param:testability.top'])
 
