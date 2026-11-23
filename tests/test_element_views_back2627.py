@@ -24,7 +24,7 @@ from pathlib import Path, PurePosixPath
 
 import pytest
 
-from conftest import _run_reveal_direct as run, without_retirement_notes
+from conftest import _run_reveal_direct as run, invalid_request_document, without_retirement_notes
 from test_conformance_matrix import EXPECTED, EXTENSIONS
 
 pytestmark = pytest.mark.conformance
@@ -346,10 +346,11 @@ ABSENT = 'no_such_var'
 
 
 def _refused(response, *names):
-    """An invalid request (D6): exit 2, no element-view answer, and the message names each of *names*."""
+    """An invalid request (D6): exit 2, no element-view answer, and the message names each of *names*. In JSON mode the
+    refusal is the invalid-request document, whose type names the answer refused (BACK-2756): nothing else on stdout."""
     said = response.stdout + response.stderr
     assert response.returncode == 2, (response.returncode, said[:400])
-    assert '"element_view"' not in response.stdout, response.stdout[:400]
+    assert response.stdout == '' or invalid_request_document(response) is not None, response.stdout[:400]
     for name in names:
         assert name in said, (name, said[:400])
 
