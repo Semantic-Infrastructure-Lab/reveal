@@ -255,6 +255,28 @@ def path_read_flag_message(args, message: str) -> Optional[str]:
     return unsupported_controls_message(ELEMENT_VIEW_SPECS, flags)
 
 
+def invalid_path_read(target, message: str, args, error: Optional[BaseException] = None):
+    """The invalid-request Answer of a path read (exit 2, the message in the document and on stderr), or None when
+    *target* is no path read (BACK-2756 cell 21j). The document answers for the path as typed; its type is the facet
+    the path read's declarations use (``element_view`` for an element request, ``code_element`` for an element,
+    ``file_structure`` for a file, a directory's ``directory_tree``); stderr labels it as the file route labels a
+    failed file, ``Error (PATH):``. A path read reads no findings, so its findings policy is none."""
+    if not is_path_read(target):
+        return None
+    return _invalid_answer(None, 'file', target, message, args, result_type=_path_read_answer(target, args),
+                           default_fail_on='none', error=error, label=target)
+
+
+def _path_read_answer(target: str, args) -> str:
+    from ...nav_params import ELEMENT_ANSWER, element_request_given
+    element = getattr(args, 'element', None)
+    if element_request_given(element_request_source(target, element, args)[0]):
+        return ELEMENT_ANSWER
+    if element:
+        return 'code_element'
+    return 'directory_tree' if os.path.isdir(target) else 'file_structure'
+
+
 def element_request_source(path: str, element: Optional[str], args) -> tuple:
     """(source, spelled): the element declarations a path read gives (``typed_source`` over ``ELEMENT_VIEW_SPECS``),
     the one reading of whether a path read is an element request (``file_handler.element_request_of`` binds it, the
@@ -1048,24 +1070,29 @@ def _declared_answer(adapter_class, name: str, path: str, source: Any, transport
 
 
 def _invalid_answer(adapter, name, path, message, args, cause=None, *, result_type=None, default_fail_on=None,
-                    error: Optional[BaseException] = None):
+                    error: Optional[BaseException] = None, label: Optional[str] = None):
     """An invalid-request answer saying *message*. *error*, the exception the message came from, is kept on the answer
     when it is the request's own validation error (``Answer.request_error``: the noun form of api.query raises it, an
-    ``UnreadControlError`` as the URI form does, BACK-2720)."""
+    ``UnreadControlError`` as the URI form does, BACK-2720). *label*: what the stderr error line names, when not the
+    noun's ``scheme://`` (a path read names its path)."""
     from ...errors import RequestValidationError
     from ...reveal_types import CONTRACT_VERSION
     from ...utils.results import FailureCause, ResultBuilder, failure_execution_facts
-    from .uri import Answer, _emit_result, _render_router_result
+    from .uri import Answer, _emit_result, _render_router_result, announce_outcome
     cause = FailureCause.INVALID_REQUEST if cause is None else cause
     result = ResultBuilder.create(
         (result_type or adapter.RESULT_TYPE), path, contract_version=CONTRACT_VERSION,
         source_type='unknown', errors=[{'code': cause.value, 'message': message}], error=message)
     facts = failure_execution_facts(cause)
-    return Answer(result, 'router', lambda answer, *, announce_error=True: _emit_result(
-        result, args, name, _render_router_result, execution_facts=facts, execution_answer=answer,
-        announce_error=announce_error, default_fail_on=default_fail_on),
-        execution_facts=facts, public_diagnostic=message,
-        request_error=error if isinstance(error, RequestValidationError) else None)
+
+    def emit(answer, *, announce_error=True):
+        if announce_error and label is not None:
+            announce_outcome(result, label)
+            announce_error = False
+        _emit_result(result, args, name, _render_router_result, execution_facts=facts, execution_answer=answer,
+                     announce_error=announce_error, default_fail_on=default_fail_on)
+    return Answer(result, 'router', emit, execution_facts=facts, public_diagnostic=message,
+                  request_error=error if isinstance(error, RequestValidationError) else None)
 
 
 def is_closed_reader(exc: BaseException) -> bool:

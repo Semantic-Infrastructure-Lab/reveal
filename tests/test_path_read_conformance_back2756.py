@@ -193,3 +193,29 @@ def test_mcp_reveal_run_in_json_returns_the_document(element_workspace):
     assert text.startswith('[reveal error: {')
     doc = json.loads(text[len('[reveal error: '):-1])
     assert doc['type'] == 'element_view' and [e['code'] for e in doc['meta']['errors']] == ['invalid_request']
+
+
+# The owner of the path read's invalid-request document, unit by unit (declared.invalid_path_read): the routes the
+# main parser and the file route hand it, and the targets it leaves to their own owners.
+@pytest.mark.parametrize('argv, answer_type', [
+    ((ELEMENT_FILE, ELEMENT, *VIEW), 'element_view'),
+    ((ELEMENT_FILE, ELEMENT, '--outline'), 'element_view'),
+    ((ELEMENT_FILE, ELEMENT), 'code_element'),
+    ((ELEMENT_FILE,), 'file_structure'),
+    ((ELEMENT_FILE, '--head', '2'), 'file_structure'),
+    (('no-such.py',), 'file_structure'),
+    (('proj',), 'directory_tree'),
+    (('ast://proj',), None),
+    (('@targets.txt',), None),
+], ids=['element-view', 'code-element-outline', 'extraction', 'file', 'head', 'missing', 'directory', 'uri', 'at-file'])
+def test_invalid_path_read_names_the_declared_facet(element_workspace, argv, answer_type):
+    from reveal.cli.routing.declared import invalid_path_read
+    from reveal.errors import RequestValidationError
+    error = RequestValidationError('bad request')
+    answer = invalid_path_read(argv[0], 'bad request', _reread(*argv), error=error)
+    if answer_type is None:
+        assert answer is None
+        return
+    assert answer.result['type'] == answer_type and answer.result['source'] == argv[0]
+    assert [e['code'] for e in answer.result['meta']['errors']] == ['invalid_request']
+    assert answer.request_error is not None and str(answer.request_error) == 'bad request'
