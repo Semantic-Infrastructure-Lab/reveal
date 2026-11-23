@@ -31,3 +31,21 @@ def test_only_help_and_reveal_keep_a_positional_element():
 def test_the_notes_name_the_replacement():
     assert RETIREMENTS['target:help.element'].text == 'help:// TOPIC is deprecated and works until 1.0; use help://TOPIC.'
     assert 'reveal PATH ELEMENT' in RETIREMENTS['target:reveal.element'].text
+
+
+# --- the CLI's URI route (uri._resolve) ------------------------------------------------------------------------------
+
+def test_cli_a_bound_noun_without_a_row_still_refuses_the_element():
+    run = _run_reveal_direct('env://', 'HOME', '--format', 'json')
+    assert run.returncode == 2, run.stderr
+    assert "env:// takes no positional element ('HOME')" in run.stdout + run.stderr
+
+
+@pytest.mark.parametrize('uri', ['stats://.?bogus=1'])
+def test_cli_an_unqualified_bound_constructor_refusal_is_the_invalid_request(uri):
+    """stats:// (and help://, reveal:// once they bind) refuse an unknown key while binding: exit 2, as metrics:// does;
+    an unqualified operation counted it as a failed answer, exit 1."""
+    run = _run_reveal_direct(uri, '--format', 'json')
+    assert run.returncode == 2, (uri, run.returncode, run.stderr)
+    assert "unsupported control 'bogus'" in run.stdout + run.stderr, run.stderr
+    json.loads(run.stdout)  # the invalid-request JSON document
