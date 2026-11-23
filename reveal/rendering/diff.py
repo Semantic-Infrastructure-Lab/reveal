@@ -484,15 +484,20 @@ def _render_edge_rule(report: Dict[str, Any]) -> List[str]:
     return ['\n'.join(rule) + '\n'] if rule else []
 
 
+def _diff_warning_lines(report: Dict[str, Any]) -> List[str]:
+    """The report's warnings, each both snapshots raised once; the standing caveat goes behind the Rules pointer only on
+    an answer that prints the pointer (not a failure or an identical tree, which return before it)."""
+    compared = not report.get('error') and report['analysis'].get('basis') != 'identical_tree'
+    return _merge_side_warnings(meta_warning_lines(report, skip_types=_STANDING_RULE_TYPES if compared else None))
+
+
 def architecture_diff_text(report: Dict[str, Any], *, title: str = 'Architecture Diff') -> str:
     """Compact human-readable rendering of an architecture_diff report.
 
     JSON is the primary contract (design doc: "JSON-first, no verdict") —
     this is a convenience summary for terminal use, not a demand.
     """
-    # The standing caveat goes behind the pointer only on an answer that prints it (not a failure or an identical tree).
-    compared = not report.get('error') and report['analysis'].get('basis') != 'identical_tree'
-    lines = _merge_side_warnings(meta_warning_lines(report, skip_types=_STANDING_RULE_TYPES if compared else None))
+    lines = _diff_warning_lines(report)
     if report.get('error'):
         lines.append(str(report['error']))
         for side, components in report['analysis']['snapshots'].items():
