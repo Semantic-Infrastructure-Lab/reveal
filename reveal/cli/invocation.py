@@ -113,8 +113,8 @@ COMMANDS: Dict[str, CommandSpec] = {
                      ('text', 'json'), help_guide=_SUBCOMMANDS_GUIDE),
     'hotspots':     _declared('hotspots',
                      'reveal hotspots [path]',
-                     'Retired: use reveal metrics <path> --view hotspots (files, --fail-on findings) and the ast:// '
-                     'complexity sort (functions); high-complexity files and functions'),
+                     'Retired: use reveal metrics <path> --view hotspots (files, --fail-on findings) and reveal ast '
+                     '<path> --sort=-complexity (functions); high-complexity files and functions'),
     'imports':      _declared('imports',
                      'reveal imports [path]',
                      'Import graph: who imports what (--importers), fan-in, cycles, unused imports, layer violations'),
@@ -604,11 +604,11 @@ RETIREMENTS: Dict[str, Retirement] = {
                                        "reveal calls <path> --callers NAME or --callees NAME, or --grep 'PATTERN'",
                                        standalone=True),
     # stats became metrics and absorbed classify (D2, BACK-2069): both old schemes answer from the
-    # metrics owner, unchanged, until the cut. File hotspots are metrics' ?hotspots=true ranking.
+    # metrics owner, unchanged, until the cut. File hotspots are metrics' --view hotspots ranking.
     'scheme:stats': Retirement('stats://', 'reveal metrics <path> (the same answer)'),
     # hotspots retired into two commands (BACK-2149, Scott 2026-11-06): files and the --fail-on findings gate are
     # metrics' hotspots ranking, functions are ast's complexity sort. Both spellings answer as before until the
-    # cut, which waits on the due-diligence script moving off hotspots:// (BACK-2153). has_test_hint is retired
+    # cut, which waits on the due-diligence script moving off hotspots:// (BACK-2770). has_test_hint is retired
     # with no replacement field (the D8 pattern of ?uncalled).
     'subcommand:hotspots': Retirement('reveal hotspots',
                                       "reveal metrics <path> --view hotspots [--fail-on findings] (files) and "

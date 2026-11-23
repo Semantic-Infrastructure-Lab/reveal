@@ -269,7 +269,7 @@ Reveal has both a **path-based interface** (`reveal <path>` + flags) and a set o
 | `reveal architecture [path] [--against REF]` | Retired: use reveal overview [path] [--against REF] | `reveal architecture --help` |
 | `reveal imports [path]` | Import graph: who imports what (--importers), fan-in, cycles, unused imports, layer violations | `reveal imports --help` |
 | `reveal deps [path]` | Retired: use reveal imports <path> --external, --circular or --unused (one graph build); dependency health: external packages, circular deps, unused imports | `reveal deps --help` |
-| `reveal hotspots [path]` | Retired: use reveal metrics <path> --view hotspots (files, --fail-on findings) and the ast:// complexity sort (functions); high-complexity files and functions | `reveal hotspots --help` |
+| `reveal hotspots [path]` | Retired: use reveal metrics <path> --view hotspots (files, --fail-on findings) and reveal ast <path> --sort=-complexity (functions); high-complexity files and functions | `reveal hotspots --help` |
 | `reveal metrics [path]` | Per-file lines, complexity and quality; --view hotspots ranks files; --view provenance tags every file | `reveal metrics --help` |
 | `reveal contracts [path]` | Architectural seams: ABCs, Protocols/interfaces, TypedDicts, dataclasses *(11 languages: Python, TypeScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, Rust, C++)* | `reveal contracts --help` |
 | `reveal surface [path]` | External surfaces: CLI commands, HTTP routes, env vars, network calls, FS writes, subprocess calls *(11 languages: Python, TypeScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, Rust, C++)* | `reveal surface --help` |
