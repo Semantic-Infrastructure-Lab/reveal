@@ -1,0 +1,84 @@
+{
+  "patches": {
+    "default": {
+      "uri": "patches://proj",
+      "exit": 0,
+      "fields": {
+        "test_scope.basis": "paths relative to the selected project"
+      },
+      "standing": [
+        "Patch pressure is advisory; mocking external boundaries can be correct."
+      ],
+      "detail_supported": false
+    },
+    "target": {
+      "uri": "patches://proj?view=target",
+      "exit": 0,
+      "fields": {
+        "test_scope.basis": "paths relative to the selected project"
+      },
+      "standing": [
+        "Patch pressure is advisory; mocking external boundaries can be correct."
+      ],
+      "detail_supported": false
+    },
+    "test": {
+      "uri": "patches://proj?view=test",
+      "exit": 0,
+      "fields": {
+        "test_scope.basis": "paths relative to the selected project"
+      },
+      "standing": [
+        "Patch pressure is advisory; mocking external boundaries can be correct."
+      ],
+      "detail_supported": false
+    },
+    "file": {
+      "uri": "patches://proj?view=file",
+      "exit": 0,
+      "fields": {
+        "test_scope.basis": "paths relative to the selected project"
+      },
+      "standing": [
+        "Patch pressure is advisory; mocking external boundaries can be correct."
+      ],
+      "detail_supported": false
+    },
+    "pressure": {
+      "uri": "patches://proj?view=pressure",
+      "exit": 0,
+      "fields": {
+        "test_scope.basis": "paths relative to the selected project"
+      },
+      "standing": [
+        "Static target resolution is best-effort.",
+        "Patch pressure is advisory; mocking external boundaries can be correct."
+      ],
+      "detail_supported": false
+    },
+    "pressure-tests": {
+      "uri": "patches://proj?view=pressure&tests=proj/tests",
+      "exit": 0,
+      "fields": {},
+      "standing": [
+        "Static target resolution is best-effort.",
+        "Patch pressure is advisory; mocking external boundaries can be correct."
+      ],
+      "detail_supported": false
+    }
+  },
+  "testability": {
+    "report": {
+      "uri": "testability://proj",
+      "exit": 0,
+      "fields": {
+        "test_scope.basis": "paths relative to the selected project"
+      },
+      "standing": [
+        "Static target resolution is best-effort.",
+        "Patch pressure is advisory; mocking external boundaries can be correct."
+      ],
+      "detail_supported": false
+    }
+  }
+}

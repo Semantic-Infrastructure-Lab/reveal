@@ -1215,9 +1215,12 @@ _RULE_BUDGET_CASES = {
     # BACK-2685: Imports, Metrics and Overview adopt the pointer; their cases name the rule fields and read the full
     # sentences from the answer's own JSON (``detail_supported``: the view offers --detail full; ``full_text``: it asks).
     **json.loads((Path(__file__).parent / 'fixtures' / 'rule_text_back2685.json').read_text(encoding='utf-8')),
+    # Patches (every view) and the retired testability, which shares the pressure renderer: the test-path basis and
+    # the standing caveats (advisory, best-effort target resolution) behind the pointer.
+    **json.loads((Path(__file__).parent / 'fixtures' / 'patches_rule_text_back2599.json').read_text(encoding='utf-8')),
 }
 _RULE_BUDGET_STANDING = frozenset({'analysis_limit', 'scope_limit', 'derived_signal',
-                                 'implicit_exclusion', 'not_measured'})
+                                 'implicit_exclusion', 'not_measured', 'advisory'})
 
 
 def _rule_value(payload, path):
@@ -1265,6 +1268,34 @@ def test_rule_budget_retrofit_text_points_and_json_keeps_the_rule(harness, noun,
     assert all(isinstance(s, str) and len(s) > 20 for s in sentences), sentences
     for sentence in sentences:
         assert (sentence in text) == bool(expected.get('full_text')), f'{case}: full rule in text: {sentence[:60]}'
+
+
+_RULE_BUDGET_PATCHES = [(noun, case) for noun in ('patches', 'testability') for case in _RULE_BUDGET_CASES[noun]]
+
+
+@pytest.mark.parametrize('noun,case', _RULE_BUDGET_PATCHES)
+def test_rule_budget_patches_text_points_and_json_keeps_the_rule(harness, noun, case):
+    """BACK-2599: the default text no longer repeats the test-path basis of a selected project or the standing
+    caveats; the JSON keeps each verbatim in its own field, and the scope line keeps the policy and the scanned count."""
+    expected = _RULE_BUDGET_CASES[noun][case]
+    _, payload, _ = harness.run(expected['uri'])
+    _, text, _ = harness.run_raw(expected['uri'])
+    for path, sentence in expected['fields'].items():
+        assert _rule_value(payload, path) == sentence, f'full JSON rule changed: {path}'
+        assert sentence not in text, f'{case}: default text repeats the rule: {sentence}'
+    standing = [w['message'] for w in payload['meta']['warnings'] if w.get('type') in _RULE_BUDGET_STANDING]
+    assert standing == expected['standing'], 'full standing caveats must remain verbatim in JSON'
+    for sentence in standing:
+        assert sentence not in text, f'{case}: default text repeats the standing caveat: {sentence}'
+    scope = payload['test_scope']
+    assert f"Test scope: {scope['rule']} ({scope['files_scanned']} test files scanned)" in text
+
+
+def test_patches_pressure_header_names_no_retiring_noun(harness):
+    """--view pressure answered under the header 'Testability: <path>', the retiring noun's name (teaching T1 bug 2)."""
+    _, text, _ = harness.run_raw('patches://proj?view=pressure')
+    assert not text.startswith('Testability:'), text.splitlines()[0]
+    assert text.startswith('Patch Pressure: proj'), text.splitlines()[0]
 
 
 @pytest.mark.parametrize('case', ['callers', 'not-found', 'callees', 'walk', 'rank', 'uncalled', 'modules'])
