@@ -547,6 +547,10 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
         start_path=Path(path).parent if Path(path).is_file() else Path(path),
         cli_overrides=cli_overrides if cli_overrides else None
     )
+    # The file view reads its settings from here: a selected file that does not exist is an invalid request (exit 2),
+    # one that could not be parsed is lost input (exit 3), whatever key is read (COMMAND_MODEL "Configuration failures";
+    # BACK-2756 cell 22 and D4). Here too, not only at the route's entry: --stdin file lines and MCP reveal_nav.
+    config.require()
 
     if show_meta:
         _refuse_meta_beside(request)
