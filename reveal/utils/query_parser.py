@@ -408,6 +408,10 @@ class LegacySpelling:
     # The binder joins them with the request's own values as one setting (``_normalize_aliases``); an old flag with sets
     # keeps an argument of its own. Empty: the word binds its owner only.
     sets: Tuple[Tuple[str, Any], ...] = ()
+    # Whether a typed value sets them, when its value decides the word's target (BACK-2733: git ``ignore=off`` is
+    # ``auto-ignore=off`` and leaves the owner unset, its codec answering None; ``ignore=SHA`` is the owner's value only).
+    # None: the word sets them when its owner's translated value is non-empty.
+    sets_when: Optional[Callable[[Any], bool]] = None
     # The old flag's value was optional (an element view's ``--flow[=SEL]``): given bare it stands for ``flag_value``,
     # given a value it carries that value. The declared parser generates it with an optional value in an argument of
     # its own; the codec translates both.
@@ -420,11 +424,11 @@ class LegacySpelling:
 
     def translate(self, raw: Any) -> Dict[str, Any]:
         """The canonical controls the legacy value stands for: its owner's value, then the controls it sets. A word that
-        states no value (None or empty) sets nothing."""
+        states no value (None or empty) sets nothing, unless ``sets_when`` decides from the typed value."""
         if self.first:
             return {self.owner: self.name}
         controls = {self.owner: raw if self.codec is None else self.codec(raw)}
-        if controls[self.owner] not in (None, ''):
+        if self.sets_when(raw) if self.sets_when is not None else controls[self.owner] not in (None, ''):
             controls.update(self.sets)
         return controls
 
@@ -566,7 +570,10 @@ class ParamSpec:
         if value is None:
             return value
         if self.repeatable and isinstance(value, list):  # each repeat of a repeatable control's legacy word
-            return [self._translated_value(item if entry is None else entry.translate(item)[self.name]) for item in value]
+            terms = [self._translated_value(item if entry is None else entry.translate(item)[self.name]) for item in value]
+            # a repeat that translates to None names no term (git ignore=off sets another control, BACK-2733)
+            kept = [term for term in terms if term is not None]
+            return kept if kept or not terms else None
         return self._translated_value(value if entry is None else entry.translate(value)[self.name])
 
     def _translated_value(self, value: Any) -> Any:

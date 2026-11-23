@@ -245,11 +245,14 @@ def _normalize_spellings(spec: ParamSpec, present: list, result: Dict[str, Any],
 
 
 def _set_controls(spec: ParamSpec, name: str, raw: Any) -> list:
-    """(control, value) for each control besides *spec* that *name*'s legacy word sets (``LegacySpelling.sets``)."""
+    """(control, value) for each control besides *spec* that *name*'s legacy word sets (``LegacySpelling.sets``); each
+    repeat of a repeatable control's word translates on its own (git ``--ignore SHA --ignore off``, BACK-2733)."""
     entry = spec.legacy_entry(name)
     if entry is None or not entry.sets or raw is None:
         return []
-    return [(control, value) for control, value in entry.translate(raw).items() if control != spec.name]
+    items = raw if spec.repeatable and isinstance(raw, list) else [raw]
+    return [(control, value) for item in items for control, value in entry.translate(item).items()
+            if control != spec.name]
 
 
 def _join_set_controls(declarations: tuple, result: Dict[str, Any], set_by: list, given_as: Dict[str, str],
@@ -319,11 +322,18 @@ def _prepare_repeated_params(declarations: tuple[ParamSpec, ...], source: str, p
         if spec.role == 'filter-expression':  # its own terms are the expression list; its legacy words repeat too
             _keep_repeated_words(spec, parts, params)
             continue
+        # a legacy word that sets other controls keeps its occurrences for the join (``_normalize_aliases``, BACK-2733)
+        setting = {name for name in spec.spellings if getattr(spec.legacy_entry(name), 'sets', ())}
+        for word in setting:
+            occurrences = [value if separator else True for key, separator, value in parts if key == word]
+            if occurrences:
+                params[word] = occurrences
         values = [spec.canonical_value(key, _decode_value(spec, value) if separator else True)
-                  for key, separator, value in parts if key in spec.spellings]
+                  for key, separator, value in parts if key in spec.spellings and key not in setting]
         if values:
             for name in spec.spellings:
-                dict.pop(params, name, None)
+                if name not in setting:
+                    dict.pop(params, name, None)
             params[spec.name] = values
 
 

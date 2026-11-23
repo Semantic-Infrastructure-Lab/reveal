@@ -42,8 +42,10 @@ DECLARATIONS = (COMMITS, AUTO)
 
 
 def _bind(source, transport='uri'):
+    """The bound commits (in sorted order: the spellings of a repeatable control join as one set of terms) and auto."""
     params = bind_declared_params(DECLARATIONS, source, transport=transport)
-    return COMMITS.read(params), AUTO.read(params)
+    commits = COMMITS.read(params)
+    return (sorted(commits) if commits else commits), AUTO.read(params)
 
 
 def test_the_value_decides_which_controls_the_word_sets():
@@ -88,7 +90,7 @@ def test_a_word_that_turns_auto_off_leaves_its_owner_unset():
     (['abc1234', 'def5678'], (['abc1234', 'def5678'], None)),
 ])
 def test_a_repeated_legacy_word_translates_each_value(values, expected):
-    assert _bind({'old': values}, transport='cli') == expected
+    assert _bind({'old': values}, transport='typed') == expected
 
 
 @pytest.mark.parametrize('source', ['old=off&auto=on', 'auto=on&old=off'])
