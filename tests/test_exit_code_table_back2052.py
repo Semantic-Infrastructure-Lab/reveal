@@ -39,6 +39,7 @@ def test_retirement_inventory_matches_the_shipped_migrations():
     detail=summary values (--view history, --detail normal). BACK-2626 adds SQLite's check (--view health). BACK-2752 adds env's show_secrets, removed outright. BACK-2614 adds
     Markdown's link-graph and lint (--view links, --view lint) and its standalone aggregate (--view aggregate --field FIELD).
     BACK-2627 adds the element view flags --boundary, --effects, --flow and --exits (--view).
+    BACK-2733 adds Git's ignore (--ignore-commits SHAS, or --auto-ignore off for ignore=off).
     """
     generated = [f'flag:{noun}.{flag}' for noun, flags in LEGACY_CLI_MODIFIERS.items() for flag in flags]  # BACK-2673
     assert sorted(RETIREMENTS) == sorted(generated + ['flag:--also-json', 'flag:--boundary', 'flag:--calls', 'flag:--catchmap', 'flag:--check', 'flag:--deps',
@@ -49,7 +50,7 @@ def test_retirement_inventory_matches_the_shipped_migrations():
                                    'param:calls.external', 'param:calls.modules', 'param:calls.rank', 'param:calls.root', 'param:calls.target', 'param:calls.top', 'param:calls.type', 'param:calls.uncalled',
                                    'param:contracts.impls', 'param:patches.group', 'param:patches.min_categories', 'param:patches.min_patches', 'param:patches.no_suppress', 'param:patches.top', 'param:contracts.no_implementations', 'param:sqlite.check', 'param:xlsx.range', 'param:xlsx.search', 'param:env.show_secrets', 'param:surface.by', 'param:surface.depth', 'param:surface.source_only', 'param:surface.top', 'param:surface.type', 'param:claude.contains', 'param:claude.filter', 'param:claude.full', 'param:claude.last', 'param:claude.raw', 'param:claude.search', 'param:claude.summary', 'param:claude.tail',
                                    'param:codex.filter', 'param:codex.full', 'param:codex.goal', 'param:codex.last', 'param:codex.search', 'param:codex.tokens',
-                                   'param:deps.verbose', 'param:git.no_merges', 'param:git.raw', 'param:git.type', 'param:git.verbose',
+                                   'param:deps.verbose', 'param:git.ignore', 'param:git.no_merges', 'param:git.raw', 'param:git.type', 'param:git.verbose',
                                    'param:json.data-only', 'param:json.flatten', 'param:json.gron', 'param:json.keys', 'param:json.length', 'param:json.schema', 'param:json.type',
                                    'param:hotspots.files_only', 'param:hotspots.functions_only', 'param:hotspots.verbose',
                                    'param:imports.max_files', 'param:imports.rank', 'param:imports.top', 'param:imports.verbose',
