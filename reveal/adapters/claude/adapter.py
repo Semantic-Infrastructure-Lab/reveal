@@ -147,7 +147,7 @@ _HELP_EXAMPLES: List[Dict[str, str]] = [
         'description': 'All tool usage with success rates'
     },
     {
-        'uri': 'claude://session/infernal-earth-0118?errors',
+        'uri': 'claude://session/infernal-earth-0118 --errors',
         'description': 'Find errors with context'
     },
     {
@@ -159,7 +159,7 @@ _HELP_EXAMPLES: List[Dict[str, str]] = [
         'description': 'Extract all thinking blocks with token estimates'
     },
     {
-        'uri': 'claude://session/infernal-earth-0118?tools=Bash',
+        'uri': 'claude://session/infernal-earth-0118 --tools Bash',
         'description': 'Filter to specific tool calls'
     },
     {
@@ -179,11 +179,11 @@ _HELP_EXAMPLES: List[Dict[str, str]] = [
         'description': 'Composed readable view: overview + human prompts + assistant narrative in one call — start here for "what happened in this session"'
     },
     {
-        'uri': 'claude://session/infernal-earth-0118/prompts?detail=raw',
+        'uri': 'claude://session/infernal-earth-0118/prompts --detail raw',
         'description': 'Raw role=user records, unfiltered: initial prompts + tool-result turns — bulk forensic scan, prefer /prompts for reading intent'
     },
     {
-        'uri': 'claude://session/infernal-earth-0118/messages?detail=raw',
+        'uri': 'claude://session/infernal-earth-0118/messages --detail raw',
         'description': 'Raw role=assistant records, unfiltered: text, thinking, tool_use, tool_result blocks — bulk forensic scan (e.g. exact tool arguments), prefer /messages for reading intent'
     },
     {
@@ -195,23 +195,23 @@ _HELP_EXAMPLES: List[Dict[str, str]] = [
         'description': 'Read the last message (negative index supported)'
     },
     {
-        'uri': 'claude://session/infernal-earth-0118/messages?sort=-message_index&limit=1',
+        'uri': 'claude://session/infernal-earth-0118/messages --limit 1 --sort=-message_index',
         'description': 'Show last assistant turn — fast session recovery'
     },
     {
-        'uri': 'claude://session/infernal-earth-0118/messages?sort=-message_index&limit=3',
+        'uri': 'claude://session/infernal-earth-0118/messages --limit 3 --sort=-message_index',
         'description': 'Show latest 3 assistant turns, latest-first'
     },
     {
-        'uri': 'claude://session/infernal-earth-0118?match=verify',
+        'uri': 'claude://session/infernal-earth-0118 --match verify',
         'description': 'Search all content (text, thinking, tool inputs) for a term'
     },
     {
-        'uri': "claude://sessions/?match=validate_token",
+        'uri': "claude://sessions/ --match validate_token",
         'description': 'Cross-session content search — find sessions mentioning a term (20 by default)'
     },
     {
-        'uri': "claude://sessions/?match=auth&since=2026-03-01",
+        'uri': "claude://sessions/ --since 2026-03-01 --match auth",
         'description': 'Cross-session search scoped to recent sessions (?since= reduces scan time)'
     },
     {
@@ -223,7 +223,7 @@ _HELP_EXAMPLES: List[Dict[str, str]] = [
         'description': 'Claude Code settings: model, permissions, timeout, hooks'
     },
     {
-        'uri': "claude://settings?key=permissions.additionalDirectories",
+        'uri': "claude://settings --key permissions.additionalDirectories",
         'description': 'Extract a specific nested settings value'
     },
     {
@@ -231,7 +231,7 @@ _HELP_EXAMPLES: List[Dict[str, str]] = [
         'description': 'Recent prompt history — last 50 prompts across all projects'
     },
     {
-        'uri': "claude://history?match=validate_token",
+        'uri': "claude://history --match validate_token",
         'description': 'Find prompts mentioning a term'
     },
     {
@@ -243,7 +243,7 @@ _HELP_EXAMPLES: List[Dict[str, str]] = [
         'description': 'Read a specific plan by name'
     },
     {
-        'uri': "claude://plans?match=token",
+        'uri': "claude://plans --match token",
         'description': 'Search across all plan content for a term'
     },
     {
@@ -251,7 +251,7 @@ _HELP_EXAMPLES: List[Dict[str, str]] = [
         'description': 'Per-install config: project count, MCP servers, feature flags'
     },
     {
-        'uri': "claude://config?key=installMethod",
+        'uri': "claude://config --key installMethod",
         'description': 'Extract a specific config value (dot-notation path)'
     },
     {
@@ -259,7 +259,7 @@ _HELP_EXAMPLES: List[Dict[str, str]] = [
         'description': 'All memory files across projects (~/.claude/projects/*/memory/)'
     },
     {
-        'uri': "claude://memory?match=feedback",
+        'uri': "claude://memory --match feedback",
         'description': 'Search memory file content across all projects'
     },
     {
@@ -282,7 +282,7 @@ _HELP_WORKFLOWS: List[Dict[str, Any]] = [
         'scenario': 'Understand what happened in a completed session',
         'steps': [
             'reveal claude://session/session-name',
-            'reveal claude://session/session-name?detail=summary',
+            'reveal claude://session/session-name --detail summary',
             'reveal claude://session/session-name/tools'
         ]
     },
@@ -290,18 +290,18 @@ _HELP_WORKFLOWS: List[Dict[str, Any]] = [
         'name': 'Debug Failed Session',
         'scenario': 'Find why a session failed',
         'steps': [
-            'reveal claude://session/failed-build?errors',
+            'reveal claude://session/failed-build --errors',
             'reveal claude://session/failed-build/message/67',
-            'reveal claude://session/failed-build?tools=Bash'
+            'reveal claude://session/failed-build --tools Bash'
         ]
     },
     {
         'name': 'Token Optimization',
         'scenario': 'Identify token waste',
         'steps': [
-            'reveal claude://session/current?detail=summary',
+            'reveal claude://session/current --detail summary',
             'reveal claude://session/current/thinking',
-            'reveal claude://session/current?tools=Read'
+            'reveal claude://session/current --tools Read'
         ]
     },
     {
@@ -319,8 +319,8 @@ _HELP_WORKFLOWS: List[Dict[str, Any]] = [
         'steps': [
             'reveal claude://session/session-a/prompts',
             'reveal claude://session/session-b/prompts',
-            'reveal claude://session/session-a?match=<finding>',
-            'reveal claude://session/session-b?match=<finding>',
+            'reveal claude://session/session-a --match <finding>',
+            'reveal claude://session/session-b --match <finding>',
         ]
     },
     {
@@ -998,7 +998,7 @@ class ClaudeAdapter(ResourceAdapter):
         return {
             'adapter': 'claude',
             'description': 'Claude Code conversation analysis with tool usage, workflow tracking, and error detection',
-            'uri_syntax': 'claude://session/{name}[/resource][?query]',
+            'uri_syntax': 'claude://session/{name}[/resource] [--flags]',
             'query_params': param_schema(PARAM_SPECS),  # the one owner: a flag-only modifier is no query parameter
             'pagination': page_schema(),
             'workflow_selection': {'tool_predicate': 'tool==NAME (case-insensitive exact equality)',
@@ -1081,11 +1081,11 @@ class ClaudeAdapter(ResourceAdapter):
             'description': 'Navigate and analyze Claude Code conversations - progressive session exploration',
             'syntax': (
                 'claude://                                          # list all sessions\n'
-                'claude://?match=<term>                            # search across sessions\n'
-                'claude://session/{name}[/resource][?query]        # session-scoped access\n'
+                'claude://sessions/ --match <term>                 # search across sessions\n'
+                'claude://session/{name}[/resource] [--flags]      # session-scoped access\n'
                 'claude://info                                      # install overview\n'
-                'claude://config[?key=<name>]                      # config flags and MCP registrations\n'
-                'claude://history[?match=<term>]                  # prompt history\n'
+                'claude://config [--key <name>]                    # config flags and MCP registrations\n'
+                'claude://history [--match <term>]                 # prompt history\n'
                 'claude://plans[/{name}]                           # saved plans\n'
                 'claude://memory                                    # memory files\n'
                 'claude://agents                                    # agent definitions\n'
@@ -1116,7 +1116,7 @@ class ClaudeAdapter(ResourceAdapter):
                 'reveal claude://info                               # install overview',
                 'reveal claude://config                            # config flags and MCP registrations',
                 'reveal claude://session/infernal-earth-0118',
-                'reveal claude://session/infernal-earth-0118?detail=summary',
+                'reveal claude://session/infernal-earth-0118 --detail summary',
                 'reveal claude://session/infernal-earth-0118/thinking'
             ],
             'notes': [

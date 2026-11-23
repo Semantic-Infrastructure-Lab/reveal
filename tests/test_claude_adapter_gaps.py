@@ -1310,7 +1310,7 @@ class TestSchemaIncludesCrossSessionSearch:
     def test_example_queries_include_sessions_search(self):
         schema = ClaudeAdapter.get_schema()
         uris = [e['uri'] for e in schema['example_queries']]
-        assert any(u.startswith('claude://sessions/') and '?match=' in u for u in uris)
+        assert any(u.startswith('claude://sessions/') and ' --match ' in u for u in uris)  # flags, BACK-2713
 
     def test_notes_mention_cross_session_search(self):
         schema = ClaudeAdapter.get_schema()
@@ -1327,7 +1327,7 @@ class TestSchemaIncludesCrossSessionSearch:
     def test_help_examples_include_cross_session_search(self):
         help_data = ClaudeAdapter.get_help()
         example_uris = [e.get('uri', '') for e in help_data.get('examples', [])]
-        assert any(u.startswith('claude://sessions/') and '?match=' in u for u in example_uris)
+        assert any(u.startswith('claude://sessions/') and ' --match ' in u for u in example_uris)  # flags, BACK-2713
 
 
 # ─── get_message_range ────────────────────────────────────────────────────────

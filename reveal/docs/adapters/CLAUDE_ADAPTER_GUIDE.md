@@ -83,8 +83,8 @@ reveal claude sessions --with-stats --limit 5
 reveal claude info --base-path /path/to/.claude/projects
 ```
 
-The one-string form, such as
-`claude://session/NAME?view=messages&sort=-message_index&limit=3`, uses the same
+The resource form, such as
+`claude://session/NAME --view messages --sort=-message_index --limit 3`, uses the same
 bound controls, readers, JSON and exit policy for composition and MCP. The native
 API accepts literal keyword values: `query('claude://session/NAME', view='messages',
 match='Fixed', limit=1)`. `--base-path` and the optional displayed-row
