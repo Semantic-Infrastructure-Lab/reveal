@@ -322,19 +322,25 @@ def _prepare_repeated_params(declarations: tuple[ParamSpec, ...], source: str, p
         if spec.role == 'filter-expression':  # its own terms are the expression list; its legacy words repeat too
             _keep_repeated_words(spec, parts, params)
             continue
-        # a legacy word that sets other controls keeps its occurrences for the join (``_normalize_aliases``, BACK-2733)
-        setting = {name for name in spec.spellings if getattr(spec.legacy_entry(name), 'sets', ())}
-        for word in setting:
-            occurrences = [value if separator else True for key, separator, value in parts if key == word]
-            if occurrences:
-                params[word] = occurrences
+        setting = _keep_setting_words(spec, parts, params)
         values = [spec.canonical_value(key, _decode_value(spec, value) if separator else True)
                   for key, separator, value in parts if key in spec.spellings and key not in setting]
         if values:
-            for name in spec.spellings:
-                if name not in setting:
-                    dict.pop(params, name, None)
+            for name in (name for name in spec.spellings if name not in setting):
+                dict.pop(params, name, None)
             params[spec.name] = values
+
+
+def _keep_setting_words(spec: ParamSpec, parts: list, params: QueryParams) -> set:
+    """A repeatable control's legacy words that set other controls (``LegacySpelling.sets``), each kept with every
+    occurrence under its own key for the join, which translates them (``_normalize_aliases``; git ``ignore``,
+    BACK-2733). Returns those words."""
+    setting = {name for name in spec.spellings if getattr(spec.legacy_entry(name), 'sets', ())}
+    for word in setting:
+        occurrences = [value if separator else True for key, separator, value in parts if key == word]
+        if occurrences:
+            params[word] = occurrences
+    return setting
 
 
 def _keep_repeated_words(spec: ParamSpec, parts: list, params: QueryParams) -> None:
