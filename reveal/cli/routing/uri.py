@@ -896,14 +896,10 @@ def _emit_check(result: Any, adapter, renderer_class: type[Any], args: 'Namespac
         else:
             print(result)
 
-    # Exit with appropriate code
-    if isinstance(result, dict):
-        exit_code = result.get('exit_code', 0)
-    else:
+    if not isinstance(result, dict):
         logger.warning("check() returned non-dict result; treating as pass (exit 0)")
-        exit_code = 0
     complete(args)
-    sys.exit(3 if failure is not None else exit_code)
+    sys.exit(3 if failure is not None else legacy_exit_code(result, 'check'))
 
 
 def _view_answer(adapter, renderer_class: type[Any], scheme: str,
@@ -1553,9 +1549,22 @@ def _emit_result(result: Any, args: 'Namespace', scheme: Optional[str], render,
         print_result_control_notes(result, output_format)
         sys.exit(3)
     conclude_outcome(result, outcome, output_format)
-    code = exit_code(result, output_format) if exit_code and outcome != 'failed' else 0
+    code = legacy_exit_code(result, 'structure', exit_code, output_format)
     if code:
         sys.exit(code)
+
+
+def legacy_exit_code(result: Any, kind: str, exit_code: Optional[Callable[[Any, str], int]] = None,
+                     output_format: str = 'text') -> int:
+    """The exit an answer without execution facts has alone. A check (*kind* ``'check'``) exits with its own
+    ``exit_code``, its verdict (failure 2, warning 1: BACK-1557); a failed answer 1 (conclude_outcome); any other answer
+    its renderer's findings code (*exit_code*: a fleet audit with gaps exits 2, BACK-1758), else 0. The emitters exit
+    with it, and a ``--stdin --batch`` entry carries the same exit (COMMAND_MODEL "Transports", BACK-2660)."""
+    if kind == 'check':
+        return result.get('exit_code', 0) if isinstance(result, dict) else 0
+    if outcome_of(result) == 'failed':
+        return 1
+    return exit_code(result, output_format) if exit_code else 0
 
 
 def announce_outcome(result: Any, label: str) -> Outcome:

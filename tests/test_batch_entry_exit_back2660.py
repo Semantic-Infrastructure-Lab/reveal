@@ -119,3 +119,29 @@ def test_a_declared_entry_keeps_its_execution_exit():
     assert _direct('ast://proj/nosuch') == 2
     batch_code, (entry,) = _batch('ast://proj/nosuch')
     assert entry.get('exit_code') == 2 and batch_code == 2, entry
+
+
+# The one mapping of a legacy answer to its exit (cli/routing/uri.py ``legacy_exit_code``): the check and structure
+# emitters exit with it, and the batch gives each legacy entry the same exit.
+
+def _hook(code):
+    def exit_code(result, output_format):
+        assert output_format == 'json'
+        return code
+    return exit_code
+
+
+@pytest.mark.parametrize('result,kind,hook,code', [
+    ({'status': 'failure', 'exit_code': 2}, 'check', None, 2),
+    ({'status': 'warning', 'exit_code': 1}, 'check', None, 1),
+    ({'status': 'pass'}, 'check', None, 0),
+    ('not a dict', 'check', None, 0),
+    ({'type': 'x', 'error': 'boom'}, 'structure', _hook(2), 1),
+    ({'type': 'x', 'error': 'boom'}, 'router', None, 1),
+    ({'type': 'nginx_fleet_audit', 'has_gaps': True}, 'structure', _hook(2), 2),
+    ({'type': 'x'}, 'element', None, 0),
+], ids=['check-failure', 'check-warning', 'check-pass', 'check-non-dict', 'failed-beats-findings', 'router-failed',
+        'findings', 'success'])
+def test_legacy_exit_code(result, kind, hook, code):
+    from reveal.cli.routing.uri import legacy_exit_code
+    assert legacy_exit_code(result, kind, hook, 'json') == code
