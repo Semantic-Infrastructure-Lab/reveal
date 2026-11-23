@@ -6,6 +6,7 @@ and the file hotspot ranking (``?hotspots=true``, which the hotspots noun's file
 prints the replaced-by note from the RETIREMENTS table until the cut (D5).
 """
 
+import shlex
 import os
 from dataclasses import replace
 from pathlib import Path
@@ -146,7 +147,7 @@ _VIEW = ParamSpec('view', 'string', 'hotspots: the ranked hotspot files are the 
                   'findings verdict; provenance: the provenance tag (first_party/test/vendor/minified) of every '
                   'analyzable file, with summary.total, by_provenance, excluded and excluded_by_extension; no file is '
                   'analyzed and no rule runs (was classify://). Omitted: per-file metrics',
-                  None, _text('view'), ('view=hotspots', 'view=provenance'), choices=VIEWS, role='operation',
+                  None, _text('view'), ('--view hotspots', '--view provenance'), choices=VIEWS, role='operation',
                   cli=CliBinding(('--view',), metavar='VIEW'))
 def _threshold(name: str, field: str, convert, what: str) -> LegacySpelling:
     """A legacy threshold is its where term (min_lines=N is lines>=N); the value keeps the legacy validation, and
@@ -163,7 +164,7 @@ def _threshold(name: str, field: str, convert, what: str) -> LegacySpelling:
 
 _WHERE = where_param('Keep the files whose field matches: FIELD OP VALUE (lines>50, avg_complexity>=5, '
                      'complexity=5..15, functions!=0, a dotted path such as lines.total); repeat to AND. A bare URI '
-                     'key with an operator (?lines>50) is the same filter', ('where=lines>50', 'where=avg_complexity>=5'),
+                     'key with an operator (?lines>50) is the same filter', ("--where 'lines>50'", "--where 'avg_complexity>=5'"),
                      legacy=(_threshold('min_lines', 'lines>=', _count('min_lines'), 'a whole number'),
                              _threshold('max_lines', 'lines<=', _count('max_lines'), 'a whole number'),
                              _threshold('min_functions', 'functions>=', _count('min_functions'), 'a whole number'),
@@ -173,19 +174,19 @@ _WHERE = where_param('Keep the files whose field matches: FIELD OP VALUE (lines>
                      fields=(*SORT_FIELDS, 'lines.*', 'complexity.*', 'elements.*', 'quality.*'))
 _WHERE = replace(_WHERE, answers=(_DIRECTORY, _FILE))
 _HOTSPOTS = ParamSpec('hotspots', 'boolean', 'Legacy: per-file rows plus the hotspot ranking, top capping it; '
-                      'replaced by view=hotspots', False, boolean_value, ('hotspots=true',), role='operation',
+                      'replaced by view=hotspots', False, boolean_value, ('--hotspots',), role='operation',
                       cli=CliBinding(('--hotspots',), action='store_true'), cap='top')
 _TOP = ParamSpec('top', 'integer', 'Legacy hotspot cap: limit in view=hotspots; with legacy hotspots=true it caps the '
-                 'ranking (default 10, 0 = all)', 10, _count('top'), ('view=hotspots&top=25',), minimum=0,
+                 'ranking (default 10, 0 = all)', 10, _count('top'), ('--view hotspots --top 25',), minimum=0,
                  zero_policy='all', role='analysis', cli=CliBinding(('--top',), metavar='N'), answers=_RANKINGS)
 # The map's spelling (BACK-2621); code_only is an alias that answers the same, as scan_limit is for Imports.
 _CODE_ONLY = ParamSpec('code-only', 'boolean', 'Exclude data/config files (xml, csv, sql, yaml, toml, large json) '
-                       'from the walk; totals describe the code files', False, boolean_value, ('code-only=true',),
+                       'from the walk; totals describe the code files', False, boolean_value, ('--code-only',),
                        role='analysis', aliases=('code_only',),
                        cli=CliBinding(('--code-only',), dest='code_only', action='store_true'), answers=(_DIRECTORY,))
 _CHURN = ParamSpec('churn', 'boolean', 'Fold commit-touch counts into the hotspot score: on (default in a git '
                    'repository; silently off elsewhere) or off for complexity-only scoring',
-                   True, switch_value, ('view=hotspots&churn=off',), role='analysis',
+                   True, switch_value, ('--view hotspots --churn off',), role='analysis',
                    cli=CliBinding(('--churn',), metavar='on|off'),
                    legacy=(LegacySpelling('no_churn', codec=legacy_switch('no_churn', 'off', 'on'),
                                           flag='--no-churn', flag_value=True),), answers=_RANKINGS)
@@ -193,10 +194,10 @@ _CHURN = ParamSpec('churn', 'boolean', 'Fold commit-touch counts into the hotspo
 # and exit 0 until BACK-2621; the walk starts at the bound's first instant (a period's first day, today's date).
 _SINCE = time_window_param('since', 'Bound the churn walk to commits on/after this date, from its start (default: full '
                            'history); only affects churn scoring, not the file list itself',
-                           examples=('view=hotspots&since=2026-01-01',), role='analysis', metavar='DATE',
+                           examples=('--view hotspots --since 2026-01-01',), role='analysis', metavar='DATE',
                            answers=_RANKINGS, requires=_CHURN_ON)
 _MERGES = ParamSpec('merges', 'boolean', 'Count merge commits in the churn tally: on (default) or off', None,
-                    switch_value, ('view=hotspots&merges=off',), role='analysis',
+                    switch_value, ('--view hotspots --merges off',), role='analysis',
                     cli=CliBinding(('--merges',), metavar='on|off'),
                     legacy=(LegacySpelling('no_merges', codec=legacy_switch('no_merges', 'off', 'on'),
                                            flag='--no-merges', flag_value=True),), answers=_RANKINGS,
@@ -204,23 +205,23 @@ _MERGES = ParamSpec('merges', 'boolean', 'Count merge commits in the churn tally
 _TESTS = ParamSpec('tests', 'string',
                    'Test/support files in the hotspot ranking, selected by conventional names plus project test_layout.additional_paths: '
                    'include them (default) or exclude them from the ranking. Only the ranking changes; totals and files still count them',
-                   'include', _text('tests'), ('view=hotspots&tests=exclude',), choices=TEST_CHOICES, role='analysis',
+                   'include', _text('tests'), ('--view hotspots --tests exclude',), choices=TEST_CHOICES, role='analysis',
                    cli=CliBinding(('--tests',), metavar='{include,exclude}'), answers=_RANKINGS)
 _DETAIL = ParamSpec('detail', 'string', 'normal: the per-file rows; summary: the aggregate summary only (the per-file '
                     'walk still runs; use it on unscoped whole-repo calls, where the rows can reach tens of MB)',
-                    'normal', _detail, ('detail=summary',), choices=DETAIL_LEVELS, role='presentation',
+                    'normal', _detail, ('--detail summary',), choices=DETAIL_LEVELS, role='presentation',
                     cli=CliBinding(('--detail',), metavar='LEVEL'),
                     legacy=(LegacySpelling('summary_only', codec=legacy_switch('summary_only', 'summary', 'normal'),
                                            flag='--summary-only', flag_value=True),), answers=_PER_FILE_ROWS)
 _SORT = ParamSpec('sort', 'string', 'Sort the files by a field, ascending; a leading - sorts descending', None,
-                  _text('sort'), ('sort=-lines',), role='analysis', cli=CliBinding(('--sort',), metavar='FIELD'),
+                  _text('sort'), ('--sort=-lines',), role='analysis', cli=CliBinding(('--sort',), metavar='FIELD'),
                   answers=_PER_FILE_ROWS)
 _LIMIT = ParamSpec('limit', 'integer', 'Keep at most this many rows: files, or the ranked files of view=hotspots '
-                   '(default 10 there); 0 = no cap', None, _count('limit'), ('limit=10',), minimum=0,
+                   '(default 10 there); 0 = no cap', None, _count('limit'), ('--limit 10',), minimum=0,
                    zero_policy='no cap', role='analysis', cli=CliBinding(('--limit',), metavar='N'),
                    answers=(_DIRECTORY, 'view=hotspots'))
 _OFFSET = ParamSpec('offset', 'integer', 'Skip this many rows before the first one kept', None,
-                    _count('offset'), ('offset=5',), minimum=0, role='analysis',
+                    _count('offset'), ('--offset 5',), minimum=0, role='analysis',
                     cli=CliBinding(('--offset',), metavar='N'), answers=(_DIRECTORY, 'view=hotspots'))
 # The walk's scope, from the URI or the global --exclude/--no-gitignore (overview composes them); declared so
 # where does not take them for filters. No subcommand flag: the global flags carry them. exclude is the shared walk
@@ -334,13 +335,13 @@ _SCHEMA_OUTPUT_TYPES = [
 
 _SCHEMA_EXAMPLE_QUERIES = [
     {'uri': 'metrics://./src', 'description': 'Get codebase statistics for src directory', 'output_type': 'stats_summary'},
-    {'uri': 'metrics://./src?view=hotspots', 'description': 'The ranked hotspot files (files needing attention), 10 by default', 'output_type': 'stats_summary'},
-    {'uri': 'metrics://./src?where=avg_complexity>=5', 'description': 'Show only files with avg complexity >= 5', 'output_type': 'stats_summary'},
-    {'uri': 'metrics://./src?code-only=true', 'description': 'Exclude data/config files', 'output_type': 'stats_summary'},
-    {'uri': 'metrics://./src?detail=summary', 'description': 'Aggregate summary only, no per-file array — for large repos where the full file list is impractical to consume directly', 'output_type': 'stats_summary'},
+    {'uri': 'metrics://./src --view hotspots', 'description': 'The ranked hotspot files (files needing attention), 10 by default', 'output_type': 'stats_summary'},
+    {'uri': "metrics://./src --where 'avg_complexity>=5'", 'description': 'Show only files with avg complexity >= 5', 'output_type': 'stats_summary'},
+    {'uri': 'metrics://./src --code-only', 'description': 'Exclude data/config files', 'output_type': 'stats_summary'},
+    {'uri': 'metrics://./src --detail summary', 'description': 'Aggregate summary only, no per-file array — for large repos where the full file list is impractical to consume directly', 'output_type': 'stats_summary'},
     {'uri': 'metrics://src/core.py', 'description': 'File-level statistics', 'output_type': 'stats_file'},
-    {'uri': 'metrics://./src?view=hotspots&limit=0', 'description': 'Every ranked hotspot file (limit=0 is uncapped)', 'output_type': 'stats_summary'},
-    {'uri': 'metrics://./src?view=provenance', 'description': 'Provenance tag of every analyzable file, with exclusions by extension (was classify://)', 'output_type': 'classify_report'},
+    {'uri': 'metrics://./src --view hotspots --limit 0', 'description': 'Every ranked hotspot file (--limit 0 is uncapped)', 'output_type': 'stats_summary'},
+    {'uri': 'metrics://./src --view provenance', 'description': 'Provenance tag of every analyzable file, with exclusions by extension (was classify://)', 'output_type': 'classify_report'},
 ]
 
 _SCHEMA_NOTES = [
@@ -425,7 +426,8 @@ class MetricsAdapter(ResourceAdapter):
         return {
             'adapter': 'metrics',
             'description': 'Codebase metrics, quality analysis, file hotspots and provenance',
-            'uri_syntax': 'metrics://<path>?<filter1>&<filter2>&...',
+            'uri_syntax': ('metrics://<path> [--view hotspots|provenance] [--where EXPR]... [--sort [-]FIELD] '
+                           '[--limit N] [--offset N] [--detail summary] [--code-only]'),
             'resource': MetricsAdapter.RESOURCE_SPEC.schema(),
             'execution_policy': {'default_fail_on': MetricsAdapter.DEFAULT_FAIL_ON,
                                  'fail_on': list(MetricsAdapter.FINDINGS_POLICIES)},
@@ -1046,6 +1048,17 @@ class MetricsAdapter(ResourceAdapter):
         }
 
 
+def _stats_spelling(example: str) -> str:
+    """A metrics example as the retired stats:// spells it: ``metrics://./src --view hotspots --limit 0`` is
+    ``stats://./src?view=hotspots&limit=0``, a bare flag ``--code-only`` is ``code-only=true``."""
+    uri, *words = shlex.split(example)
+    pairs = []
+    while words:
+        key = words.pop(0)[2:]
+        pairs.append(f'{key}={words.pop(0)}' if words and not words[0].startswith('--') else f'{key}=true')
+    return 'stats://' + uri[len('metrics://'):] + ('?' + '&'.join(pairs) if pairs else '')
+
+
 @register_adapter('stats')
 @register_renderer(StatsRenderer)
 class StatsAdapter(MetricsAdapter):
@@ -1072,8 +1085,9 @@ class StatsAdapter(MetricsAdapter):
     @staticmethod
     def get_schema() -> Dict[str, Any]:
         schema = dict(MetricsAdapter.get_schema())
-        # The schema of the stats:// spelling, so its examples spell it too (as trace:// keeps its own).
-        examples = [{**ex, 'uri': 'stats://' + ex['uri'][len('metrics://'):]} for ex in schema['example_queries']]
+        # The schema of the stats:// spelling, so its examples spell it too (as trace:// keeps its own), as a query
+        # string: the retired stats:// route takes no flags (metrics' examples teach them, BACK-2713).
+        examples = [{**ex, 'uri': _stats_spelling(ex['uri'])} for ex in schema['example_queries']]
         schema.update(adapter='stats', uri_syntax='stats://<path>?<filter1>&<filter2>&...', example_queries=examples,
                       notes=['Retired spelling of metrics:// (the same answer); stats:// prints a '
                              'replaced-by note until the cut release.', *schema['notes']])
