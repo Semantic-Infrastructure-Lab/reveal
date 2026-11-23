@@ -711,17 +711,17 @@ def _reject_unread_element(path: Path, path_str: str, element: Optional[str], ar
 def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
     """Handle regular file or directory path. A refusal of the request (``RequestValidationError``: the binder, the
     element request's own checks, the configuration it reads) in a JSON request answers with the path read's
-    invalid-request document, exit 2, as a declared noun's does (BACK-2756 cell 21j); in text mode the refusal goes on
-    to the process's ``error:`` line unchanged.
+    invalid-request document, exit 2, as a declared noun's does (BACK-2756 cell 21j), and a configuration that could
+    not be loaded with the failed answer, exit 3; in text mode each goes on to the process's ``error:`` line unchanged.
 
     Args:
         path_str: Path string to file or directory
         args: Parsed arguments
     """
-    from ...errors import RequestValidationError
+    from ...errors import ConfigLoadError, RequestValidationError
     try:
         _handle_file_or_directory(path_str, args)
-    except RequestValidationError as exc:
+    except (RequestValidationError, ConfigLoadError) as exc:
         if getattr(args, 'format', None) != 'json':
             raise
         answer = invalid_path_read(path_str, str(exc), args, error=exc)
@@ -732,6 +732,8 @@ def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
 
 
 def _handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
+    from ...config import require_selected_config
+    require_selected_config()  # on every path read, read or not, as on every noun (BACK-2677, BACK-2756 cell 22)
     request = _element_request(path_str, args)
 
     if getattr(args, 'check', False):
