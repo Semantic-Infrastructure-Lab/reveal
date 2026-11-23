@@ -256,10 +256,11 @@ def test_an_unknown_metrics_view_is_rejected(project, argv):
     assert json.loads(result.stdout)['error']
 
 
-def test_an_unknown_view_on_the_retired_stats_scheme_keeps_its_legacy_exit(project):
-    """stats:// stays on the legacy URI route until the cut: a raised adapter error, exit 1."""
+def test_an_unknown_view_on_the_retired_stats_scheme_is_the_invalid_request(project):
+    """stats:// stays on the legacy URI route until the cut, but a value its bound constructor refuses is the invalid
+    request, exit 2, as on metrics:// (BACK-2767; it exited 1, an adapter error)."""
     result = run(f'stats://{project}?view=everything', '--format', 'json')
-    assert result.returncode == 1, (result.returncode, result.stdout, result.stderr)
+    assert result.returncode == 2, (result.returncode, result.stdout, result.stderr)
     # The raw-query constructor binds through PARAM_SPECS (BACK-2621): the declared view check words it.
     assert "got 'everything'" in result.stderr and 'provenance' in result.stderr, result.stderr
     assert json.loads(result.stdout)['error']

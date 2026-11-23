@@ -34,8 +34,9 @@ def _run(tree, monkeypatch, query, scheme='metrics'):
 def _rejected(tree, monkeypatch, query, scheme='metrics'):
     monkeypatch.chdir(tree)
     result = _run_reveal_direct(f'{scheme}://.?{query}', '--format', 'json')
-    # The retired stats:// answers every invalid request with exit 1 (limit=-1 too); rule 9 exempts it.
-    assert result.returncode == (1 if scheme == 'stats' else 2), result.stdout[:300]
+    # The retired stats:// refuses as metrics:// does, exit 2: a control its bound constructor refuses is the invalid
+    # request (BACK-2767; it exited 1).
+    assert result.returncode == 2, result.stdout[:300]
     return result.stderr
 
 
