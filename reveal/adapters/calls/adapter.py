@@ -98,36 +98,36 @@ def _name_spec(name: str, description: str, example: str) -> ParamSpec:
 
 def _flag_spec(name: str, description: str, role: str = 'analysis', dest: Optional[str] = None,
                answers: Tuple[str, ...] = ()) -> ParamSpec:
-    return ParamSpec(name, 'boolean', description, False, boolean_value, examples=(f'{name}=true',),
+    return ParamSpec(name, 'boolean', description, False, boolean_value, examples=(f'--{name}',),
                      role=role, cli=CliBinding((f'--{name}',), dest=dest, action='store_true'), answers=answers)
 
 
 _CALLERS = _name_spec('callers', 'Function name to find callers of (reverse lookup): a bare NAME, since the '
                       'callers index has no file filter (FILE:NAME exits 2); reveal calls <path>:<name> is shorthand '
-                      'when no mode is given', 'callers=validate_item')
+                      'when no mode is given', '--callers validate_item')
 # target is callers' older word: the same mode and answer (the parity probe proves it), noted (BACK-2654).
 _CALLERS = replace(_CALLERS, legacy=(LegacySpelling('target', flag='--target'),))
 _CALLEES = _name_spec('callees', 'Function name, or FILE:NAME for one file\'s definitions, to find callees of: '
                       'at depth 1 what every definition calls (matches); at depth 2-5 a level-by-level walk '
                       '(levels, definitions), each definition expanded once at its shallowest level, every call '
-                      'site an edge; builtins hidden', 'callees=validate_item')
+                      'site an edge; builtins hidden', '--callees validate_item')
 _ROOT = _name_spec('root', 'Retired (use callees=NAME&depth=N, the same walk; prints a replaced-by note): '
                    'function name (or FILE:NAME) for a level-by-level callee walk: each definition is '
                    'expanded once, at the shallowest level it is reached, and every '
                    'call site of an expanded definition is an edge (call_expr), one to a definition already '
                    'reached with expanded: false. Totals count edges: total_edges = total_resolved (ambiguous '
-                   'included, also counted in total_ambiguous) + total_unresolved', 'root=main')
+                   'included, also counted in total_ambiguous) + total_unresolved', '--root main')
 _DEPTH = ParamSpec('depth', 'integer', 'Levels to walk, a signed whole integer clamped 1-5: callers (default 1), '
                    'callees (default 1; beyond 1 is not measured, W-CALLS-9), the retired root '
                    '(default 2); other modes refuse it',
-                   None, _calls_depth, examples=('depth=2',), role='analysis',
+                   None, _calls_depth, examples=('--depth 2',), role='analysis',
                    cli=CliBinding(('--depth',), metavar='N'), answers=(_Q, _C, _R))
 _RANK = ParamSpec('sort', 'string', 'Select caller ranking, most-called first: -callers (legacy --rank callers)', None,
-                  _calls_sort, examples=('sort=-callers',), choices=('-callers',), role='operation',
+                  _calls_sort, examples=('--sort=-callers',), choices=('-callers',), role='operation',
                   legacy=(LegacySpelling('rank', codec=_calls_rank, flag='--rank'),),
                   cli=CliBinding(('--sort',), metavar='-callers'))
 _TOP = ParamSpec('limit', 'integer', 'Max entries for rank (default 10) or uncalled (default all); 0 = all; '
-                 'other modes refuse it', None, _calls_top, examples=('limit=20',), minimum=0,
+                 'other modes refuse it', None, _calls_top, examples=('--limit 20',), minimum=0,
                  zero_policy='all', role='analysis', legacy=(LegacySpelling('top', codec=_calls_top, flag='--top'),),
                  cli=CliBinding(('--limit',), dest='top', metavar='N'), answers=(_K, _U))
 _UNCALLED = _flag_spec('uncalled', 'List every function/method with no callers (retired, D8: ?callers=NAME for one '
@@ -135,11 +135,11 @@ _UNCALLED = _flag_spec('uncalled', 'List every function/method with no callers (
                        role='operation')
 _TYPE = ParamSpec('kind', 'string', 'For uncalled: function selects module-level functions; '
                  'legacy method keeps the unfiltered function-and-method population', None,
-                  nonempty_scalar, examples=('kind=function',), choices=('function', 'method'), role='analysis',
+                  nonempty_scalar, examples=('--kind function',), choices=('function', 'method'), role='analysis',
                   legacy=(LegacySpelling('type', flag='--type'),), cli=CliBinding(('--kind',), dest='type', metavar='KIND'),
                   answers=(_U,))
 _MODULES = _flag_spec('modules', 'Module-level dependency graph: one edge per import that resolves under the path '
-                      '(retired: imports://<path>?importers&scope=path answers the same edges)', role='operation')
+                      '(retired: the same edges as reveal imports <path> --importers --scope path)', role='operation')
 _EXTERNAL = _flag_spec('external', 'With modules: also count importers from the rest of the project root '
                        '(imports scope=root; retired with modules)', answers=(_M,))
 _BUILTINS = _flag_spec('builtins', 'Include language builtins (len, str, ValueError, ...) in callees (every '
@@ -147,12 +147,12 @@ _BUILTINS = _flag_spec('builtins', 'Include language builtins (len, str, ValueEr
                        '(library methods such as dict.get) (default: false)', answers=(_C, _R, _K))
 _DETAIL = ParamSpec('detail', 'boolean', 'Callees only: normal or full; full adds params/effects '
                    '(not measured, W-CALLS-9). Bare --detail and true/false remain supported.',
-                   False, _calls_detail, examples=('detail=normal', 'detail=full', 'detail=true'),
+                   False, _calls_detail, examples=('--detail',),
                    role='analysis', cli=CliBinding(('--detail',), nargs='?', const=True, metavar='LEVEL'), answers=(_C,))
 _TEST_FRAMEWORK = _flag_spec('test-framework', 'Include test-framework entrypoints: as callers in rank, and as '
                              'dead-code candidates in uncalled (default: false)', dest='test_framework', answers=(_K, _U))
 _FORMAT = ParamSpec('format', 'string', 'Output format: text, json or dot (Graphviz, --format dot; it draws '
-                    'callers, a callees walk, root and modules, and exits 2 on the other views)', None, nonempty_scalar, examples=('format=dot',), choices=('text', 'json', 'dot'),
+                    'callers, a callees walk, root and modules, and exits 2 on the other views)', None, nonempty_scalar, examples=('--format dot',), choices=('text', 'json', 'dot'),
                     role='presentation', answers=(_Q, _C, _R, _U, _M))
 
 _RESOURCE = ResourceSpec(uri_codec='existing-path-first')
@@ -221,25 +221,25 @@ _HELP: Dict[str, Any] = {
               'depth 1 and --detail are not measured (W-CALLS-9). (legacy --target, --root, --uncalled and '
               '--modules still answer, with a note naming the replacement)',
     'examples': [
-        {'uri': 'calls://src/?callers=validate_item',
+        {'uri': 'reveal calls src/ --callers validate_item',
          'description': 'Who calls validate_item? (reverse lookup)'},
-        {'uri': 'calls://src/main.py:main',
-         'description': 'Shorthand — who calls main? (colon infers ?callers=main)'},
-        {'uri': 'calls://src/?callers=process_batch&depth=2',
+        {'uri': 'reveal calls src/main.py:main',
+         'description': 'Shorthand — who calls main? (the colon infers --callers main)'},
+        {'uri': 'reveal calls src/ --callers process_batch --depth 2',
          'description': 'Callers-of-callers too (transitive, 2 levels)'},
-        {'uri': 'calls://src/?callees=validate_item',
+        {'uri': 'reveal calls src/ --callees validate_item',
          'description': 'What does validate_item call? (forward lookup, builtins hidden)'},
-        {'uri': 'calls://src/?callees=validate_item&depth=2&detail',
+        {'uri': 'reveal calls src/ --callees validate_item --depth 2 --detail',
          'description': 'What those call too, level by level, with params and effects (not measured: W-CALLS-9)'},
-        {'uri': 'calls://src/?callees=validate_item&builtins=true',
+        {'uri': 'reveal calls src/ --callees validate_item --builtins',
          'description': 'Include builtins (len, str, sorted, exceptions, etc.)'},
-        {'uri': 'calls://src/?sort=-callers',
+        {'uri': 'reveal calls src/ --sort=-callers',
          'description': 'Top 10 most-called functions (coupling hotspot ranking)'},
-        {'uri': 'calls://src/?sort=-callers&limit=20',
+        {'uri': 'reveal calls src/ --sort=-callers --limit 20',
          'description': 'Top 20 most-called functions'},
-        {'uri': 'calls://src/?callers=main&format=dot',
+        {'uri': 'reveal calls src/ --callers main --format dot',
          'description': 'Output callers graph as Graphviz dot (pipe to dot -Tsvg)'},
-        {'uri': 'calls://src/?callers=main&format=json',
+        {'uri': 'reveal calls src/ --callers main --format json',
          'description': 'Machine-readable callers result'},
     ],
     'notes': [
@@ -264,7 +264,7 @@ _HELP: Dict[str, Any] = {
         'two exit 2 and name both, and so does the path:name shorthand with an explicit mode. '
         'A malformed value (depth=abc, top=-1, rank=other), callers=FILE:NAME or detail outside callees exits 2 '
         'naming the parameter; names are never coerced (callers=123 is the name 123).',
-        '?modules is retired (BACK-1054): it answers from imports://<path>?importers&scope=path, one edge per '
+        '?modules is retired (BACK-1054): it answers from reveal imports <path> --importers --scope path, one edge per '
         'import that resolves under the path (an import used without a call counts too; no call_count), and '
         '&external counts importers from the whole project root (scope=root). A file tree-sitter read only '
         'through error recovery is named in a parse_recovered warning and exits 3, as on every noun.',
@@ -284,10 +284,10 @@ _HELP: Dict[str, Any] = {
 _SCHEMA: Dict[str, Any] = {
     'adapter': 'calls',
     'description': 'Cross-file call graph — who calls X (?callers) or what does X call (?callees)?',
-    'uri_syntax': 'calls://<path>?callers=<name>[&depth=N][&format=text|dot|json]\n'
-                  '             calls://<path>?callees=<name>|<file>:<name>[&depth=N][&detail]\n'
-                  '             calls://<path>:<name>  # shorthand — infers ?callers=<name>\n'
-                  '             reveal calls <path> --callers NAME  # same request, generated from query_params',
+    'uri_syntax': 'calls://<path> --callers NAME [--depth N] [--format text|dot|json]\n'
+                  '             calls://<path> --callees NAME|FILE:NAME [--depth N] [--detail]\n'
+                  '             calls://<path> --sort=-callers [--limit N]\n'
+                  '             calls://<path>:<name>  # shorthand for --callers <name>',
     'resource': _RESOURCE.schema(),
     'execution_policy': {'default_fail_on': 'none', 'fail_on': ['none']},
     'query_params': param_schema(_PARAM_SPECS),
@@ -430,37 +430,37 @@ _SCHEMA: Dict[str, Any] = {
     ],
     'example_queries': [
         {
-            'uri': 'calls://src/?callers=validate_item',
+            'uri': 'calls://src/ --callers validate_item',
             'description': 'Who calls validate_item? (reverse lookup across whole project)',
             'output_type': 'calls_query',
         },
         {
-            'uri': 'calls://src/?callers=validate_item&depth=2',
+            'uri': 'calls://src/ --callers validate_item --depth 2',
             'description': 'Callers and callers-of-callers (transitive, 2 levels)',
             'output_type': 'calls_query',
         },
         {
-            'uri': 'calls://src/?callees=validate_item',
+            'uri': 'calls://src/ --callees validate_item',
             'description': 'What does validate_item call? (builtins hidden by default)',
             'output_type': 'calls_callees',
         },
         {
-            'uri': 'calls://src/?callees=validate_item&builtins=true',
+            'uri': 'calls://src/ --callees validate_item --builtins',
             'description': 'Include Python builtins (len, str, sorted, ValueError, etc.)',
             'output_type': 'calls_callees',
         },
         {
-            'uri': 'calls://src/?callees=validate_item&depth=3',
+            'uri': 'calls://src/ --callees validate_item --depth 3',
             'description': 'Callee walk, level by level (not measured beyond depth 1: W-CALLS-9)',
             'output_type': 'calls_callees',
         },
         {
-            'uri': 'calls://src/?callers=main&format=dot',
+            'uri': 'calls://src/ --callers main --format dot',
             'description': 'Export callers graph as Graphviz dot format',
             'output_type': 'calls_query',
         },
         {
-            'uri': 'calls://src/?callers=main&format=json',
+            'uri': 'calls://src/ --callers main --format json',
             'description': 'Machine-readable callers result',
             'output_type': 'calls_query',
         },
@@ -483,7 +483,7 @@ _SCHEMA: Dict[str, Any] = {
         'A call-source language with no recall snapshot in scope: no meta.confidence, W-CALLS-10 names it (languages). '
         'No source file counted in scope: no meta.confidence, W-CALLS-12. '
         '?uncalled (retired, D8): no meta.confidence in any language; over JS/TS/TSX, Java or PHP W-CALLS-11 names the language and the measured precision.',
-        '?modules is retired (BACK-1054): it answers from imports://<path>?importers&scope=path, one edge per '
+        '?modules is retired (BACK-1054): it answers from reveal imports <path> --importers --scope path, one edge per '
         'import that resolves under the path (an import used without a call counts too; no call_count), and '
         '&external counts importers from the whole project root (scope=root). A file tree-sitter read only '
         'through error recovery is named in a parse_recovered warning and exits 3, as on every noun.',

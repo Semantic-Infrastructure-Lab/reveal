@@ -18,7 +18,7 @@ beth_topics:
 ## Table of Contents
 
 1. [Quick Start](#quick-start)
-2. [URI Syntax](#uri-syntax)
+2. [Syntax](#syntax)
 3. [How It Works](#how-it-works)
 4. [Query Parameters](#query-parameters)
 5. [Output Formats](#output-formats)
@@ -50,16 +50,12 @@ reveal calls src/ --callers validate_item --depth 2
 # Graphviz dot output (pipe it to dot for SVG/PNG: | dot -Tsvg > call_graph.svg)
 reveal calls src/ --callers main --format dot
 
-# Per-function calls/called_by fields of one file (ast:// adapter — no project index)
-reveal 'ast://src/auth.py?kind=function' --format json
-
-# The same requests as a subcommand (flags generated from the same declarations)
-reveal calls src/ --callers validate_item --depth 2
-reveal calls src/ --callees validate_item --depth 2 --detail
+# Per-function calls/called_by fields of one file (reveal ast — no project index)
+reveal ast src/auth.py --kind function --format json
 ```
 
-`?target=` and `?root=` are retired spellings (see [Retired spellings](#retired-spellings)): they still
-answer, with a note naming `?callers=` and `?callees=NAME&depth=N`.
+`--target` and `--root` are retired spellings (see [Retired spellings](#retired-spellings)): they still
+answer, with a note naming `--callers` and `--callees NAME --depth N`.
 
 **Why use calls://?**
 - **Impact analysis**: Before changing a function, find all callers across the codebase
@@ -70,20 +66,20 @@ answer, with a note naming `?callers=` and `?callees=NAME&depth=N`.
 
 ---
 
-## URI Syntax
+## Syntax
 
 ```
-# Reverse lookup: who calls function X? (target= is the older name)
-calls://<path>?callers=<name>[&depth=N][&format=<fmt>]
+# Reverse lookup: who calls function X? (the retired --target is the same)
+reveal calls <path> --callers <name> [--depth N] [--format <fmt>]
 
-# Shorthand (colon syntax): same as ?callers=, only when no mode is given
-calls://<path>:<name>
+# Shorthand (colon syntax): same as --callers, only when no mode is given
+reveal calls <path>:<name>
 
 # Forward lookup: what does function X call? FILE:X picks one file's definitions
-calls://<path>?callees=<name>|<file>:<name>[&depth=N][&detail][&format=<fmt>]
+reveal calls <path> --callees <name>|<file>:<name> [--depth N] [--detail] [--format <fmt>]
 
 # Ranking: most-called functions in the project
-calls://<path>?sort=-callers[&limit=N]
+reveal calls <path> --sort=-callers [--limit N]
 ```
 
 | Component | Description |
@@ -99,7 +95,7 @@ calls://<path>?sort=-callers[&limit=N]
 
 ### Colon Shorthand
 
-The colon syntax `calls://path:name` is equivalent to `calls://path?callers=name`. Reveal detects that the portion before the colon is an existing filesystem path and the portion after is a bare name (no slashes), and automatically routes it as the callers mode. With an explicit mode (`calls://src/a.py:main?callees=x`) it names a second mode and exits 2; it used to ignore `:main` silently:
+The colon syntax `reveal calls path:name` is equivalent to `reveal calls path --callers name`. Reveal detects that the portion before the colon is an existing filesystem path and the portion after is a bare name (no slashes), and automatically routes it as the callers mode. With an explicit mode (`reveal calls src/a.py:main --callees x`) it names a second mode and exits 2; it used to ignore `:main` silently:
 
 ```bash
 # These are equivalent:
