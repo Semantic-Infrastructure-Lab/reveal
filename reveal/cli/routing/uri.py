@@ -1561,7 +1561,7 @@ def legacy_exit_code(result: Any, kind: str, exit_code: Optional[Callable[[Any, 
     its renderer's findings code (*exit_code*: a fleet audit with gaps exits 2, BACK-1758), else 0. The emitters exit
     with it, and a ``--stdin --batch`` entry carries the same exit (COMMAND_MODEL "Transports", BACK-2660)."""
     if kind == 'check':
-        return result.get('exit_code', 0) if isinstance(result, dict) else 0
+        return cast(int, result.get('exit_code', 0)) if isinstance(result, dict) else 0
     if outcome_of(result) == 'failed':
         return 1
     return exit_code(result, output_format) if exit_code else 0
