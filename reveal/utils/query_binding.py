@@ -11,7 +11,7 @@ from ..errors import RequestValidationError, UnreadControlError, UnsupportedOver
 from .match_terms import PATTERN_EXAMPLES, TERM_EXAMPLES, TermValue, empty_term_error, is_blank_term
 from .query_parser import (SHARED_CONTROL_NAMES, CliBinding, LegacySpelling, ParamSpec, ParamValueError, QueryParams,
                            ResourceSpec, exclude_param, mark_query_keys, parse_query_params, peek_query_items,
-                           query_key, query_key_recorder, whole_number)
+                           _spelling_variants, query_key, query_key_recorder, whole_number)
 
 
 def boolean_value(value: Any) -> bool:
@@ -600,10 +600,13 @@ def flag_conflicts_with_uri_message(flag: str, key: str, value: str) -> str:
 
 def _uri_spelling(spec: ParamSpec, params: QueryParams) -> tuple:
     """(key, raw value) of the first query part that set *spec*, as the URI typed it (an alias or legacy word
-    included), else the control's name and its prepared value."""
+    included, and a legacy word of another control that set it: git ``ignore=off`` sets auto-ignore, BACK-2733), else
+    the control's name and its prepared value."""
+    word = getattr(params, '_implied_by', {}).get(spec.name)
+    spellings = (*spec.spellings, *_spelling_variants(word)) if word else spec.spellings
     for part in (getattr(params, '_source_query', None) or '').split('&'):
         key, _, value = part.partition('=')
-        if part and query_key(part) in spec.spellings:
+        if part and query_key(part) in spellings:
             return key, value
     return spec.name, dict.get(params, spec.name)
 

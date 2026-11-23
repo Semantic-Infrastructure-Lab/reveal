@@ -146,3 +146,34 @@ def test_no_other_noun_meets_the_new_shape():
     assert {spec for _, spec, _ in with_predicate} <= {'ignore-commits'}, with_predicate
     assert repeatable_sets == set()
     assert none_codecs == set()
+
+
+# A flag after a URI whose legacy word set the control: the conflict names the URI's word as typed, not the control the
+# word set (git ``git://f?view=blame&ignore=off --auto-ignore on``). Before, it named ``auto-ignore=off``, a part the URI
+# never typed; the mirror (a legacy flag after a URI that spells the control) was already named as typed.
+AGG_FIELD = ParamSpec('field', 'string', 'A field', None, str,
+                      legacy=(LegacySpelling('agg', flag='--agg', sets=(('view', 'agg'),)),))
+VIEW = ParamSpec('view', 'string', 'A view', None, str, choices=('list', 'agg'), cli=CliBinding(('--view',)))
+
+
+@pytest.mark.parametrize('specs,uri,typed,spelled,message', [
+    (DECLARATIONS, 'old=off', {'auto': 'on'}, {'auto': '--auto'}, '--auto conflicts with old=off in the URI'),
+    ((AGG_FIELD, VIEW), 'agg=b', {'view': 'list'}, {'view': '--view'}, '--view conflicts with agg=b in the URI'),
+])
+def test_a_flag_after_a_uri_names_the_uri_word_that_set_the_control(specs, uri, typed, spelled, message):
+    from reveal.utils.query_binding import join_uri_and_flags, prepare_declared_params
+    uri_params = prepare_declared_params(specs, uri, 'uri')
+    typed_params = prepare_declared_params(specs, typed, 'typed', spelled=spelled)
+    with pytest.raises(ValueError) as caught:
+        join_uri_and_flags(specs, uri_params, typed_params, spelled=spelled)
+    assert str(caught.value).startswith(message), str(caught.value)
+
+
+def test_a_flag_after_a_uri_spelling_the_control_itself_is_named_as_before():
+    """Negative control: with no legacy word in the URI, the part named is the control's own."""
+    from reveal.utils.query_binding import join_uri_and_flags, prepare_declared_params
+    uri_params = prepare_declared_params(DECLARATIONS, 'auto=off', 'uri')
+    typed_params = prepare_declared_params(DECLARATIONS, {'auto': 'on'}, 'typed', spelled={'auto': '--auto'})
+    with pytest.raises(ValueError) as caught:
+        join_uri_and_flags(DECLARATIONS, uri_params, typed_params, spelled={'auto': '--auto'})
+    assert str(caught.value).startswith('--auto conflicts with auto=off in the URI')
