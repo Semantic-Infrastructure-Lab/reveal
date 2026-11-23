@@ -8,7 +8,7 @@ category: guide
 > **Retired (BACK-2149).** `reveal hotspots` and `hotspots://` answer as before until the cut release,
 > with one note on stderr and a `retired_spelling` entry in JSON `meta.warnings`. Use two commands
 > instead: `reveal metrics <path> --view hotspots` for the file ranking and its `--fail-on findings` gate,
-> and `reveal 'ast://<path>?complexity>=10&sort=-complexity&limit=10' --format json` for the function
+> and `reveal ast <path> --where 'complexity>=10' --sort=-complexity --limit 10 --format json` for the function
 > ranking. `has_test_hint` has no replacement field (see [Reading The Output](#reading-the-output)).
 
 `hotspots://` identifies the files and functions most likely to need
@@ -22,8 +22,8 @@ existing adapters rather than running an independent scan.
 reveal metrics ./src --view hotspots               # was: reveal hotspots ./src (files), --files-only
 reveal metrics ./src --view hotspots --limit 20           # was: --top 20 (files)
 reveal metrics . --view hotspots --fail-on findings # was: reveal hotspots . --fail-on findings
-reveal 'ast://.?complexity>=10&sort=-complexity&limit=10' --format json   # was: --functions-only
-reveal 'ast://.?complexity>=15&sort=-complexity&limit=20' --format json   # was: --min-complexity 15 --top 20
+reveal ast . --where 'complexity>=10' --sort=-complexity --limit 10 --format json   # was: --functions-only
+reveal ast . --where 'complexity>=15' --sort=-complexity --limit 20 --format json   # was: --min-complexity 15 --top 20
 ```
 
 The file entries are the same (`hotspot_score`, `quality_score`, `issues`, `details`, the path-only

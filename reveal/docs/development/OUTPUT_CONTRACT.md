@@ -953,7 +953,7 @@ imports graph build. Imports declares default `none` and supports `findings`: ex
 the `?circular`, `?unused` or `?violations` answer has a row (an incomplete answer exits
 3 first); every other imports view has no findings verdict, so `--fail-on findings` there exits 2
 naming the three views (BACK-2528; it exited 0, a gate that could never fire). Metrics gates its
-`?hotspots=true` answer the same way and refuses the policy on its other views.
+`--view hotspots` answer the same way and refuses the policy on its other views.
 An imports answer is incomplete (exit 3) when a file it reads failed to parse or was lost. The
 scan covers the whole project root, so most views count every failed file in that scan: a file
 outside the path can still be an importer or sit on a cycle. `?external` lists only the imports of

@@ -775,7 +775,7 @@ reveal metrics ./src --view hotspots --fail-on findings          # CI gate: exit
 ```
 
 This is the gate `reveal hotspots --fail-on findings` had. The functions themselves are ranked by
-`reveal 'ast://./src?complexity>=10&sort=-complexity&limit=10' --format json`.
+`reveal ast ./src --where 'complexity>=10' --sort=-complexity --limit 10 --format json`.
 
 ### Example
 

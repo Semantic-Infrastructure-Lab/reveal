@@ -609,17 +609,17 @@ reveal surface . --format json       # Machine-readable output
 ## reveal hotspots — Retired (use `reveal metrics --view hotspots` and the `ast://` complexity sort)
 
 `reveal hotspots` and `hotspots://` are retired into two commands (BACK-2149): the file ranking and
-its findings gate are `reveal metrics --view hotspots`, the function ranking is `ast://`'s complexity sort.
+its findings gate are `reveal metrics --view hotspots`, the function ranking is `reveal ast`'s complexity sort.
 Until the cut release they still answer as before (`hotspots_scan`, the same exits: 0 complete, 1 a
 `--fail-on findings` match, 2 invalid input, 3 incomplete), with one note on stderr and a
 `retired_spelling` entry in JSON `meta.warnings`.
 
 | Retired | Use instead |
 |---------|-------------|
-| `reveal hotspots PATH` (files) | `reveal metrics PATH --view hotspots` (`metrics://PATH?view=hotspots`) |
-| `reveal hotspots PATH` (functions), `--functions-only` | `reveal 'ast://PATH?complexity>=10&sort=-complexity&limit=10' --format json` |
+| `reveal hotspots PATH` (files) | `reveal metrics PATH --view hotspots` |
+| `reveal hotspots PATH` (functions), `--functions-only` | `reveal ast PATH --where 'complexity>=10' --sort=-complexity --limit 10 --format json` |
 | `--files-only` | `reveal metrics PATH --view hotspots` |
-| `--min-complexity N`, `--top N` (functions) | `complexity>=N`, `limit=N` on the `ast://` query |
+| `--min-complexity N`, `--top N` (functions) | `--where 'complexity>=N'`, `--limit N` on `reveal ast` |
 | `--top N` (files) | `reveal metrics PATH --view hotspots --limit N` |
 | `--fail-on findings` | `reveal metrics PATH --view hotspots --fail-on findings` |
 | `has_test_hint` | no replacement field: it was an unmeasured test-name heuristic, not coverage; use the language's coverage tool |
@@ -628,14 +628,14 @@ Until the cut release they still answer as before (`hotspots_scan`, the same exi
 function with complexity above 20 (`summary.has_findings`). The verdict is taken over every analysed
 file before the file filters and the `--top`, `--limit` and `--offset` cuts, so it does not move with
 `--min-complexity` (an average-complexity filter on metrics). Each file entry carries the same
-path-only `provenance` tag the hotspots noun put on its file entries. `ast://`'s text output groups the
+path-only `provenance` tag the hotspots noun put on its file entries. `reveal ast`'s text output groups the
 ranked functions by file; `--format json` keeps the global order.
 
 ```bash
 reveal metrics ./src --view hotspots                       # Worst 10 files
 reveal metrics ./src --view hotspots --limit 20              # Worst 20 files
 reveal metrics . --view hotspots --fail-on findings        # CI gate
-reveal 'ast://.?complexity>=10&sort=-complexity&limit=10' --format json   # Most complex functions
+reveal ast . --where 'complexity>=10' --sort=-complexity --limit 10 --format json   # Most complex functions
 ```
 
 See the [metrics guide](../adapters/METRICS_ADAPTER_GUIDE.md#findings-gate) for the gate and the

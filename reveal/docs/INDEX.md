@@ -53,7 +53,7 @@ They live in the `adapters/` directory.
 | [DOMAIN_ADAPTER_GUIDE.md](adapters/DOMAIN_ADAPTER_GUIDE.md) | Domain, DNS and WHOIS analysis |
 | [ENV_ADAPTER_GUIDE.md](adapters/ENV_ADAPTER_GUIDE.md) | Environment variable analysis and validation |
 | [GIT_ADAPTER_GUIDE.md](adapters/GIT_ADAPTER_GUIDE.md) | Commits, branches, tags, blame |
-| [HOTSPOTS_ADAPTER_GUIDE.md](adapters/HOTSPOTS_ADAPTER_GUIDE.md) | Files and functions most likely to need attention (complexity and churn) |
+| [HOTSPOTS_ADAPTER_GUIDE.md](adapters/HOTSPOTS_ADAPTER_GUIDE.md) | Retired (BACK-2149): files and functions most likely to need attention; use `reveal metrics <path> --view hotspots` and `reveal ast` |
 | [IMPORTS_ADAPTER_GUIDE.md](adapters/IMPORTS_ADAPTER_GUIDE.md) | Import dependency analysis across languages |
 | [JSON_ADAPTER_GUIDE.md](adapters/JSON_ADAPTER_GUIDE.md) | JSON/JSONL analysis with JMESPath |
 | [LETSENCRYPT_ADAPTER_GUIDE.md](adapters/LETSENCRYPT_ADAPTER_GUIDE.md) | Let's Encrypt certificate inventory: orphan and duplicate detection |

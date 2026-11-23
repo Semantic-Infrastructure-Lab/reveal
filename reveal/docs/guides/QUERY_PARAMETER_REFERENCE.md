@@ -41,9 +41,10 @@ Query parameters allow filtering, formatting, and modifying adapter behavior usi
 
 `sort`, `limit` and `offset` are applied by `ast://`, `markdown://`, `json://`, `git://` and
 `metrics://`; `imports://` (`sort=-fan-in`) and `calls://` (`sort=-callers`; `limit` also caps `?uncalled`) take `sort`
-and `limit=N` for their ranking and reject `offset` (`top` is calls' legacy spelling of `limit`, with a note). The legacy
-`metrics://?hotspots=true` ranking, the retired `hotspots://` and `depends://`, and `patches://?view=pressure` cap with
-`top=N` (on `hotspots://` and `depends://` the `--limit N` flag maps to it). A declared noun rejects a key it does not
+and `limit=N` for their ranking and reject `offset` (`top` is calls' legacy spelling of `limit`, with a note). Metrics'
+`--view hotspots` ranking and the retired `hotspots://` cap with `limit=N` too (`top=N` is their legacy spelling, with a
+note); `patches://?view=pressure` and the retired `depends://` cap with `top=N` (on `depends://` the `--limit N` flag maps
+to it). A declared noun rejects a key it does not
 take (exit 2, naming its controls), and one its selected answer does not read (`sort`, `limit` and `offset`
 on a Git blame, a Markdown link view or a JSON key listing) exits 2 naming the answers that read it
 ([output contract](../development/OUTPUT_CONTRACT.md#ignored-inputs)); other adapters answer
