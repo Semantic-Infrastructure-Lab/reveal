@@ -38,7 +38,7 @@ def test_registered_stdio_text_json_top_zero_and_scope_only(tmp_path):
         scope = await session.call_tool('reveal_query', {'uri': uri + '?no_imports=true', 'provenance': True})
         assert not scope.is_error and json.loads(_text(scope))['map'] is None
         obsolete = await session.call_tool('reveal_query', {'uri': uri + '?tests=include'})
-        assert obsolete.is_error and 'metrics://' in _text(obsolete)
+        assert obsolete.is_error and 'reveal metrics' in _text(obsolete)
     _run(tmp_path, scenario)
 
 

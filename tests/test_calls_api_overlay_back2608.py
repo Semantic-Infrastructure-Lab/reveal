@@ -61,7 +61,7 @@ def test_false_zero_and_none_are_effective(project):
 
 @pytest.mark.parametrize('kwargs,exception,match', [
     ({'unknown': True}, TypeError, 'unknown'), ({'depth': True}, ValueError, 'depth'),
-    ({'depth': '1.5'}, ValueError, 'depth'), ({'top': -1}, ValueError, 'top'),
+    ({'depth': '1.5'}, ValueError, 'depth'), ({'top': -1}, ValueError, 'limit must be a non-negative integer'),
     ({'callees': 'top'}, ValueError, 'one answer per request'), ({'detail': True}, ValueError, 'detail')])
 def test_invalid_and_contradictory_controls_reject(project, kwargs, exception, match):
     with pytest.raises(exception, match=match):

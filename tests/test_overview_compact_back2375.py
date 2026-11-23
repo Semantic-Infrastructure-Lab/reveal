@@ -105,8 +105,8 @@ def test_removed_owners_never_run(project, monkeypatch):
 
 @pytest.mark.parametrize('query,flags,owner', [
     ('no_git=true', ['--no-git'], 'git://'), ('no_git=false', None, 'git://'),
-    ('tests=include', ['--tests', 'include'], 'metrics://'),
-    ('tests=exclude', ['--tests', 'exclude'], 'metrics://'),
+    ('tests=include', ['--tests', 'include'], 'reveal metrics'),
+    ('tests=exclude', ['--tests', 'exclude'], 'reveal metrics'),
 ])
 def test_obsolete_controls_correct_the_caller(project, query, flags, owner):
     result = run(f'overview://{project.as_posix()}?{query}', '--format', 'json')
