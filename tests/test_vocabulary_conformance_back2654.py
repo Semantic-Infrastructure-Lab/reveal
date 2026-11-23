@@ -3274,12 +3274,10 @@ ELEMENT_EXEMPT = {
     '26': 'a path read of one element walks no tree: no walk to exclude from',
 }
 ELEMENT_NOT_YET = {
-    '21j': 'an invalid path read in --format json (unknown flag, a value outside --view\'s choices, a missing value, an '
-           'extra argument, a malformed --output) exits 2 with stdout empty, not the invalid-request JSON document',
     '22': 'REVEAL_CONFIG naming no file exits 2 on the answers that read configuration (--transitive walks), but the '
           'other element views read none and answer exit 0, as every plain path read does; the row says every noun',
 }
-ELEMENT_NOT_YET_BASELINE = 2
+ELEMENT_NOT_YET_BASELINE = 1
 
 
 @pytest.fixture
@@ -3615,7 +3613,7 @@ def element_invalid_requests_answer_json():
     for label, extra in requests.items():
         run = _run(ELEMENT_FILE, 'process_order', *extra, '--format', 'json')
         cases.append(Case(label, bool(_invalid_document(run)), f'{run.brief()}; stdout {run.out[:80]!r}'))
-    run = _run(*_sub(ELEMENT), '--output', 'json=')
+    run = _run(*_sub(ELEMENT), '--output', 'zz-sink', '--format', 'json')  # the nouns' malformed spec (_INVALID_REQUESTS)
     cases.append(Case('malformed --output', bool(_invalid_document(run)), f'{run.brief()}; stdout {run.out[:80]!r}'))
     return cases
 

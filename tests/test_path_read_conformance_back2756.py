@@ -116,3 +116,80 @@ def test_path_read_flag_message_answers_only_element_requests(argv, message, tau
 def test_is_path_read(target, path_read):
     from reveal.cli.routing.declared import is_path_read
     assert is_path_read(target) is path_read
+
+
+# --- cell 21j: an invalid path read in --format json answers the invalid-request document ------------------------
+# D2: the document's type is the facet the declarations use (element_view, code_element, file_structure; a directory's
+# tree), its source the path as typed; stderr says the error once under the file route's label, ``Error (PATH):``.
+
+from test_vocabulary_conformance_back2654 import _invalid_document  # noqa: E402
+
+# (label, argv before --format json, the document's type, a word the error names)
+INVALID_IN_JSON = [
+    # refused by the main parser (argparse): cell 3's teaching, choices, a missing value, an extra argument
+    ('element unknown flag', (ELEMENT_FILE, ELEMENT, *VIEW, '--zz-unknown'), 'element_view', "'--zz-unknown'"),
+    ('element missing value', (ELEMENT_FILE, ELEMENT, *VIEW, '--varflow'), 'element_view', '--varflow'),
+    ('element extra argument', (ELEMENT_FILE, ELEMENT, *VIEW, 'extra'), 'element_view', 'extra'),
+    ('extraction unknown flag', (ELEMENT_FILE, ELEMENT, '--zz-unknown'), 'code_element', '--zz-unknown'),
+    ('file unknown flag', (ELEMENT_FILE, '--zz-unknown'), 'file_structure', '--zz-unknown'),
+    ('outline unknown flag', (ELEMENT_FILE, '--outline', '--zz-unknown'), 'file_structure', '--zz-unknown'),
+    ('head missing value', (ELEMENT_FILE, '--head'), 'file_structure', '--head'),
+    ('head not a number', (ELEMENT_FILE, '--head', 'abc'), 'file_structure', '--head'),
+    ('directory unknown flag', ('proj', '--zz-unknown'), 'directory_tree', '--zz-unknown'),
+    # refused after parsing: the binder, the element request's own refusal (U1), rule 4
+    ('view outside its choices', (ELEMENT_FILE, ELEMENT, '--view', 'nosuch'), 'element_view', 'nosuch'),
+    ('two views', (ELEMENT_FILE, ELEMENT, '--boundary', '--exits'), 'element_view', 'boundary'),
+    ('kind unread by boundary', (ELEMENT_FILE, ELEMENT, *VIEW, '--kind', 'if'), 'element_view', 'kind'),
+    ('main-parser flag unread', (ELEMENT_FILE, ELEMENT, *VIEW, '--limit', '1'), 'element_view', "'--limit'"),
+    ('verbose is detail', (ELEMENT_FILE, ELEMENT, *VIEW, '--verbose'), 'element_view', 'detail'),
+    # a malformed stdout sink
+    ('malformed --output', (ELEMENT_FILE, ELEMENT, *VIEW, '--output', 'zz-sink'), 'element_view', 'zz-sink'),
+]
+
+
+@pytest.mark.parametrize('label, argv, answer_type, named', INVALID_IN_JSON, ids=[row[0] for row in INVALID_IN_JSON])
+def test_an_invalid_path_read_in_json_answers_the_document(element_workspace, label, argv, answer_type, named):
+    import json
+    run = _run(*argv, '--format', 'json')
+    assert _invalid_document(run, named, source=argv[0]), f'{run.brief()}; stdout {run.out[:120]!r}'
+    doc = json.loads(run.out)
+    assert doc['type'] == answer_type
+    assert run.err.count(doc['error']) == 1 and f"Error ({argv[0]}): {doc['error']}" in run.err
+    assert 'usage:' not in run.err
+
+
+def test_a_missing_config_on_a_transitive_view_answers_the_document(element_workspace, monkeypatch):
+    """ConfigValidationError, raised by the transitive walk, is an invalid request like the others."""
+    monkeypatch.setenv('REVEAL_CONFIG', 'no-such-dir/reveal.yaml')
+    run = _run(ELEMENT_FILE, ELEMENT, *VIEW, '--transitive', '--format', 'json')
+    assert _invalid_document(run, 'no-such-dir', source=ELEMENT_FILE), run.brief()
+
+
+@pytest.mark.parametrize('label, argv, answer_type, named', INVALID_IN_JSON, ids=[row[0] for row in INVALID_IN_JSON])
+def test_text_mode_keeps_its_usage_error(element_workspace, label, argv, answer_type, named):
+    """Control: the same requests in text mode print no document and no file-route label (argparse's usage, or the
+    owner's ``error:`` line), stdout empty."""
+    run = _run(*argv)
+    assert run.rc == 2 and run.out == '' and named in run.err, run.brief()
+    assert f'Error ({argv[0]})' not in run.err and 'contract_version' not in run.err
+
+
+def test_a_failed_analysis_is_not_an_invalid_request(element_workspace, tmp_path):
+    """Control: a file that fails to parse is a failed answer (exit 3), not refused before analysis; the route's
+    JSON-mode refusal does not reach it."""
+    import json
+    (element_workspace / 'bad.xml').write_text('<a><b></a>', encoding='utf-8')
+    run = _run('bad.xml', '--format', 'json')
+    assert run.rc == 3
+    errors = (json.loads(run.out).get('meta') or {}).get('errors') or [] if run.out.strip() else []
+    assert [e.get('code') for e in errors] != ['invalid_request']
+
+
+def test_mcp_reveal_run_in_json_returns_the_document(element_workspace):
+    import json
+    pytest.importorskip('mcp')
+    from reveal.mcp_server import reveal_run
+    text = reveal_run([ELEMENT_FILE, ELEMENT, *VIEW, '--zz-unknown', '--format', 'json'])
+    assert text.startswith('[reveal error: {')
+    doc = json.loads(text[len('[reveal error: '):-1])
+    assert doc['type'] == 'element_view' and [e['code'] for e in doc['meta']['errors']] == ['invalid_request']
