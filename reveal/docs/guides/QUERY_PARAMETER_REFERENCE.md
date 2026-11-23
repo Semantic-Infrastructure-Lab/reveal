@@ -26,7 +26,7 @@ Query parameters allow filtering, formatting, and modifying adapter behavior usi
 | **codex://** | `where` (`session~=TEXT`), `match`, `matches`, `since`, `until`, `view`, `detail`, `key`, `limit`, `offset` (retired, with a note: `filter`, `search`, `full`, `last`, `tokens`, `goal`) | `codex://sessions/?match=auth-refactor` |
 | **depends://** (retired, with a note: use `imports://?importers`) | `top`, `format` | `depends://src?top=10` |
 | **xlsx://** | `--sheet`, `--cells`, `--match`, `--limit`, `--formulas`, `--powerpivot`, `--powerquery`, `--names`, `--connections` (`?range`, `?search` legacy) | `reveal xlsx model.xlsx --sheet Sales` |
-| **help://** | `search`, `top` (only on `help://search`; `top` caps hits, default 20, `0` = all) | `help://search?search=find callers&top=50` |
+| **help://** | `search`, `top` (only on `help://search`, another topic exits 2 naming them; `top` caps hits, default 20, `0` = all; any other key exits 2) | `help://search?search=find callers&top=50` |
 | **cpanel://** | `domain_type`, `dns-verified`, `check-live` | `cpanel://USER/ssl?domain_type=addon` |
 | **ssl://** | `expiring-within` (implies `--check`), `summary` (batch and nginx views) | `ssl://host?expiring-within=30` |
 | **diff://** | none | N/A |
@@ -37,7 +37,7 @@ Query parameters allow filtering, formatting, and modifying adapter behavior usi
 | **letsencrypt://** | `check-orphans`, `check-duplicates` | `letsencrypt://?check-orphans` |
 | **nginx://** | none (CLI flags only; unrecognized `?params` stripped with warning) | N/A |
 | **domain://** | none | N/A |
-| **reveal://** | none | N/A |
+| **reveal://** | none (any key, `--sort`/`--limit` or `api.query` keyword exits 2 naming it) | N/A |
 
 `sort`, `limit` and `offset` are applied by `ast://`, `markdown://`, `json://`, `git://` and
 `metrics://`; `imports://` (`sort=-fan-in`) and `calls://` (`sort=-callers`; `limit` also caps `?uncalled`) take `sort`

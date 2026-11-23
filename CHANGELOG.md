@@ -102,7 +102,7 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 - `imports` `root` with `scope=path` now exits 2 naming both (`control 'root' requires scope=root; this request gives scope=path: give one or the other`), on the subcommand, the URI, a flag after the URI and `reveal.api.query`; it answered exit 0 with the warning `?root=. is ignored under scope=path` (BACK-2697).
 
-- The retired `stats://` refuses a positional element as `metrics://` and `reveal.api.query` do: `reveal stats://src app.py` exits 2 with `stats:// takes no positional element ('app.py'); name it in the URI: ...`. It answered a per-file `stats_element` document (exit 0) for an existing file and "Element 'x' not found" otherwise; `reveal metrics src/app.py` answers one file (BACK-2694).
+- The retired `stats://` refuses a positional element as `metrics://` does (`stats:// takes no positional element ('app.py')`, exit 2; it answered a per-file document) and exits 2 for an option it refuses (it exited 1). `help://` and `reveal://` refuse an unknown query key, flag or `reveal.api.query` keyword, exit 2 naming it (they ignored it with a note), and `?search`/`?top` on a topic other than `help://search`; `reveal help:// TOPIC` and `reveal reveal://FILE ELEMENT` answer with a note naming `help://TOPIC` and the path read of that file until 1.0 (BACK-2694, BACK-2767).
 
 - `reveal.api.query(NOUN, TARGET, ...)` raises `UnreadControlError` for an option the selected answer does not read or one another option's value leaves unread (`api.query('metrics', 'src', top=1)`), as the URI form does; it raised the base `RequestValidationError` with the same message (BACK-2720).
 
