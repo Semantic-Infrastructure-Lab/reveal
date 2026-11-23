@@ -228,7 +228,7 @@ def _reject_unreceived_control(adapter_class: Any, spec: FlagSpec) -> None:
     """An explicit control flag a declared noun does not receive (rule 3, BACK-2654): exit 2 with the binder's
     teaching (its supported controls), not a note."""
     declarations = getattr(adapter_class, 'PARAM_SPECS', None)
-    if spec.control and declarations:
+    if spec.control and declarations is not None:  # a declared noun, one with no control (reveal://) included
         from ...errors import RequestValidationError
         from ...utils.query_binding import unsupported_controls_message
         raise RequestValidationError(unsupported_controls_message(declarations, [typed_option(spec)]))
@@ -253,7 +253,7 @@ def _fragment_for(args: Any, spec: FlagSpec, adapter_class: Any, scheme: str, re
     that way (rule 4), else the adapter's CLI_QUERY_FLAGS declaration, re-keyed to the cap the selected answer
     declares when the flag lifts a cap (--all on Metrics' legacy hotspots ranking lifts top, elsewhere limit)."""
     declarations = getattr(adapter_class, 'PARAM_SPECS', None)
-    if spec.declared_binding is not None and declarations:
+    if spec.declared_binding is not None and declarations is not None:
         return _declared_fragment(args, spec, spec.declared_binding, declarations, scheme)
     target, _, query = resource.partition('?')
     fragment = declared_flag_fragment(spec, adapter_class, query, path or target or None)
@@ -265,7 +265,7 @@ def _fragment_for(args: Any, spec: FlagSpec, adapter_class: Any, scheme: str, re
 def lifts_no_cap(spec: FlagSpec, adapter_class: Any, fragment: str | None) -> bool:
     """A cap-lifting flag (--all) that reaches no cap on a declared noun is satisfied, not unused: the selected
     answer is every row already, so it answers quietly (Scott 2026-11-18, COMMAND_MODEL "Applicability")."""
-    return spec.answer_cap and not fragment and bool(getattr(adapter_class, 'PARAM_SPECS', None))
+    return spec.answer_cap and not fragment and getattr(adapter_class, 'PARAM_SPECS', None) is not None
 
 
 def declared_flag_fragment(spec: FlagSpec, adapter_class: Any, selection: Any, path: str | None = None) -> str | None:

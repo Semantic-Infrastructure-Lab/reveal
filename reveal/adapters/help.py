@@ -10,7 +10,7 @@ from .base import ResourceAdapter, Stability, register_adapter, register_rendere
 from .registry import OPS_SCHEMES, _SCAFFOLD_SCHEMES, is_internal_scheme
 from ..errors import MissingResourceError
 from ..utils.formatting import shell_command
-from ..utils.query_parser import ParamSpec, param_schema, whole_number
+from ..utils.query_parser import ParamSpec, ResourceSpec, param_schema, whole_number
 from ..utils.results import ResultBuilder, note_truncation, note_warning
 from reveal.reveal_types import CONTRACT_VERSION
 from reveal.utils.lines import split_lines
@@ -319,6 +319,9 @@ class HelpRenderer:
 # a result-control key that help:// does not take (HONORS_RESULT_CONTROL = False strips it).
 _SEARCH_TOP = ParamSpec('top', 'integer', 'help://search only: maximum hits to list', 20,
                         whole_number, ('top=50',), minimum=0, zero_policy='all')
+# help://'s whole query vocabulary: a key outside it, or an api.query keyword, is refused as unsupported (BACK-2764).
+HELP_PARAM_SPECS = (ParamSpec('search', 'string', 'help://search?search=<term>: full-text search over guides, adapters '
+                              'and recipes', None, str, ('search=navigation',)), _SEARCH_TOP)
 _FENCE_RE = re.compile(r'^\s*(```|~~~)')
 _HEADING_RE = re.compile(r'^(#{1,6})\s+(.*)')
 
@@ -411,6 +414,10 @@ class HelpAdapter(ResourceAdapter):
     LEGACY_INIT = False
     HONORS_RESULT_CONTROL = False  # no sort=/limit=/offset= handling (BACK-1385)
     CANONICAL_EMPTY_RESOURCE = ''
+    # The query binds in the constructor (factory.uses_bound_query_call): an unknown key is refused; a positional
+    # topic (help:// quick) answers with its note until the cut (invocation.element_retirement, BACK-2764).
+    PARAM_SPECS = HELP_PARAM_SPECS
+    RESOURCE_SPEC = ResourceSpec(name='topic', cli_default='', uri_default='', walks=False, filesystem=False)
 
     # Valid section names for help://adapter/section queries
     VALID_SECTIONS = {'workflows', 'try-now', 'anti-patterns'}
@@ -595,13 +602,7 @@ class HelpAdapter(ResourceAdapter):
             'adapter': 'help',
             'description': help_data['description'],
             'uri_syntax': help_data['syntax'],
-            'query_params': {
-                'search': {
-                    'type': 'string',
-                    'description': 'help://search?search=<term>: full-text search over guides, adapters and recipes',
-                },
-                **param_schema((_SEARCH_TOP,)),
-            },
+            'query_params': param_schema(HELP_PARAM_SPECS),
             'elements': {},
             'cli_flags': [],
             'supports_batch': False,
@@ -639,14 +640,25 @@ class HelpAdapter(ResourceAdapter):
             'notes': list(help_data['notes']),
         }
 
-    def __init__(self, resource: str = '', query: Optional[str] = None, **kwargs: Any):
+    def __init__(self, resource: str = '', query: Optional[str] = None, *, params: Any = None, **kwargs: Any):
         """Initialize help adapter.
 
         Args:
             resource: Specific help topic to display ('' = list all)
             query: The topic's own query (help://search?search=TERM), split off by canonical construction; the
                 structure call gives it back to the topic it belongs to.
+            params: Already-bound or typed controls (``api.query('help://search', search=TERM)``), in place of *query*.
         """
+        from ..utils.query_binding import bind_declared_params
+        from ..utils.query_parser import QueryParams
+        if params is not None:
+            self.query_params = params if isinstance(params, QueryParams) else bind_declared_params(
+                HELP_PARAM_SPECS, params, transport='typed')
+            from urllib.parse import urlencode
+            given = {key: value for key, value in self.query_params.items() if value is not None}
+            query = query or (urlencode(given) if given else None)  # the topic reads its query string
+        else:
+            self.query_params = bind_declared_params(HELP_PARAM_SPECS, query or '', transport='uri')
         self.topic = resource or None
         self._topic_query = query
         # Merge auto-discovered guides with manual STATIC_HELP entries

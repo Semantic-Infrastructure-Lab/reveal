@@ -8,6 +8,7 @@ from reveal.reveal_types import CONTRACT_VERSION, RevealResult
 from ..base import ResourceAdapter, Stability, register_adapter, register_renderer
 from ...rules.validation.utils import find_reveal_root
 from ...utils.path_utils import to_posix
+from ...utils.query_parser import ResourceSpec
 from ...utils.results import ResultBuilder
 
 from .renderer import RevealRenderer
@@ -40,6 +41,11 @@ class RevealAdapter(ResourceAdapter):
     HONORS_RESULT_CONTROL = False  # ignores its query entirely (BACK-1385)
     BUDGET_LIST_FIELD = ('analyzers', 'adapters', 'rules')  # --head/--tail slice each (BACK-1497)
     CANONICAL_EMPTY_RESOURCE = ''
+    # reveal:// takes no query control: the query binds in the constructor, so an unknown key or api.query keyword is
+    # refused (factory.uses_bound_query_call); ``reveal reveal://FILE ELEMENT`` answers with its note until the cut
+    # (invocation.element_retirement, BACK-2764).
+    PARAM_SPECS: tuple = ()
+    RESOURCE_SPEC = ResourceSpec(name='section', cli_default='', uri_default='', walks=False, filesystem=False)
 
     @staticmethod
     def get_schema() -> Dict[str, Any]:
@@ -59,13 +65,19 @@ class RevealAdapter(ResourceAdapter):
         """Every section answers ``reveal_structure``, so a section the router answers as failed keeps it."""
         return 'reveal_structure'
 
-    def __init__(self, resource: str = '', query: Optional[str] = None, **kwargs: Any):
+    def __init__(self, resource: str = '', query: Optional[str] = None, *, params: Any = None, **kwargs: Any):
         """Initialize reveal adapter.
 
         Args:
             resource: Optional component to inspect (analyzers, rules, etc.)
-            query: Unused, accepted for canonical signature conformance.
+            query: The URI's query string; reveal:// declares no key, so any is refused.
+            params: Already-bound or typed controls, in place of *query* (none is declared).
         """
+        from ...utils.query_binding import bind_declared_params
+        from ...utils.query_parser import QueryParams
+        self.query_params = (params if isinstance(params, QueryParams) else
+                             bind_declared_params((), params if params is not None else query or '',
+                                                  transport='typed' if params is not None else 'uri'))
         self.component = resource or None
         self.reveal_root = self._find_reveal_root()
 

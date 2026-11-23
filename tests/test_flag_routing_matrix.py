@@ -205,7 +205,7 @@ def derive_matrix():
                 via.append('adapter-reads-args')
             if accepts_top and flag == 'all':
                 via.append('routing-special')
-            if flag in bound_flags and getattr(cls, 'PARAM_SPECS', None):
+            if flag in bound_flags and getattr(cls, 'PARAM_SPECS', None) is not None:  # () too: reveal:// (BACK-2767)
                 via.append('declared-binding')
             if flag in ROUTING_SPECIAL.get(scheme, ()):
                 via.append('routing-special')
