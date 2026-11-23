@@ -105,7 +105,8 @@ class JsonUsageParser(RevealArgumentParser):
         return args
 
     def _typed_defaults(self):
-        defaults = {action.dest: action.default for action in self._actions if action.dest != argparse.SUPPRESS}
+        defaults = {action.dest: action.default for action in self._actions  # a suppressed default is absent, as in
+                    if argparse.SUPPRESS not in (action.dest, action.default)}  # argparse's namespace (BACK-2756)
         args = argparse.Namespace(**{**defaults, **self._defaults})
         positionals, values = self._typed_words()
         for action, word in zip([a for a in self._actions if not a.option_strings], positionals):
