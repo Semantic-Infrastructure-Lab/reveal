@@ -25,6 +25,16 @@ from reveal.errors import RequestValidationError, UnsupportedOverrideError  # no
 
 pytestmark = [pytest.mark.component]
 
+# Option B is held (pathread P5 report, section 4); these cases stay red, strict, and flip when it lands.
+# help:// and reveal://: declaring their query (PARAM_SPECS) makes both declared nouns of the conformance matrix, a
+# noun onboarding of its own (the work is on agent/pathread-2764b-wip). diff:// also: its positional element is the
+# only spelling for a URI side (diff://git://A/f.py:git://B/f.py NAME; the embedded /NAME splits plain file paths
+# only), so a note naming diff://LEFT:RIGHT/ELEMENT would name a replacement that does not answer.
+HELD = pytest.mark.xfail(strict=True, reason='BACK-2764 option B held: help:// and reveal:// binding needs their '
+                                             'conformance onboarding (pathread P5 section 4)')
+DIFF_HELD = pytest.mark.xfail(strict=True, reason='BACK-2764 diff:// held: the element form has no replacement for a '
+                                                  'URI side yet (pathread P5 section 4)')
+
 ELEMENT_FORMS = {
     # key -> (CLI words, the answer's type, what the note names)
     'target:help.element': (('help://', 'quick'), 'help_quick', 'help://TOPIC'),
@@ -52,13 +62,15 @@ def _notes(doc):
 
 # --- unknown keywords: exit 2 / UnsupportedOverrideError, naming the key -------------------------------------------
 
-@pytest.mark.parametrize('scheme', ['help', 'diff', 'reveal'])
+@pytest.mark.parametrize('scheme', [pytest.param('help', marks=HELD), pytest.param('diff', marks=DIFF_HELD),
+                                    pytest.param('reveal', marks=HELD)])
 def test_api_refuses_an_unknown_keyword(pair, scheme):
     with pytest.raises(UnsupportedOverrideError, match='bogus_kw'):
         api.query(_uris(pair)[scheme], bogus_kw=1)
 
 
-@pytest.mark.parametrize('scheme', ['help', 'diff', 'reveal'])
+@pytest.mark.parametrize('scheme', [pytest.param('help', marks=HELD), pytest.param('diff', marks=DIFF_HELD),
+                                    pytest.param('reveal', marks=HELD)])
 def test_cli_refuses_an_unknown_query_key(pair, scheme):
     run = _run_reveal_direct(f"{_uris(pair)[scheme]}?bogus=1", '--format', 'json')
     assert run.returncode == 2, (run.returncode, run.stderr)
@@ -66,22 +78,29 @@ def test_cli_refuses_an_unknown_query_key(pair, scheme):
     assert "unsupported control 'bogus'" in run.stdout + run.stderr, (run.stdout[:400], run.stderr[:400])
 
 
+@DIFF_HELD
 def test_api_refuses_an_unknown_keyword_beside_the_element_form(pair):
     with pytest.raises(UnsupportedOverrideError, match='bogus_kw'):
         api.query(f"diff://{pair['a']}:{pair['b']}", 'ok', bogus_kw=1)
 
 
-def test_mcp_refuses_an_unknown_query_key(pair):
+@pytest.mark.parametrize('scheme', [pytest.param('help', marks=HELD), pytest.param('diff', marks=DIFF_HELD),
+                                    pytest.param('reveal', marks=HELD)])
+def test_mcp_refuses_an_unknown_query_key(pair, scheme):
     from reveal.mcp_server import reveal_query, _ToolFailure
-    for scheme, uri in _uris(pair).items():
-        answer = reveal_query(f'{uri}?bogus=1')
-        assert isinstance(answer, _ToolFailure), (scheme, str(answer)[:300])
-        assert 'bogus' in str(answer), (scheme, str(answer)[:300])
+    answer = reveal_query(f'{_uris(pair)[scheme]}?bogus=1')
+    assert isinstance(answer, _ToolFailure), (scheme, str(answer)[:300])
+    assert "unsupported control 'bogus'" in str(answer), (scheme, str(answer)[:300])
 
 
 # --- the element form: the same answer, plus one note naming the replacement ----------------------------------------
 
-@pytest.mark.parametrize('key', sorted(ELEMENT_FORMS))
+def _element_keys():
+    return [pytest.param(key, marks=DIFF_HELD if key.startswith('target:diff.') else HELD)
+            for key in sorted(ELEMENT_FORMS)]
+
+
+@pytest.mark.parametrize('key', _element_keys())
 def test_cli_element_form_answers_with_its_note(pair, key):
     words, answer_type, replacement = ELEMENT_FORMS[key]
     run = _run_reveal_direct(*(w.format(**pair) for w in words), '--format', 'json')
@@ -93,7 +112,7 @@ def test_cli_element_form_answers_with_its_note(pair, key):
     assert replacement in notes[0]['message'], notes[0]['message']
 
 
-@pytest.mark.parametrize('key', sorted(ELEMENT_FORMS))
+@pytest.mark.parametrize('key', _element_keys())
 def test_api_element_form_answers_with_its_note(pair, key):
     words, answer_type, replacement = ELEMENT_FORMS[key]
     uri, element = (w.format(**pair) for w in words)
@@ -102,6 +121,7 @@ def test_api_element_form_answers_with_its_note(pair, key):
     assert [n['field'] for n in _notes(doc)] == [key], _notes(doc)
 
 
+@HELD
 def test_cli_element_form_text_prints_the_note_once(pair):
     run = _run_reveal_direct('help://', 'quick')
     assert run.returncode == 0
@@ -133,6 +153,7 @@ def test_controls_answer_without_a_note(pair):
         assert api.query(uri)['type'] == answer_type
 
 
+@HELD
 def test_help_search_binds_its_declared_keys(pair):
     run = _run_reveal_direct('help://search?search=navigation&top=2', '--format', 'json')
     assert run.returncode == 0, run.stderr

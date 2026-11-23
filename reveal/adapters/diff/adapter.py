@@ -1,6 +1,7 @@
 """Core diff adapter for comparing two reveal resources."""
 
 from pathlib import Path
+from reveal.errors import MissingResourceError
 from typing import Dict, Any, Optional, Tuple, cast
 from reveal.reveal_types import CONTRACT_VERSION
 from reveal.utils.path_utils import failure_records
@@ -179,6 +180,14 @@ class DiffAdapter(ResourceAdapter):
             }
         """
         from ...diff import compute_structure_diff
+
+        if self.embedded_element:
+            # diff://a.py:b.py/element names one element: the structure call answers it, as the CLI router does through
+            # get_element (BACK-2764; the API answered the whole comparison).
+            element = self.get_element(self.embedded_element, **kwargs)
+            if element is None:
+                raise MissingResourceError(f"Element '{self.embedded_element}' not found")
+            return element
 
         # Resolve both URIs using existing adapter infrastructure
         left_struct = resolve_uri(self.left_uri, **kwargs)
