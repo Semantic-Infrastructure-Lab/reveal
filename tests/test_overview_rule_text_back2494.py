@@ -70,8 +70,7 @@ def test_shared_clauses_appear_once(tmp_path):
     text = _overview(root)
     lines = _rule_lines(text)
     assert len(lines) == 1 and lines[0].startswith('Rules: --format json (')
-    assert lines[0].endswith('map.rules.edge_rule.text, map.rules.edge_rule_sections.entry_points.text, '
-                             'map.rules.edge_rule_sections.cycles.text)')
+    assert lines[0].endswith('map.rules, map.entry_point_filter, diagnostic_budget)')  # parents since BACK-2599
     assert text.count('takes no &lazy') == 0 and text.count('Test paths:') == 0  # stated once, in each JSON rule
     assert text.count('Import scope is unknown') <= 1
 

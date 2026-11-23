@@ -115,19 +115,25 @@ def _assert_rules(owner, root, noun='architecture://'):
     _assert_rule(sections['cycles'], CYCLES)
 
 
-def _assert_rule_text(text):
-    """A text answer that still states the rule in full (the comparison, ``architecture --against``)."""
-    assert 'Rule: ' in text and 'function-level (lazy) imports included (default)' in text
-    assert 'TYPE_CHECKING imports excluded' in text
-    assert 'Rule (entry points): ' in text and 'importers under a test path not counted' in text
-    assert 'Rule (cycles): ' in text and 'function-level (lazy) imports excluded (default)' in text
+def _assert_rule_text(text, data):
+    """The comparison (``overview --against``, and ``architecture --against`` reaching it) names its rules and the
+    standing McCabe caveat in the one Rules pointer since BACK-2599; the JSON states each rule in full."""
+    assert ('Rules: --format json (edge_rule.text, edge_rule_sections.entry_points.text, '
+            'edge_rule_sections.cycles.text, meta.warnings)') in text.splitlines()
+    head, sections = data['edge_rule']['text'], data['edge_rule_sections']
+    assert head.startswith('Rule: ') and 'function-level (lazy) imports included (default)' in head
+    assert 'TYPE_CHECKING imports excluded' in head
+    assert 'importers under a test path not counted' in sections['entry_points']['text']
+    assert 'function-level (lazy) imports excluded (default)' in sections['cycles']['text']
+    assert head not in text and sections['cycles']['text'] not in text
 
 
 def _assert_rule_lines(uri):
-    """The text names the JSON fields of the headline rule and of each section's (BACK-2685); the JSON states them."""
+    """The text names the JSON parent of the headline rule and each section's, map.rules (BACK-2685; parents since
+    BACK-2599); the JSON states them."""
     text, data = _run(uri), _json(uri)
-    assert ('map.rules.edge_rule.text, map.rules.edge_rule_sections.entry_points.text, '
-            'map.rules.edge_rule_sections.cycles.text)') in text
+    assert 'Rules: --format json (scope.counting_rule, reading_note, map.rules, map.entry_point_filter, ' \
+        'diagnostic_budget)' in text.splitlines()
     rules = data['map']['rules']
     head, sections = rules['edge_rule']['text'], rules['edge_rule_sections']
     assert head.startswith('Rule: ') and 'function-level (lazy) imports included (default)' in head
@@ -272,7 +278,7 @@ def test_architecture_against_states_its_rule_in_text(tmp_path):
     (root / 'lazy.py').write_text(FILES['lazy.py'], encoding='utf-8')
     text = _run(f'architecture://{to_posix(root)}?against=HEAD')
     assert 'late.py' in text and 'Fan-in changes' in text
-    _assert_rule_text(text)
+    _assert_rule_text(text, _json(f'architecture://{to_posix(root)}?against=HEAD'))
 
 
 def test_overview_against_text_names_live_noun_and_new_files(tmp_path):
@@ -285,7 +291,8 @@ def test_overview_against_text_names_live_noun_and_new_files(tmp_path):
          'commit', '-q', '-m', 'base')
     (root / 'added.py').write_text('import core\nimport late\n\nY = core.X\n', encoding='utf-8')
     text = _run('overview', to_posix(root), '--against', 'HEAD')
-    assert 'overview:// takes no &lazy' in text
+    # The rule (in JSON since BACK-2599; the text points at it) names the live noun.
+    assert 'overview:// takes no &lazy' in _json('overview', to_posix(root), '--against', 'HEAD')['edge_rule']['text']
     assert 'architecture://' not in text
     assert 'None' not in text
     added = [line for line in text.splitlines() if 'added.py' in line and ' -> ' in line]

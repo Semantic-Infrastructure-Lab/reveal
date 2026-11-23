@@ -3,9 +3,12 @@ import sys
 from typing import Any, Dict, Optional
 
 from ..base import BaseRenderer
-from ...analyzers.imports.service import edge_rule_disclosures, edge_rule_fields
+from ...analyzers.imports.service import edge_rule_disclosures
 from ...utils import print_json_result
 from ...utils.warning_render import meta_warning_lines, rule_text_lines
+
+
+_RULE_PARENTS = ('scope.counting_rule', 'reading_note', 'map.rules', 'map.entry_point_filter', 'diagnostic_budget')
 
 
 def _page_heading(name: str, page: dict) -> str:
@@ -51,12 +54,11 @@ def _render_map(facts: dict) -> list[str]:
     page = facts['entrypoints']
     predicate = facts['entry_point_filter']
     lines += [_page_heading('Active entrypoint candidates', page),
-              f"  {predicate['fan_in_zero']} raw candidates; {predicate['active']} active; {predicate['rule']}",
-              '  Path basis: ' + predicate['path_basis']]
+              f"  {predicate['fan_in_zero']} raw candidates; {predicate['active']} active; {predicate['rule']}"]
     for row in page['rows']:
         lines.append(f"  {row['file']}  fan-out {row['fan_out']}, test-only importers {row['test_only_importers']}")
     page = facts['components']
-    lines += [_page_heading('Major components', page), '  Order: ' + facts['rules']['component_order']]
+    lines.append(_page_heading('Major components', page))
     for row in page['rows']:
         cohesion = 'n/a' if row['cohesion'] is None else str(row['cohesion'])
         lines.append(f"  {row['component']}  {row['files']} files; internal {row['internal']}, outgoing {row['outgoing']}, incoming {row['incoming']}; cohesion {cohesion}")
@@ -78,17 +80,15 @@ def _render_map(facts: dict) -> list[str]:
 def overview_text(report: Dict[str, Any], top: int = 5) -> str:
     # Projection already bounded both formats; the renderer never reslices or scans.
     lines = [f"Overview: {report['path']}"]
-    # The counting rules (the code census, the import edges and each section's) are one pointer to their JSON fields
-    # (BACK-2599, BACK-2685); the full sentences stay there.
-    rule_fields = ('scope.counting_rule', *edge_rule_fields((report.get('map') or {}).get('rules') or {}, 'map.rules.'))
-    lines.extend(rule_text_lines(report, fields=rule_fields, standing_types=frozenset()))
+    # The counting rules (the code census, the import edges and each section's, the component order), the entrypoint
+    # path basis, the reading note and the diagnostic budget are one pointer naming their JSON parents (BACK-2599,
+    # BACK-2685); the full sentences stay there. Per-scan facts (budget, predicate counts, disclosures) stay below.
+    lines.extend(rule_text_lines(report, fields=_RULE_PARENTS, standing_types=frozenset()))
     lines.extend(_render_scope(report['scope']))
-    lines.append('\n' + report['reading_note'])
     status = report['map_status']
-    lines.append(f'Import map: {status}')
+    lines.append(f'\nImport map: {status}')
     if report['map'] is not None:
         lines.extend(_render_map(report['map']))
-    lines.append('\n' + report['diagnostic_budget']['rule'])
     lines.extend(meta_warning_lines(report, heading='Caveats'))
     lines.append('\nNext questions')
     for step in report['next_steps']:

@@ -4,8 +4,8 @@ import difflib
 import json
 from typing import Dict, Any, List, Optional
 
-from reveal.analyzers.imports.service import edge_rule_lines
-from reveal.utils.warning_render import meta_warning_lines
+from reveal.analyzers.imports.service import edge_rule_disclosures, edge_rule_fields
+from reveal.utils.warning_render import meta_warning_lines, rule_text_lines
 from reveal.utils.formatting import lines_label
 from reveal.utils.lines import split_lines
 
@@ -472,9 +472,15 @@ def render_diff_json(diff_result: Dict[str, Any]) -> None:
     print(json.dumps(diff_result, indent=2))
 
 
+# A caveat true of every compared snapshot: behind the Rules pointer with the counting rules (BACK-2599).
+_STANDING_RULE_TYPES = frozenset({'complexity_is_unweighted'})
+
+
 def _render_edge_rule(report: Dict[str, Any]) -> List[str]:
-    """The counting rule of the report's numbers: one block, none when no edge was counted."""
-    rule = edge_rule_lines(report)
+    """The counting rules of the report's numbers and its standing caveat as the one Rules pointer, then what this
+    comparison left uncertain or uncounted (the rule's request-specific sentences, BACK-2685): one block."""
+    rule = [*rule_text_lines(report, fields=edge_rule_fields(report), standing_types=_STANDING_RULE_TYPES),
+            *edge_rule_disclosures(report.get('edge_rule'))]
     return ['\n'.join(rule) + '\n'] if rule else []
 
 
@@ -484,7 +490,9 @@ def architecture_diff_text(report: Dict[str, Any], *, title: str = 'Architecture
     JSON is the primary contract (design doc: "JSON-first, no verdict") —
     this is a convenience summary for terminal use, not a demand.
     """
-    lines = _merge_side_warnings(meta_warning_lines(report))
+    # The standing caveat goes behind the pointer only on an answer that prints it (not a failure or an identical tree).
+    compared = not report.get('error') and report['analysis'].get('basis') != 'identical_tree'
+    lines = _merge_side_warnings(meta_warning_lines(report, skip_types=_STANDING_RULE_TYPES if compared else None))
     if report.get('error'):
         lines.append(str(report['error']))
         for side, components in report['analysis']['snapshots'].items():
