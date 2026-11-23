@@ -407,6 +407,12 @@ RETIREMENTS: Dict[str, Retirement] = {
     # (D5), but code quality is check's. An .conf nginx file is an ops target and stays.
     'target:health.code': Retirement('reveal health on a code path', 'reveal check <path>; health keeps ssl://, '
                                      'domain://, mysql://, sqlite:// and nginx .conf targets'),
+    # A positional element on a resource scheme that binds its query (BACK-2764, option B): it answers until the cut,
+    # where a declared noun without such a row refuses it (``element_retirement``). COMMAND_MODEL rule 2 names the
+    # topic in the URI; a reveal source file is a path, which ``reveal reveal://FILE`` names.
+    'target:help.element': Retirement('help:// TOPIC', 'help://TOPIC'),
+    'target:reveal.element': Retirement('reveal://FILE ELEMENT', 'reveal PATH ELEMENT on that source file '
+                                        '(reveal reveal://FILE names its path)'),
     # trace merged into calls (BACK-2066): both spellings keep trace's frames shape until the cut
     # (decision c); the MCP tool reveal_trace keeps its name until Phase 7 (decision g).
     'subcommand:trace': Retirement('reveal trace', 'reveal calls <path> --callees FUNC --depth N --detail'),
@@ -799,6 +805,14 @@ def retirement_note(key: str) -> Optional[Retirement]:
 REQUEST_STAGE = 'note'
 REQUEST_FORMS = ('cli', 'mcp', 'python')
 _FORM: ContextVar[str] = ContextVar('reveal_request_form', default='cli')
+
+
+def element_retirement(scheme: str) -> Optional[str]:
+    """The ``target:SCHEME.element`` row of a scheme whose positional element still answers until the cut, noted, or
+    None: the one check every transport's unread-element refusal consults (the CLI's URI route and ``api.query``), so
+    a bound noun with no such row refuses the element as before (BACK-2764)."""
+    key = f'target:{scheme}.element'
+    return key if retirement_note(key) is not None else None
 
 
 def request_form() -> str:
