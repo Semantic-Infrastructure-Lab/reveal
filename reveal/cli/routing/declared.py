@@ -261,10 +261,13 @@ def invalid_path_read(target, message: str, args, error: Optional[BaseException]
     *target* is no path read (BACK-2756 cell 21j). The document answers for the path as typed; its type is the facet
     the path read's declarations use (``element_view`` for an element request, ``code_element`` for an element,
     ``file_structure`` for a file, a directory's ``directory_tree``); stderr labels it as the file route labels a
-    failed file, ``Error (PATH):``. A path read reads no findings, so its findings policy is none."""
+    failed file, ``Error (PATH):``. A path read reads no findings, so its findings policy is none. *error*: a
+    configuration that could not be loaded (``ConfigLoadError``) is lost input, the failed answer (exit 3), as on a
+    declared noun (``_resource_failure_cause``)."""
     if not is_path_read(target):
         return None
-    return _invalid_answer(None, 'file', target, message, args, result_type=_path_read_answer(target, args),
+    cause = _resource_failure_cause(error) if isinstance(error, ConfigLoadError) else None
+    return _invalid_answer(None, 'file', target, message, args, cause, result_type=_path_read_answer(target, args),
                            default_fail_on='none', error=error, label=target)
 
 

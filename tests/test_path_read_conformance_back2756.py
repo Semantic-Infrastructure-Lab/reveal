@@ -323,3 +323,17 @@ def test_an_invalid_value_of_a_key_the_file_read_does_not_read_still_answers(pat
     monkeypatch.setenv('REVEAL_CONFIG', 'badval.yaml')
     assert _run(ELEMENT_FILE).rc == 0
     assert _run('proj').rc == 2
+
+
+def test_invalid_path_read_answers_an_unloadable_config_as_lost_input(element_workspace):
+    """The unit: ConfigLoadError is the failed answer (code analysis, exit 3), every other error the invalid request."""
+    from reveal.cli.routing.declared import invalid_path_read
+    from reveal.errors import ConfigLoadError, ConfigValidationError
+    from reveal.utils.results import execution_exit_code
+    lost = invalid_path_read(ELEMENT_FILE, 'config x could not be loaded', _reread(ELEMENT_FILE),
+                             error=ConfigLoadError('config x could not be loaded'))
+    assert [e['code'] for e in lost.result['meta']['errors']] == ['analysis'] and lost.request_error is None
+    assert execution_exit_code(lost.execution_facts, fail_on='none') == 3
+    missing = invalid_path_read(ELEMENT_FILE, 'missing', _reread(ELEMENT_FILE), error=ConfigValidationError('missing'))
+    assert [e['code'] for e in missing.result['meta']['errors']] == ['invalid_request']
+    assert execution_exit_code(missing.execution_facts, fail_on='none') == 2
