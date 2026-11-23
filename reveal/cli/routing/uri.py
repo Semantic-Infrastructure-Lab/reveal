@@ -11,7 +11,7 @@ import sys
 from argparse import Namespace
 from contextlib import ExitStack, contextmanager, nullcontext
 from dataclasses import dataclass, field
-from typing import Any, Callable, Iterable, Iterator, List, NoReturn, Optional, Tuple, cast
+from typing import Any, Callable, Dict, Iterable, Iterator, List, NoReturn, Optional, Tuple, cast
 
 from ...errors import (ConfigLoadError, ConfigValidationError, ElementNotFoundError, MissingResourceError,
                        NotApplicableError, RequestValidationError, TestLayoutValidationError, UnreadControlError)
@@ -61,6 +61,11 @@ class Answer:
     # ``exception``, which MCP reads as an internal failure: the noun form of api.query raises it (BACK-2720).
     request_error: Optional[RequestValidationError] = field(default=None, repr=False)
     private_diagnostic: Optional[str] = field(default=None, repr=False)
+    # The JSON document this answer prints with --format json, when its renderer builds that document from more than
+    # ``result`` (a file's envelope, BACK-2325): called only by a reader that wants the document (the Python API), never
+    # by emit, so a text answer never builds it. None: the document is json_answer(result). Like ``printer``, it must
+    # not close over the answer (BACK-2674).
+    document: Optional[Callable[[], Dict[str, Any]]] = field(default=None, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         if self.request_error is not None:
