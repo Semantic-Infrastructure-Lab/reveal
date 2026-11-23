@@ -121,6 +121,20 @@ class DiffAdapter(ResourceAdapter):
         self.left_structure = None
         self.right_structure = None
 
+    @classmethod
+    def from_uri(cls, scheme: str, resource: str, element: Optional[str]) -> 'DiffAdapter':
+        """Build from ``LEFT:RIGHT[/ELEMENT][?QUERY]``. diff:// reads no query key, and its constructor's second
+        argument is the right side (``DiffAdapter('a.py', 'b.py')``), so the canonical ``(resource, query)`` call read
+        ``?bogus=1`` as the right side ("File not found: a.py:b.py"). An unknown key is disclosed, as every adapter
+        that reads no query discloses it, and the comparison runs (BACK-2768)."""
+        path, sep, query = resource.partition('?')
+        if sep:
+            from ...utils.query_parser import parse_query_params, warn_unknown_query_params
+            known = set(_get_schema()['query_params']) | {
+                fragment.partition('=')[0] for fragment in cls.CLI_QUERY_FLAGS.values()}
+            warn_unknown_query_params(parse_query_params(query), known, adapter=scheme)
+        return cls(path)
+
     @staticmethod
     def _parse_diff_uris(resource: str) -> Tuple[str, str]:
         """Parse left:right from diff resource string.
