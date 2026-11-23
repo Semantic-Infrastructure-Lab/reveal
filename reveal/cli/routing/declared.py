@@ -47,9 +47,20 @@ class JsonUsageParser(RevealArgumentParser):
     stdout sink), answer with the invalid-request JSON document the declared route builds for an invalid value
     (COMMAND_MODEL "Transports"; exit 2, the message in the document and on stderr). The one seam for the main parser
     and every noun's declared parser; in text mode each keeps its own usage error. A subclass names the document's
-    target in ``invalid_request``. A long option is spelled in full (``RevealArgumentParser``, BACK-2705)."""
+    target in ``invalid_request``. A long option is spelled in full (``RevealArgumentParser``, BACK-2705).
+    *raise_usage_errors*: the Python API reads its request with the CLI's own parser (the noun form, BACK-2717, and the
+    path read, BACK-2325) and gets the message the CLI would print as a ``RequestValidationError``; nothing prints and
+    nothing exits."""
     _argv: list | None = None
     _lenient: bool = False
+    raise_usage_errors: bool = False
+
+    def raise_if_asked(self, message: str) -> None:
+        """Under *raise_usage_errors*, raise *message* (the one the CLI would print) as a ``RequestValidationError``;
+        else return, for the CLI's printed error."""
+        if self.raise_usage_errors:
+            from ...errors import RequestValidationError
+            raise RequestValidationError(message)
 
     def parse_known_args(self, args=None, namespace=None):
         if not self._lenient:  # the request as typed (main passes it), for a usage error to recover format and target
@@ -161,13 +172,11 @@ class JsonUsageParser(RevealArgumentParser):
 class _DeclaredParser(JsonUsageParser):
     """A noun's parser: an unknown flag gets rule 3's teaching (the supported controls and fields, exit 2), the
     same message the URI gives, not argparse's bare usage error (COMMAND_MODEL "Unsupported controls"); in JSON
-    mode every usage error answers with the invalid-request document (``JsonUsageParser``). *raise_usage_errors*: the
-    Python API's noun form (BACK-2717) reads its request with this parser and gets the same message as a
-    ``RequestValidationError``; nothing prints and nothing exits."""
+    mode every usage error answers with the invalid-request document (``JsonUsageParser``). The Python API's noun form
+    (BACK-2717) reads its request with this parser and gets the same message raised (``raise_usage_errors``)."""
     declarations: tuple = ()
     noun: str = ''
     uri_query: Optional[str] = None  # the URI's query when this parser reads a URI request's flags (BACK-2673)
-    raise_usage_errors: bool = False
 
     def error(self, message: str):
         self.stop_tolerant_reread(message)
@@ -176,9 +185,7 @@ class _DeclaredParser(JsonUsageParser):
         if teaching:
             from ...utils.query_binding import unsupported_controls_message
             message = unsupported_controls_message(self.declarations, flags)
-        if self.raise_usage_errors:
-            from ...errors import RequestValidationError
-            raise RequestValidationError(message)
+        self.raise_if_asked(message)
         if teaching:
             self.answer_in_json(message)
             self._print_message(f'{self.prog}: error: {message}\n', sys.stderr)

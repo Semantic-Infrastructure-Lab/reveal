@@ -730,6 +730,7 @@ class _ScopedErrorArgumentParser(JsonUsageParser):
         taught = uri_flag_message(getattr(args, 'path', None), message)  # rule 3's one message (BACK-2654)
         if taught is None:  # an element request of a path read names its declarations (BACK-2756)
             taught = path_read_flag_message(args, message)
+        self.raise_if_asked(taught or message)  # the Python API's path read (BACK-2325)
         self.answer_in_json(taught or message, args)
         if taught is not None:
             self._print_message(f'{self.prog}: error: {taught}\n', sys.stderr)
