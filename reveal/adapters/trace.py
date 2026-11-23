@@ -606,7 +606,7 @@ class TraceAdapter(ResourceAdapter):
                 'A same-named definition in an unrelated language is not conflated with the real target (BACK-405).',
             ],
             'see_also': [
-                'calls://<path>?callees=<FUNC>&depth=N&detail - the replacement (reveal calls <path> --callees ...)',
+                'calls://<path>?callees=<FUNC>&depth=N&detail - the replacement (reveal calls <path> --callees <FUNC> --depth 2 --detail)',
                 "reveal_trace MCP tool - same narrative, MCP-native",
             ],
             'output_formats': ['text', 'json'],

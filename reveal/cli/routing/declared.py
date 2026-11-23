@@ -117,13 +117,17 @@ class JsonUsageParser(RevealArgumentParser):
 
     def _typed_words(self) -> tuple:
         """(positionals, {dest: [values]}) as typed: a known option takes the value its action declares (one, or
-        none for a switch); an unknown one takes none."""
+        none for a switch), never a following option string, as argparse never does (``--limit --format json`` is
+        a missing limit in a JSON request, BACK-2763); an unknown one takes none."""
         positionals: list = []
         values: dict = {}
-        words = iter(self._argv or [])
-        for word in words:
+        words = list(self._argv or [])
+        index = 0
+        while index < len(words):
+            word = words[index]
+            index += 1
             if word == '--':
-                positionals.extend(words)
+                positionals.extend(words[index:])
                 break
             if not word.startswith('-') or word == '-':
                 positionals.append(word)
@@ -133,9 +137,23 @@ class JsonUsageParser(RevealArgumentParser):
             if action is None:
                 continue
             if not eq and action.nargs != 0:
-                value = next(words, '')
+                value = ''
+                if index < len(words) and not self._reads_as_option(words[index]):
+                    value, index = words[index], index + 1
             values.setdefault(action.dest, []).append(value)
         return positionals, values
+
+    def _reads_as_option(self, word: str) -> bool:
+        """Whether argparse reads *word* as an option string, not a value: a known option (``--x=V`` included), or a
+        word starting with a prefix character that is not a lone ``-``, a negative number (unless an option looks
+        like one) or a word with a space (argparse's ``_parse_optional``)."""
+        if word in self._option_string_actions or word.partition('=')[0] in self._option_string_actions:
+            return True
+        if len(word) < 2 or word[0] not in self.prefix_chars:
+            return False
+        if self._negative_number_matcher.match(word) and not self._has_negative_number_optionals:
+            return False
+        return ' ' not in word
 
 
 class _DeclaredParser(JsonUsageParser):
