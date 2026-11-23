@@ -86,6 +86,7 @@ invariant 7 can't vary) and consumed flags (BACK-1514).
 import copy
 import json
 import os
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -1221,8 +1222,9 @@ _RULE_BUDGET_CASES = {
     # The remaining nouns (BACK-2599): each case names its rule fields; the full sentences are read from the answer's JSON.
     **json.loads((Path(__file__).parent / 'fixtures' / 'rule_budget_registry_back2599.json').read_text(encoding='utf-8')),
 }
-_RULE_BUDGET_STANDING = frozenset({'analysis_limit', 'scope_limit', 'derived_signal',
-                                 'implicit_exclusion', 'not_measured', 'advisory', 'complexity_is_unweighted'})
+_RULE_BUDGET_STANDING = frozenset({'analysis_limit', 'scope_limit', 'derived_signal', 'implicit_exclusion',
+                                   'not_measured', 'advisory', 'complexity_is_unweighted',
+                                   'degraded_language_conformance'})
 
 
 def _rule_value(payload, path):
@@ -1334,6 +1336,107 @@ def test_rule_budget_pack_default_points_and_names_the_next_step(harness):
     assert 'Warning:' not in err, err
     _, focused, focused_err = harness.run_raw('pack://proj?focus=app')
     assert 'Next: ' not in focused and 'meta.relevance_warning' not in focused and not focused_err  # control
+
+
+# The one check across every noun's default answer (BACK-2599; teaching T1 decision D1: cases at this owner, no new
+# conformance column). A rule sentence is a JSON string at a ``rule``/``*_rule`` key (or the ``text`` of a ``*_rule``
+# object), ``known_limits``, ``reading_note``, ``relevance_warning`` or a test-path ``basis``.
+_RULE_SENTENCE_KEY = re.compile(r'(?:^|_)rule$|^known_limits$|^reading_note$|^relevance_warning$|^basis$')
+# Retired nouns keep their full rule text until the cut deletes them; each replacement carries the pointer.
+_RULE_BUDGET_RETIRED = {
+    'hotspots': 'retired; metrics --view hotspots carries the pointer (issue-count rule, McCabe caveat)',
+    'deps': 'retired; imports --circular/--external/--unused carry the pointer (edge_rule.text)',
+    'depends': 'retired; imports --importers carries the pointer (edge_rule.text); its known_limits and edge rule '
+               'print in full until the cut, as deps and hotspots do',
+}
+# Rule sentences a default answer prints by design beside its pointer (BACK-2599 note #1: facts of this request).
+_RULE_BUDGET_VISIBLE = {
+    'map.entry_point_filter.rule': 'overview prints the entrypoint predicate with its counts (rules R1)',
+}
+# Acquisition-proof receipts: claude and codex record how their catalog proof counts operations
+# (meta.session_catalog.count_rule). Their text prints no rule; whether such a receipt is an answer's counting rule
+# that needs a pointer is a cross-noun question left to the manager (rules R2 report, D19), so it is not a rule here.
+_RULE_BUDGET_RECEIPTS = ('meta.session_catalog.',)
+
+
+def _rule_sentences(node, path=''):
+    """(dotted path, sentence) for every rule sentence in a JSON answer."""
+    items = node.items() if isinstance(node, dict) else enumerate(node) if isinstance(node, list) else ()
+    for key, value in items:
+        here = f'{path}[{key}]' if isinstance(key, int) else f'{path}.{key}' if path else key
+        rule_key = isinstance(key, str) and bool(_RULE_SENTENCE_KEY.search(key))
+        if isinstance(value, str):
+            if (rule_key or (key == 'text' and re.search(r'(?:^|_)rule$', path.rpartition('.')[2]))) and len(value) > 20:
+                yield here, value
+        elif isinstance(value, list) and rule_key and value and all(isinstance(item, str) for item in value):
+            yield from ((f'{here}[{i}]', item) for i, item in enumerate(value) if len(item) > 20)
+        else:
+            yield from _rule_sentences(value, here)
+
+
+def _assert_rule_budget(payload, text, err):
+    """No rule sentence or standing caveat is printed in full; a Rules pointer appears if and only if the answer has
+    one, and it names a field that holds (or whose sentence contains) each one."""
+    sentences = [(path, sentence) for path, sentence in _rule_sentences(payload)
+                 if not path.startswith(_RULE_BUDGET_RECEIPTS)]
+    standing = [(f'{key}.warnings', w['message']) for key in ('meta', '_meta')
+                for w in (payload.get(key) or {}).get('warnings', [])
+                if isinstance(w, dict) and w.get('type') in _RULE_BUDGET_STANDING and w.get('message')]
+    for path, sentence in sentences + standing:
+        if path not in _RULE_BUDGET_VISIBLE and not path.endswith(tuple(f'.{v}' for v in _RULE_BUDGET_VISIBLE)):
+            assert sentence not in text and sentence not in err, f'printed in full: {path}: {sentence[:60]}'
+    pointers = [line.strip() for line in text.splitlines() if line.strip().startswith('Rules: ')]
+    assert len(pointers) == (1 if sentences or standing else 0), f'Rules pointers {pointers} for {len(sentences + standing)} rules'
+    if not pointers:
+        return
+    named = pointers[0].partition('(')[2].partition(')')[0].split(', ')
+    covered = [value for value in (_pointer_value(payload, f) for f in named) if value is not None]
+    for path, sentence in sentences + standing:
+        under = any(path == f or path.startswith((f'{f}.', f'{f}[')) for f in named)
+        within = any(sentence in json.dumps(value, ensure_ascii=False) for value in covered)
+        assert under or within, f'the pointer {named} names no field holding {path}'
+
+
+def _pointer_value(payload, path):
+    value = payload
+    for key in path.split('.'):
+        value = value.get(key) if isinstance(value, dict) else None
+    return value
+
+
+@pytest.mark.parametrize('noun', sorted(set(FIXTURE_URIS) - set(_RULE_BUDGET_RETIRED)))
+def test_rule_budget_every_default_answer_points_or_prints_no_rule(harness, noun):
+    uri = FIXTURE_URIS[noun]
+    _, payload, _ = harness.run(uri)
+    _, text, err = harness.run_raw(uri)
+    if not isinstance(payload, dict):
+        pytest.skip(f'{uri}: no JSON answer on this host')
+    _assert_rule_budget(payload, text, err)
+
+
+@pytest.mark.parametrize('noun', sorted(_RULE_BUDGET_RETIRED))
+def test_rule_budget_retired_nouns_are_still_retired(noun):
+    """An exemption lasts only while its noun retires: a noun that stops retiring loses it."""
+    from reveal.cli.invocation import RETIREMENTS
+    assert f'scheme:{noun}' in RETIREMENTS, f'{noun} is exempt from the rule budget only as a retiring noun'
+
+
+@pytest.mark.parametrize('damage', ['full-sentence', 'no-pointer', 'stray-pointer', 'wrong-field'])
+def test_rule_budget_negative_check_bites(harness, damage):
+    """Positive control: the check fails each way an answer can break the budget."""
+    _, payload, _ = harness.run('surface://proj')
+    _, text, err = harness.run_raw('surface://proj')
+    _assert_rule_budget(payload, text, err)
+    if damage == 'full-sentence':
+        text += payload['_meta']['known_limits'][0] + '\n'
+    elif damage == 'no-pointer':
+        text = '\n'.join(line for line in text.splitlines() if not line.startswith('Rules: '))
+    elif damage == 'stray-pointer':
+        payload = {'meta': {'warnings': []}}
+    else:
+        text = text.replace('_meta.known_limits', '_meta.elsewhere')
+    with pytest.raises(AssertionError):
+        _assert_rule_budget(payload, text, err)
 
 
 def test_patches_pressure_header_names_no_retiring_noun(harness):

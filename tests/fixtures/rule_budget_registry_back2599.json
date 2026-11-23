@@ -39,5 +39,38 @@
       "standing": [],
       "detail_supported": false
     }
+  },
+  "ast": {
+    "complexity": {
+      "uri": "ast://proj?complexity>0",
+      "exit": 0,
+      "fields": [],
+      "standing": [
+        "complexity is McCabe cyclomatic complexity (a count of decision points), not weighted by nesting depth -- ~40 flat, sequential branches at the same level score identically to one branch nested 40 levels deep. Two functions with the same score can have very different actual structure."
+      ],
+      "detail_supported": false
+    }
+  },
+  "git": {
+    "ownership": {
+      "uri": "git://proj/app.py?view=ownership",
+      "exit": 0,
+      "fields": [
+        "_meta.known_limits"
+      ],
+      "standing": [],
+      "detail_supported": false
+    }
+  },
+  "markdown": {
+    "links": {
+      "uri": "markdown://proj?view=links",
+      "exit": 0,
+      "fields": [
+        "_meta.known_limits"
+      ],
+      "standing": [],
+      "detail_supported": false
+    }
   }
 }
