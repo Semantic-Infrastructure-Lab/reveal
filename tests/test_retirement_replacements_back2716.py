@@ -8,18 +8,11 @@ import re
 
 import pytest
 
-from reveal.adapters.registry import get_adapter_class, list_supported_schemes
 from reveal.cli.invocation import COMMANDS, RETIREMENTS, generated_retirements
 from reveal.cli.parser import create_argument_parser
 from reveal.cli.routing.declared import create_declared_parser, declared_adapter_class
-
-# COMMAND_MODEL rule 2: schemes that name a path and select an analysis. Their requests are `reveal NOUN TARGET`. The
-# adapters declare it (``ANALYSIS_ONLY``); a retired twin (architecture, stats) is one with its own scheme row.
-ANALYSIS_ONLY = tuple(sorted(
-    scheme for scheme in list_supported_schemes()
-    if getattr(get_adapter_class(scheme), 'ANALYSIS_ONLY', False) and f'scheme:{scheme}' not in RETIREMENTS))
-_ANALYSIS_URI = re.compile(r'\b(?:' + '|'.join(ANALYSIS_ONLY) + r')://')
-_QUERY_OPTION = re.compile(r'(?<![\w/])[?&][A-Za-z_][\w-]*')
+# COMMAND_MODEL rule 2: schemes that name a path and select an analysis. Their requests are `reveal NOUN TARGET`.
+from teaching_patterns import ANALYSIS_ONLY, ANALYSIS_URI as _ANALYSIS_URI, QUERY_OPTION as _QUERY_OPTION
 _FLAG = re.compile(r'(?<![\w-])--[a-z][\w-]*')
 _NOUN = re.compile(r'\breveal ([a-z]+)\b')
 
