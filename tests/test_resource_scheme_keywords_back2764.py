@@ -25,12 +25,9 @@ from reveal.errors import RequestValidationError, UnsupportedOverrideError  # no
 
 pytestmark = [pytest.mark.component]
 
-# help:// and reveal:// are declared nouns (BACK-2767). diff:// is not declared yet: its positional element is noted,
-# since the embedded /NAME answers for git:// sides too (BACK-2768), but an unknown key is disclosed as on every
-# adapter that reads no query (unknown_query_param, the answer runs) and an API keyword is forwarded; the refusal
-# (exit 2, UnsupportedOverrideError) comes with diff's declaration (BACK-2214, sized in the declare D3 report).
-DIFF_HELD = pytest.mark.xfail(strict=True, reason='BACK-2214 diff:// is not a declared noun: an unknown key is a '
-                                                  'warning until its declaration (declare D3 report)')
+# help:// and reveal:// are declared nouns (BACK-2767), and diff:// since BACK-2214: an unknown key or keyword exits 2 /
+# raises naming it. diff's positional element is noted, since the embedded /NAME answers for git:// sides too
+# (BACK-2768).
 
 ELEMENT_FORMS = {
     # key -> (CLI words, the answer's type, what the note names)
@@ -59,13 +56,13 @@ def _notes(doc):
 
 # --- unknown keywords: exit 2 / UnsupportedOverrideError, naming the key -------------------------------------------
 
-@pytest.mark.parametrize('scheme', ['help', pytest.param('diff', marks=DIFF_HELD), 'reveal'])
+@pytest.mark.parametrize('scheme', ['help', 'diff', 'reveal'])
 def test_api_refuses_an_unknown_keyword(pair, scheme):
     with pytest.raises(UnsupportedOverrideError, match='bogus_kw'):
         api.query(_uris(pair)[scheme], bogus_kw=1)
 
 
-@pytest.mark.parametrize('scheme', ['help', pytest.param('diff', marks=DIFF_HELD), 'reveal'])
+@pytest.mark.parametrize('scheme', ['help', 'diff', 'reveal'])
 def test_cli_refuses_an_unknown_query_key(pair, scheme):
     run = _run_reveal_direct(f"{_uris(pair)[scheme]}?bogus=1", '--format', 'json')
     assert run.returncode == 2, (run.returncode, run.stderr)
@@ -73,13 +70,12 @@ def test_cli_refuses_an_unknown_query_key(pair, scheme):
     assert "unsupported control 'bogus'" in run.stdout + run.stderr, (run.stdout[:400], run.stderr[:400])
 
 
-@DIFF_HELD
 def test_api_refuses_an_unknown_keyword_beside_the_element_form(pair):
     with pytest.raises(UnsupportedOverrideError, match='bogus_kw'):
         api.query(f"diff://{pair['a']}:{pair['b']}", 'ok', bogus_kw=1)
 
 
-@pytest.mark.parametrize('scheme', ['help', pytest.param('diff', marks=DIFF_HELD), 'reveal'])
+@pytest.mark.parametrize('scheme', ['help', 'diff', 'reveal'])
 def test_mcp_refuses_an_unknown_query_key(pair, scheme):
     from reveal.mcp_server import reveal_query, _ToolFailure
     answer = reveal_query(f'{_uris(pair)[scheme]}?bogus=1')
