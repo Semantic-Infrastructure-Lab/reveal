@@ -426,8 +426,7 @@ class MetricsAdapter(ResourceAdapter):
         return {
             'adapter': 'metrics',
             'description': 'Codebase metrics, quality analysis, file hotspots and provenance',
-            'uri_syntax': ('metrics://<path> [--view hotspots|provenance] [--where EXPR]... [--sort [-]FIELD] '
-                           '[--limit N] [--offset N] [--detail summary] [--code-only]'),
+            'uri_syntax': 'metrics://<path> [--view VIEW] [--where EXPR]... [--limit N]',
             'resource': MetricsAdapter.RESOURCE_SPEC.schema(),
             'execution_policy': {'default_fail_on': MetricsAdapter.DEFAULT_FAIL_ON,
                                  'fail_on': list(MetricsAdapter.FINDINGS_POLICIES)},

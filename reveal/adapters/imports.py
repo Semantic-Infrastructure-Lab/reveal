@@ -1688,9 +1688,7 @@ class ImportsAdapter(ResourceAdapter):
         return {
             'adapter': 'imports',
             'description': 'Import graph analysis for detecting unused imports, circular dependencies, and layer violations',
-            'uri_syntax': ('imports://<path> [--unused|--circular|--violations|--entrypoints|--components|--external|'
-                           '--importers [FILE]|--sort=-fan-in [--limit N]] [--lazy include|exclude|only] '
-                           '[--scope root|path] [--tests include|exclude] [--detail full]'),
+            'uri_syntax': 'imports://<path> [--unused|--circular|--violations|--importers|--sort=-fan-in]',
             'query_params': param_schema(PARAM_SPECS),
             'elements': {},
             'cli_flags': ['--verbose'],

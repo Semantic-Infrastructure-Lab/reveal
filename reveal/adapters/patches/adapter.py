@@ -225,7 +225,7 @@ class PatchesAdapter(ResourceAdapter):
         return {
             'adapter': 'patches',
             'description': 'Patch pressure scanner for Python and TypeScript/JavaScript tests',
-            'uri_syntax': 'patches://<path> [--view target|test|file|pressure] [--limit N] [--min N]',
+            'uri_syntax': 'patches://<path> [--view VIEW] [--limit N]',
             'resource': PatchesAdapter.RESOURCE_SPEC.schema(),
             'query_params': param_schema(PatchesAdapter.PARAM_SPECS),
             'elements': {},

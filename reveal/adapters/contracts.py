@@ -1029,7 +1029,7 @@ class ContractsAdapter(ResourceAdapter):
         return {
             'adapter': 'contracts',
             'description': 'Contract and architectural-seam scanner (ABCs, Protocols, interfaces, traits, mixins)',
-            'uri_syntax': 'contracts://<path> [--abstract-only] [--implementations off] [--implementations-limit N]',
+            'uri_syntax': 'contracts://<path> [--abstract-only] [--implementations off]',
             'resource': ContractsAdapter.RESOURCE_SPEC.schema(),
             'execution_policy': {'default_fail_on': ContractsAdapter.DEFAULT_FAIL_ON,
                                  'fail_on': list(ContractsAdapter.FINDINGS_POLICIES)},

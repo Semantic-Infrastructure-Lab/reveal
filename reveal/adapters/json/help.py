@@ -176,7 +176,7 @@ def get_schema() -> Dict[str, Any]:
     return {
         'adapter': 'json',
         'description': 'JSON file navigation with path access, schema inference, and gron-style flattening',
-        'uri_syntax': 'json://<file>[/path/to/key] [--where EXPR]... [--view VIEW] [--sort [-]FIELD] [--limit N]',
+        'uri_syntax': 'json://<file>[/key] [--where EXPR]... [--view VIEW]',
         'query_params': _SCHEMA_QUERY_PARAMS,
         'path_syntax': {
             '/key': 'Access object key',

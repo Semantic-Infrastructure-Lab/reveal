@@ -1041,7 +1041,7 @@ class PackAdapter(ResourceAdapter):
         return {
             'adapter': 'pack',
             'description': 'Token-budgeted context snapshot: ranked file selection for LLM consumption',
-            'uri_syntax': 'pack://<path> [--budget 2000] [--focus PATTERN] [--since REF] [--content] [--architecture]',
+            'uri_syntax': 'pack://<path> [--budget N] [--focus PATTERN] [--since REF]',
             'resource': PackAdapter.RESOURCE_SPEC.schema(),
             'execution_policy': {'default_fail_on': 'none', 'fail_on': ['none']},
             'query_params': {
