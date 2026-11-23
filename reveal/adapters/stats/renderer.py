@@ -8,9 +8,10 @@ from .provenance import PROVENANCE_RESULT_TYPE
 
 
 def _print_issue_count_line(result: dict) -> None:
-    """The footer that points at the counting rule behind the quality score (BACK-1884): one pointer to the JSON field
-    that states it, which also names the rule count and rule set (BACK-2599, BACK-2685)."""
-    for line in rule_text_lines(result, fields=('meta.issue_count.rule',), standing_types=frozenset()):
+    """The footer that points at the counting rule behind the quality score (BACK-1884) and, on the hotspots view, the
+    findings verdict's rule: one pointer to the JSON fields that state them (BACK-2599, BACK-2685)."""
+    for line in rule_text_lines(result, fields=('meta.issue_count.rule', 'summary.findings_rule'),
+                                standing_types=frozenset()):
         print(f"\n{line}")
 
 
@@ -25,9 +26,7 @@ def _print_hotspots(result: Dict[str, Any]) -> None:
             print(f"   Issues: {', '.join(h['issues'])}")
     summary = result.get('summary', {})
     if 'has_findings' in summary:
-        verdict = 'yes' if summary['has_findings'] else 'none'
-        print(f"\nFindings:   {verdict} (a file below quality 70 or a function above complexity 20, "
-              "over every analysed file before filters and cuts)")
+        print(f"\nFindings:   {'yes' if summary['has_findings'] else 'none'}")
 
 
 def _print_test_scope(result: dict) -> None:

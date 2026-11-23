@@ -18,6 +18,9 @@ CHURN_WEIGHT = 0.2
 # complexity above 20. Fixed thresholds, not read from C901's config (BACK-2149, Scott 2026-11-06).
 FINDINGS_QUALITY_BELOW = 70
 FINDINGS_COMPLEXITY_ABOVE = 20
+# The verdict's rule, as ``summary.findings_rule`` states it beside ``has_findings``; the text names the field (BACK-2599).
+FINDINGS_RULE = (f'a file below quality {FINDINGS_QUALITY_BELOW} or a function above complexity '
+                 f'{FINDINGS_COMPLEXITY_ABOVE}, over every analysed file before filters and cuts')
 
 
 def has_findings(qualities: Iterable[Any], complexities: Iterable[Any]) -> bool:

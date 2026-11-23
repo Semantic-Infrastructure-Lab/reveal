@@ -43,7 +43,7 @@ from .analysis import find_analyzable_files, analyze_file, get_file_display_path
 from .issue_count import note_issue_count_basis, renamed_field
 from .metrics import calculate_file_stats
 from .queries import SORT_FIELDS, get_quality_config, field_value, compare, matches_filters
-from .aggregation import aggregate_stats, has_findings, identify_hotspots
+from .aggregation import FINDINGS_RULE, aggregate_stats, has_findings, identify_hotspots
 from .provenance import PROVENANCE_RESULT_TYPE, provenance_report
 from ...reveal_types import PathFailure
 from ...errors import RequestValidationError
@@ -275,6 +275,7 @@ _SCHEMA_OUTPUT_TYPES = [
                 'total_classes': {'type': 'integer'}, 'avg_complexity': {'type': 'number'},
                 'avg_quality_score': {'type': 'number'},
                 'has_findings': {'type': 'boolean', 'description': 'Present with hotspots=true: an analysed file has quality below 70 or a function with complexity above 20, over every analysed file before filters and cuts; --fail-on findings exits 1 on it'},
+                'findings_rule': {'type': 'string', 'description': 'Present with has_findings: the sentence stating its rule, which the text answer points at'},
             }},
             'hotspots': {'type': 'array', 'items': {'type': 'object', 'properties': {
                 'file': {'type': 'string'}, 'quality_score': {'type': 'number'},
@@ -869,6 +870,7 @@ class MetricsAdapter(ResourceAdapter):
         for entry in result['hotspots']:
             entry['provenance'] = provenance_for_display_path(entry['file'], base)
         result['summary']['has_findings'] = self._population_findings
+        result['summary']['findings_rule'] = FINDINGS_RULE
 
     def _churn_bounds_unread(self) -> Optional[Dict[str, Any]]:
         """since and merges bound the churn walk, so a ranking whose files have no git history to walk leaves them

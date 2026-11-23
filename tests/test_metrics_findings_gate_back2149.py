@@ -195,9 +195,16 @@ def test_the_exit_code_help_names_the_gate():
 @pytest.mark.parametrize('names, verdict', [(('clean.py', 'complex.py'), 'yes'), (('clean.py', 'edge.py'), 'none')])
 def test_text_states_the_verdict_and_its_rule_in_both_spellings(make, names, verdict):
     target = make(*names)
+    """The rule is one sentence in ``summary.findings_rule``, which the text's Rules pointer names (BACK-2599); the
+    verdict line keeps only the verdict."""
     for argv in (['metrics', target, '--hotspots'], [f'metrics://{target}?hotspots=true']):
         result = run(*argv, '--no-gitignore')
         assert result.returncode == 0, result.stderr
-        assert (f'Findings:   {verdict} (a file below quality 70 or a function above complexity 20, '
-                'over every analysed file before filters and cuts)') in result.stdout, argv
+        lines = result.stdout.splitlines()
+        assert f'Findings:   {verdict}' in lines, argv
+        assert 'Rules: --format json (meta.issue_count.rule, summary.findings_rule)' in lines, argv
+        rule = json.loads(run(*argv, '--no-gitignore', '--format', 'json').stdout)['summary']['findings_rule']
+        assert rule == ('a file below quality 70 or a function above complexity 20, '
+                        'over every analysed file before filters and cuts'), argv
+        assert rule not in result.stdout, argv
     assert 'Findings:' not in run('metrics', target, '--no-gitignore').stdout  # no ranking, no verdict

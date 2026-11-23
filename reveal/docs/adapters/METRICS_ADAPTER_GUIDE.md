@@ -531,7 +531,8 @@ failure and exclusion diagnostics qualify what the scan could analyze.
     "avg_quality_score": 78.5,
     "excluded": 0,
     "excluded_by_extension": {},
-    "has_findings": false  // Only with the hotspot ranking (view=hotspots): see Findings gate
+    "has_findings": false,  // Only with the hotspot ranking (view=hotspots): see Findings gate
+    "findings_rule": "a file below quality 70 or a function above complexity 20, over every analysed file before filters and cuts"
   },
   "files": [
     {
@@ -761,7 +762,8 @@ so `tests/proj`, `./tests/proj`, `.` from inside it and the absolute path give t
 
 `view=hotspots` adds `summary.has_findings`: true when an analysed file has a quality score below 70
 or a function with complexity above 20 (`complexity.max > 20`; exactly 20 is not a finding). The
-thresholds are fixed. The verdict is taken over every analysed file, before `where` (an
+thresholds are fixed. `summary.findings_rule` states that rule as one sentence; the text answer prints
+`Findings:   yes` or `none` and names the field in its `Rules:` line. The verdict is taken over every analysed file, before `where` (an
 `avg_complexity` filter is an average), `tests=` and the `limit` and `offset` cuts, so a cut or a
 filter never hides a finding from the gate. `--fail-on findings` exits 1 on it; the default
 `--fail-on none` reports it with exit 0. The default and `view=provenance` answers have no findings
