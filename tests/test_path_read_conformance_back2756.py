@@ -82,3 +82,35 @@ def test_mcp_reveal_run_gives_the_same_teaching(element_workspace):
         reveal_run([ELEMENT_FILE, ELEMENT, *VIEW, '--offset', '1'])
     text = str(raised.value)
     assert unsupported_controls_message(ELEMENT_VIEW_SPECS, ['--offset']) in text and 'usage:' not in text
+
+
+# The file route's owner of cell 3's message, unit by unit: one answer per route the main parser's error reaches.
+def _reread(*argv):
+    from reveal.cli.parser import create_argument_parser
+    args, _unknown = create_argument_parser('').parse_known_args(list(argv))
+    return args
+
+
+@pytest.mark.parametrize('argv, message, taught', [
+    ((ELEMENT_FILE, ELEMENT, *VIEW), 'unrecognized arguments: --zz 1', True),            # an element request
+    ((ELEMENT_FILE, ELEMENT, '--varflow', 'order'), 'unrecognized arguments: --zz', True),
+    ((ELEMENT_FILE, ELEMENT), 'unrecognized arguments: --zz', False),                     # element extraction
+    ((ELEMENT_FILE,), 'unrecognized arguments: --zz', False),                             # the file view
+    (('proj',), 'unrecognized arguments: --zz', False),                                   # a directory
+    (('ast://proj', ELEMENT, *VIEW), 'unrecognized arguments: --zz', False),              # a URI: its noun's message
+    (('@targets.txt', *VIEW), 'unrecognized arguments: --zz', False),                     # an @file list
+    ((ELEMENT_FILE, ELEMENT, *VIEW), 'argument --head: expected one argument', False),    # another usage error
+    ((ELEMENT_FILE, ELEMENT, *VIEW), 'unrecognized arguments: extra', False),             # an extra positional
+], ids=['element-view', 'varflow', 'extraction', 'file', 'directory', 'uri', 'at-file', 'other-error', 'positional'])
+def test_path_read_flag_message_answers_only_element_requests(argv, message, taught):
+    from reveal.cli.routing.file import path_read_flag_message
+    flags = [word for word in message.partition(':')[2].split() if word.startswith('-')]
+    expected = unsupported_controls_message(ELEMENT_VIEW_SPECS, flags) if taught else None
+    assert path_read_flag_message(_reread(*argv), message) == expected
+
+
+@pytest.mark.parametrize('target, path_read', [('a.py', True), ('proj/', True), ('-', True), ('ast://proj', False),
+                                               ('@list.txt', False), ('', False), (None, False)])
+def test_is_path_read(target, path_read):
+    from reveal.cli.routing.file import is_path_read
+    assert is_path_read(target) is path_read

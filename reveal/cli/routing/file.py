@@ -444,6 +444,28 @@ PATHLESS_FLAGS = {
 STDIN_BLIND_FLAGS = frozenset({'explain_file', 'capabilities', 'show_ast', 'decorator_stats'})
 
 
+def is_path_read(target) -> bool:
+    """Whether the request's target is a path read (a file or directory), not a URI or an ``@file`` list."""
+    return isinstance(target, str) and bool(target) and '://' not in target and not target.startswith('@')
+
+
+def path_read_flag_message(args: 'Namespace', message: str) -> Optional[str]:
+    """Rule 3's one message for flags the main parser does not have on an element request of a path read, or None
+    (argparse's own error stands: another error, a URI, a path read that is no element request, BACK-2756 cell 3).
+    *args*: the request as the main parser re-read it. A path read that is not an element request has no declaration
+    to name and keeps BACK-522's scoped usage; an element request names its declarations (``ELEMENT_VIEW_SPECS``),
+    as its refusal of a known main-parser flag does (``_reject_unsupported_element_controls``)."""
+    from ...nav_params import ELEMENT_VIEW_SPECS, element_request_given
+    from ...utils.query_binding import unsupported_controls_message
+    from .declared import typed_source
+    flags = [token for token in message.partition(':')[2].split() if token.startswith('-')]
+    if not is_path_read(getattr(args, 'path', None)) or not message.startswith('unrecognized arguments:') or not flags:
+        return None
+    if not element_request_given(typed_source(ELEMENT_VIEW_SPECS, args)[0]):
+        return None
+    return unsupported_controls_message(ELEMENT_VIEW_SPECS, flags)
+
+
 def _given_flags(args: 'Namespace', table: dict) -> list:
     """The (dest, spelling) pairs of ``table`` the command line set: a value other than the parser's default, as the
     flag ledger reads it, so a switch typed off (``--group off``, default None) counts as given; the spelling is the
@@ -461,7 +483,7 @@ def reject_ignored_element(args: 'Namespace') -> None:
     are left alone.
     """
     path_str = getattr(args, 'path', None)
-    if not path_str or '://' in path_str or path_str.startswith('@'):
+    if not is_path_read(path_str):
         return
     declared = _given_flags(args, {**ELEMENT_LESS_FLAGS, **ELEMENT_FLAGS})
     whole_file = _given_flags(args, WHOLE_FILE_FLAGS)
