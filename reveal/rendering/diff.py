@@ -1,10 +1,10 @@
 """Rendering functions for diff:// adapter output."""
 
 import difflib
-import json
 from typing import Dict, Any, List, Optional
 
 from reveal.analyzers.imports.service import edge_rule_disclosures, edge_rule_fields
+from reveal.utils import print_json_result
 from reveal.utils.warning_render import meta_warning_lines, rule_text_lines
 from reveal.utils.formatting import lines_label
 from reveal.utils.lines import split_lines
@@ -464,12 +464,13 @@ def _render_diff_breadcrumbs(left: Dict[str, Any], right: Dict[str, Any],
 
 
 def render_diff_json(diff_result: Dict[str, Any]) -> None:
-    """Render diff in JSON format.
+    """Render diff in JSON format, through the one JSON funnel: the invocation's retirement notes, config warnings
+    and unused-input warnings reach ``meta.warnings`` instead of stderr (BACK-2768).
 
     Args:
         diff_result: Diff result
     """
-    print(json.dumps(diff_result, indent=2))
+    print_json_result(diff_result)
 
 
 # A caveat true of every compared snapshot: behind the Rules pointer with the counting rules (BACK-2599).
