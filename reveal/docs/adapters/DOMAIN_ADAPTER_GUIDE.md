@@ -624,16 +624,17 @@ echo -e "domain://example.com\ndomain://google.com\ndomain://github.com" | \
   "summary": {"successful": 2, "warnings": 1, "failures": 0, "not_applicable": 0},
   "adapters": ["domain"],
   "results": [
-    {"uri": "domain://example.com", "scheme": "domain", "status": "pass", "data": {...}},
-    {"uri": "domain://google.com", "scheme": "domain", "status": "pass", "data": {...}},
-    {"uri": "domain://github.com", "scheme": "domain", "status": "warning", "data": {...}}
+    {"uri": "domain://example.com", "scheme": "domain", "status": "pass", "data": {...}, "exit_code": 0},
+    {"uri": "domain://google.com", "scheme": "domain", "status": "pass", "data": {...}, "exit_code": 0},
+    {"uri": "domain://github.com", "scheme": "domain", "status": "warning", "data": {...}, "exit_code": 1}
   ]
 }
 ```
 
 Each entry's `data` is the result `reveal <uri> --check --format json` gives for that URI,
-with the same flags applied. A query that fails there (exit 1) is `"status": "error"` here,
-with its message in `error`. The batch exits 2 when any entry failed, 1 when any warned (and none failed), else 0.
+with the same flags applied, and its `exit_code` is the exit that command has alone: 2 for a failed
+check, 1 for a warning, 0 for a pass. A query that fails there (exit 1) is `"status": "error"` here,
+with its message in `error` and `exit_code` 1. The batch exits with the highest entry `exit_code`.
 
 **Use cases**:
 - Monitor multiple domains in parallel
