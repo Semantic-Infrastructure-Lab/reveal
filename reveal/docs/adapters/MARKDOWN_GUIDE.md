@@ -9,8 +9,8 @@ help_category: feature_guides
 
 ## Directory queries
 
-`reveal markdown PATH` takes the controls as flags; `markdown://PATH` names the same directory and takes the
-same flags, with equal JSON and exit codes:
+`reveal markdown PATH` takes the controls as flags (the deprecated `markdown://` URI takes the same flags until
+1.0, with equal JSON and exit codes):
 
 ```bash
 reveal markdown docs/ --where 'status=draft' --match retry --columns author,date

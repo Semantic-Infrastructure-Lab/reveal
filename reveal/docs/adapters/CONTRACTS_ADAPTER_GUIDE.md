@@ -56,7 +56,7 @@ the filename as an argument.
 ```python
 from reveal import api
 
-report = api.query("contracts://./src", abstract_only=True, implementations=False, implementations_limit=0)
+report = api.query("contracts", "./src", abstract_only=True, implementations=False, implementations_limit=0)
 ```
 
 Explicit keywords override validated URI values, including `False` and zero.
@@ -176,5 +176,5 @@ Legacy stdin and mixed URI batches retain their existing exit policy and reject 
 ## See Also
 
 - `reveal help://schemas/contracts` - JSON schema
-- `reveal 'ast://<path>'` - full structure for any contract's implementers
-- `reveal 'calls://<dir>/?callers=<method>'` - who calls into a specific implementation
+- `reveal ast <path>` - full structure for any contract's implementers
+- `reveal calls <dir>/ --callers <method>` - who calls into a specific implementation

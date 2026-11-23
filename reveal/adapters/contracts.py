@@ -939,17 +939,17 @@ def _contracts_impls(value: Any) -> int:
 
 _ABSTRACT_ONLY = ParamSpec(
     'abstract_only', 'boolean', 'Show only ABCs and Protocols (skip TypedDicts, dataclasses, path-heuristic)',
-    False, boolean_value, ('abstract_only=true',), role='analysis',
+    False, boolean_value, ('--abstract-only',), role='analysis',
     cli=CliBinding(('--abstract-only',), action='store_true'))
 _IMPLEMENTATIONS = ParamSpec(
     'implementations', 'boolean', 'Which classes implement each contract: on (default) or off', True,
-    switch_value, ('implementations=off',), role='analysis',
+    switch_value, ('--implementations off',), role='analysis',
     cli=CliBinding(('--implementations',), metavar='on|off'),
     legacy=(LegacySpelling('no_implementations', codec=legacy_switch('no_implementations', 'off', 'on'),
                            flag='--no-implementations', flag_value=True),))
 _IMPLS = ParamSpec('implementations_limit', 'integer',
                    'Implementers listed per contract in the text view (0 = all; JSON always has all)',
-                   5, _contracts_impls, ('implementations_limit=20', 'implementations_limit=0'), minimum=0,
+                   5, _contracts_impls, ('--implementations-limit 20', '--implementations-limit 0'), minimum=0,
                    zero_policy='all', role='presentation', cli=CliBinding(('--implementations-limit',), metavar='N'),
                    legacy=(LegacySpelling('impls', flag='--impls'),))
 
@@ -1003,11 +1003,11 @@ class ContractsAdapter(ResourceAdapter):
         return {
             'name': 'contracts',
             'description': 'Find contracts and architectural seams: ABCs, Protocols, TypedDicts, dataclasses, BaseModels.',
-            'syntax': 'contracts://<path>[?abstract_only=true&implementations=off]',
+            'syntax': 'reveal contracts <path> [--abstract-only] [--implementations off] [--implementations-limit N]',
             'examples': [
-                {'uri': 'contracts://src', 'description': 'All contracts in src/'},
-                {'uri': 'contracts://.?abstract_only=true', 'description': 'Only ABCs and Protocols'},
-                {'uri': 'contracts://.?implementations=off', 'description': "Skip showing which classes implement each contract"},
+                {'uri': 'reveal contracts src', 'description': 'All contracts in src/'},
+                {'uri': 'reveal contracts . --abstract-only', 'description': 'Only ABCs and Protocols'},
+                {'uri': 'reveal contracts . --implementations off', 'description': "Skip showing which classes implement each contract"},
             ],
             'features': [
                 'Detects ABCs, Protocols, TypedDicts, dataclasses, Pydantic BaseModels (Python)',
@@ -1029,7 +1029,7 @@ class ContractsAdapter(ResourceAdapter):
         return {
             'adapter': 'contracts',
             'description': 'Contract and architectural-seam scanner (ABCs, Protocols, interfaces, traits, mixins)',
-            'uri_syntax': 'contracts://<path>?abstract_only=true&implementations=off',
+            'uri_syntax': 'contracts://<path> [--abstract-only] [--implementations off] [--implementations-limit N]',
             'resource': ContractsAdapter.RESOURCE_SPEC.schema(),
             'execution_policy': {'default_fail_on': ContractsAdapter.DEFAULT_FAIL_ON,
                                  'fail_on': list(ContractsAdapter.FINDINGS_POLICIES)},

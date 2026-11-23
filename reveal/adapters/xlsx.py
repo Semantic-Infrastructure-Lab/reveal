@@ -548,44 +548,44 @@ _SHEET_ANSWER, _SEARCH_ANSWER = ('xlsx_sheet',), ('xlsx_search',)
 # before any work, and an unknown, unread or repeated control is an invalid request. The six views are answer selectors
 # (ruling Q3): two in one request exit 2. ?range and ?search are the legacy words of --cells and --match.
 _SHEET = ParamSpec('sheet', 'string|integer', 'Sheet to show (name, 0-based index or a unique part of a name)', None,
-                   _text_value('sheet', '--sheet NAME'), ('sheet=Sales', 'sheet=0'), role='operation',
+                   _text_value('sheet', '--sheet NAME'), ('--sheet Sales', '--sheet 0'), role='operation',
                    cli=CliBinding(('--sheet',), metavar='NAME'))
 _CELLS = ParamSpec('cells', 'string', 'Cells of the sheet view: A1:C10, whole columns B:D, whole rows 5:7, or one '
-                   'cell B2', None, _text_value('cells', '--cells A1:C10'), ('sheet=0&cells=A1:C10', 'sheet=0&cells=B:D', 'sheet=0&cells=5:7'),
+                   'cell B2', None, _text_value('cells', '--cells A1:C10'), ('--sheet 0 --cells A1:C10', '--sheet 0 --cells B:D', '--sheet 0 --cells 5:7'),
                    cli=CliBinding(('--cells',), metavar='RANGE'), legacy=(LegacySpelling('range'),),
                    answers=_SHEET_ANSWER)
 _MATCH = ParamSpec('match', 'array', 'Search every sheet for rows holding the text (case-insensitive); repeat to '
-                   'require every term in a row', None, _match_terms, ('match=revenue', 'match=total'),
+                   'require every term in a row', None, _match_terms, ('--match revenue', '--match total'),
                    role='operation', repeatable=True, cli=CliBinding(('--match',), metavar='TEXT'),
                    legacy=(LegacySpelling('search'),))
 # --format is the global flag; csv is the format only this noun renders (formats.noun_formats), so --format csv binds
 # this control as ?format=csv spells it (BACK-2722 precedent: calls/imports --format dot).
 _FORMAT = ParamSpec('format', 'string', 'Output override: csv (the sheet view as CSV, every row) or json; text follows '
-                    '--format', None, _format_value, ('sheet=0&format=csv', 'format=json'), choices=('text', 'json', 'csv'),
+                    '--format', None, _format_value, ('--sheet 0 --format csv', '--format json'), choices=('text', 'json', 'csv'),
                     role='presentation')
 _LIMIT = ParamSpec('limit', 'integer', 'Rows (sheet view) or matches (search) to return; 0 = every row. Absent: the '
                    'sheet view shows 100 and says so; --format csv and the search return every row', None,
-                   _limit_value, ('sheet=0&limit=500', 'sheet=0&limit=0', 'match=total&limit=20'), minimum=0, zero_policy='no cap',
+                   _limit_value, ('--sheet 0 --limit 500', '--sheet 0 --limit 0', '--match total --limit 20'), minimum=0, zero_policy='no cap',
                    cli=CliBinding(('--limit',), metavar='N'), answers=_SHEET_ANSWER + _SEARCH_ANSWER)
 _FORMULAS = ParamSpec('formulas', 'boolean', 'Sheet view: on shows formulas instead of values (default off)', False,
-                      switch_value, ('sheet=0&formulas=on',), cli=CliBinding(('--formulas',), metavar='on|off'),
+                      switch_value, ('--sheet 0 --formulas on',), cli=CliBinding(('--formulas',), metavar='on|off'),
                       answers=_SHEET_ANSWER)
 _PARAM_SPECS: Tuple[ParamSpec, ...] = (
     _SHEET, _CELLS, _MATCH, _FORMAT, _LIMIT, _FORMULAS,
     ParamSpec('powerpivot', 'string', 'Extract the Power Pivot model; bare means schema', None,
-              _mode_value('schema'), ('powerpivot=schema', 'powerpivot=dax', 'powerpivot=tables',
-                                      'powerpivot=measures'), choices=_POWERPIVOT_MODES, role='operation',
+              _mode_value('schema'), ('--powerpivot schema', '--powerpivot dax', '--powerpivot tables',
+                                      '--powerpivot measures'), choices=_POWERPIVOT_MODES, role='operation',
               cli=_mode_flag('powerpivot')),
     ParamSpec('powerquery', 'string', 'Extract Power Query M code: list (bare), show (all M code) or one '
               'query by name (case-insensitive; a name that matches nothing exits 2)', None,
-              _mode_value('list'), ('powerquery=list', 'powerquery=show', 'powerquery=SalesData'), role='operation',
+              _mode_value('list'), ('--powerquery list', '--powerquery show', '--powerquery SalesData'), role='operation',
               cli=_mode_flag('powerquery')),
     ParamSpec('names', 'string', 'List named ranges defined in the workbook: list (bare)', None,
-              _mode_value('list'), ('names=list', 'names'), choices=('list',), role='operation',
+              _mode_value('list'), ('--names list', '--names'), choices=('list',), role='operation',
               cli=_mode_flag('names')),
     ParamSpec('connections', 'string', 'List external data connections: list (bare) or show (full '
               'connection strings and commands)', None, _mode_value('list'),
-              ('connections=list', 'connections'), choices=('list', 'show'), role='operation',
+              ('--connections list', '--connections'), choices=('list', 'show'), role='operation',
               cli=_mode_flag('connections')),
 )
 _SPEC = {spec.name: spec for spec in _PARAM_SPECS}

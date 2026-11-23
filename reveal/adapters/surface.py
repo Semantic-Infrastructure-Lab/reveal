@@ -433,30 +433,30 @@ TEST_CHOICES = ('include', 'exclude')
 # legacy cap of its own until the cut: it cuts the text only, where limit cuts the answer, so the two never agree and
 # are never given together.
 _KIND = ParamSpec('kind', 'string', 'One surface category: ' + ', '.join(CATEGORIES) + ' (omitted: every category)',
-                  None, str, examples=('kind=env',), choices=CATEGORIES, role='analysis',
+                  None, str, examples=('--kind env',), choices=CATEGORIES, role='analysis',
                   cli=CliBinding(('--kind',), metavar='KIND'),
                   legacy=(LegacySpelling('type', codec=_blank_is_omitted, flag='--type'),))
 _TESTS = ParamSpec('tests', 'string', 'Test/support files, selected by the project test/support policy: include them '
-                   '(default) or exclude them', 'include', str, examples=('tests=exclude',), choices=TEST_CHOICES,
+                   '(default) or exclude them', 'include', str, examples=('--tests exclude',), choices=TEST_CHOICES,
                    role='analysis', cli=CliBinding(('--tests',), metavar='{include,exclude}'),
                    legacy=(LegacySpelling('source_only', codec=legacy_switch('source_only', 'exclude', 'include'),
                                           flag='--source-only', flag_value=True),))
 _VIEW = ParamSpec('view', 'string', 'dir: add the per-directory rollup (by_dir: entries per directory and category, '
                   'busiest first); the text lists the directories in place of the entries', None, str,
-                  examples=('view=dir',), choices=('dir',), role='operation', cli=CliBinding(('--view',), metavar='VIEW'),
+                  examples=('--view dir',), choices=('dir',), role='operation', cli=CliBinding(('--view',), metavar='VIEW'),
                   cap='limit', legacy=(LegacySpelling('by', codec=_blank_is_omitted, flag='--by'),))
 _DIR_DEPTH = ParamSpec('dir-depth', 'integer', 'With --view dir: keep the first N path segments of each directory '
                        '(0 = the full directory)', 0, lambda value: _surface_limit(value, 'dir-depth'), minimum=0,
-                       examples=('view=dir&dir-depth=2',), zero_policy='full directory', role='analysis',
+                       examples=('--view dir --dir-depth 2',), zero_policy='full directory', role='analysis',
                        aliases=('dir_depth',), cli=CliBinding(('--dir-depth',), dest='dir_depth', metavar='N'),
                        answers=_DIR_VIEW, legacy=(LegacySpelling('depth', flag='--depth'),))
 _LIMIT = ParamSpec('limit', 'integer', 'Rows per category, and directories in --view dir, in JSON and text; 0 = no cap '
                    '(the default). total stays the uncut count', None, lambda value: _surface_limit(value, 'limit'),
-                   minimum=0, examples=('limit=20',), zero_policy='no cap', role='analysis',
+                   minimum=0, examples=('--limit 20',), zero_policy='no cap', role='analysis',
                    cli=CliBinding(('--limit',), metavar='N'))
 _TOP = ParamSpec('top', 'integer', 'Legacy: text entries per category (omitted or 0 = all; JSON stays complete), '
                  'replaced by limit', None, lambda value: _surface_limit(value, 'top'), minimum=0,
-                 examples=('top=20',), zero_policy='all', role='presentation', cli=CliBinding(('--top',), metavar='N'),
+                 examples=('--top 20',), zero_policy='all', role='presentation', cli=CliBinding(('--top',), metavar='N'),
                  requires=('!limit',))
 _LIMIT_HINT = 'raise --limit N, or --limit 0 for every row'
 

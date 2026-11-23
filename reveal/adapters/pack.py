@@ -868,26 +868,26 @@ def _legacy_flag(value: Any) -> bool:
 
 
 _BUDGET = ParamSpec('budget', 'string', 'Token or line budget (e.g. 2000, 500-lines)', '2000',
-                    _budget_text, ('budget=4000', 'budget=500-lines'), role='analysis',
+                    _budget_text, ('--budget 4000', '--budget 500-lines'), role='analysis',
                     cli=CliBinding(('--budget',), metavar='N[=tokens|-lines]'))
 _FOCUS = ParamSpec('focus', 'string', 'Emphasize files matching this name pattern', None,
-                   _optional_text, ('focus=auth',), role='analysis', uri_codec='percent',
+                   _optional_text, ('--focus auth',), role='analysis', uri_codec='percent',
                    cli=CliBinding(('--focus',), metavar='TOPIC'))
 _SINCE = ParamSpec('since', 'string', 'Git ref to diff against; changed files rank first, one the budget drops is named in a warning',
-                   None, _optional_text, ('since=main',), role='analysis', uri_codec='percent',
+                   None, _optional_text, ('--since main',), role='analysis', uri_codec='percent',
                    cli=CliBinding(('--since',), metavar='REF'))
 _CONTENT = ParamSpec('content', 'boolean', 'Include tiered file content (full/structure/name_only)',
-                     False, _legacy_flag, ('content=true',), role='presentation',
+                     False, _legacy_flag, ('--content',), role='presentation',
                      cli=CliBinding(('--content',), action='store_true'))
 # Pack's verbose adds detail (the per-file breakdown): detail=full, keeping the JSON verbose key (COMMAND_MODEL
 # "Detail", BACK-2654 rule 4).
 _DETAIL = ParamSpec('detail', 'string', 'normal, or full: adds the per-file token/line-count breakdown (JSON '
                     '"verbose": true)', 'normal', str,
-                    ('detail=full',), choices=('normal', 'full'), role='presentation',
+                    ('--detail full',), choices=('normal', 'full'), role='presentation',
                     legacy=(verbose_legacy('full', 'detail=full (--detail full)'),),
                     cli=CliBinding(('--detail',), metavar='LEVEL'))
 _ARCHITECTURE = ParamSpec('architecture', 'boolean', 'Boost high fan-in files; include an architecture hint',
-                          False, _legacy_flag, ('architecture=true',), role='analysis',
+                          False, _legacy_flag, ('--architecture',), role='analysis',
                           cli=CliBinding(('--architecture',), action='store_true'))
 
 
@@ -1008,12 +1008,12 @@ class PackAdapter(ResourceAdapter):
         return {
             'name': 'pack',
             'description': 'Curate a token-budgeted context snapshot for LLM consumption.',
-            'syntax': 'pack://<path>[?budget=2000&focus=auth&since=main&content=true&architecture=true]',
+            'syntax': 'reveal pack <path> [--budget 2000] [--focus PATTERN] [--since REF] [--content] [--architecture]',
             'examples': [
-                {'uri': 'pack://src', 'description': 'Default 2000-token budget'},
-                {'uri': 'pack://src?budget=4000', 'description': '4000-token budget'},
-                {'uri': 'pack://src?since=main', 'description': 'PR review: changed files first'},
-                {'uri': 'pack://src?content=true', 'description': 'Emit structure content (agent-ready)'},
+                {'uri': 'reveal pack src', 'description': 'Default 2000-token budget'},
+                {'uri': 'reveal pack src --budget 4000', 'description': '4000-token budget'},
+                {'uri': 'reveal pack src --since main', 'description': 'PR review: changed files first'},
+                {'uri': 'reveal pack src --content', 'description': 'Emit structure content (agent-ready)'},
             ],
             'features': [
                 'Priority ranking: changed files (--since) > entry points > focus/graph relevance > fan-in > recency',
@@ -1041,7 +1041,7 @@ class PackAdapter(ResourceAdapter):
         return {
             'adapter': 'pack',
             'description': 'Token-budgeted context snapshot: ranked file selection for LLM consumption',
-            'uri_syntax': 'pack://<path>?budget=2000&focus=auth&since=main&content=true&architecture=true',
+            'uri_syntax': 'pack://<path> [--budget 2000] [--focus PATTERN] [--since REF] [--content] [--architecture]',
             'resource': PackAdapter.RESOURCE_SPEC.schema(),
             'execution_policy': {'default_fail_on': 'none', 'fail_on': ['none']},
             'query_params': {

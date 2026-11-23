@@ -65,9 +65,9 @@ _SCHEMA_EXAMPLE_QUERIES = [
     {'uri': 'json://package.json/name', 'description': 'Get package name', 'output_type': 'json_value'},
     {'uri': 'json://data.json/users/0', 'description': 'Get first user from array', 'output_type': 'json_value'},
     {'uri': 'json://data.json/users[0:3]', 'description': 'Get first 3 users (array slice)', 'output_type': 'json_value'},
-    {'uri': 'json://config.json?schema', 'description': 'Show type structure of entire file', 'cli_flag': '?schema', 'output_type': 'json_schema'},
-    {'uri': 'json://config.json?flatten', 'description': 'Flatten to grep-able format (also: ?gron)', 'cli_flag': '?flatten', 'output_type': 'json_flatten'},
-    {'uri': 'json://package.json/dependencies?keys', 'description': 'List all dependency names', 'cli_flag': '?keys', 'output_type': 'json_keys'},
+    {'uri': 'json://config.json --view schema', 'description': 'Show type structure of entire file', 'cli_flag': '--view schema', 'output_type': 'json_schema'},
+    {'uri': 'json://config.json --view flatten', 'description': 'Flatten to grep-able format (also: --view gron)', 'cli_flag': '--view flatten', 'output_type': 'json_flatten'},
+    {'uri': 'json://package.json/dependencies --view keys', 'description': 'List all dependency names', 'cli_flag': '--view keys', 'output_type': 'json_keys'},
 ]
 
 
@@ -111,20 +111,20 @@ def get_examples() -> List[Dict[str, str]]:
         {'uri': 'json://package.json/scripts', 'description': 'Get all scripts'},
         {'uri': 'json://data.json/users/0', 'description': 'Get first user from array'},
         {'uri': 'json://data.json/users[0:3]', 'description': 'Get first 3 users (array slice)'},
-        {'uri': 'json://config.json?schema', 'description': 'Show type structure of entire file'},
-        {'uri': 'json://data.json/users?schema', 'description': 'Show schema of users array'},
-        {'uri': 'json://config.json?flatten', 'description': 'Flatten to grep-able format (also: ?gron)'},
-        {'uri': 'json://data.json/users?type', 'description': 'Get type at path (e.g., Array[Object])'},
-        {'uri': 'json://package.json/dependencies?keys', 'description': 'List all dependency names'},
+        {'uri': 'reveal json config.json --view schema', 'description': 'Show type structure of entire file'},
+        {'uri': 'json://data.json/users --view schema', 'description': 'Show schema of users array'},
+        {'uri': 'reveal json config.json --view flatten', 'description': 'Flatten to grep-able format (also: --view gron)'},
+        {'uri': 'json://data.json/users --view type', 'description': 'Get type at path (e.g., Array[Object])'},
+        {'uri': 'json://package.json/dependencies --view keys', 'description': 'List all dependency names'},
         # Filtering examples
-        {'uri': 'json://data.json/users?age>25', 'description': 'Filter users older than 25'},
-        {'uri': 'json://data.json/products?price=10..50', 'description': 'Products in price range $10-$50'},
-        {'uri': 'json://data.json/users?name~=^John', 'description': 'Users with names starting with "John"'},
-        {'uri': 'json://data.json/items?status!=inactive', 'description': 'Active items (exclude inactive)'},
+        {'uri': "json://data.json/users --where 'age>25'", 'description': 'Filter users older than 25'},
+        {'uri': 'json://data.json/products --where price=10..50', 'description': 'Products in price range $10-$50'},
+        {'uri': "json://data.json/users --where 'name~=^John'", 'description': 'Users with names starting with "John"'},
+        {'uri': "json://data.json/items --where 'status!=inactive'", 'description': 'Active items (exclude inactive)'},
         # Result control examples
-        {'uri': 'json://data.json/users?sort=-age', 'description': 'Sort users by age descending'},
-        {'uri': 'json://data.json/products?sort=price&limit=10', 'description': 'Top 10 cheapest products'},
-        {'uri': 'json://data.json/users?age>21&sort=-age&limit=5', 'description': 'Top 5 oldest users over 21'},
+        {'uri': 'json://data.json/users --sort=-age', 'description': 'Sort users by age descending'},
+        {'uri': 'json://data.json/products --sort price --limit 10', 'description': 'Top 10 cheapest products'},
+        {'uri': "json://data.json/users --where 'age>21' --sort=-age --limit 5", 'description': 'Top 5 oldest users over 21'},
     ]
 
 
@@ -135,9 +135,9 @@ def get_workflows() -> List[Dict[str, Any]]:
             'name': 'Explore Unknown JSON Structure',
             'scenario': 'Large JSON file, need to understand what\'s in it',
             'steps': [
-                "reveal json://data.json?schema       # See type structure",
-                "reveal json://data.json?keys         # Top-level keys",
-                "reveal json://data.json/users?schema # Drill into nested",
+                "reveal json data.json --view schema       # See type structure",
+                "reveal json data.json --view keys         # Top-level keys",
+                "reveal json://data.json/users --view schema # Drill into nested",
                 "reveal json://data.json/users/0      # Sample first element",
             ],
         },
@@ -145,8 +145,8 @@ def get_workflows() -> List[Dict[str, Any]]:
             'name': 'Search JSON Content',
             'scenario': 'Find specific values in a large JSON file',
             'steps': [
-                "reveal json://config.json?flatten | grep -i 'database'",
-                "reveal json://config.json?flatten | grep 'url'",
+                "reveal json config.json --view flatten | grep -i 'database'",
+                "reveal json config.json --view flatten | grep 'url'",
             ],
         },
     ]
@@ -162,7 +162,7 @@ def get_anti_patterns() -> List[Dict[str, str]]:
         },
         {
             'bad': "cat large.json | python -c 'import json,sys; print(json.load(sys.stdin).keys())'",
-            'good': "reveal json://large.json?keys",
+            'good': "reveal json large.json --view keys",
             'why': "One command, handles errors gracefully",
         },
     ]
@@ -176,7 +176,7 @@ def get_schema() -> Dict[str, Any]:
     return {
         'adapter': 'json',
         'description': 'JSON file navigation with path access, schema inference, and gron-style flattening',
-        'uri_syntax': 'json://<file>[/path/to/key][?query]',
+        'uri_syntax': 'json://<file>[/path/to/key] [--where EXPR]... [--view VIEW] [--sort [-]FIELD] [--limit N]',
         'query_params': _SCHEMA_QUERY_PARAMS,
         'path_syntax': {
             '/key': 'Access object key',
@@ -220,9 +220,9 @@ def get_help() -> Dict[str, Any]:
             'Nested field access with dot notation (user.name)',
         ],
         'try_now': [
-            "reveal json://package.json?schema",
+            "reveal json package.json --view schema",
             "reveal json://package.json/name",
-            "reveal json://package.json?flatten | head -20",
+            "reveal json package.json --view flatten | head -20",
         ],
         'workflows': get_workflows(),
         'anti_patterns': get_anti_patterns(),

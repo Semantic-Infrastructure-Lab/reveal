@@ -21,7 +21,7 @@ class ArchitectureAdapter(OverviewAdapter):
         help_data.update(
             name='architecture',
             syntax='architecture://<path>[?limit=5&imports=off|against=REF]',
-            examples=[{**example, 'uri': example['uri'].replace('overview://', 'architecture://', 1)}
+            examples=[{**example, 'uri': example['uri'].replace('reveal overview ', 'architecture://', 1)}
                       for example in help_data['examples']],
             notes=['Retired spelling of overview:// (the same answer); use overview for project maps '
                    'and comparisons.', *help_data['notes']],

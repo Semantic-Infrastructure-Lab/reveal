@@ -53,24 +53,24 @@ _SCAN, _PRESSURE = ('patches_scan',), (TestabilityAdapter.RESULT_TYPE,)
 _VIEW = ParamSpec('view', 'string', 'target, test or file: the raw patch scan of a test root grouped that way (default target; '
                   'was group); pressure: testability\'s report (was testability://), patch hotspots joined with production '
                   'boundary fan-out; the path is then the production root',
-                  None, _text, ('view=test', 'view=pressure'), choices=VIEWS, role='operation',
+                  None, _text, ('--view test', '--view pressure'), choices=VIEWS, role='operation',
                   cli=CliBinding(('--view',), metavar='VIEW'), cap='limit',  # --all lifts the report's group cap
                   legacy=(LegacySpelling('group', flag='--group'),))
 _LIMIT = ParamSpec('limit', 'integer', 'Maximum groups to return (the scan\'s groups, or each pressure hotspot list); 0 is '
-                   'all', 20, _whole, ('limit=20',), minimum=0, zero_policy='all', role='presentation',
+                   'all', 20, _whole, ('--limit 20',), minimum=0, zero_policy='all', role='presentation',
                    cli=CliBinding(('--limit',), metavar='N'), answers=_SCAN + _PRESSURE,
                    legacy=(LegacySpelling('top', flag='--top'),))
 _MIN = ParamSpec('min', 'integer', 'Minimum patch count for a group', 1, _whole,
-                 ('min=3',), minimum=0, zero_policy='no minimum', role='analysis',
+                 ('--min 3',), minimum=0, zero_policy='no minimum', role='analysis',
                  cli=CliBinding(('--min',), metavar='N'), answers=_SCAN)
-_TARGET = ParamSpec('target', 'string', 'Filter by target substring or glob', '', _text, ('target=ssl',),
+_TARGET = ParamSpec('target', 'string', 'Filter by target substring or glob', '', _text, ('--target ssl',),
                     role='analysis', cli=CliBinding(('--target',), metavar='PATTERN'), answers=_SCAN)
 _PRIVATE = ParamSpec('private', 'boolean', 'Only include private/internal patch targets', False, boolean_value,
-                     ('private=true',), role='analysis', cli=CliBinding(('--private',), action='store_true'),
+                     ('--private',), role='analysis', cli=CliBinding(('--private',), action='store_true'),
                      answers=_SCAN)
 _SUPPRESS = ParamSpec('suppress', 'boolean', 'Stdlib I/O noise (sys.stdout/stderr, builtins) in grouped output: on '
                       '(default) hides it, off shows it. Raw totals always include it.', True, switch_value,
-                      ('suppress=off',), role='analysis', cli=CliBinding(('--suppress',), metavar='on|off'),
+                      ('--suppress off',), role='analysis', cli=CliBinding(('--suppress',), metavar='on|off'),
                       legacy=(LegacySpelling('no_suppress', codec=legacy_switch('no_suppress', 'off', 'on'),
                                              flag='--no-suppress', flag_value=True),), answers=_SCAN)
 # The pressure view's own parameters are testability's, declared once there; here only the pressure report reads them.
@@ -101,7 +101,7 @@ def _threshold_word(name: str, field: str) -> LegacySpelling:
 _WHERE = replace(where_param(
     "A minimum on a pressure count: patches>=N keeps the target groups with N or more patches (default 3), "
     "categories>=N the boundary profiles with N or more categories (default 3); repeat to AND",
-    ('view=pressure&where=patches>=5', 'view=pressure&where=categories>=2'), convert=_pressure_terms, fields=_PRESSURE_FIELDS,
+    ("--view pressure --where 'patches>=5'", "--view pressure --where 'categories>=2'"), convert=_pressure_terms, fields=_PRESSURE_FIELDS,
     legacy=(_threshold_word('min_patches', 'patches'), _threshold_word('min_categories', 'categories'))),
     answers=_PRESSURE)
 
@@ -192,13 +192,13 @@ class PatchesAdapter(ResourceAdapter):
         return {
             'name': 'patches',
             'description': 'Scan Python and TypeScript/JavaScript tests for mock/patch pressure grouped by target.',
-            'syntax': 'patches://<tests-path>[?view=target|test|file&limit=N&min=N]',
+            'syntax': 'reveal patches <tests-path> [--view target|test|file] [--limit N] [--min N]',
             'examples': [
-                {'uri': 'patches://tests', 'description': 'Summarize patch pressure in tests/'},
-                {'uri': 'patches://tests?view=target', 'description': 'Group patches by production target'},
-                {'uri': 'patches://tests?view=test&min=3', 'description': 'Find tests with at least 3 patches'},
-                {'uri': 'patches://tests?target=ssl&limit=10', 'description': 'Show patch groups matching ssl'},
-                {'uri': 'patches://tests?private=true', 'description': 'Show patches of private/internal targets'},
+                {'uri': 'reveal patches tests', 'description': 'Summarize patch pressure in tests/'},
+                {'uri': 'reveal patches tests --view target', 'description': 'Group patches by production target'},
+                {'uri': 'reveal patches tests --view test --min 3', 'description': 'Find tests with at least 3 patches'},
+                {'uri': 'reveal patches tests --target ssl --limit 10', 'description': 'Show patch groups matching ssl'},
+                {'uri': 'reveal patches tests --private', 'description': 'Show patches of private/internal targets'},
             ],
             'features': [
                 'Detects unittest.mock.patch decorators and context managers (Python)',
@@ -225,7 +225,7 @@ class PatchesAdapter(ResourceAdapter):
         return {
             'adapter': 'patches',
             'description': 'Patch pressure scanner for Python and TypeScript/JavaScript tests',
-            'uri_syntax': 'patches://<path>?view=target&limit=20',
+            'uri_syntax': 'patches://<path> [--view target|test|file|pressure] [--limit N] [--min N]',
             'resource': PatchesAdapter.RESOURCE_SPEC.schema(),
             'query_params': param_schema(PatchesAdapter.PARAM_SPECS),
             'elements': {},
@@ -262,7 +262,7 @@ class PatchesAdapter(ResourceAdapter):
             ],
             'example_queries': [
                 {'uri': 'patches://tests', 'description': 'Summarize patch pressure', 'output_type': 'patches_scan'},
-                {'uri': 'patches://tests?view=test&min=3', 'description': 'Find patch-heavy tests', 'output_type': 'patches_scan'},
+                {'uri': 'patches://tests --view test --min 3', 'description': 'Find patch-heavy tests', 'output_type': 'patches_scan'},
             ],
             'notes': [
                 'Default selection uses the selected project test/support policy, including configured additional paths. Raw scans stay within the target, including direct files; narrowing within a project retains its file roles. Markerless roots use a disclosed fallback.',

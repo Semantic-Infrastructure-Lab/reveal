@@ -164,7 +164,7 @@ _SCHEMA_OUTPUT_TYPES = [
 
 _SCHEMA_EXAMPLE_QUERIES = [
     {
-        'uri': 'markdown://',
+        'uri': 'markdown://.',
         'description': 'List all markdown files in current directory',
         'output_type': 'markdown_query'
     },
@@ -186,12 +186,12 @@ _SCHEMA_EXAMPLE_QUERIES = [
         'output_type': 'markdown_query'
     },
     {
-        'uri': "markdown:// --where '!topics'",
+        'uri': "markdown://. --where '!topics'",
         'description': 'Find files missing topics field',
         'output_type': 'markdown_query'
     },
     {
-        'uri': "markdown:// --where 'type=*guide*'",
+        'uri': "markdown://. --where 'type=*guide*'",
         'description': 'Wildcard matching (case-insensitive)',
         'output_type': 'markdown_query'
     },

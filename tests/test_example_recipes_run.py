@@ -424,7 +424,9 @@ SCHEMA_PLACEHOLDERS = (
     ('diff://app.py:git://app.py@HEAD~1', 'diff://proj/app.py:git://proj/app.py@HEAD~1'),
     ('diff://app.py:old.py/handle_request', 'diff://proj/app.py:proj/app_old.py/main'),
     ('markdown://sessions/', 'markdown://proj/'),
+    ('markdown sessions/', 'markdown proj/'),
     ('patches://tests', 'patches://proj/tests'),
+    ('patches tests', 'patches proj/tests'),
     ('./src', 'proj'),
     ('docs/', 'proj/'),
 )

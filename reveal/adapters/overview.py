@@ -198,7 +198,7 @@ def _obsolete_tests(value: Any) -> str:
 # 0 is uncapped. No default value, so a request that gave limit is told from one that gave the legacy top.
 _LIMIT = ParamSpec('limit', 'integer', f'Rows per map section (default {_DEFAULT_ROWS}); 0 = no cap. With --against the '
                    'compared population is 4 x limit, the whole population at 0', None, _overview_top, minimum=0,
-                   role='analysis', examples=('limit=10',), zero_policy='no cap',
+                   role='analysis', examples=('--limit 10',), zero_policy='no cap',
                    cli=CliBinding(('--limit',), metavar='N'))
 # The old word for the cap until the cut: top=0 kept its own meaning (no graph rows), which no limit value spells,
 # so it is a setting of its own with its note, not a legacy entry on limit (the Metrics pattern, BACK-2621).
@@ -207,7 +207,7 @@ _TOP = ParamSpec('top', 'integer', 'Legacy rows per map section, replaced by lim
                  zero_policy='no graph rows; comparison population 4', cli=CliBinding(('--top',), metavar='N'))
 # The map's own controls: the comparison (against=REF, overview_diff) reads neither (BACK-2656).
 _IMPORTS = ParamSpec('imports', 'boolean', 'Import analysis: on (default) or off for the recognized-code census only',
-                     True, switch_value, role='analysis', examples=('imports=off',), answers=('overview',),
+                     True, switch_value, role='analysis', examples=('--imports off',), answers=('overview',),
                      cli=CliBinding(('--imports',), metavar='on|off'),
                      legacy=(LegacySpelling('no_imports', codec=legacy_switch('no_imports', 'off', 'on'),
                                             flag='--no-imports', flag_value=True),))
@@ -581,11 +581,11 @@ class OverviewAdapter(ResourceAdapter):
     @staticmethod
     def get_help() -> Dict[str, Any]:
         return {'name': 'overview', 'description': 'Compact project map: recognized-code scope, components and static import relationships.',
-                'syntax': 'overview://<path>[?limit=5&imports=off|against=REF]',
-                'examples': [{'uri': 'overview://src', 'description': 'Compact project map'},
-                             {'uri': 'overview://.?limit=10', 'description': 'Expand map evidence'},
-                             {'uri': 'overview://.?imports=off', 'description': 'Scope census only'},
-                             {'uri': 'overview://.?against=HEAD', 'description': 'Compare HEAD with the live working tree'}],
+                'syntax': 'reveal overview <path> [--limit N] [--imports off] | [--against REF]',
+                'examples': [{'uri': 'reveal overview src', 'description': 'Compact project map'},
+                             {'uri': 'reveal overview . --limit 10', 'description': 'Expand map evidence'},
+                             {'uri': 'reveal overview . --imports off', 'description': 'Scope census only'},
+                             {'uri': 'reveal overview . --against HEAD', 'description': 'Compare HEAD with the live working tree'}],
                 'features': ['Recognized-code language counts', 'Bounded fan-in, active entrypoint candidates, components and cycles',
                              'Coverage, losses, counting rules and drill-down commands'],
                 'notes': ['Static imports are not runtime execution evidence or risk judgments.',
@@ -600,7 +600,7 @@ class OverviewAdapter(ResourceAdapter):
     @staticmethod
     def get_schema() -> Dict[str, Any]:
         return {'adapter': 'overview', 'description': 'Compact project map',
-                'uri_syntax': 'overview://<path>?limit=5&imports=off|against=REF',
+                'uri_syntax': 'overview://<path> [--limit N] [--imports off] | [--against REF]',
                 'resource': OverviewAdapter.RESOURCE_SPEC.schema(),
                 'execution_policy': {'default_fail_on': 'none', 'fail_on': ['none']},
                 'query_params': {**param_schema(OverviewAdapter.PARAM_SPECS),
@@ -612,7 +612,7 @@ class OverviewAdapter(ResourceAdapter):
                                'map_status': {'type': 'string'}, 'scope': {'type': 'object'}}}},
                     {'type': 'overview_diff', 'description': 'Architecture comparison with basis and per-side snapshot proof'}],
                 'example_queries': [{'uri': 'overview://src', 'description': 'Compact project map', 'output_type': 'overview'},
-                    {'uri': 'overview://.?against=HEAD', 'description': 'Compare the live working tree with HEAD',
+                    {'uri': 'overview://. --against HEAD', 'description': 'Compare the live working tree with HEAD',
                      'output_type': 'overview_diff'}],
                 'notes': ['Ordinary overview is a bounded static import map, not a quality assessment.',
                           'Comparison uses the live working tree and retains required snapshot losses.']}

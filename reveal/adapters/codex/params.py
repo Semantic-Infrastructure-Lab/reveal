@@ -23,8 +23,8 @@ QUERY_VIEWS = {'last': 'codex_messages', 'tokens': 'codex_tokens', 'goal': 'code
 SESSION_VIEWS = {'overview': 'codex_session_overview', **PATH_VIEWS, **QUERY_VIEWS}
 
 _MATCHES = ParamSpec('matches', 'integer', 'Snippets kept per session by a content search (0 = all)',
-                     3, whole_number, ('codex://sessions/?match=auth&matches=10',
-                                       'codex://sessions/?match=auth&matches=0'),
+                     3, whole_number, ('reveal codex sessions/ --match auth --matches 10',
+                                       'reveal codex sessions/ --match auth --matches 0'),
                      minimum=0, zero_policy='all', answers=(_SEARCH,), cli=CliBinding(('--matches',)))
 
 

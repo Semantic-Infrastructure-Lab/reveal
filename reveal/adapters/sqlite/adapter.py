@@ -52,7 +52,7 @@ def _health_word(raw: Any) -> Optional[str]:
 # integrity check before, is the legacy word of --view health (ruling Q4): the same answer and exit, with its note. The
 # seam has no flag-only legacy entry, so the word is also the URI key ?check, which answers and notes alike.
 _VIEW = ParamSpec('view', 'string', 'health: the integrity check (PRAGMA integrity_check and foreign_key_check) of the '
-                  'whole database, in place of the database or table answer', None, str, examples=('view=health',),
+                  'whole database, in place of the database or table answer', None, str, examples=('--view health',),
                   choices=('health',), role='operation', cli=CliBinding(('--view',), metavar='VIEW'),
                   legacy=(LegacySpelling('check', codec=_health_word, flag='--check', flag_value=True),))
 PARAM_SPECS = (_VIEW,)

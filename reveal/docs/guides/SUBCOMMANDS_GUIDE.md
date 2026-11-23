@@ -214,8 +214,8 @@ other changed files are not added to a single-file selection.
 
 `--architecture` fan-in and `--focus` relevance read the import graph and state their rule: a `Rule:` line under
 the header, `edge_rule` in JSON, and none when neither flag is given. Every static import edge except
-`TYPE_CHECKING` ones counts, function-level imports and test importers included. `pack` takes no `&lazy`;
-`imports://<dir>?sort=-fan-in&lazy=exclude` is the load-time view.
+`TYPE_CHECKING` ones counts, function-level imports and test importers included. `pack` takes no `--lazy`;
+`reveal imports <dir> --sort=-fan-in --lazy exclude` is the load-time view.
 
 ### Discovery evidence
 
@@ -330,9 +330,7 @@ reveal pack src/ --since HEAD~3 --budget 4000  # Since 3 commits ago
 reveal pack . --architecture              # Boost core abstractions; show architecture hint
 reveal pack . --format json               # For agent consumption
 
-# pack:// is also a queryable URI in its own right
-reveal 'pack://.?budget=4000'
-reveal 'pack://.?since=main&content=true'
+reveal pack . --since main --content      # Changed files first, with their tiered content
 ```
 
 ### Agent-Ready Output with --content
