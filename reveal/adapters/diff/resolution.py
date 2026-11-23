@@ -7,14 +7,14 @@ from typing import Dict, Any, Optional, Iterator, cast
 from .git import resolve_git_ref, resolve_git_adapter, read_git_text
 from ..base import get_adapter_class
 from ...diff.structure_diff import element_categories, element_label
-from ...errors import MissingResourceError, NotApplicableError
+from ...errors import NotApplicableError, PathNotFoundError
 from ...registry import get_analyzer
 from ...utils.path_utils import _walk_code_files
 from reveal.utils.lines import split_lines
 
 
-class DiffTargetNotFoundError(MissingResourceError, FileNotFoundError):
-    """An absent comparison target; preserve FileNotFoundError for library callers."""
+class DiffTargetNotFoundError(PathNotFoundError):
+    """An absent comparison target: the shared missing path, still a FileNotFoundError for library callers."""
 
 
 _CODE_KEYS = ('functions', 'classes', 'imports')
