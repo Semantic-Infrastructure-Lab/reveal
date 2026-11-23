@@ -292,6 +292,23 @@ def _query_noun(noun: str, target: Optional[str], controls: Dict[str, Any]) -> D
         return answer_typed_request(noun, target, controls)
 
 
+def _legacy_element(adapter_class: Any, scheme: str, element_name: Optional[str]) -> Optional[str]:
+    """The RETIREMENTS row of a positional element a declared noun still answers until the cut, or None. A declared
+    noun reads no positional element: the CLI's refusal, before the adapter is built, never in get_element (V020: a
+    missing element is None there); plugin subclasses keep forwarding (BACK-2687). A scheme whose element is a legacy
+    spelling (``target:SCHEME.element``: help://, reveal://) answers it through get_element with its note (BACK-2767)."""
+    from .adapters.factory import uses_bound_query_call
+    if not element_name or not uses_bound_query_call(adapter_class):
+        return None
+    from .cli.invocation import element_retirement
+    legacy = element_retirement(scheme)
+    if legacy is None:
+        from .adapters.base import unread_element_message
+        from .errors import RequestValidationError
+        raise RequestValidationError(unread_element_message(adapter_class, scheme, element_name))
+    return legacy
+
+
 def query(
     uri: str,
     element_name: Optional[str] = None,
@@ -385,17 +402,7 @@ def query(
 
     _refuse_removed_controls(scheme, uri, kwargs)
     from .adapters.factory import _canonical_init, uses_bound_query_call
-    from .cli.invocation import element_retirement
-    legacy_element = None
-    if element_name and uses_bound_query_call(adapter_class):
-        # A declared noun reads no positional element: the CLI's refusal, before the adapter is built, never in
-        # get_element (V020: a missing element is None there). Plugin subclasses keep forwarding (BACK-2687). A scheme
-        # whose element is a legacy spelling answers it through get_element with its note until the cut (BACK-2764).
-        legacy_element = element_retirement(scheme)
-        if legacy_element is None:
-            from .adapters.base import unread_element_message
-            from .errors import RequestValidationError
-            raise RequestValidationError(unread_element_message(adapter_class, scheme, element_name))
+    legacy_element = _legacy_element(adapter_class, scheme, element_name)
 
     from .utils.request_cache import host_request
     from .utils.invocation_log import log_scope
