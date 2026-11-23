@@ -3,7 +3,7 @@
 
 name: imports
 description: 'Import graph analysis for detecting unused imports, circular dependencies, layer violations, and fan-in ranking'
-syntax: 'imports://<path>[?<query>]'
+syntax: 'reveal imports <path> [--unused|--circular|--violations|--sort=-fan-in|--importers [FILE]|...] [--lazy include|exclude|only]'
 
 examples:
   # Basic import inspection

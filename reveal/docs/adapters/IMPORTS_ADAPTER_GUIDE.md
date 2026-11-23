@@ -12,7 +12,7 @@ category: guide
 ## Table of Contents
 
 1. [Quick Start](#quick-start)
-2. [URI Syntax](#uri-syntax)
+2. [Syntax](#syntax)
 3. [Import Graph Overview](#import-graph-overview)
 4. [Unused Import Detection](#unused-import-detection)
 5. [Circular Dependency Detection](#circular-dependency-detection)
@@ -67,10 +67,10 @@ reveal imports src --unused --format=json
 
 ---
 
-## URI Syntax
+## Syntax
 
 ```
-imports://<path>[?<query>]
+reveal imports <path> [--unused|--circular|--violations|--sort=-fan-in|--importers [FILE]|...] [--lazy include|exclude|only]
 ```
 
 ### Components
@@ -78,7 +78,7 @@ imports://<path>[?<query>]
 | Component | Required | Default | Description |
 |-----------|----------|---------|-------------|
 | `path` | No | `.` (current directory) | Directory or file to analyze |
-| `query` | No | (none) | Query flag (?unused, ?circular, ?violations), plus `&lazy=include\|exclude\|only` (see [Which edges count](#which-edges-count-lazy)) |
+| flags | No | (none) | A view flag (`--unused`, `--circular`, `--violations`, ...), plus `--lazy include\|exclude\|only` (see [Which edges count](#which-edges-count-lazy)) |
 
 ### Examples
 

@@ -7,9 +7,9 @@ Analyze import relationships in codebases:
 - Validate layer violations (?violations)
 
 Usage:
-    reveal imports://src                     # All imports
-    reveal 'imports://src?unused'            # Find unused
-    reveal 'imports://src?circular'          # Find cycles
+    reveal imports src                       # All imports
+    reveal imports src --unused              # Find unused
+    reveal imports src --circular            # Find cycles
 """
 
 import difflib
@@ -140,7 +140,7 @@ _LAZY = ParamSpec(
     'other expressions/receivers/arguments and convention edges remain unclassified: exclude '
     'retains them and only omits them. Scope is lexical, not runtime timing; the printed rule names coverage',
     None, _lazy_value,
-    examples=('imports://src?sort=-fan-in&lazy=exclude', 'imports://src?circular&lazy=include'),
+    examples=('reveal imports src --sort=-fan-in --lazy exclude', 'reveal imports src --circular --lazy include'),
     choices=LAZY_MODES, role='analysis', cli=_request_cli('lazy'),
 )
 
@@ -176,7 +176,7 @@ _SCOPE = ParamSpec(
     'counting importers from anywhere under the root. path: the requested path is the scan root, '
     'as imports resolved before (architecture, overview, pack and diff pass it)',
     SCOPE_ROOT, _choice_value,
-    examples=('imports://src?sort=-fan-in&scope=path',), choices=(SCOPE_ROOT, SCOPE_PATH),
+    examples=('reveal imports src --sort=-fan-in --scope path',), choices=(SCOPE_ROOT, SCOPE_PATH),
     role='analysis', cli=_request_cli('scope'),
 )
 _TESTS = ParamSpec(
@@ -186,7 +186,7 @@ _TESTS = ParamSpec(
     'Checkout ancestors and the selected project name are ignored; a disclosed markerless '
     'scan-root fallback retains its own directory name',
     'include', _choice_value,
-    examples=('imports://src?sort=-fan-in&tests=exclude',), choices=('include', 'exclude'),
+    examples=('reveal imports src --sort=-fan-in --tests exclude',), choices=('include', 'exclude'),
     role='analysis', cli=_request_cli('tests'),
 )
 _ROOT = ParamSpec(
@@ -195,7 +195,7 @@ _ROOT = ParamSpec(
     'must be an existing directory containing the path, not a filesystem/home/system root; a refused '
     'value says why and the climb decides. Needs scope=root (the default): under scope=path the path is the scan '
     'root, so the two conflict (exit 2)',
-    None, _choice_value, examples=('imports://src/app.py?importers&root=.',),
+    None, _choice_value, examples=('reveal imports src/app.py --importers --root ./',),
     role='analysis', cli=_request_cli('root'),
     # The climb's pin: scope=path never climbs, so root there is a conflicting request (BACK-2656 requires, BACK-2697).
     requires=(f'scope={SCOPE_ROOT}',),
@@ -205,7 +205,7 @@ _SCAN_LIMIT = ParamSpec(
     'scan-limit', 'integer',
     'Source files the walk may keep (default 20000, minimum 1): an input budget, not a row cap; a capped walk '
     'is incomplete (exit 3), disclosed in metadata.scan_budget and as a warning, never silently partial',
-    import_analysis.DEFAULT_FILE_CAP, _max_files_value, examples=('imports://.?importers&scan-limit=50000',), minimum=1,
+    import_analysis.DEFAULT_FILE_CAP, _max_files_value, examples=('reveal imports . --importers --scan-limit 50000',), minimum=1,
     role='analysis', aliases=('scan_limit',), legacy=(LegacySpelling('max_files', flag='--max-files'),),
     cli=CliBinding(('--scan-limit',), dest='scan_limit', metavar='N'),
 )
@@ -215,7 +215,7 @@ _IMPORTERS = ParamSpec(
     'importers; =FILE (relative to the path) or a file path lists that file\'s importers with the import '
     'line, scope and the cascade stage (via) of each edge',
     None, _importers_value, names='file',
-    examples=('imports://src?importers', 'imports://src?importers=utils.py', 'imports://src/utils.py?importers'),
+    examples=('reveal imports src --importers', 'reveal imports src --importers utils.py', 'reveal imports src/utils.py --importers'),
     role='operation', cli=CliBinding(('--importers',), nargs='?', const=True, metavar='FILE'),
 )
 
@@ -229,13 +229,13 @@ _FORMAT = ParamSpec(
     'format', 'string',
     'Output format for ?importers on a directory: dot (--format dot) draws one importer -> module edge per '
     'listed importer as Graphviz (pipe to dot -Tsvg); text and json follow --format. Any other view refuses it',
-    None, _choice_value, examples=('imports://src?importers&scope=path&format=dot',),
+    None, _choice_value, examples=('reveal imports src --importers --scope path --format dot',),
     choices=('text', 'json', 'dot'), role='presentation', answers=('importer_summary',),
 )
 
 
 def _flag(name: str, description: str) -> ParamSpec:
-    return ParamSpec(name, 'boolean', description, False, boolean_value, (f'imports://src?{name}',),
+    return ParamSpec(name, 'boolean', description, False, boolean_value, (f'reveal imports src --{name}',),
                      role='operation', cli=CliBinding((f'--{name}',), action='store_true'))
 
 
@@ -309,23 +309,23 @@ _EXTERNAL = ParamSpec(
     'resolution truth first -- resolved in the tree (internal), stdlib (a language rule or marker, never Python\'s '
     'list for another language) or unresolved (third-party or an unresolved local) -- with uses per package, the '
     'languages importing each unresolved package, and import statements per file. --tests exclude drops test files',
-    False, boolean_value, ('imports://src?external', 'imports://src?external&scope=path'),
+    False, boolean_value, ('reveal imports src --external', 'reveal imports src --external --scope path'),
     role='operation', cli=CliBinding(('--external',), action='store_true'))
 _DETAIL = ParamSpec('detail', 'string', 'How much of the answer: normal (a summary) or full (every file in a cycle '
                     'group plus its cycle edges, all unused imports, all violations, every package; JSON adds '
                     '"verbose": true). The default, ranking, '
                     'component and entry-point views refuse it', 'normal', _detail_value,
-                    ('imports://src?circular&detail=full',), choices=_DETAIL_LEVELS, role='presentation',
+                    ('reveal imports src --circular --detail full',), choices=_DETAIL_LEVELS, role='presentation',
                     legacy=(verbose_legacy('full', 'detail=full (--detail full)'),),
                     cli=CliBinding(('--detail',), metavar='LEVEL'), answers=_VERBOSE_VIEW_TYPES)
 _SORT = ParamSpec('sort', 'string', 'Rank files by fan-in, most imported first: the count of files that import each '
                   'file (higher = more central; 0 = entry point or dead code). One value: -fan-in (legacy rank=fan-in)',
-                  None, _sort_value, ('imports://src?sort=-fan-in', 'imports://src?sort=-fan-in&limit=20'),
+                  None, _sort_value, ('reveal imports src --sort=-fan-in', 'reveal imports src --sort=-fan-in --limit 20'),
                   choices=_SORT_FIELDS, role='operation', legacy=(LegacySpelling('rank', codec=_rank_value, flag='--rank'),),
                   cli=CliBinding(('--sort',), dest='sort', metavar='-fan-in'))
 _LIMIT = ParamSpec('limit', 'integer', 'Ranking rows to show (default: all; 0 = all); the total is kept and other '
                    'views refuse it. Legacy top is the same cap', None, _limit_value,
-                   ('imports://src?sort=-fan-in&limit=20',), minimum=0, zero_policy='all', role='analysis',
+                   ('reveal imports src --sort=-fan-in --limit 20',), minimum=0, zero_policy='all', role='analysis',
                    legacy=(LegacySpelling('top', flag='--top'),), cli=CliBinding(('--limit',), dest='top', metavar='N'),
                    answers=('fan_in_ranking',))
 
@@ -667,21 +667,21 @@ _SCHEMA_EXAMPLE_QUERIES = [
         'output_type': 'imports'
     },
     {
-        'uri': 'imports://src?unused',
+        'uri': 'imports://src --unused',
         'description': 'Find unused imports',
-        'cli_flag': '?unused',
+        'cli_flag': '--unused',
         'output_type': 'unused_imports'
     },
     {
-        'uri': 'imports://src?circular',
+        'uri': 'imports://src --circular',
         'description': 'Detect circular dependencies',
-        'cli_flag': '?circular',
+        'cli_flag': '--circular',
         'output_type': 'circular_dependencies'
     },
     {
-        'uri': 'imports://src?violations',
+        'uri': 'imports://src --violations',
         'description': 'Check layer violations (requires .reveal.yaml layers config)',
-        'cli_flag': '?violations',
+        'cli_flag': '--violations',
         'output_type': 'layer_violations'
     },
     {
@@ -690,37 +690,37 @@ _SCHEMA_EXAMPLE_QUERIES = [
         'output_type': 'imports'
     },
     {
-        'uri': 'imports://src?sort=-fan-in',
+        'uri': 'imports://src --sort=-fan-in',
         'description': 'Rank all files by fan-in — surface core abstractions and entry points',
         'output_type': 'fan_in_ranking'
     },
     {
-        'uri': 'imports://src?sort=-fan-in&limit=20',
+        'uri': 'imports://src --sort=-fan-in --limit 20',
         'description': 'Top-20 files by fan-in',
         'output_type': 'fan_in_ranking'
     },
     {
-        'uri': 'imports://src?sort=-fan-in&lazy=exclude',
+        'uri': 'imports://src --sort=-fan-in --lazy exclude',
         'description': 'Fan-in over load-time (module-level) imports only: the architecture view',
         'output_type': 'fan_in_ranking'
     },
     {
-        'uri': 'imports://src?circular&lazy=include',
+        'uri': 'imports://src --circular --lazy include',
         'description': 'Cycles counting function-level (lazy) imports too',
         'output_type': 'circular_dependencies'
     },
     {
-        'uri': 'imports://src/utils.py?importers',
+        'uri': 'imports://src/utils.py --importers',
         'description': 'Who imports utils.py, from anywhere under the project root',
         'output_type': 'module_importers'
     },
     {
-        'uri': 'imports://src?importers&tests=exclude',
+        'uri': 'imports://src --importers --tests exclude',
         'description': 'Every module under src with its importers, test importers not counted',
         'output_type': 'importer_summary'
     },
     {
-        'uri': 'imports://src?external',
+        'uri': 'imports://src --external',
         'description': 'Unresolved (third-party) and stdlib packages by use',
         'output_type': 'external_packages'
     },
@@ -1688,7 +1688,9 @@ class ImportsAdapter(ResourceAdapter):
         return {
             'adapter': 'imports',
             'description': 'Import graph analysis for detecting unused imports, circular dependencies, and layer violations',
-            'uri_syntax': 'imports://<path>[?query]',
+            'uri_syntax': ('imports://<path> [--unused|--circular|--violations|--entrypoints|--components|--external|'
+                           '--importers [FILE]|--sort=-fan-in [--limit N]] [--lazy include|exclude|only] '
+                           '[--scope root|path] [--tests include|exclude] [--detail full]'),
             'query_params': param_schema(PARAM_SPECS),
             'elements': {},
             'cli_flags': ['--verbose'],
