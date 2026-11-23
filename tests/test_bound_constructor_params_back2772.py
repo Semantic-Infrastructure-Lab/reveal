@@ -7,9 +7,12 @@ import pytest
 
 from reveal.adapters.patches.adapter import PatchesAdapter
 from reveal.adapters.stats.adapter import MetricsAdapter
+from reveal.errors import RequestValidationError, UnsupportedOverrideError
 from reveal.utils.query_binding import (bind_declared_params, bound_constructor_params, join_uri_and_flags,
-                                        prepare_declared_params, prepared_constructor_params)
-from reveal.utils.query_parser import ParamSpec, QueryParams, parse_query_params, whole_number
+                                        prepare_declared_params, prepared_constructor_params,
+                                        unsupported_controls_message)
+from reveal.utils.query_parser import (CliBinding, LegacySpelling, ParamSpec, QueryParams, parse_query_params,
+                                       whole_number)
 
 SPECS = (ParamSpec('limit', 'integer', 'Cap', None, whole_number, minimum=0),
          ParamSpec('name', 'string', 'Name', None, str))
@@ -82,3 +85,39 @@ def test_a_noun_constructor_binds_a_parsed_query(tmp_path):
     assert adapter.query_params['limit'] == 2
     bound = bind_declared_params(PatchesAdapter.PARAM_SPECS, {'limit': 2}, transport='typed')
     assert PatchesAdapter(str(tmp_path), params=bound).query_params is bound
+
+
+# --- the typed source's refusal (D21): a key no declaration spells is rule 3's invalid request ------------------
+
+SPELLED = (ParamSpec('sort', 'string', 'Order', None, str, aliases=('sort_by',),
+                     legacy=(LegacySpelling('rank', codec=lambda value: f'-{value}'),),
+                     cli=CliBinding(('--sort',), dest='order')),
+           ParamSpec('head', 'integer', 'Slice', None, whole_number, flag_only='applied', cli=CliBinding(('--head',))))
+
+
+@pytest.mark.parametrize('prepare', [lambda source: bind_declared_params(SPECS, source, transport='typed'),
+                                     lambda source: prepare_declared_params(SPECS, source, 'typed'),
+                                     lambda source: bound_constructor_params(SPECS, None, source)],
+                         ids=['bind', 'prepare', 'constructor'])
+def test_a_typed_key_no_declaration_spells_is_refused_with_the_shared_message(prepare):
+    with pytest.raises(UnsupportedOverrideError) as raised:
+        prepare({'limit': 1, 'bogus': 1, 'other': 2})
+    assert str(raised.value) == unsupported_controls_message(SPECS, ['bogus', 'other'])
+    assert isinstance(raised.value, TypeError)  # what an unexpected keyword is to a library caller
+
+
+@pytest.mark.parametrize('key,value,bound', [('sort', 'name', 'name'), ('sort_by', 'name', 'name'),
+                                             ('rank', 'size', '-size'), ('order', 'name', 'name'), ('head', 3, 3)],
+                         ids=['name', 'alias', 'legacy-word', 'cli-destination', 'flag-only'])
+def test_every_spelling_a_declaration_gives_still_binds(key, value, bound):
+    params = bind_declared_params(SPELLED, {key: value}, transport='typed')
+    name = 'head' if key == 'head' else 'sort'
+    assert params[name] == bound
+
+
+def test_the_uri_keeps_its_own_unknown_key_refusal():
+    """The URI's rule-3 refusal is unchanged: the same message, a RequestValidationError that is no TypeError."""
+    with pytest.raises(RequestValidationError) as raised:
+        bind_declared_params(SPECS, 'bogus=1', transport='uri')
+    assert not isinstance(raised.value, UnsupportedOverrideError)
+    assert str(raised.value) == unsupported_controls_message(SPECS, ['bogus'])

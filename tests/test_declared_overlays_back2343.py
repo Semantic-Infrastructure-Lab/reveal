@@ -44,9 +44,11 @@ def test_invalid_original_source_precedes_valid_or_unknown_overrides():
             bind_declared_params([spec], 'depth=-1', transport='uri', overrides=overrides)
 
 
-def test_unknown_override_rejects_instead_of_typed_preparation_dropping():
+def test_unknown_typed_key_rejects_in_preparation_as_an_override_does():
+    """A typed source key no declaration spells is refused, not dropped (BACK-2772), as an override is."""
     spec = ParamSpec('name', 'string', '', '', str)
-    assert bind_declared_params([spec], {'nonsense': True}, transport='typed') == {}
+    with pytest.raises(TypeError, match="unsupported control 'nonsense'; supported controls: name"):
+        bind_declared_params([spec], {'nonsense': True}, transport='typed')
     with pytest.raises(TypeError, match='nonsense'):
         bind_declared_params([spec], '', transport='uri', overrides={'nonsense': True})
 

@@ -64,12 +64,15 @@ def test_cli_omission_and_boolean_polarity(binding):
     binding.add_declared_arguments(parser, declarations, query.ResourceSpec())
     args = parser.parse_args([])
     assert vars(args) == {'path': '.'}
+    # the declared route reads the controls off the namespace (typed_source): the resource is no control, and a typed
+    # key no declaration spells is refused (BACK-2772)
+    from reveal.cli.routing.declared import typed_source
     with query.collect_query_keys() as log:
-        params = binding.bind_declared_params(declarations, vars(args), transport='typed')
+        params = binding.bind_declared_params(declarations, typed_source(declarations, args)[0], transport='typed')
         assert not log.seen and not log.used
         assert declarations[1].read(params) is True
     args = parser.parse_args(['--disabled', '--value', ''])
-    params = binding.bind_declared_params(declarations, vars(args), transport='typed')
+    params = binding.bind_declared_params(declarations, typed_source(declarations, args)[0], transport='typed')
     assert declarations[1].read(params) is False and declarations[0].read(params) == ''
 
 

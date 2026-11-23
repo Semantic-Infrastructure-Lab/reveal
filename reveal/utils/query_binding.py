@@ -701,10 +701,24 @@ def join_uri_and_flags(declarations: Iterable[ParamSpec], uri_params: QueryParam
     return joined
 
 
+def _typed_keys(declarations: tuple) -> set:
+    """Every key a typed source may give: each control's spellings (flag-only modifiers included) and its CLI
+    destination (Trace's ``root``: accepted until Trace retires at the cut, ruling S9 of BACK-2772)."""
+    return {key for spec in declarations
+            for key in (*spec.spellings, *((spec.cli.dest,) if spec.cli is not None and spec.cli.dest else ()))}
+
+
 def _prepare_typed_params(declarations: tuple, source: Mapping[str, Any],
                           spelled: Optional[Mapping[str, str]]) -> QueryParams:
+    """A typed source (subcommand flags, an in-process ``params=`` mapping) prepared once. A key no declaration spells
+    is rule 3's invalid request with the one message, as an ``api.query`` keyword is (``apply_declared_overrides``):
+    dropping it would answer the default request in its place (D21, BACK-2772)."""
     implied_by: Dict[str, str] = {}
     supplied = _normalize_aliases(declarations, source, spelled, implied_by)
+    known = _typed_keys(declarations)
+    unknown = [key for key, _value in peek_query_items(source) if key not in known]
+    if unknown:
+        raise UnsupportedOverrideError(unsupported_controls_message(declarations, unknown))
     params = QueryParams()
     params._implied_by = implied_by  # control -> the legacy word that set it (a join names the word's flag)
     params._aliases = {spec.name: spec.spellings[1:] for spec in declarations}
