@@ -26,6 +26,7 @@ shared-control keys on the open-field nouns (``param:NOUN.NAME``: ``markdown://d
 (``invocation.generated_retirements``).
 """
 import asyncio
+import functools
 import json
 import re
 import shlex
@@ -434,16 +435,23 @@ def _raw_problems(harness, argv):
     return problems
 
 
-# The first screens teach one spelling (BACK-2713): on them the URI request's own note is a fault as well. Elsewhere it
-# is not yet a printed spelling's fault: reveal's other hints and examples still teach URI forms (BACK-2713's later
-# steps), counted by test_doc_uri_requests_only_fall (BACK-2716).
+# The first screens and every answer's hints teach one spelling (BACK-2713): on them the URI request's own note is a
+# fault as well. On the other help pages it is not yet a printed spelling's fault: their examples still teach URI forms
+# (BACK-2713's help-page step), counted by test_doc_uri_requests_only_fall (BACK-2716).
 _ONE_SPELLING_SURFACES = re.compile(r'^(?:--agent-help|help://quick|MCP \w+)$')
+
+
+@functools.lru_cache(maxsize=1)
+def _hint_surfaces():
+    """The label of every answer whose next steps and lines test_hints_and_lines_in_every_declared_answer_follow_the_rules
+    reads (``_collect`` names a surface by its argv)."""
+    return frozenset(' '.join(argv) for argv in _answer_surfaces())
 
 
 def _excused(problem, surface):
     kind, field, _ = problem
     if kind == 'request note':
-        return not _ONE_SPELLING_SURFACES.match(surface)
+        return not (_ONE_SPELLING_SURFACES.match(surface) or surface in _hint_surfaces())
     return kind == 'note' and _own_scheme_note(field, surface)
 
 
