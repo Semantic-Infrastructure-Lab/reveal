@@ -3273,11 +3273,8 @@ ELEMENT_EXEMPT = {
           'operations (BACK-2627), not a declared noun\'s term',
     '26': 'a path read of one element walks no tree: no walk to exclude from',
 }
-ELEMENT_NOT_YET = {
-    '22': 'REVEAL_CONFIG naming no file exits 2 on the answers that read configuration (--transitive walks), but the '
-          'other element views read none and answer exit 0, as every plain path read does; the row says every noun',
-}
-ELEMENT_NOT_YET_BASELINE = 1
+ELEMENT_NOT_YET: dict = {}
+ELEMENT_NOT_YET_BASELINE = 0
 
 
 @pytest.fixture

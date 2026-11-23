@@ -221,3 +221,105 @@ def test_invalid_path_read_names_the_declared_facet(element_workspace, argv, ans
     assert answer.result['type'] == answer_type and answer.result['source'] == argv[0]
     assert [e['code'] for e in answer.result['meta']['errors']] == ['invalid_request']
     assert answer.request_error is not None and str(answer.request_error) == 'bad request'
+
+
+# --- cell 22: REVEAL_CONFIG is read up front by every path read --------------------------------------------------
+# A selected config file that does not exist is an invalid request on every path read (exit 2 naming it, the document
+# in JSON), checked at the file route's entry and in handle_file (the --stdin file line, MCP reveal_nav), as the
+# declared route checks it for every noun. D4: a config file that cannot be parsed is lost input, exit 3, on the plain
+# file read too, which reads configuration (handle_file builds it; the display settings come from it).
+
+MISSING = 'no-such-dir/reveal.yaml'
+
+
+@pytest.fixture
+def path_reads(element_workspace):
+    (element_workspace / 'proj' / 'README.md').write_text('# Intro\n\nText.\n', encoding='utf-8')
+    (element_workspace / 'proj' / 'data.json').write_text('{"a": 1}\n', encoding='utf-8')
+    (element_workspace / 'broken.yaml').write_text('ignore: [\n  bad', encoding='utf-8')
+    (element_workspace / 'badval.yaml').write_text('ignore: 5\n', encoding='utf-8')
+    return element_workspace
+
+
+CONFIG_READS = [
+    ('file', (ELEMENT_FILE,)), ('element', (ELEMENT_FILE, ELEMENT)), ('boundary', (ELEMENT_FILE, ELEMENT, *VIEW)),
+    ('flow', (ELEMENT_FILE, ELEMENT, '--view', 'flow')), ('varflow', (ELEMENT_FILE, ELEMENT, '--varflow', 'order')),
+    ('outline', (ELEMENT_FILE, '--outline')), ('head', (ELEMENT_FILE, '--head', '2')),
+    ('range', (ELEMENT_FILE, '--range', '1-3')), ('grep', (ELEMENT_FILE, '--grep', 'def')),
+    ('markdown', ('proj/README.md',)), ('markdown section', ('proj/README.md', 'Intro')),
+    ('json', ('proj/data.json',)),
+]
+
+
+@pytest.mark.parametrize('label, argv', CONFIG_READS, ids=[row[0] for row in CONFIG_READS])
+@pytest.mark.parametrize('fmt', ['text', 'json'])
+def test_a_missing_selected_config_is_an_invalid_request_on_every_path_read(path_reads, monkeypatch, label, argv, fmt):
+    monkeypatch.setenv('REVEAL_CONFIG', MISSING)
+    run = _run(*argv, '--format', fmt)
+    assert run.rc == 2 and 'no-such-dir' in run.err, run.brief()
+    if fmt == 'json':
+        assert _invalid_document(run, 'no-such-dir', source=argv[0]), f'{run.brief()}; stdout {run.out[:120]!r}'
+    else:
+        assert run.out == ''
+
+
+@pytest.mark.parametrize('label, argv', CONFIG_READS[:3], ids=[row[0] for row in CONFIG_READS[:3]])
+def test_no_config_or_the_opt_out_answers(path_reads, monkeypatch, label, argv):
+    """Controls: with no REVEAL_CONFIG, or REVEAL_NO_CONFIG=1 beside a missing one, the path read answers."""
+    assert _run(*argv).rc == 0
+    monkeypatch.setenv('REVEAL_CONFIG', MISSING)
+    monkeypatch.setenv('REVEAL_NO_CONFIG', '1')
+    assert _run(*argv).rc == 0
+
+
+@pytest.mark.parametrize('argv', [(ELEMENT_FILE, ELEMENT, *VIEW, '--transitive'), ('proj',), ('ast', 'proj')])
+def test_the_routes_that_already_read_it_are_unchanged(path_reads, monkeypatch, argv):
+    """Controls: the transitive walk, the directory listing and a declared noun already refused, exit 2."""
+    monkeypatch.setenv('REVEAL_CONFIG', MISSING)
+    run = _run(*argv)
+    assert run.rc == 2 and 'no-such-dir' in run.err, run.brief()
+
+
+def test_a_stdin_file_line_reads_it(path_reads, monkeypatch):
+    from conftest import _run_reveal_in
+    monkeypatch.setenv('REVEAL_CONFIG', MISSING)
+    result = _run_reveal_in(path_reads, '--stdin', stdin=f'{ELEMENT_FILE}\n')
+    assert result.returncode == 2 and 'no-such-dir' in result.stderr, (result.returncode, result.stderr)
+
+
+def test_mcp_reveal_nav_reads_it(path_reads, monkeypatch):
+    pytest.importorskip('mcp')
+    from reveal.mcp_server import reveal_nav
+    monkeypatch.setenv('REVEAL_CONFIG', MISSING)
+    text = reveal_nav(ELEMENT_FILE, ELEMENT, 'boundary')
+    assert text.startswith('[reveal error:') and 'no-such-dir' in text, text[:200]
+
+
+# D4: an unparseable selected config
+@pytest.mark.parametrize('argv', [(ELEMENT_FILE,), (ELEMENT_FILE, ELEMENT, *VIEW), (ELEMENT_FILE, ELEMENT)],
+                         ids=['file', 'boundary', 'element'])
+def test_an_unparseable_config_is_lost_input_on_the_file_read(path_reads, monkeypatch, argv):
+    import json
+    monkeypatch.setenv('REVEAL_CONFIG', 'broken.yaml')
+    text = _run(*argv)
+    assert text.rc == 3 and 'broken.yaml could not be loaded' in text.err and text.out == '', text.brief()
+    as_json = _run(*argv, '--format', 'json')
+    assert as_json.rc == 3, as_json.brief()
+    doc = json.loads(as_json.out)
+    assert [e['code'] for e in doc['meta']['errors']] == ['analysis'] and 'broken.yaml' in doc['error']
+    assert doc['source'] == argv[0] and as_json.err.count('could not be loaded') == 1
+
+
+def test_an_unparseable_config_on_a_directory_answers_the_failed_document(path_reads, monkeypatch):
+    """The directory listing already exited 3; in JSON it answers the failed document instead of empty stdout."""
+    import json
+    monkeypatch.setenv('REVEAL_CONFIG', 'broken.yaml')
+    run = _run('proj', '--format', 'json')
+    assert run.rc == 3 and [e['code'] for e in json.loads(run.out)['meta']['errors']] == ['analysis'], run.brief()
+
+
+def test_an_invalid_value_of_a_key_the_file_read_does_not_read_still_answers(path_reads, monkeypatch):
+    """Control: ``ignore: 5`` is an invalid request only where ``ignore`` is read (the walks); the file read answers."""
+    monkeypatch.setenv('REVEAL_CONFIG', 'badval.yaml')
+    assert _run(ELEMENT_FILE).rc == 0
+    assert _run('proj').rc == 2
