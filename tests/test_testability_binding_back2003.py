@@ -222,7 +222,7 @@ def test_declared_text_accepts_ranked_top_without_render_failure(project, observ
         _write(tests / 'test_broken.py', 'def broken(:\n')
     response = run(*_args(src, [tests], spelling), '--format', 'text')
     assert response.returncode == (3 if partial else 0), (response.stdout, response.stderr)
-    assert 'Testability:' in response.stdout
+    assert 'Patch Pressure:' in response.stdout  # the header names patches, not the retiring noun (BACK-2599)
     assert 'Production Patch Hotspots' in response.stdout
     assert 'Boundary Fan-Out Hotspots' in response.stdout
     assert 'unexpected keyword' not in response.stdout + response.stderr

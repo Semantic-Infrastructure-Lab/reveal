@@ -128,7 +128,8 @@ def test_patches_prints_its_own_advisory_warning(tmp_path):
     as_json = json.loads(_run(tmp_path, 'patches://.', '--format', 'json').stdout)
     codes = [w.get('code') for w in as_json.get('meta', {}).get('warnings', [])]
     assert 'W-PATCHES-1' in codes, as_json.get('meta')
-    assert 'advisory' in _run(tmp_path, 'patches://.').stdout
+    # Rendered as the one Rules pointer to meta.warnings since BACK-2599 (a standing caveat of every answer).
+    assert 'Rules: --format json (test_scope.basis, meta.warnings)' in _run(tmp_path, 'patches://.').stdout
 
 
 def test_deps_text_carries_the_autoload_disclosure(tmp_path):

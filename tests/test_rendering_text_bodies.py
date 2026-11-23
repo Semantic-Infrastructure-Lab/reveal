@@ -25,7 +25,10 @@ def test_body_is_pure_and_seam_discloses_once(tmp_path, capsys):
     result['meta']['errors'] = [{'message': 'recorded partial scan'}]
     _emit_result(result, Namespace(format='text', also_json=None), 'patches', PatchesRenderer.render_structure)
     text = capsys.readouterr().out
-    assert text.count('Patch pressure is advisory') == 1
+    # The standing advisory is the one Rules pointer since BACK-2599 (JSON keeps it); the partial scan prints once.
+    assert text.count('Rules: --format json (test_scope.basis, meta.warnings)') == 1
+    assert 'Patch pressure is advisory' not in text
+    assert [w['code'] for w in result['meta']['warnings']] == ['W-PATCHES-1']
     assert text.count('recorded partial scan') == 1
 
 

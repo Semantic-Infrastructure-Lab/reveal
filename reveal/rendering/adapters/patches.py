@@ -4,10 +4,12 @@ from typing import Any, Dict
 
 from ..base import BaseRenderer, RenderOptions, capped_section
 from ...utils.results import lost_evidence, outcome_of
-from .testability import _scope_line
+from .testability import _scope_line, rules_and_warning_lines
 
 
 class PatchesRenderer(BaseRenderer):
+    RENDERS_META_WARNINGS = True  # both bodies print them after their Rules pointer
+
     @classmethod
     def render_structure(cls, result: Dict[str, Any], format: str = 'text', top=None):
         """?view=pressure answers testability's report, rendered as testability renders it."""
@@ -52,4 +54,5 @@ class PatchesRenderer(BaseRenderer):
                 lines.extend(capped_section(examples, options.max_examples,
                     lambda ex: f"    {ex.get('test_file')}::{ex.get('test_name')} L{ex.get('line')}"))
             lines.append('')
+        lines.extend(rules_and_warning_lines(result))
         return '\n'.join(lines) + '\n'

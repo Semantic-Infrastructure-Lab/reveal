@@ -5,6 +5,13 @@ from typing import Any, Dict, List, Optional
 from ..base import BaseRenderer
 from ...utils import print_json_result
 from ...utils.results import outcome_of
+from ...utils.warning_render import meta_warning_lines, rule_text_lines
+
+# Caveats true of every patches and pressure answer (W-PATCHES-1, W-TESTABILITY-1/2) and a selected project's test-path
+# basis print as the one Rules pointer; their full text stays in JSON (BACK-2599). Request-specific warnings (failed,
+# skipped or unscanned files) stay in the warning block.
+STANDING_RULE_TYPES = frozenset({'advisory', 'analysis_limit'})
+RULE_FIELDS = ('test_scope.basis',)
 
 
 def patch_hotspot_lines(rows: List[Dict[str, Any]], note: str = '') -> List[str]:
@@ -60,17 +67,26 @@ def _scope_line(scope: Any) -> str:
     if not isinstance(scope, dict):
         return 'Test scope: unknown'
     line = f"Test scope: {scope.get('rule')} ({scope.get('files_scanned', 0)} test files scanned)"
-    if scope.get('basis'):
+    if scope.get('basis') and (scope.get('include_anchor_name') or 'additional_paths' in scope):
+        # A basis that departs from the default changes what counted, so it stays beside the pointer: no project
+        # boundary (the scan root's own name counts as a test path, as imports keeps it, BACK-2685) or a declared
+        # test_layout (additional paths, or the whole scope by '.'). A selected project's default basis is behind it.
         line += f"; {scope['basis']} (anchor: {scope.get('anchor', '.')})"
     if scope.get('outside_anchor_roots'):
         line += f"; outside-anchor suites: {len(scope['outside_anchor_roots'])} (conventions only)"
     return line
 
 
+def rules_and_warning_lines(result: Dict[str, Any]) -> List[str]:
+    """The one Rules pointer, then the request-specific warnings and errors the shared seam would have printed."""
+    return [*rule_text_lines(result, fields=RULE_FIELDS, standing_types=STANDING_RULE_TYPES),
+            *meta_warning_lines(result, skip_types=STANDING_RULE_TYPES)]
+
+
 def testability_text(report: Dict[str, Any]) -> str:
     summary = report.get('summary', {})
     lines = [
-        f"Testability: {report.get('source')}",
+        f"Patch Pressure: {report.get('source')}",
         f"Tests: {', '.join(report.get('tests', []))}",
         _scope_line(report.get('test_scope')),
         "-" * 50,
@@ -84,6 +100,7 @@ def testability_text(report: Dict[str, Any]) -> str:
         "Summary",
         f"  {summary.get('patch_groups_reported', 0)} patch hotspot(s) reported",
         f"  {summary.get('boundary_profiles_reported', 0)} boundary hotspot(s) reported",
+        *rules_and_warning_lines(report),
     ]
     return "\n".join(lines)
 
@@ -92,6 +109,7 @@ class TestabilityRenderer(BaseRenderer):
     """Renderer for testability:// results."""
 
     __test__ = False  # not a pytest class
+    RENDERS_META_WARNINGS = True  # the body prints them after its Rules pointer
     ACCEPTS_TOP = True  # The declared route may forward an overridden display limit.
 
     @classmethod

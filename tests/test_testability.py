@@ -318,7 +318,7 @@ def test_one():
         run_testability(args)
 
     text = out.getvalue()
-    assert 'Testability:' in text
+    assert 'Patch Pressure:' in text  # the header names patches, not the retiring noun (BACK-2599)
     assert 'service.fetch_price' in text
     assert 'Boundary Fan-Out Hotspots' in text
 

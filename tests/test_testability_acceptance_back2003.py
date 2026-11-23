@@ -107,7 +107,8 @@ def test_artifact_write_failure_preserves_primary_text_and_failure_exit(project,
     # A directory is a genuine output write error, independent of analysis.
     response = run(uri(src, tests), '--format', 'text', '--also-json', str(tmp_path))
     assert response.returncode == 3
-    assert 'Testability:' in response.stdout and 'Patch uses: 1' in response.stdout
+    # The header names patches, not the retiring noun (BACK-2599).
+    assert 'Patch Pressure:' in response.stdout and 'Patch uses: 1' in response.stdout
 
 
 def test_postprocess_cannot_launder_prior_required_failure(project, monkeypatch):

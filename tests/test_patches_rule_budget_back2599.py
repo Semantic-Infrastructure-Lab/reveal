@@ -59,3 +59,16 @@ def test_basis_with_no_project_boundary_stays_visible(tmp_path, capsys, query):
     assert 'Test scope: is_test_path (1 test files scanned)' in text
     assert 'paths relative to the selected project' not in text
     assert 'Rules: --format json (test_scope.basis, meta.warnings)' in text
+
+
+@pytest.mark.parametrize('query', ['', 'view=pressure'])
+@pytest.mark.parametrize('selectors,suffix', [(['suite'], 'conventional names plus declared additional paths'),
+                                              (['.'], 'WHOLE SCOPE selected by explicit .')])
+def test_declared_test_layout_basis_stays_visible(tmp_path, capsys, query, selectors, suffix):
+    """Control: a declared test_layout changes what counts as a test (the whole scope with '.'), so its basis stays."""
+    result = _result(tmp_path, query)
+    basis = f'paths relative to the selected project; {suffix}'
+    result['test_scope'] = dict(_FALLBACK, source='project', include_anchor_name=False, basis=basis,
+                                additional_paths=selectors, whole_scope='.' in selectors)
+    text = _emitted(result, capsys)
+    assert f'Test scope: is_test_path (1 test files scanned); {basis} (anchor: .)' in text

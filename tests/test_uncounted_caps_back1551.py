@@ -5,6 +5,7 @@ it cannot see a cap that has none. git's repository view now cuts its branches a
 ``?limit`` and is covered there (its fixture has two of each). These are the rest: each
 either lists everything, or records its cut with ``note_truncation``.
 """
+import json
 
 from conftest import _run_reveal_direct
 from reveal.adapters.help import HelpAdapter
@@ -88,5 +89,9 @@ def test_testability_uri_text_carries_the_result_warnings(tmp_path):
     (tmp_path / 'pkg' / 'a.py').write_text('import requests\n\ndef f():\n    return requests.get("x")\n', encoding='utf-8')
     (tmp_path / 'tests').mkdir()
     (tmp_path / 'tests' / 'test_a.py').write_text('def test_a():\n    assert True\n', encoding='utf-8')
-    out = _run_reveal_direct(f'testability://{tmp_path / "pkg"}?tests={tmp_path / "tests"}').stdout
-    assert 'Summary' in out and 'best-effort' in out
+    uri = f'testability://{tmp_path / "pkg"}?tests={tmp_path / "tests"}'
+    out = _run_reveal_direct(uri).stdout
+    # The standing best-effort caveat is the one Rules pointer since BACK-2599; JSON keeps its sentence.
+    assert 'Summary' in out and 'Rules: --format json (meta.warnings)' in out
+    payload = json.loads(_run_reveal_direct(uri, '--format', 'json').stdout)
+    assert 'Static target resolution is best-effort.' in [w['message'] for w in payload['meta']['warnings']]
