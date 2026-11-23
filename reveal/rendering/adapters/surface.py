@@ -25,9 +25,10 @@ _LANGUAGE_NAMES = {
     'rust': 'Rust', 'cpp': 'C++',
 }
 
-# The standing caveats (taxonomy coverage, dynamic registrations, the test-origin note) are one Rules pointer to the
-# JSON field that holds their full text (COMMAND_MODEL rule 7, BACK-2599, BACK-2623).
-_RULE_FIELDS = ('_meta.known_limits',)
+# The standing caveats (taxonomy coverage, dynamic registrations, the test-origin note) and a selected project's
+# default test-path basis are one Rules pointer to the JSON fields that hold their full text (COMMAND_MODEL rule 7,
+# BACK-2599, BACK-2623).
+_RULE_FIELDS = ('test_scope.basis', '_meta.known_limits')
 
 
 def _recovered_note(recovered_files: List[str], error_region_entries: int) -> str:
@@ -144,7 +145,9 @@ def _cut_totals(report: Dict[str, Any]) -> Dict[str, int]:
 
 
 def _test_policy_lines(test_scope: Optional[Dict[str, Any]]) -> List[str]:
-    if not test_scope:
+    if not test_scope or not (test_scope.get('include_anchor_name') or 'additional_paths' in test_scope):
+        # A basis that departs from the default changes what counted, so it stays visible: no project boundary or a
+        # declared test_layout, as patches and imports keep it. The default basis is behind the pointer.
         return []
     lines = [f"Test/support policy: {test_scope['basis']} (anchor {test_scope['anchor']}; {test_scope['source']})"]
     declaration = test_scope.get('declaration')

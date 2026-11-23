@@ -261,7 +261,12 @@ def test_no_replacement_names_a_retiring_spelling():
 @pytest.mark.parametrize('argv', [[], ['--view', 'dir'], ['--kind', 'mcp']])
 def test_the_standing_caveats_are_one_rules_pointer_and_json_keeps_their_text(proj, argv):
     code, out, _ = _text('surface', '.', *argv)
-    assert code == 0 and out.count('Rules: --format json (_meta.known_limits)') == 1
-    assert 'Taxonomy-based' not in out  # the caveat's full text lives in JSON only
     _, doc, _ = _cli('surface', '.', *argv)
+    # A selected project's default test-path basis joins the pointer when the answer carries one (BACK-2599).
+    fields = ('test_scope.basis, ' if 'test_scope' in doc else '') + '_meta.known_limits'
+    assert code == 0 and out.count(f'Rules: --format json ({fields})') == 1
+    assert 'Taxonomy-based' not in out  # the caveat's full text lives in JSON only
     assert doc['_meta']['known_limits'][0].startswith('taxonomy covers common libraries only')
+    if 'test_scope' in doc:  # this fixture has no project boundary: that basis stays visible beside the pointer
+        assert doc['test_scope']['include_anchor_name'] is True
+        assert f"Test/support policy: {doc['test_scope']['basis']}" in out
