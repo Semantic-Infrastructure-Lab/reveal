@@ -146,6 +146,7 @@ TARGETS = {'claude': 'sessions', 'codex': 'sessions', 'json': 'proj/data.json', 
 # A control that answers only on another target than its noun's default (Claude's turn slice reads one session):
 # the legacy-word probes (1b, 6, 16) send its spellings there, so they compare answers rather than two rejections.
 CONTROL_TARGETS = {('claude', 'tail'): 'session/my-session', ('git', 'detail'): 'proj/app.py', ('git', 'raw'): 'proj/app.py',
+                   ('git', 'ignore-commits'): 'proj/app.py', ('git', 'auto-ignore'): 'proj/app.py',  # blame's (BACK-2733)
                    # Codex: the resource whose answer reads the control (BACK-2656; the catalog reads few of them)
                    ('codex', 'key'): 'config', ('codex', 'detail'): '019e5cc5-0000-7000-8000-000000000001/exchanges',
                    ('codex', 'view'): '019e5cc5-0000-7000-8000-000000000001'}
@@ -156,6 +157,8 @@ CONTROL_BASES = {('calls', 'kind'): (['--uncalled'], '?uncalled'), ('calls', 'ex
                  ('imports', 'limit'): (['--sort=-fan-in'], '?sort=-fan-in'),
                  ('imports', 'detail'): (['--circular'], '?circular'),
                  ('git', 'detail'): (['--view', 'blame'], '?view=blame'),
+                 ('git', 'ignore-commits'): (['--view', 'blame'], '?view=blame'),
+                 ('git', 'auto-ignore'): (['--view', 'blame'], '?view=blame'),
                  # a legacy word read by another answer than its control's base (Git raw is detail=raw: a file's text)
                  ('git', 'raw'): ([], ''),
                  ('patches', 'where'): (['--view', 'pressure'], '?view=pressure'),
@@ -187,7 +190,8 @@ EXEMPT = {
     ('sqlite', '1a'): 'binds no global flag as a URI key (no CLI_QUERY_FLAGS, no walk policy): no key and flag to give '
                       'together',
     **{(noun, '1d'): 'declares no repeatable control with an alias'
-       for noun in NOUNS if noun not in ('ast', 'claude', 'codex', 'markdown', 'metrics', 'patches', 'stats', 'xlsx')},
+       for noun in NOUNS if noun not in ('ast', 'claude', 'codex', 'git', 'markdown', 'metrics', 'patches', 'stats',
+                                         'xlsx')},  # git: ignore-commits (BACK-2733)
     **{(noun, '5'): 'no note-stage param: row whose replacement is a control of this noun' for noun in (
         'trace',)},
     **{(noun, '6'): 'declares no alias: nothing to note or keep note-free' for noun in (

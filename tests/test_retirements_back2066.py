@@ -326,6 +326,7 @@ PRODUCTION_CASES = {
     'param:git.raw': lambda f: [f'git://{f}?raw=1'],
     'param:git.no_merges': lambda f: ['git', str(Path(f).parent), '--view', 'history', '--no-merges'],
     'value:git.view=log': lambda f: ['git', f, '--view', 'log'],
+    'param:git.ignore': lambda f: ['git', f, '--view', 'blame', '--ignore', 'off'],  # BACK-2733
     'value:git.detail=summary': lambda f: ['git', f, '--view', 'blame', '--detail', 'summary'],
     'param:pack.verbose': lambda f: [f'pack://{Path(f).parent}?verbose'],
     'param:overview.verbose': lambda f: [f'overview://{Path(f).parent}?verbose'],

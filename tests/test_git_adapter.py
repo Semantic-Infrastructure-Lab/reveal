@@ -2193,7 +2193,7 @@ class TestAutoIgnoreRenderer(unittest.TestCase):
         out = self._capture(result)
         assert 'Auto-ignored' in out
         assert 'noise heuristic' in out
-        assert '--ignore off' in out  # the flag form (BACK-2616)
+        assert '--auto-ignore off' in out  # the switch that includes them (BACK-2733; the flag form, BACK-2616)
 
     def test_ignore_revs_shows_auto_ignored_with_revs_label(self):
         result = self._base_result()
