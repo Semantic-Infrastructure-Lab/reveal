@@ -102,9 +102,34 @@
       "detail_supported": false,
       "fields": [
         "scope.counting_rule",
+        "reading_note",
+        "map.rules",
+        "map.entry_point_filter",
+        "diagnostic_budget"
+      ],
+      "sentences": [
+        "scope.counting_rule",
+        "reading_note",
         "map.rules.edge_rule.text",
         "map.rules.edge_rule_sections.entry_points.text",
-        "map.rules.edge_rule_sections.cycles.text"
+        "map.rules.edge_rule_sections.cycles.text",
+        "map.rules.component_order",
+        "map.entry_point_filter.path_basis",
+        "diagnostic_budget.rule"
+      ]
+    },
+    "comparison": {
+      "uri": "overview://wide?against=HEAD~2",
+      "exit": 0,
+      "detail_supported": false,
+      "fields": [
+        "edge_rule.text",
+        "edge_rule_sections.entry_points.text",
+        "edge_rule_sections.cycles.text"
+      ],
+      "standing": [
+        "base: complexity is McCabe cyclomatic complexity (a count of decision points), not weighted by nesting depth -- ~40 flat, sequential branches at the same level score identically to one branch nested 40 levels deep. Two functions with the same score can have very different actual structure.",
+        "head: complexity is McCabe cyclomatic complexity (a count of decision points), not weighted by nesting depth -- ~40 flat, sequential branches at the same level score identically to one branch nested 40 levels deep. Two functions with the same score can have very different actual structure."
       ]
     }
   }

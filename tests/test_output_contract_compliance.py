@@ -1220,7 +1220,7 @@ _RULE_BUDGET_CASES = {
     **json.loads((Path(__file__).parent / 'fixtures' / 'patches_rule_text_back2599.json').read_text(encoding='utf-8')),
 }
 _RULE_BUDGET_STANDING = frozenset({'analysis_limit', 'scope_limit', 'derived_signal',
-                                 'implicit_exclusion', 'not_measured', 'advisory'})
+                                 'implicit_exclusion', 'not_measured', 'advisory', 'complexity_is_unweighted'})
 
 
 def _rule_value(payload, path):
@@ -1264,10 +1264,17 @@ def test_rule_budget_retrofit_text_points_and_json_keeps_the_rule(harness, noun,
     expected = _RULE_BUDGET_CASES[noun][case]
     _, payload, _ = harness.run(expected['uri'])
     _, text, _ = harness.run_raw(expected['uri'])
-    sentences = [_rule_value(payload, path) for path in expected['fields']]
+    # ``sentences``: the leaf rule sentences when the pointer names parent objects (overview, BACK-2599).
+    sentences = [_rule_value(payload, path) for path in expected.get('sentences', expected['fields'])]
     assert all(isinstance(s, str) and len(s) > 20 for s in sentences), sentences
     for sentence in sentences:
         assert (sentence in text) == bool(expected.get('full_text')), f'{case}: full rule in text: {sentence[:60]}'
+    # Standing caveats stay verbatim in JSON and leave the text (a comparison's per-side caveat, merged in text as
+    # 'base and head: ...', is checked without its side prefix).
+    standing = [w['message'] for w in payload['meta']['warnings'] if w.get('type') in _RULE_BUDGET_STANDING]
+    assert standing == expected['standing'], 'full standing caveats must remain verbatim in JSON'
+    for message in standing:
+        assert message.removeprefix('base: ').removeprefix('head: ') not in text, f'{case}: {message[:60]}'
 
 
 _RULE_BUDGET_PATCHES = [(noun, case) for noun in ('patches', 'testability') for case in _RULE_BUDGET_CASES[noun]]
