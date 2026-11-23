@@ -231,6 +231,10 @@ def _add_global_options(target, *, main_modes: bool = True) -> None:
                         help='Output format (text, json, typed [typed JSON with types/relationships], grep). '
                              'Each target accepts only the formats it renders (help://schemas/<adapter>); '
                              'another value exits 2 with the supported list. Defaults to $REVEAL_FORMAT if set.')
+    # The --stdin sentence is the main parser's only: --stdin --check is live there, and a
+    # declared noun has no --stdin.
+    stdin_sinks = (' With --stdin it needs --check and file paths only: JSON holds one aggregate '
+                   'document; text/grep hold the corresponding per-file stdout stream.') if main_modes else ''
     target.add_argument('--output', metavar='FORMAT[=PATH]', action='append', default=None,
                         help='An output sink, repeatable. FORMAT alone is the stdout sink (the same as --format); '
                              'FORMAT=PATH also writes the result to PATH in that format, one invocation and '
@@ -239,8 +243,7 @@ def _add_global_options(target, *, main_modes: bool = True) -> None:
                              'explicit JSON destinations are written even with JSON stdout. A format the '
                              'command does not render exits 2 before the '
                              'scan; a write that fails exits 3 with the answer printed and the other sinks '
-                             'written. With --stdin it needs --check and file paths only: JSON holds one aggregate '
-                             'document; text/grep hold the corresponding per-file stdout stream.')
+                             'written.' + stdin_sinks)
     target.add_argument('--also-json', metavar='PATH', default=None,
                         help='Retired: use --output json=PATH. Also write the result as JSON to PATH, in addition to '
                              '--format\'s primary output -- one invocation, one parse, both a '
@@ -253,7 +256,7 @@ def _add_global_options(target, *, main_modes: bool = True) -> None:
     target.add_argument('--copy', '-c', action='store_true',
                         help='Copy output to clipboard (also prints normally)')
     target.add_argument('--verbose', '-v', action='store_true',
-                        help='Show detailed output (e.g., all results instead of truncated summary for imports://)')
+                        help='Show detailed output (e.g., all results instead of a truncated summary for imports)')
     add_switch_argument(target, 'breadcrumbs')
     if main_modes:
         target.add_argument('--disable-breadcrumbs', action='store_true',
@@ -429,9 +432,9 @@ def _add_display_options(parser: argparse.ArgumentParser) -> None:
                         help='Flat file list with timestamps sorted by mtime — replaces find|sort. '
                              'Combine with --ext to filter by type, --sort name/size/mtime, --desc.')
     parser.add_argument('--hotspots', action='store_true',
-                        help='Replaced by ?view=hotspots on metrics:// (reveal metrics PATH --view hotspots); still adds the hotspot ranking to metrics://, with a note')
+                        help='Replaced by reveal metrics PATH --view hotspots; still adds the hotspot ranking, with a note')
     parser.add_argument('--code-only', action='store_true',
-                        help='Exclude data/config files from analysis (requires metrics:// adapter, filters .json>10KB, .yaml, .xml, .csv, .toml)')
+                        help='Exclude data/config files from analysis (requires reveal metrics, filters .json>10KB, .yaml, .xml, .csv, .toml)')
 
 
 def _add_pattern_detection_options(parser: argparse.ArgumentParser) -> None:
