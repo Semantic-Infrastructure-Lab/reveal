@@ -1237,12 +1237,13 @@ reveal git src/auth.py --view blame --element L128-L162         # blame for expl
 
 # Noise-commit suppression — strip mass-formatting commits from blame
 # Auto-ignored by default: .git-blame-ignore-revs + noise heuristic (>50% hunks, noise message)
-reveal git src/auth.py --view blame --ignore off                # disable auto-ignore, see raw blame
-reveal git src/auth.py --view blame --ignore 69b0093            # explicit suppress (stacks with auto)
-reveal git src/auth.py --view blame --ignore 69b0093,f5fcac0    # multiple explicit
+reveal git src/auth.py --view blame --auto-ignore off           # disable auto-ignore, see raw blame
+reveal git src/auth.py --view blame --ignore-commits 69b0093    # explicit suppress (stacks with auto)
+reveal git src/auth.py --view blame --ignore-commits 69b0093,f5fcac0    # multiple explicit
+reveal git src/auth.py --view blame --ignore-commits 69b0093 --auto-ignore off  # explicit only
 
 # The motivating combined pattern: who really changed this function, ignoring formatting?
-reveal git src/auth.py --view blame --element process_payment --ignore off
+reveal git src/auth.py --view blame --element process_payment --auto-ignore off
 
 # Ownership — commit-share over a file, directory, or whole repo
 reveal git src/auth.py --view ownership                        # primary author, contributor count, last touch
@@ -1256,7 +1257,7 @@ reveal git . --view ownership --scan-limit 500                      # cap the hi
 - `?type=diff` — "what exactly did this commit change?" (replaces `git show`)
 - `?type=history&element=func` — "when was this function changed and by whom?" (replaces file history + manual grep)
 - `?type=history&content~=X` — "which commits introduced or removed this string?" (pickaxe search)
-- `?type=blame` — "who really owns these *lines*?" (surviving-line attribution; noise commits auto-suppressed; use `?ignore=off` for raw)
+- `?type=blame` — "who really owns these *lines*?" (surviving-line attribution; noise commits auto-suppressed; use `--auto-ignore off` for raw)
 - `?type=ownership` — "who owns this file/dir/repo by *commit-share*?" (primary author, contributor count, last touch — the input to a bus-factor / key-person read)
 - `?element=L128-L162` — blame for a procedural file or specific line range (no named element needed)
 

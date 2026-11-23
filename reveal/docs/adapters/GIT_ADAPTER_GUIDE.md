@@ -92,7 +92,7 @@ before the repository is read, naming where it is read and the controls the answ
 Commit lists (repository overview, a ref's history, a file or directory history, a timeline)
 read `where`, `since`, `until`, `sort`, `limit`, `offset`, `merges` and `no_merges`; ownership
 reads `sort`, `limit`, `offset`, `merges` and `scan-limit` (it aggregates unfiltered); a
-timeline also reads `scan-limit`; blame reads `detail` and `ignore`, a diff `context`; `element`
+timeline also reads `scan-limit`; blame reads `detail`, `ignore-commits` and `auto-ignore`, a diff `context`; `element`
 narrows a file's history, blame, diff or timeline (a repository has none: exit 2); a file's
 content reads `raw` (or `detail=raw`). So a row cap on a file's content, or a commit filter
 on ownership, exits 2 rather than answering with a note.
@@ -742,7 +742,8 @@ that shares are limited to the fetched history. Run `git fetch --unshallow` firs
 | `ref` | string | branch/tag/commit | Override the starting ref — alias for `@ref` in the URI (e.g., `?ref=v0.63.0`) |
 | `merges` | string | `on`, `off` | Include or exclude merge commits (ownership excludes them by default, commit lists include them; `no_merges` is the deprecated spelling of `off`) |
 | `bucket` | string | `week`, `month` | Modifier on `type=history`: bucket commits into periods (commit_count + distinct author_count per period) instead of a flat list |
-| `ignore` | string | comma-separated hash prefixes | For `type=blame`: suppress these commits (any prefix length, 4–7 chars typical) |
+| `ignore-commits` | string | comma-separated hash prefixes; repeat to add more | For `view=blame`: suppress these commits (any prefix length, 4–7 chars typical); auto-ignore still applies (`ignore` is its deprecated spelling) |
+| `auto-ignore` | string | `on`, `off` | For `view=blame`: suppress the commits in `.git-blame-ignore-revs` and those the noise heuristic finds (default `on`); `off` shows the raw blame (`ignore=off` is its deprecated spelling) |
 
 ### Filter Parameters
 
