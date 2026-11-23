@@ -163,7 +163,7 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 - The markdown guide and the markdown lines of the shared guides teach `reveal markdown DIR --flags` (`reveal markdown docs/ --where type=guide --match nginx`, `--view links`, `--backlinks auth.md`), as do `help://markdown`, `help://schemas/markdown` (examples as `markdown://DIR --flags`, query parameters from the declarations) and the recipe list (BACK-2614).
 
-- `reveal --agent-help` and its full guide, `reveal help://quick`, the recipes guide, the MCP server's instructions and tool descriptions, and the `--help` text of calls, imports, pack, metrics, json, claude and the main parser teach analysis nouns as subcommands and options as flags (`reveal calls src/ --callers NAME`, `reveal imports src --circular`, `reveal_run([...])` on MCP) instead of `calls://...?callers=` query strings (BACK-2713).
+- `reveal --agent-help` and its full guide, `reveal help://quick`, the recipes guide, the MCP server's instructions and tool descriptions, the `--help` text of calls, imports, pack, metrics, json, claude and the main parser, and the hints answers print (next steps, including overview's JSON `next_steps`, breadcrumbs, and every cut's `raise --limit N or page with --offset N`) teach analysis nouns as subcommands and options as flags (`reveal calls src/ --callers NAME`, `reveal imports src --circular`, `reveal_run([...])` on MCP) instead of `calls://...?callers=` query strings (BACK-2713).
 
 ### Fixed
 
