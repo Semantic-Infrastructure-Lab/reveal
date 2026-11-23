@@ -105,6 +105,10 @@ def _resolve_structure(uri: str, **kwargs) -> Dict[str, Any]:
         if file_path.is_dir():
             return resolve_directory(str(file_path))
 
+        # A side that does not exist is the request's fault whatever its name: 'absent' has no analyzer either, and
+        # answered "No analyzer found" as a failed analysis (exit 3, D6; BACK-2214)
+        if not file_path.exists():
+            raise DiffTargetNotFoundError(f"File not found: {resource}")
         # Single file - use analyzer
         analyzer_class = get_analyzer(resource, allow_fallback=True)
         if not analyzer_class:
