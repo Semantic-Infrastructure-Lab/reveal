@@ -591,10 +591,25 @@ def run_declared_uri_command(name: str, uri: str, element: Optional[str], args) 
     from .uri import _note_retired_spellings
     _note_retired_spellings(uri)
     query = uri.partition('?')[2]
+    resource = peek(args, declared_adapter_class(name).RESOURCE_SPEC.name)
     if element:
-        _refuse_element(name, peek(args, declared_adapter_class(name).RESOURCE_SPEC.name), element, args)
-        return
-    run_declared_command(name, args, uri_query=query)
+        legacy = legacy_element_resource(name, resource, element)
+        if legacy is None:
+            _refuse_element(name, resource, element, args)
+            return
+        resource = legacy
+    run_declared_command(name, args, uri_query=query, resource=resource)
+
+
+def legacy_element_resource(name: str, path: str, element: str) -> Optional[str]:
+    """The resource that names a positional element the noun still answers until the cut, its ``target:NOUN.element``
+    row noted (``element_retirement``): the element after a ``/`` in the resource, the spelling the row names
+    (``reveal diff://L:R NAME`` is ``diff://L:R/NAME``, BACK-2768). None: the noun has no such row and refuses the
+    element, as before (BACK-2526)."""
+    from ..invocation import element_retirement
+    if element_retirement(name) is None:
+        return None
+    return f"{path.rstrip('/')}/{element}"
 
 
 def _refuse_element(name: str, path: str, element: str, args, answer_consumer=None) -> None:
@@ -605,9 +620,11 @@ def _refuse_element(name: str, path: str, element: str, args, answer_consumer=No
         adapter, name, path, unread_element_message(adapter, name, element), args))
 
 
-def run_declared_command(name: str, args, *, answer_consumer=None, uri_query: Optional[str] = None) -> None:
+def run_declared_command(name: str, args, *, answer_consumer=None, uri_query: Optional[str] = None,
+                         resource: Optional[str] = None) -> None:
     """Bind original argparse values; no URI string is constructed. *uri_query*: the query of the URI these flags
-    followed, the request's second source (joined under "Conflicting values", BACK-2673)."""
+    followed, the request's second source (joined under "Conflicting values", BACK-2673). *resource*: the resource in
+    place of the positionals' (a URI request whose noted legacy element joins its path, ``legacy_element_resource``)."""
     from ...utils.query_binding import convert_flag_only, typed_resource
     adapter = declared_adapter_class(name)
     _note_retired_flags(name, adapter)
@@ -615,7 +632,9 @@ def run_declared_command(name: str, args, *, answer_consumer=None, uri_query: Op
     source, spelled = typed_source(
         adapter.PARAM_SPECS, args,
         carried=lambda spec, source, spelled: _bind_global_carried(adapter, spec, args, uri_query, source, spelled))
-    _run_declared(name, args, typed_resource(adapter.RESOURCE_SPEC, args), source, 'typed',
+    if resource is None:
+        resource = typed_resource(adapter.RESOURCE_SPEC, args)
+    _run_declared(name, args, resource, source, 'typed',
                   answer_consumer=answer_consumer, spelled=spelled, uri_query=uri_query)
 
 
@@ -676,9 +695,12 @@ def run_declared_uri(uri: str, element: str | None, args, consumed=(), *, answer
     name, _, resource = uri.partition('://')
     path, _, query = resource.partition('?')
     if element:
-        # One stderr line and an empty stdout left --format json with no answer (BACK-2526).
-        _refuse_element(name, path, element, args, answer_consumer)
-        return
+        legacy = legacy_element_resource(name, path, element)
+        if legacy is None:
+            # One stderr line and an empty stdout left --format json with no answer (BACK-2526).
+            _refuse_element(name, path, element, args, answer_consumer)
+            return
+        path = legacy
     _run_declared(name, args, path, query, 'uri', consumed, answer_consumer=answer_consumer)
 
 
