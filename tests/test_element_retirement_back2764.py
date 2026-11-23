@@ -59,3 +59,30 @@ def test_cli_an_unqualified_bound_constructor_refusal_is_the_invalid_request(uri
     assert run.returncode == 2, (uri, run.returncode, run.stderr)
     assert "unsupported control 'bogus'" in run.stdout + run.stderr, run.stderr
     json.loads(run.stdout)  # the invalid-request JSON document
+
+
+# --- api.query -------------------------------------------------------------------------------------------------------
+
+def test_api_a_bound_noun_without_a_row_still_refuses_the_element():
+    from reveal import api
+    from reveal.errors import RequestValidationError
+    with pytest.raises(RequestValidationError, match=r"env:// takes no positional element \('PATH'\)"):
+        api.query('env://', 'PATH')
+
+
+def test_api_a_bound_scheme_with_a_row_answers_its_element_with_the_note(monkeypatch):
+    """The seam alone: a scheme that binds its query (here reveal:// made bound by its own PARAM_SPECS, as its adapter
+    declares it) and has a row answers get_element with the row's note in meta.warnings, and refuses an unknown keyword
+    beside it, which it used to forward to get_element."""
+    from reveal import api
+    from reveal.adapters.factory import uses_bound_query_call
+    from reveal.adapters.reveal.adapter import RevealAdapter
+    from reveal.errors import UnsupportedOverrideError
+    monkeypatch.setattr(RevealAdapter, 'PARAM_SPECS', (), raising=False)
+    assert uses_bound_query_call(RevealAdapter)
+    doc = api.query('reveal://adapters/env.py', 'EnvAdapter')
+    assert doc['type'] == 'code_element'
+    assert [w['field'] for w in doc['meta']['warnings'] if w.get('code') == 'retired_spelling'] == \
+        ['target:reveal.element']
+    with pytest.raises(UnsupportedOverrideError, match='bogus'):
+        api.query('reveal://adapters/env.py', 'EnvAdapter', bogus=1)
