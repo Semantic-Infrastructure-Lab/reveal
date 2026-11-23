@@ -11,6 +11,8 @@ control is the walk's ``exclude`` (a directory pair walks both sides, and the wa
 2 naming the supported controls; an absent side, or an element neither side has (its names listed), exits 2.
 """
 import json
+import os
+import shutil
 
 import pytest
 
@@ -148,6 +150,22 @@ def test_a_side_that_does_not_exist_is_an_invalid_request(pair, argv):
     code, doc, stderr = _json(*argv)
     assert code == 2, stderr
     assert 'File not found' in doc['error'], doc
+
+
+def test_two_words_are_the_sides_as_typed_even_holding_a_colon(pair):
+    """reveal diff LEFT RIGHT reads each word as a side; it joined them with ':' and re-split the text, so a side holding a
+    colon (a drive-letter path beside a POSIX-style one, a filename with a colon) was 'requires left:right format', exit 3."""
+    if os.name == 'nt':
+        right = str(pair / 'b.py')  # C:\...\b.py beside the relative a.py
+    else:
+        shutil.copy(pair / 'b.py', pair / 'side:b.py')
+        right = 'side:b.py'
+    code, doc, stderr = _json('diff', 'a.py', right)
+    assert code == 0, stderr
+    assert doc['type'] == 'diff_comparison' and 'error' not in doc, doc
+    code, doc, stderr = _json('diff', '/nonexistent/path', 'C:\\Users\\x')
+    assert code == 2, stderr
+    assert 'File not found: /nonexistent/path' in doc['error'], doc  # noqa: win-path (a side as typed)
 
 
 def test_the_api_raises_the_missing_side(pair):

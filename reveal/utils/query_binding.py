@@ -1,6 +1,7 @@
 """Declared CLI/URI binding; legacy raw queries and exclusion/filter codecs stay separate."""
 
 import argparse
+import os
 import re
 import stat
 from pathlib import Path
@@ -1298,15 +1299,43 @@ def _add_resource_arguments(parser: argparse.ArgumentParser, resource: ResourceS
     parser.add_argument(resource.name, nargs=nargs, default=resource.cli_default)
 
 
+class SpelledParts(str):
+    """A resource spelled as separate words: the joined text every answer echoes, plus the words as given (``parts``),
+    so its owner reads each part as typed instead of re-splitting text a part may itself hold the joiner in
+    (``reveal diff /a C:\\b`` is not the URI ``/a:C:\\b``)."""
+
+    parts: Tuple[str, ...]
+    joiner: str
+
+    def __new__(cls, joiner: str, parts: Iterable[str]) -> 'SpelledParts':
+        words = tuple(parts)
+        spelled = super().__new__(cls, joiner.join(words))
+        spelled.parts, spelled.joiner = words, joiner
+        return spelled
+
+    def __getnewargs__(self) -> Tuple[str, Tuple[str, ...]]:  # type: ignore[override]  # pickle and copy rebuild it
+        return self.joiner, self.parts
+
+    def map(self, convert: Callable[[str], str]) -> 'SpelledParts':
+        """Each part converted on its own (``~`` expansion, path binding), joined again."""
+        return SpelledParts(self.joiner, (convert(part) for part in self.parts))
+
+
+def expand_resource_user(path: str) -> str:
+    """``os.path.expanduser`` on a resource: on each of its parts when it is spelled as separate words."""
+    return path.map(os.path.expanduser) if isinstance(path, SpelledParts) else os.path.expanduser(path)
+
+
 def typed_resource(resource: ResourceSpec, args: Any) -> Any:
     """The resource a declared parser's positionals spell (``add_declared_arguments``): its one positional, or its words
     joined by ``resource.joiner`` (``reveal diff a.py b.py`` is ``a.py:b.py``; one word is the resource as its URI
-    spells it). A parser that read the joined positional (a URI request's) answers that."""
+    spells it), a ``SpelledParts`` that keeps the words. A parser that read the joined positional (a URI request's)
+    answers that."""
     if not resource.parts or resource.name in vars(args):
         return getattr(args, resource.name, None)
     words = [getattr(args, part, None) for part in resource.parts]
     given = [word for word in words if word is not None]
-    return resource.joiner.join(given) if given else resource.cli_default
+    return SpelledParts(resource.joiner, given) if given else resource.cli_default
 
 
 def _resource_exists(path: str) -> bool:
@@ -1336,6 +1365,9 @@ def bind_resource_path(spec: ResourceSpec, path: str, *, transport: str,
     """
     if transport not in ('typed', 'uri'):
         raise ValueError(f'Unknown resource transport {transport!r}')
+    if isinstance(path, SpelledParts):
+        return path.map(lambda part: bind_resource_path(spec, part, transport=transport, resolve=resolve,
+                                                        validate_kind=validate_kind))
     default = spec.cli_default if transport == 'typed' else spec.uri_default
     value = str(path if path else default or '')
     if not value and spec.required:

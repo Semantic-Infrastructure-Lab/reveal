@@ -901,7 +901,7 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
     into one request under "Conflicting values" (``join_uri_and_flags``) that binds as the URI does."""
     from ...utils.exclusions import exclusion_scope
     from ...utils.gitignore import gitignore_scope, split_respect_gitignore
-    from ...utils.query_binding import bind_resource_path, join_uri_and_flags, prepare_declared_params
+    from ...utils.query_binding import bind_resource_path, expand_resource_user, join_uri_and_flags, prepare_declared_params
     adapter = declared_adapter_class(name)
     consume = answer_consumer or (lambda answer: answer.emit())
     from .formats import declared_output_formats, require_supported_format
@@ -945,7 +945,7 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
                 return
             expected_type = predicted_result_type(adapter, source)
             try:
-                path = bind_resource_path(adapter.RESOURCE_SPEC, os.path.expanduser(path), transport=transport,
+                path = bind_resource_path(adapter.RESOURCE_SPEC, expand_resource_user(path), transport=transport,
                                           resolve=getattr(adapter, 'resource_path', None))
             except (ValueError, FileNotFoundError, NotADirectoryError) as exc:
                 consume(_invalid_answer(adapter, name, path, _resource_error_message(exc, path), args,

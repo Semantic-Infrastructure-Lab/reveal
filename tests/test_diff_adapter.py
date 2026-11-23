@@ -615,7 +615,9 @@ class TestDirectoryDiff(unittest.TestCase):
 
     def test_directory_not_found_error(self):
         """Test error when directory doesn't exist."""
-        adapter = DiffAdapter(f"/nonexistent/path:{self.temp_dir}")
+        from reveal.utils.query_binding import SpelledParts
+        # The two sides as separate words (reveal diff LEFT RIGHT): the URI text '/nonexistent/path:C:\...' is ambiguous
+        adapter = DiffAdapter(SpelledParts(':', ('/nonexistent/path', self.temp_dir)))
         with self.assertRaises(ValueError) as ctx:
             adapter.get_structure()
         # A side that does not exist is an absent target whatever its name, an invalid request (BACK-2214): it was

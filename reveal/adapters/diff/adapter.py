@@ -133,9 +133,11 @@ class DiffAdapter(ResourceAdapter):
         if not resource:
             raise TypeError("diff requires a pair: reveal diff LEFT RIGHT, or diff://LEFT:RIGHT")
         self.resource = resource
-        # parse_diff_uris handles Windows drive letters and all URI schemes
+        # Two words (reveal diff LEFT RIGHT) are the sides as typed; one string is the pair as the URI spells it, which
+        # parse_diff_uris splits (Windows drive letters and URI schemes included)
+        parts: Tuple[str, ...] = getattr(resource, 'parts', ())
         try:
-            self.left_uri, self.right_uri = parse_diff_uris(resource)
+            self.left_uri, self.right_uri = (parts[0], parts[1]) if len(parts) == 2 else parse_diff_uris(resource)
             self.right_uri, self.embedded_element = split_trailing_element(self.right_uri)
         except ValueError:
             raise ValueError(
