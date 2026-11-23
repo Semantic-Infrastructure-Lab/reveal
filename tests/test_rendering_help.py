@@ -1462,7 +1462,8 @@ def test_help_search_query_param_is_counted_as_read():
     assert "Help Search: 'progressive disclosure'" in used.stdout
     assert 'has no effect' not in used.stderr
     unknown = run('help://search?search=extract&bogus=1')
-    assert "query param 'bogus' has no effect" in unknown.stderr
+    # declared since BACK-2767: the unknown key is refused by name, exit 2 (it was noted and ignored)
+    assert unknown.returncode == 2 and "unsupported control 'bogus'" in unknown.stderr
 
 
 if __name__ == '__main__':

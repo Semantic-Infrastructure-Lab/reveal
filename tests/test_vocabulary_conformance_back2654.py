@@ -138,18 +138,22 @@ RULES = ('1a', '1b', '1c', '1d', '2', '3', '3b', '4', '5', '6', '8a', '8b', '10'
          '14', '21j', '22', '23', '24', '28', '25', '27', '26')
 
 # The request each noun answers by default: the parity gate's table (CLI argv after the noun, URI suffix), plus
-# the declared noun it has no row for. None: no subcommand (stats is metrics' retired scheme).
-BASE = {**CASES, 'stats': (None, '')}
-# Targets that are not the fixture project directory.
+# the declared nouns it has no row for. None: no subcommand (stats is metrics' retired scheme; help:// and reveal://
+# are resource schemes with no subcommand, declared since BACK-2767).
+BASE = {**CASES, 'stats': (None, ''), 'help': (None, ''), 'reveal': (None, '')}
+# Targets that are not the fixture project directory. reveal://analyzers, not config: config reports the REVEAL_*
+# variables it is run under, so rule 14's REVEAL_FORMAT probe would see its own setting in the answer.
 TARGETS = {'claude': 'sessions', 'codex': 'sessions', 'json': 'proj/data.json', 'sqlite': 'app.db', 'xlsx': 'book.xlsx',
-           'env': ENV_VARIABLE}
+           'env': ENV_VARIABLE, 'help': 'quick', 'reveal': 'analyzers'}
 # A control that answers only on another target than its noun's default (Claude's turn slice reads one session):
 # the legacy-word probes (1b, 6, 16) send its spellings there, so they compare answers rather than two rejections.
 CONTROL_TARGETS = {('claude', 'tail'): 'session/my-session', ('git', 'detail'): 'proj/app.py', ('git', 'raw'): 'proj/app.py',
                    ('git', 'ignore-commits'): 'proj/app.py', ('git', 'auto-ignore'): 'proj/app.py',  # blame's (BACK-2733)
                    # Codex: the resource whose answer reads the control (BACK-2656; the catalog reads few of them)
                    ('codex', 'key'): 'config', ('codex', 'detail'): '019e5cc5-0000-7000-8000-000000000001/exchanges',
-                   ('codex', 'view'): '019e5cc5-0000-7000-8000-000000000001'}
+                   ('codex', 'view'): '019e5cc5-0000-7000-8000-000000000001',
+                   # help://search's hits read search and top; another topic refuses both (BACK-2767)
+                   ('help', 'search'): 'search', ('help', 'top'): 'search'}
 # The answer a probe of a control's spelling selects when the default one does not read the control (rule 20,
 # BACK-2656: there it is refused, which is applicability's subject, not the spelling's): (subcommand argv, URI query).
 CONTROL_BASES = {('calls', 'kind'): (['--uncalled'], '?uncalled'), ('calls', 'external'): (['--modules'], '?modules'),
@@ -230,18 +234,41 @@ EXEMPT = {
         ('17', 'no control selects the answer: the resource does (the listing, or the variable it names)'),
         ('20', 'declares no control an answer could leave unread (the inert --check is read by every answer)'),
         ('24', 'declares no query key: a resource URI with no query string says no request note'))},
+    # help:// and reveal:// (BACK-2767): resource schemes with no subcommand. help's two controls (search, top) are read
+    # by help://search only; reveal:// declares none. Rules 3, 3b, 4, 14, 18, 21j and 22 conform on both, and 1c, 10, 20
+    # on help; each probe below finds nothing to give. Their only rows are the target:SCHEME.element notes.
+    **{(noun, rule): reason for noun in ('help', 'reveal') for rule, reason in (
+        ('1a', 'binds no global flag as a URI key (no CLI_QUERY_FLAGS, no walk policy): no key and flag to give together'),
+        ('1b', _NO_ALIAS),
+        ('2', 'no note-stage param: or value: row: its only note row is its target:SCHEME.element row (a positional '
+              'element, not a control)'),
+        ('5', 'no note-stage param: row whose replacement is a control of this noun'),
+        ('6', 'declares no alias: nothing to note or keep note-free'),
+        ('8a', 'no where expression: a bare key is never read as a field'),
+        ('8b', 'declares no where control: there are no field filters'),
+        ('12', 'declares no repeatable control: nothing to append'),
+        ('16', 'no legacy word and no standalone legacy parameter: nothing to translate or mark'),
+        ('17', 'no control selects the answer: the resource does (the topic, or the section)'),
+        ('23', 'no subcommand: a URI is not read by a declared parser, so there is no typed flag to join its query'),
+        ('24', 'no subcommand and no request spelling that retires: the URI is the resource spelling (COMMAND_MODEL rule '
+               '2), so it says no request note'),
+        ('28', 'no subcommand: no declared parser whose --help could list a legacy flag'))},
+    **{('reveal', rule): reason for rule, reason in (
+        ('1c', 'declares no control: no scalar spelling to give twice'),
+        ('10', 'declares no control with an alias or a legacy entry'),
+        ('20', 'declares no control an answer could leave unread'))},
     **{(noun, '25'): 'declares no since/until: no time window to check' for noun in (
-        'architecture', 'ast', 'calls', 'contracts', 'deps', 'env', 'hotspots', 'imports', 'json', 'markdown',
-        'overview', 'patches', 'sqlite', 'surface', 'testability', 'trace', 'xlsx')},
+        'architecture', 'ast', 'calls', 'contracts', 'deps', 'env', 'help', 'hotspots', 'imports', 'json', 'markdown',
+        'overview', 'patches', 'reveal', 'sqlite', 'surface', 'testability', 'trace', 'xlsx')},
     ('pack', '25'): "its since is a git ref, not a time (NOT_A_TIME_WINDOW): it becomes --against REF in Pack's own "
                     'package',
     **{(noun, '27'): 'declares no match or where, and no text-valued standalone word whose replacement is one: no term '
                      'to be empty (hotspots ?functions_only is a switch)'
-       for noun in ('architecture', 'calls', 'contracts', 'deps', 'env', 'hotspots', 'imports', 'overview', 'pack',
-                    'sqlite', 'surface', 'testability', 'trace')},
+       for noun in ('architecture', 'calls', 'contracts', 'deps', 'env', 'help', 'hotspots', 'imports', 'overview', 'pack',
+                    'reveal', 'sqlite', 'surface', 'testability', 'trace')},
     **{(noun, '26'): 'does not walk a tree: no walk to exclude from (--exclude and ?exclude= are refused by rule 3; JSON\'s '
                      'bare ?exclude= is its generated legacy where term, rule 8a)'
-       for noun in ('claude', 'codex', 'env', 'git', 'json', 'sqlite', 'xlsx')},
+       for noun in ('claude', 'codex', 'env', 'git', 'help', 'json', 'reveal', 'sqlite', 'xlsx')},
     **{(noun, '26'): 'a retired twin: its URI answers through its own scheme: row until the cut (rule 24\'s exemption); '
                      'its --exclude is the walk scope every walking parser carries'
        for noun in ('architecture', 'deps', 'hotspots', 'testability', 'trace')},

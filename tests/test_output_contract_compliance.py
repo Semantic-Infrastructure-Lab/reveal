@@ -1152,9 +1152,13 @@ def test_batch_answers_like_the_uri(harness, scheme):
     for uri in _batch_uris(harness, scheme):
         code, payload, batch_code, entry = harness.run_batch(uri)
         from reveal.cli.routing.declared import declared_adapter_class
-        if declared_adapter_class(scheme) is not None:
+        from reveal.adapters.factory import uses_bound_query_call
+        from reveal.adapters.base import get_adapter_class as _owner_of
+        if declared_adapter_class(scheme) is not None or (scheme in ('help', 'reveal')
+                                                          and uses_bound_query_call(_owner_of(scheme))):
             # A declared noun's batch line is the same request as the URI form: same answer, same exit
-            # (COMMAND_MODEL 'Transports', BACK-2325); batches used to keep a legacy result identity.
+            # (COMMAND_MODEL 'Transports', BACK-2325); batches used to keep a legacy result identity. help:// and
+            # reveal:// are declared nouns with no subcommand (BACK-2767): their batch line is their URI's too.
             assert entry.get('data') == payload, f'{uri}: --batch answered differently from the URI form'
             assert entry['exit_code'] == code, f'{uri}: --batch entry exit {entry["exit_code"]}, URI form {code}'
             assert batch_code == code, f'{uri}: --batch exited {batch_code}, the URI form {code}'

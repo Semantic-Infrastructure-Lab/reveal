@@ -247,8 +247,10 @@ def test_sqlite_limit_is_named_not_dropped(db):
     proc = _cli('sqlite://t.db', '--limit', '2', cwd=db)
     assert proc.returncode == 2 and not proc.stdout
     assert "unsupported control '--limit'; supported controls: view" in proc.stderr
-    proc = _cli('help://adapters', '--limit', '2', cwd=db)
-    assert proc.returncode == 0 and 'Note: --limit has no effect on help://' in proc.stderr
+    for name in ('a.py', 'b.py'):  # diff:// is undeclared (help:// is declared since BACK-2767 and refuses it)
+        (db / name).write_text('def f():\n    return 1\n', encoding='utf-8')
+    proc = _cli('diff://a.py:b.py', '--limit', '2', cwd=db)
+    assert proc.returncode == 0 and 'Note: --limit has no effect on diff://' in proc.stderr
 
 
 def test_unread_query_key_is_named(db):

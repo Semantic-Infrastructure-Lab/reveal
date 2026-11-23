@@ -254,8 +254,10 @@ def test_the_second_path_refusal_names_a_switch_as_typed(project, typed, hint):
 
 def test_a_flag_spec_note_names_respect_gitignore_as_typed(project):
     from conftest import _run_reveal_direct
-    err = _run_reveal_direct('reveal://', '--respect-gitignore', 'off').stderr  # an undeclared scheme (env:// is declared)
-    assert '--respect-gitignore has no effect on reveal://' in err, err
+    conf = project / 'site.conf'
+    conf.write_text('server {\n  listen 80;\n}\n', encoding='utf-8')
+    err = _run_reveal_direct(f'nginx://{conf.as_posix()}', '--respect-gitignore', 'off').stderr  # undeclared (reveal:// is)
+    assert '--respect-gitignore has no effect on nginx://' in err, err
 
 
 
@@ -326,7 +328,7 @@ def test_typed_spellings_skip_a_value_and_read_attached_and_clustered_forms():
     (['a.py', 'f', '-i'], 'Note: -i has no effect on the file view'),
     (['a.py', 'f', '-r'], 'Note: -r has no effect on the file view'),
     (['a.py', 'f', '-v'], 'Note: -v has no effect on the file view'),
-    (['reveal://', '-v'], 'Note: -v has no effect on reveal:// queries'),  # an undeclared scheme (env:// is declared)
+    (['diff://a.py:long.py', '-v'], 'Note: -v has no effect on diff:// queries'),  # undeclared (reveal:// is, BACK-2767)
     (['a.py', 'long.py', '--search', 'f'], "Error: --search answers for the whole of a.py"),
     (['a.py', 'f', '--lint'], 'Error: --lint reads no element'),
     (['a.py', 'f', '--ignore-case'], 'Note: --ignore-case has no effect on the file view'),  # control: first spelling

@@ -526,11 +526,11 @@ adapters:
       review: not-applicable
       via: []
     verbose:
-      reason: 'top-level get_structure(**kwargs) has no query parsing; confirmed live:
-        ''?verbose=1'' errors as an unknown element (help.py:615). help://search''s
-        one real gap (hits[:20] cap) is BACK-1383, a count issue not a detail issue'
-      review: not-applicable
-      via: []
+      reason: 'BACK-2654 rule 4 (declared since BACK-2767): --verbose is --detail full, bound from the declarations;
+        help declares no detail, so it exits 2 naming detail and its controls'
+      review: honored
+      via:
+      - declared-binding
   hotspots:
     all:
       via:
@@ -910,10 +910,11 @@ adapters:
       review: not-applicable
       via: []
     verbose:
-      reason: 'get_structure(**kwargs) has no query validation; confirmed live: ?verbose=1
-        output byte-identical, no warning, no detail hook exists (adapter.py:78)'
-      review: not-applicable
-      via: []
+      reason: 'BACK-2654 rule 4 (declared since BACK-2767): --verbose is --detail full, bound from the declarations;
+        reveal:// declares no control, so it exits 2 naming detail'
+      review: honored
+      via:
+      - declared-binding
   sqlite:
     all:
       reason: schema/health inspection only, no row-listing feature exists to cap

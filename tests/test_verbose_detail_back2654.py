@@ -207,8 +207,12 @@ def test_a_noun_without_detail_names_it(capped):
 def test_an_undeclared_scheme_keeps_its_own_verbose(tmp_path, monkeypatch):
     """Negative control: a scheme with no declarations is not a noun; --verbose stays its own business. env:// is
     declared since BACK-2626 and refuses it naming detail, as every noun without one does."""
-    result = _run_reveal_direct('reveal://', '--verbose')
+    for name in ('a.py', 'b.py'):  # diff:// is undeclared; reveal:// is declared since BACK-2767 and refuses it
+        (tmp_path / name).write_text('def f():\n    return 1\n', encoding='utf-8')
+    result = _run_reveal_direct(f"diff://{(tmp_path / 'a.py').as_posix()}:{(tmp_path / 'b.py').as_posix()}", '--verbose')
     assert result.returncode == 0 and 'detail' not in result.stderr
+    refused = _run_reveal_direct('reveal://', '--verbose')
+    assert refused.returncode == 2 and "'detail'" in refused.stderr
     monkeypatch.setenv('REVEAL_VERBOSE_PROBE', 'x')
     declared = _run_reveal_direct('env://REVEAL_VERBOSE_PROBE', '--verbose')
     assert declared.returncode == 2 and "'detail'" in declared.stderr

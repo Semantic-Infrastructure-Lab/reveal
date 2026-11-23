@@ -329,21 +329,22 @@ from test_vocabulary_conformance_back2654 import BASE, NOUNS, TARGETS, _adapter,
 
 REFUSED_CONTROL = {'architecture': ('top', '2'), 'ast': ('limit', '2'), 'calls': ('limit', '2'),
                    'claude': ('limit', '2'), 'codex': ('matches', '2'), 'contracts': ('implementations_limit', '2'),
-                   'deps': ('top', '2'), 'git': ('limit', '2'), 'hotspots': ('limit', '2'), 'imports': ('limit', '2'),
+                   'deps': ('top', '2'), 'git': ('limit', '2'), 'help': ('top', '2'), 'hotspots': ('limit', '2'),
+                   'imports': ('limit', '2'),
                    'json': ('limit', '2'), 'markdown': ('limit', '2'), 'metrics': ('limit', '2'),
                    'overview': ('top', '2'), 'pack': ('budget', '2000'), 'patches': ('limit', '2'),
                    'surface': ('top', '2'), 'testability': ('limit', '2'), 'trace': ('depth', '2'),
                    'xlsx': ('limit', '2')}
 # Nouns whose only controls select the answer (role='operation') or are inert flag-only modifiers every answer reads:
 # an answer selector is never "not read by this answer", so they have no control to refuse (sqlite's view; env, which
-# declares only --check, BACK-2626).
+# declares only --check, BACK-2626; reveal://, which declares none, BACK-2767).
 SELECTORS_ONLY = {noun for noun in NOUNS if noun != 'stats'
                   and all(spec.role == 'operation' or spec.flag_only == 'inert' for spec in _adapter(noun).PARAM_SPECS)}
 
 
 def test_every_declared_noun_with_a_refusal_case():
     assert set(REFUSED_CONTROL) == set(NOUNS) - {'stats'} - SELECTORS_ONLY  # stats:// is metrics' retired scheme (rule 9)
-    assert SELECTORS_ONLY == {'env', 'sqlite'}
+    assert SELECTORS_ONLY == {'env', 'reveal', 'sqlite'}
 
 
 @pytest.mark.parametrize('noun', sorted(REFUSED_CONTROL))

@@ -11,7 +11,7 @@ from .registry import OPS_SCHEMES, _SCAFFOLD_SCHEMES, is_internal_scheme
 from ..errors import MissingResourceError
 from ..utils.formatting import shell_command
 from ..utils.query_parser import ParamSpec, ResourceSpec, param_schema, whole_number
-from ..utils.results import ResultBuilder, note_truncation, note_warning
+from ..utils.results import AnalysisCompleteness, ResultBuilder, note_truncation, note_warning, result_execution_facts
 from reveal.reveal_types import CONTRACT_VERSION
 from reveal.utils.lines import split_lines
 
@@ -316,12 +316,13 @@ class HelpRenderer:
 
 # help://search's hit cap; the rest is recorded as a cut (BACK-1543). ?top=N widens it
 # (BACK-1383). Named like the native caps of hotspots/calls/depends/testability: limit= is
-# a result-control key that help:// does not take (HONORS_RESULT_CONTROL = False strips it).
+# a result-control key that help:// does not take (refused as an unsupported control, BACK-2767).
 _SEARCH_TOP = ParamSpec('top', 'integer', 'help://search only: maximum hits to list', 20,
-                        whole_number, ('top=50',), minimum=0, zero_policy='all')
-# help://'s whole query vocabulary: a key outside it, or an api.query keyword, is refused as unsupported (BACK-2764).
+                        whole_number, ('top=50',), minimum=0, zero_policy='all', answers=('help_search',))
+# help://'s whole query vocabulary: a key outside it, or an api.query keyword, is refused as unsupported; both are read by
+# help://search only, so another topic refuses them (COMMAND_MODEL "Applicability"; BACK-2764, BACK-2767).
 HELP_PARAM_SPECS = (ParamSpec('search', 'string', 'help://search?search=<term>: full-text search over guides, adapters '
-                              'and recipes', None, str, ('search=navigation',)), _SEARCH_TOP)
+                              'and recipes', None, str, ('search=navigation',), answers=('help_search',)), _SEARCH_TOP)
 _FENCE_RE = re.compile(r'^\s*(```|~~~)')
 _HEADING_RE = re.compile(r'^(#{1,6})\s+(.*)')
 
@@ -412,11 +413,29 @@ class HelpAdapter(ResourceAdapter):
     STABILITY = Stability.STABLE
     ELEMENT_NAMESPACE_ADAPTER = True
     LEGACY_INIT = False
-    HONORS_RESULT_CONTROL = False  # no sort=/limit=/offset= handling (BACK-1385)
     CANONICAL_EMPTY_RESOURCE = ''
     # The query binds in the constructor (factory.uses_bound_query_call): an unknown key is refused; a positional
     # topic (help:// quick) answers with its note until the cut (invocation.element_retirement, BACK-2764).
     PARAM_SPECS = HELP_PARAM_SPECS
+    BOUND_QUERY_CALL = True
+    RESULT_TYPE = 'help'  # the index; a topic answers its own type (help_quick, static_guide, help_search...)
+    DEFAULT_FAIL_ON = 'none'
+    FINDINGS_POLICIES = ('none',)
+
+    @classmethod
+    def uri_execution_facts(cls, resource):
+        """Every topic shares D6: a refused control or a topic that does not exist is an invalid request (exit 2)."""
+        return cls.execution_facts
+
+    @classmethod
+    def result_type_at(cls, params, resource):
+        """The answer the topic selects, as far as its controls' applicability reads it: help://search's hits, or a
+        page (the index's type stands for every other topic, which reads neither search nor top)."""
+        return 'help_search' if str(resource or '').partition('?')[0] == 'search' else cls.RESULT_TYPE
+
+    @staticmethod
+    def execution_facts(result):
+        return result_execution_facts(result, completeness=AnalysisCompleteness.COMPLETE)
     RESOURCE_SPEC = ResourceSpec(name='topic', cli_default='', uri_default='', walks=False, filesystem=False)
 
     # Valid section names for help://adapter/section queries

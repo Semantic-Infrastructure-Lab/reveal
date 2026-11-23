@@ -76,5 +76,5 @@ def test_cli_reads_top_and_rejects_bad_values():
     assert ok.returncode == 0, ok.stderr
     assert 'has no effect' not in ok.stderr  # the flag ledger counts top= as read
     bad = _run_reveal_direct('help://search?search=a&top=-1')
-    assert bad.returncode == 1
+    assert bad.returncode == 2  # the invalid request since help:// binds its declared top (BACK-2767; it exited 1)
     assert 'top must be >= 0' in bad.stderr + bad.stdout

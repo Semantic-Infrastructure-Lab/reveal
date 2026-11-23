@@ -208,7 +208,7 @@ def _help_surfaces():
 
 # Where a control example's flags or fragment run: Codex's examples are a session's controls; Claude's carry their own
 # resource (``/messages --detail raw``) or none (``--tools Bash``: each Claude resource is tried, see _candidates).
-_EXAMPLE_TARGETS = {'codex': '019e5cc5', 'claude': ''}
+_EXAMPLE_TARGETS = {'codex': '019e5cc5', 'claude': '', 'help': 'search'}  # help's two controls are help://search's
 
 
 def _example_request(noun, example):
@@ -312,6 +312,10 @@ def _target(noun, path):
         return 'proj/sheets.xlsx'
     if noun == 'env':  # the listing, or one variable: PATH, which every host sets (never HOME or USER, V042)
         return 'PATH' if path else ''
+    if noun == 'help':  # the topic as printed; a placeholder (help://[topic], help://<adapter>) is the index
+        return '' if re.search(r'[<\[A-Z]', path) else path
+    if noun == 'reveal':  # a section as printed; a placeholder (reveal://FILE, reveal://[path]) is the overview
+        return path if path.split('/')[0] in ('config', 'analyzers', 'rules', 'adapters') else ''  # noqa: win-path (a URI)
     if noun == 'sqlite':  # DB[/TABLE]: the harness database, and its one table where the example names a table
         table = re.split(r'\.(?:db|sqlite3?)/', path, maxsplit=1)
         return 'proj/app.db/users' if len(table) == 2 and table[1] else 'proj/app.db'

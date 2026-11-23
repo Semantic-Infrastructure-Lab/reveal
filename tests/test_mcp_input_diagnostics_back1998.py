@@ -61,7 +61,8 @@ def test_cli_json_and_text_preserve_unknown_and_unused_inputs(resources):
                                                                                         ['where'])]
     code, out, err = _cli(json_uri, '--format', 'text')
     assert code == 0 and "'where' (bogus=1) has no effect on this data" in out and 'bogus' not in without_request_note_lines(err), (out, err)  # BACK-2716
-    # sqlite is declared since BACK-2626: each of these inputs is refused by name; reveal:// (undeclared) discloses them.
+    # sqlite is declared since BACK-2626: each of these inputs is refused by name; depends:// (undeclared until its cut)
+    # discloses them. help:// and reveal:// are declared since BACK-2767; nginx:// prints its own query warning on stderr.
     for uri, field, options in (
         (f'sqlite://{resources / "data.db"}?bogus=1', 'bogus', ()),
         (f'sqlite://{resources / "data.db"}?limit=1', 'limit', ()),
@@ -70,9 +71,9 @@ def test_cli_json_and_text_preserve_unknown_and_unused_inputs(resources):
         code, out, err = _cli(uri, '--format', 'json', *options)
         assert code == 2 and f"unsupported control '{field}'; supported controls: view" in err, (uri, err)
     for uri, field, options in (
-        ('reveal://?bogus=1', 'bogus', ()),
-        ('reveal://?limit=1', 'limit', ()),
-        ('reveal://', '--depth', ('--depth', '4')),
+        (f'depends://{resources}?bogus=1', 'bogus', ()),
+        (f'depends://{resources}?limit=1', 'limit', ()),
+        (f'depends://{resources}', '--depth', ('--depth', '4')),
     ):
         code, out, err = _cli(uri, '--format', 'json', *options)
         assert code == 0, (uri, err)
@@ -121,7 +122,7 @@ def test_json_dispatch_without_shared_writer_keeps_deferred_warning_fallback():
 
 def test_text_primary_keeps_warning_and_json_artifact_has_the_same_fact(resources):
     artifact = resources / 'answer.json'
-    code, out, err = _cli('reveal://?bogus=1', '--format', 'text', '--output', f'json={artifact}')  # undeclared
+    code, out, err = _cli(f'depends://{resources}?bogus=1', '--format', 'text', '--output', f'json={artifact}')
     assert code == 0 and out and 'bogus' in err
     assert len(_ignored(json.loads(artifact.read_text(encoding='utf-8')), 'bogus')) == 1
 
@@ -150,7 +151,7 @@ def test_sdk_provenance_keeps_one_json_value_and_diagnostics_without_leaking(res
             rejected = await session.call_tool('reveal_query', {'uri': uri, 'provenance': True})
             assert rejected.is_error and "unsupported control 'bogus'" in _text(rejected), _text(rejected)
         for uri, warning in ((f'json://{resources / "object.json"}?bogus=1', ('control_unread_by_data', ['where'])),
-                             ('reveal://?bogus=1', None)):  # undeclared: the key is disclosed as ignored
+                             (f'depends://{resources}?bogus=1', None)):  # undeclared: the key is disclosed as ignored
             result = await session.call_tool('reveal_query', {'uri': uri, 'provenance': True})
             assert not result.is_error, _text(result)
             answer = json.loads(_text(result))

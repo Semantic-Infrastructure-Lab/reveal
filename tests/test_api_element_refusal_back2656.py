@@ -12,15 +12,24 @@ import pytest
 from conftest import _run_reveal_direct
 from reveal import api
 from reveal.adapters.base import unread_element_message
+from reveal.cli.invocation import RETIREMENTS
 from reveal.errors import RequestValidationError
 from test_vocabulary_conformance_back2654 import NOUNS, TARGETS, _adapter, workspace  # noqa: F401
+
+# help:// and reveal:// keep their positional element, noted, until the cut (their target:SCHEME.element rows; BACK-2767:
+# tests/test_resource_scheme_keywords_back2764.py pins that), so they refuse no element yet.
+KEEPS_ELEMENT = {noun for noun in NOUNS if f'target:{noun}.element' in RETIREMENTS}
 
 
 def _uri(noun):
     return f"{noun}://{TARGETS.get(noun, 'proj')}"
 
 
-@pytest.mark.parametrize('noun', sorted(NOUNS))
+def test_only_help_and_reveal_keep_an_element():
+    assert KEEPS_ELEMENT == {'help', 'reveal'}
+
+
+@pytest.mark.parametrize('noun', sorted(set(NOUNS) - KEEPS_ELEMENT))
 def test_a_declared_noun_refuses_an_element_on_the_api_before_its_adapter_is_built(workspace, monkeypatch,  # noqa: F811
                                                                                    noun):
     adapter = _adapter(noun)
@@ -37,7 +46,7 @@ def test_a_declared_noun_refuses_an_element_on_the_api_before_its_adapter_is_bui
     assert calls == [], calls
 
 
-@pytest.mark.parametrize('noun', sorted(set(NOUNS) - {'stats'}))  # stats:// on the CLI: BACK-2656 Step 3 report
+@pytest.mark.parametrize('noun', sorted(set(NOUNS) - {'stats'} - KEEPS_ELEMENT))  # stats://: BACK-2656 Step 3 report
 def test_the_api_refusal_is_the_clis(workspace, noun):  # noqa: F811
     cli = _run_reveal_direct(_uri(noun), 'x', '--format', 'json')
     assert cli.returncode == 2, (cli.returncode, cli.stderr)

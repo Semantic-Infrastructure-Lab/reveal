@@ -95,11 +95,6 @@ _SCHEMA_EXAMPLE_QUERIES = [
         'description': 'Run specific validation rules',
         'cli_flag': '--check --select',
         'output_type': 'reveal_check'
-    },
-    {
-        'uri': 'reveal://adapters/reveal.py get_element',
-        'description': 'Extract specific function from reveal\'s source',
-        'output_type': 'code_element'
     }
 ]
 
@@ -119,14 +114,6 @@ _HELP_EXAMPLES = [
     {
         'uri': 'reveal reveal://rules',
         'description': 'List all available validation rules'
-    },
-    {
-        'uri': 'reveal reveal://adapters/reveal.py get_element',
-        'description': 'Extract specific function from reveal\'s source (element extraction)'
-    },
-    {
-        'uri': 'reveal reveal://analyzers/markdown.py MarkdownAnalyzer',
-        'description': 'Extract class from reveal\'s source'
     },
     {
         'uri': 'reveal reveal:// --check',
@@ -152,9 +139,9 @@ _HELP_WORKFLOWS = [
         'name': 'Extract Reveal Source Code',
         'scenario': 'Study reveal\'s implementation by extracting specific functions/classes',
         'steps': [
-            "reveal reveal://analyzers/markdown.py MarkdownAnalyzer  # Extract class",
-            "reveal reveal://rules/links/L001.py _extract_anchors_from_markdown  # Extract function",
-            "reveal reveal://adapters/reveal.py get_element  # Self-referential extraction",
+            "reveal reveal://analyzers                # Each analyzer and the module it lives in",
+            "reveal reveal://analyzers/markdown.py    # Names that source file's path (exit 2: not a section)",
+            "# then read it as any file: reveal PATH MarkdownAnalyzer (reveal reveal://FILE ELEMENT retires at 1.0)",
         ],
     },
     {

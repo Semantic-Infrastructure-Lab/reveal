@@ -124,12 +124,14 @@ def test_no_gitignore_injects_the_declared_fragment():
 
 def test_unsupported_flag_gets_a_note_naming_the_supporting_schemes():
     """An undeclared scheme keeps the note; a declared noun exits 2 naming its controls (BACK-2654 rule 3)."""
-    out, err = _inject('.', 'reveal', since='2026-01-01')  # an undeclared scheme (env:// is declared, BACK-2626)
+    out, err = _inject('.', 'diff', since='2026-01-01')  # undeclared (env://, help://, reveal:// are declared)
     assert out == '.'
     # Not a fixed list -- schemes gain since/until support over time (BACK-1379);
-    # just confirm the note names reveal:// and includes a real supporting scheme.
-    assert '--since has no effect on reveal://' in err and 'git://' in err
+    # just confirm the note names diff:// and includes a real supporting scheme.
+    assert '--since has no effect on diff://' in err and 'git://' in err
     from reveal.errors import RequestValidationError
+    with pytest.raises(RequestValidationError, match=r"'--since'; supported controls: \(none\)"):
+        _inject('.', 'reveal', since='2026-01-01')  # declared with no control (BACK-2767)
     with pytest.raises(RequestValidationError, match=r"'--since'; supported controls: where, "):
         _inject('.', 'ast', since='2026-01-01')
 
@@ -144,7 +146,7 @@ def test_note_lists_every_declaring_scheme():
 def test_all_and_verbose_stay_silent_on_adapters_without_a_declaration():
     """Many adapters honor --all/--verbose themselves (claude, nginx, overview), so a
     missing declaration is not evidence the flag is ignored: no note."""
-    assert _inject('.', 'reveal', all=True, verbose=True) == ('.', '')  # undeclared (env:// is declared, BACK-2626)
+    assert _inject('.', 'diff', all=True, verbose=True) == ('.', '')  # undeclared (env://, help://, reveal:// are declared)
 
 
 def test_all_and_verbose_inject_where_declared():
@@ -166,11 +168,12 @@ def test_sort_and_desc_inject_on_schemes_that_honor_result_control():
 
 
 def test_sort_is_not_injected_where_the_adapter_ignores_it():
-    # BACK-1385: env:// read no sort=; gluing `?sort=name` onto it made it "Element not found". reveal:// is the
-    # undeclared adapter that opts out now (env:// is declared and refuses --sort, BACK-2626).
-    resource, err = _inject('reveal://', 'reveal', sort='name', desc=True)
-    assert resource == 'reveal://'
-    assert 'has no effect on reveal://' in err
+    # BACK-1385: env:// read no sort=; gluing `?sort=name` onto it made it "Element not found". diff:// is an
+    # undeclared adapter that opts out now (env://, help:// and reveal:// are declared and refuse --sort: BACK-2626,
+    # BACK-2767).
+    resource, err = _inject('diff://a.py:b.py', 'diff', sort='name', desc=True)
+    assert resource == 'diff://a.py:b.py'
+    assert 'has no effect on diff://' in err
 
 
 def test_sort_already_negated_is_not_double_negated():

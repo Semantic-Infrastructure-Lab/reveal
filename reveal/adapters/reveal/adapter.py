@@ -9,7 +9,7 @@ from ..base import ResourceAdapter, Stability, register_adapter, register_render
 from ...rules.validation.utils import find_reveal_root
 from ...utils.path_utils import to_posix
 from ...utils.query_parser import ResourceSpec
-from ...utils.results import ResultBuilder
+from ...utils.results import AnalysisCompleteness, ResultBuilder, result_execution_facts
 
 from .renderer import RevealRenderer
 from .help import get_schema, get_help
@@ -38,13 +38,26 @@ class RevealAdapter(ResourceAdapter):
     internal = True
     STABILITY = Stability.STABLE
     LEGACY_INIT = False
-    HONORS_RESULT_CONTROL = False  # ignores its query entirely (BACK-1385)
     BUDGET_LIST_FIELD = ('analyzers', 'adapters', 'rules')  # --head/--tail slice each (BACK-1497)
     CANONICAL_EMPTY_RESOURCE = ''
     # reveal:// takes no query control: the query binds in the constructor, so an unknown key or api.query keyword is
     # refused (factory.uses_bound_query_call); ``reveal reveal://FILE ELEMENT`` answers with its note until the cut
     # (invocation.element_retirement, BACK-2764).
     PARAM_SPECS: tuple = ()
+    BOUND_QUERY_CALL = True
+    RESULT_TYPE = 'reveal_structure'
+    DEFAULT_FAIL_ON = 'none'
+    FINDINGS_POLICIES = ('none',)
+
+    @classmethod
+    def uri_execution_facts(cls, resource):
+        """Every section shares D6: a refused control or a section that does not exist is an invalid request (exit 2).
+        ``reveal reveal:// --check`` is the check route, which the router never qualifies."""
+        return cls.execution_facts
+
+    @staticmethod
+    def execution_facts(result):
+        return result_execution_facts(result, completeness=AnalysisCompleteness.COMPLETE)
     RESOURCE_SPEC = ResourceSpec(name='section', cli_default='', uri_default='', walks=False, filesystem=False)
 
     @staticmethod
