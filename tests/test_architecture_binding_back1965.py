@@ -107,8 +107,8 @@ def test_malformed_type_and_metadata_repair_is_a_required_failure():
 
 def test_schema_preserves_existing_parameter_examples():
     params = ArchitectureAdapter.get_schema()['query_params']
-    assert params['limit']['examples'] == ['limit=10']  # BACK-2622: limit caps the map sections, imports is a switch
-    assert params['imports']['examples'] == ['imports=off']
+    assert params['limit']['examples'] == ['--limit 10']  # BACK-2622: limit caps the map sections, imports is a switch
+    assert params['imports']['examples'] == ['--imports off']  # flags (BACK-2713)
     assert not params.get('top', {}).get('examples') and 'no_imports' not in params  # legacy words are never taught
 
 

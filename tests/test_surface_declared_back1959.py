@@ -30,9 +30,9 @@ def test_surface_declaration_exports_complete_binding_schema():
         assert schema['query_params'][name] == declaration.schema()
     assert specs['dir-depth'].minimum == 0 and 'env' in specs['kind'].choices
     assert {name: schema['query_params'][name]['examples'] for name in specs} == {
-        'kind': ['kind=env'], 'tests': ['tests=exclude'], 'view': ['view=dir'], 'dir-depth': ['view=dir&dir-depth=2'],
-        'limit': ['limit=20'], 'top': ['top=20'], 'exclude': [],
-    }  # D20 words; type, source_only, by and depth are their legacy words (BACK-2623); exclude: the shared walk control
+        'kind': ['--kind env'], 'tests': ['--tests exclude'], 'view': ['--view dir'], 'dir-depth': ['--view dir --dir-depth 2'],
+        'limit': ['--limit 20'], 'top': ['--top 20'], 'exclude': [],
+    }  # D20 words, as flags (BACK-2713); type, source_only, by and depth are their legacy words (BACK-2623); exclude: the shared walk control
 
 
 def test_surface_typed_and_uri_inputs_share_scanner_result(tmp_path):

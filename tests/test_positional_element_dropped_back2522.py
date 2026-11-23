@@ -36,7 +36,7 @@ def tree(tmp_path, monkeypatch):
 @pytest.mark.parametrize('uri,element,syntax', [
     ('sqlite://x.db', 'users', 'sqlite:///path/to/db.db[/table]'),
     ('sqlite://x.db', 'nope', 'sqlite:///path/to/db.db[/table]'),
-    ('json://f.json', 'a', 'json://<file>[/path/to/key][?query]'),
+    ('json://f.json', 'a', 'json://<file>[/key] [--where EXPR]... [--view VIEW]'),
     ('ast://src', 'foo', 'ast://<path> [--where EXPR]'),  # the URI plus flags (BACK-2613)
 ])
 def test_a_uri_element_the_adapter_has_no_view_for_exits_2(tree, uri, element, syntax):

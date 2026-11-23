@@ -573,7 +573,7 @@ def _value_pair(flag, spec):
     if len(spec.choices) >= 2:
         return str(spec.choices[0]), str(spec.choices[1])
     if flag.dest == 'sort':
-        example = next((e.partition('=')[2] for e in spec.examples if e.startswith('sort=')), '-name')
+        example = next((value for key, value in _example_pairs(spec) if key == 'sort'), '-name')
         return example, example[1:] if example.startswith('-') else f'-{example}'
     if spec.type in ('integer', 'number'):
         return '2', '1'
@@ -641,9 +641,28 @@ def _candidate_values(spec):
         return [str(low + 2), str(low + 1)]
     spellings = (spec.name, *_other_spellings(spec))
     # An example may name the answer that reads the control first (xlsx 'sheet=0&cells=A1:C10'): its own part counts.
-    example = next((value for e in spec.examples for key, _, value in (part.partition('=') for part in e.split('&'))
-                    if key in spellings), '')
+    names = {name.replace('-', '_') for name in spellings}
+    example = next((value for key, value in _example_pairs(spec) if key.replace('-', '_') in names), '')
     return [example or 'function', 'other']
+
+
+def _example_pairs(spec):
+    """(key, value) for each control a declared example names: its flags (``--sheet 0 --cells A1:C10``, a
+    ``reveal NOUN PATH --flags`` command; BACK-2713), or a query fragment (``sheet=0&cells=A1:C10``)."""
+    for example in spec.examples:
+        if not (example.startswith(('-', 'reveal ')) or ' --' in example):
+            for part in example.split('&'):
+                key, _, value = part.lstrip('?').partition('=')
+                yield key, value
+            continue
+        words = shlex.split(example)
+        while words:
+            word = words.pop(0)
+            if word.startswith('--'):
+                key, eq, value = word[2:].partition('=')
+                if not eq and words and not words[0].startswith('-'):
+                    value = words.pop(0)
+                yield key, value
 
 
 def _alias_spelling(spec, alias, value):
@@ -1013,7 +1032,7 @@ def _levels(noun):
         return ()
     if spec.choices:
         return tuple(str(choice) for choice in spec.choices)
-    return tuple(e.partition('=')[2] for e in spec.examples if e.startswith('detail='))
+    return tuple(value for key, value in _example_pairs(spec) if key == 'detail' and value)
 
 
 def _mentions(run, option):

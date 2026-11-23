@@ -75,8 +75,8 @@ def test_only_owned_missing_evidence_is_incomplete(evidence):
 def test_schema_preserves_examples_and_declares_roles():
     schema = ContractsAdapter.get_schema()
     params = schema['query_params']
-    assert params['abstract_only']['examples'] == ['abstract_only=true']
-    assert params['implementations']['examples'] == ['implementations=off']
-    assert params['implementations_limit']['examples'] == ['implementations_limit=20', 'implementations_limit=0']
+    assert params['abstract_only']['examples'] == ['--abstract-only']  # flags (BACK-2713)
+    assert params['implementations']['examples'] == ['--implementations off']
+    assert params['implementations_limit']['examples'] == ['--implementations-limit 20', '--implementations-limit 0']
     assert params['implementations_limit']['role'] == 'presentation'
     assert schema['execution_policy'] == {'default_fail_on': 'none', 'fail_on': ['none']}
