@@ -26,7 +26,6 @@ shared-control keys on the open-field nouns (``param:NOUN.NAME``: ``markdown://d
 (``invocation.generated_retirements``).
 """
 import asyncio
-import functools
 import json
 import re
 import shlex
@@ -207,25 +206,36 @@ def _help_surfaces():
     return surfaces + [(noun, '--help') for noun in SUBCOMMANDS]
 
 
-# Where a control example's fragment runs: Codex's examples are a session's controls; Claude's carry their own
-# resource (``/messages?detail=raw``) or none (``?tools=Bash``: each Claude resource is tried, see _candidates).
+# Where a control example's flags or fragment run: Codex's examples are a session's controls; Claude's carry their own
+# resource (``/messages --detail raw``) or none (``--tools Bash``: each Claude resource is tried, see _candidates).
 _EXAMPLE_TARGETS = {'codex': '019e5cc5', 'claude': ''}
 
 
+def _example_request(noun, example):
+    """The request a control's example stands for: a whole request as printed (a URI, a ``reveal`` command); flags
+    (``--depth 2``) on the noun's subcommand; a Claude resource (``/messages --detail raw``) on the fixture's session;
+    a query fragment (``depth=2``, the spelling D20 retires) on the noun's URI."""
+    if '://' in example.split()[0] or example.startswith('reveal '):
+        return example
+    target = _EXAMPLE_TARGETS.get(noun, 'src')
+    if example.startswith('/'):
+        resource, _, flags = example.partition(' ')
+        session = f'session/infernal-earth-0118{resource}'
+        return f'reveal {noun} {session} {flags}' if flags.startswith('-') else f'{noun}://{session}'
+    if example.startswith('-'):
+        return ' '.join(filter(None, ('reveal', noun, target, example)))
+    return f"{noun}://{target}?{example.lstrip('?')}"
+
+
 def _spec_examples():
-    """Each declared control's ``examples`` (shown in help://schemas): a fragment runs on the noun's URI."""
+    """Each declared control's ``examples`` (shown in help://schemas), as the request each stands for."""
     found = {}
     for noun in NOUNS:
         adapter = declared_adapter_class(noun) if noun in COMMANDS else get_adapter_class(noun)
         for spec in adapter.PARAM_SPECS:
             for example in spec.examples:
-                if '://' in example:
-                    printed = example
-                elif example.startswith('/'):
-                    printed = f'{noun}://session/infernal-earth-0118{example}'
-                else:
-                    printed = f"{noun}://{_EXAMPLE_TARGETS.get(noun, 'src')}?{example.lstrip('?')}"
-                found.setdefault(printed, []).append((f'help://schemas/{noun} {spec.name}', example))
+                found.setdefault(_example_request(noun, example), []).append(
+                    (f'help://schemas/{noun} {spec.name}', example))
     return found
 
 
@@ -435,23 +445,21 @@ def _raw_problems(harness, argv):
     return problems
 
 
-# The first screens and every answer's hints teach one spelling (BACK-2713): on them the URI request's own note is a
-# fault as well. On the other help pages it is not yet a printed spelling's fault: their examples still teach URI forms
-# (BACK-2713's help-page step), counted by test_doc_uri_requests_only_fall (BACK-2716).
-_ONE_SPELLING_SURFACES = re.compile(r'^(?:--agent-help|help://quick|MCP \w+)$')
-
-
-@functools.lru_cache(maxsize=1)
-def _hint_surfaces():
-    """The label of every answer whose next steps and lines test_hints_and_lines_in_every_declared_answer_follow_the_rules
-    reads (``_collect`` names a surface by its argv)."""
-    return frozenset(' '.join(argv) for argv in _answer_surfaces())
+# Every surface reveal prints teaches one spelling (BACK-2713): the first screens, every answer's hints, the help pages
+# and each control's schema example. On them the URI request's own note is a fault as well, except on a retired noun's
+# own pages (below).
+_RETIRED_NOUNS = sorted(_RETIRED_SCHEMES | {name.partition(':')[2] for name in RETIREMENTS
+                                             if name.startswith('subcommand:')})
+# A retired noun's own help page (``help://hotspots``, ``help://schemas/trace``, ``testability --help``) is deleted
+# with its noun at the cut, and until then it describes that noun's own requests, URI forms included: rewriting a page
+# that goes away teaches nothing, and the noun's own scheme/subcommand note already tells its reader the replacement.
+_RETIRED_PAGE = re.compile(rf"^(?:help://(?:schemas/)?(?:{'|'.join(_RETIRED_NOUNS)})\b|(?:{'|'.join(_RETIRED_NOUNS)}) --help$)")
 
 
 def _excused(problem, surface):
     kind, field, _ = problem
     if kind == 'request note':
-        return not (_ONE_SPELLING_SURFACES.match(surface) or surface in _hint_surfaces())
+        return bool(_RETIRED_PAGE.match(surface))
     return kind == 'note' and _own_scheme_note(field, surface)
 
 
@@ -470,11 +478,35 @@ _CLAUDE_RESOURCES = ('session/infernal-earth-0118', 'sessions', 'search', 'histo
 _OPERATIONS = {'calls': ('callers=main', 'callees=main', 'sort=-callers', 'uncalled', 'modules'), 'trace': ('from=main',)}
 
 
+def _operation_flags(operation):
+    """An ``_OPERATIONS`` fragment as the subcommand's flags: ``callers=main`` is ``--callers main``."""
+    key, _, value = operation.partition('=')
+    if not value:
+        return [f'--{key}']
+    return [f'--{key}={value}'] if value.startswith('-') else [f'--{key}', value]
+
+
+def _command_candidates(printed, examples):
+    """``_candidates`` for a printed ``reveal NOUN ...`` command."""
+    if printed.startswith('reveal claude -'):  # flags without a resource: each Claude resource is tried
+        return [a for a in (_argv(f'reveal claude {resource}{printed[13:]}') for resource in _CLAUDE_RESOURCES) if a]
+    argv = _argv(printed)
+    if not argv:
+        return []
+    noun, flags = argv[0], [token.lstrip('-').partition('=')[0] for token in argv[2:] if token.startswith('--')]
+    if examples and noun in _OPERATIONS and not any(
+            getattr(_spec(noun, flag), 'role', None) == 'operation' for flag in flags):
+        return [[*argv[:2], *_operation_flags(op), *argv[2:]] for op in _OPERATIONS[noun]]
+    return [argv]
+
+
 def _candidates(printed, examples=False):
     """The runnable argv for *printed*: one; one per Claude resource for a resource-less Claude query; one per
     operation for a calls or trace control example (*examples*) printed without its operation."""
     if printed.startswith('claude://?'):
         return [a for a in (_argv(f'claude://{resource}{printed[9:]}') for resource in _CLAUDE_RESOURCES) if a]
+    if printed.startswith('reveal '):
+        return _command_candidates(printed, examples)
     scheme, _, rest = printed.partition('://')
     path, _, query = rest.partition('?')
     keys = [re.split(r'[=<>~!]', part)[0] for part in query.split('&') if part]
@@ -726,24 +758,40 @@ def test_the_collector_reads_hints_and_maps_placeholders():
     assert _argv('reveal hotspots is deprecated') is None
     assert _argv('ast://src/?depth>N') == ['ast://proj?depth>2']
     assert _argv('claude://session/NAME/messages?limit=3') == ['claude://session/infernal-earth-0118/messages?limit=3']
+    # a control example in flags runs on the subcommand; a fragment, the spelling D20 retires, on the URI (BACK-2713)
+    assert _example_request('metrics', '--view hotspots --top 25') == 'reveal metrics src --view hotspots --top 25'
+    assert _example_request('metrics', 'view=hotspots&top=25') == 'metrics://src?view=hotspots&top=25'
+    assert _example_request('claude', '/messages --detail raw') == \
+        'reveal claude session/infernal-earth-0118/messages --detail raw'
+    assert _example_request('imports', 'reveal imports src --unused') == 'reveal imports src --unused'
+    assert _candidates('reveal calls src --depth 2', examples=True)[:2] == [
+        ['calls', 'proj', '--callers', 'main', '--depth', '2'], ['calls', 'proj', '--callees', 'main', '--depth', '2']]
+    assert _candidates('reveal calls src --callees x --depth 2', examples=True) == [
+        ['calls', 'proj', '--callees', 'main', '--depth', '2']]
+    assert [argv[1] for argv in _candidates('reveal claude --tools Bash')] == [
+        'session/infernal-earth-0118', 'sessions', 'search', 'history', 'config', 'session/infernal-earth-0118/files']
 
 
 def test_the_judge_bites(harness):
     """Positive controls: a legacy spelling and a rejected key are problems; a canonical spelling is not."""
-    # (a standalone legacy row keeps its own note; a covered one is the URI request's note, which is no fault, BACK-2716)
-    assert any('note:' in p for p in _problems(harness, ['ast://proj?calls=helper'], 'test'))
-    assert _problems(harness, ['ast://proj?type=function'], 'test') == []
+    # (a standalone legacy row keeps its own note; a covered one is the URI request's one note, BACK-2716)
+    assert any(p.startswith('note:') for p in _problems(harness, ['ast://proj?calls=helper'], 'test'))
     assert any('invalid request' in p for p in _problems(harness, ['metrics://proj?bogus=1'], 'test'))
-    assert _problems(harness, ['ast://proj?kind=function'], 'test') == []
-    # the generated family: a bare shared-control key on an open-field noun notes where=
-    # (that note is now the URI request's one note, which names --where; it is no printed-spelling fault, BACK-2716)
-    assert _problems(harness, ['ast://proj?depth>1'], 'test') == []
+    # every surface teaches one spelling (BACK-2713): the URI request's note is a fault on each, a help page and a
+    # control's schema example included, and the subcommand spelling of the same request is not
+    for surface in ('test', '--agent-help', 'help://quick', 'MCP reveal_query', 'help://schemas/ast --format json',
+                    'help://examples/quality', 'help://schemas/metrics view', 'calls --help'):
+        assert any(p.startswith('request note:') for p in _problems(harness, ['ast://proj?kind=function'], surface))
+        assert any(p.startswith('request note:') for p in _problems(harness, ['ast://proj?type=function'], surface))
+        assert _problems(harness, ['ast', 'proj', '--kind', 'function'], surface) == []
+    # the generated family: a bare shared-control key on an open-field noun notes where= (now the URI request's one
+    # note, which names --where, BACK-2716)
     _, out, _, _ = harness.run_subcommand(*_json_argv(['ast://proj?depth>1']))
     assert any(is_request_note(w) and '--where' in w['message'] for w in json.loads(out)['meta']['warnings'])
-    # ... except on the first screens, which teach one spelling (BACK-2713)
-    for surface in ('--agent-help', 'help://quick', 'MCP reveal_query'):
-        assert any(p.startswith('request note:') for p in _problems(harness, ['ast://proj?kind=function'], surface))
-    assert _problems(harness, ['ast', 'proj', '--kind', 'function'], '--agent-help') == []
+    # ... except on a retired noun's own pages, which go with it at the cut
+    for surface in ('help://hotspots', 'help://schemas/trace --format json', 'testability --help', 'help://deps'):
+        assert _problems(harness, ['metrics://proj?view=hotspots'], surface) == []
+    assert any(p.startswith('request note:') for p in _problems(harness, ['metrics://proj?view=hotspots'], 'help://metrics'))
     # a retired scheme's own help may name it; another surface may not
     assert _problems(harness, ['deps://proj'], 'help://deps') == []
     assert _problems(harness, ['deps://proj'], 'overview://proj')
