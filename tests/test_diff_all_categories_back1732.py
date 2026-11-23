@@ -235,7 +235,7 @@ Structure Diff: fa.py → fb.py
 
 ---
 
-  1. reveal 'diff://fa.py:fb.py/f'
+  1. reveal diff fa.py fb.py/f
      └─ Deep dive into f changes
 
 Next: reveal metrics fb.py      # Analyze complexity trends

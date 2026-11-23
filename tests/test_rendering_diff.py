@@ -232,9 +232,9 @@ class TestRenderDiffBreadcrumbs(unittest.TestCase):
 
         output = capture_stdout(_render_diff_breadcrumbs, left, right, details)
 
-        # A git:// right side does not split a /element suffix (BACK-1494), so the
-        # deep dive passes the element positionally (BACK-1503).
-        self.assertIn("1. reveal 'diff://git://HEAD/app.py:git://.//app.py' handle_request", output)
+        # A git:// right side splits its /element suffix since BACK-2768, so the deep dive names the
+        # element after the right side on the subcommand (BACK-2214); it passed it positionally (BACK-1503).
+        self.assertIn("1. reveal diff git://HEAD/app.py git://.//app.py/handle_request", output)
         self.assertIn("2. reveal metrics app.py", output)
         self.assertIn("3. reveal imports . --circular", output)
         self.assertIn("4. reveal check app.py", output)

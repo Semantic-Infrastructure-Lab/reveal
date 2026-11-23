@@ -1,6 +1,7 @@
 """Rendering functions for diff:// adapter output."""
 
 import difflib
+import shlex
 from typing import Dict, Any, List, Optional
 
 from reveal.analyzers.imports.service import edge_rule_disclosures, edge_rule_fields
@@ -442,10 +443,8 @@ def _render_diff_breadcrumbs(left: Dict[str, Any], right: Dict[str, Any],
     if modified_funcs and not is_dir:
         func_name = modified_funcs[0].get('name', '')
         if func_name:
-            if right_uri.startswith('git://'):
-                cmd = f"reveal 'diff://{left_uri}:{right_uri}' {func_name}"
-            else:
-                cmd = f"reveal 'diff://{left_uri}:{right_uri}/{func_name}'"
+            # The subcommand with the element after the right side, git:// sides included (BACK-2768, BACK-2214).
+            cmd = f"reveal diff {shlex.quote(left_uri)} {shlex.quote(f'{right_uri}/{func_name}')}"
             print(f"  {step}. {cmd}")
             print(f"     └─ Deep dive into {func_name} changes")
             print()
