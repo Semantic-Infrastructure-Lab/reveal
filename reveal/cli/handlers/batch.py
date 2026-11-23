@@ -69,7 +69,7 @@ def _process_stdin_command(words: List[str], target: str, args: 'Namespace',
 def _batch_line_error(target: str, words: List[str]) -> dict:
     """A ``--batch`` row for a command line: --batch aggregates one URI per line."""
     scheme = words[0].split('://', 1)[0] if '://' in words[0] else words[0]
-    return {'uri': target, 'scheme': scheme, 'status': 'error',
+    return {'uri': target, 'scheme': scheme, 'status': 'error', 'exit_code': 2,
             'error': '--batch aggregates one URI per line; run the command lines without --batch'}
 
 
@@ -442,14 +442,15 @@ def _collect_batch_result(uri: str, args: 'Namespace') -> dict:
 
     The answer is the one ``reveal URI`` prints: the adapter built by from_uri, the
     missing-path check, element lookup, --check arguments, the flag ledger. The status
-    comes from its outcome, so an error result is an error here, as it exits 1 there.
+    comes from its outcome, so an error result is an error here, and ``exit_code`` is the
+    exit ``reveal URI`` has alone (COMMAND_MODEL 'Transports', BACK-2660).
     This used to build the adapter itself as adapter_class(uri), with the whole URI as its
     resource and get_structure() only, and label every returned result 'success'
     (BACK-1554): ast:// found nothing on any path, env://HOME listed the whole environment,
     and a missing path or parameter counted as successful with exit 0.
 
     Returns:
-        {uri, scheme, status, data} plus ``error`` when the answer failed
+        {uri, scheme, status, data, exit_code} plus ``error`` when the answer failed
     """
     from ..routing.uri import UriUsageError, resolve_uri
 
@@ -457,13 +458,11 @@ def _collect_batch_result(uri: str, args: 'Namespace') -> dict:
     try:
         answer = resolve_uri(uri, args, consumed=_BATCH_FLAGS)
     except UriUsageError as e:
-        return {'uri': uri, 'scheme': scheme, 'status': 'error', 'error': e.message}
+        return {'uri': uri, 'scheme': scheme, 'status': 'error', 'exit_code': e.exit_code, 'error': e.message}
     from ...utils.results import note_incomplete
     note_incomplete(answer.result, answer.execution_facts)  # what the emit boundary adds to the same answer alone
-    entry = {'uri': uri, 'scheme': scheme, 'status': _batch_status(answer), 'data': answer.result}
-    code = _declared_exit(answer, scheme, args)
-    if code is not None:
-        entry['exit_code'] = code
+    entry = {'uri': uri, 'scheme': scheme, 'status': _batch_status(answer), 'data': answer.result,
+             'exit_code': _entry_exit(answer, scheme, args)}
     if entry['status'] == 'error':
         entry['error'] = answer.result.get('error') or _declared_failure_text(answer)
     return entry
@@ -501,11 +500,15 @@ def _batch_status(answer: 'Answer') -> str:
     return 'success'
 
 
-def _declared_exit(answer: 'Answer', scheme: str, args: 'Namespace') -> Optional[int]:
-    """The exit the same request alone would have (emit_declared_result's mapping and findings policy),
-    for an answer with execution facts; None for a legacy answer, whose status keeps its legacy code."""
+def _entry_exit(answer: 'Answer', scheme: str, args: 'Namespace') -> int:
+    """The exit the same request alone would have: emit_declared_result's mapping and findings policy for an answer
+    with execution facts, else the legacy emitters' (``legacy_exit_code``: a check its verdict, a failed answer 1, a
+    renderer's findings code). A legacy failed entry used to exit 2 here where its URI form exits 1 (BACK-2660)."""
     if answer.execution_facts is None:
-        return None
+        from ...adapters.base import get_renderer_class
+        from ..routing.uri import legacy_exit_code
+        hook = getattr(get_renderer_class(scheme), 'exit_code', None) if answer.kind in ('structure', 'element') else None
+        return legacy_exit_code(answer.result, answer.kind, hook, args.format)
     from ..routing.declared import declared_adapter_class
     from ...utils.results import execution_exit_code
     declared = declared_adapter_class(scheme)
@@ -725,11 +728,9 @@ def _render_batch_results(results: list, args: 'Namespace') -> None:
         _render_batch_text_output(stats, overall_status, by_scheme, display_results,
                                    summary_only=summary_only)
 
-    # The most severe outcome of the batch's requests (COMMAND_MODEL 'Transports'): a declared entry
-    # counts with the exit the same request has alone; legacy entries keep their status codes.
-    declared_exits = [r['exit_code'] for r in results if isinstance(r.get('exit_code'), int)]
-    exit_code = max([_calculate_batch_exit_code(stats['failures'], stats['warnings']), *declared_exits])
-    sys.exit(exit_code)
+    # The most severe outcome of the batch's requests (COMMAND_MODEL 'Transports'): every entry counts with the
+    # exit the same request has alone (BACK-2660).
+    sys.exit(max([0, *(r['exit_code'] for r in results if isinstance(r.get('exit_code'), int))]))
 
 
 def _schema_batch_entry(target: str, schema: dict, args: 'Namespace') -> dict:
