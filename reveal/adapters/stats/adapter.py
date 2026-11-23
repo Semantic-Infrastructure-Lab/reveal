@@ -335,14 +335,14 @@ _SCHEMA_OUTPUT_TYPES = [
 ]
 
 _SCHEMA_EXAMPLE_QUERIES = [
-    {'uri': 'metrics://./src', 'description': 'Get codebase statistics for src directory', 'output_type': 'stats_summary'},
-    {'uri': 'metrics://./src --view hotspots', 'description': 'The ranked hotspot files (files needing attention), 10 by default', 'output_type': 'stats_summary'},
-    {'uri': "metrics://./src --where 'avg_complexity>=5'", 'description': 'Show only files with avg complexity >= 5', 'output_type': 'stats_summary'},
-    {'uri': 'metrics://./src --code-only', 'description': 'Exclude data/config files', 'output_type': 'stats_summary'},
-    {'uri': 'metrics://./src --detail summary', 'description': 'Aggregate summary only, no per-file array — for large repos where the full file list is impractical to consume directly', 'output_type': 'stats_summary'},
-    {'uri': 'metrics://src/core.py', 'description': 'File-level statistics', 'output_type': 'stats_file'},
-    {'uri': 'metrics://./src --view hotspots --limit 0', 'description': 'Every ranked hotspot file (--limit 0 is uncapped)', 'output_type': 'stats_summary'},
-    {'uri': 'metrics://./src --view provenance', 'description': 'Provenance tag of every analyzable file, with exclusions by extension (was classify://)', 'output_type': 'classify_report'},
+    {'uri': 'reveal metrics ./src', 'description': 'Get codebase statistics for src directory', 'output_type': 'stats_summary'},
+    {'uri': 'reveal metrics ./src --view hotspots', 'description': 'The ranked hotspot files (files needing attention), 10 by default', 'output_type': 'stats_summary'},
+    {'uri': "reveal metrics ./src --where 'avg_complexity>=5'", 'description': 'Show only files with avg complexity >= 5', 'output_type': 'stats_summary'},
+    {'uri': 'reveal metrics ./src --code-only', 'description': 'Exclude data/config files', 'output_type': 'stats_summary'},
+    {'uri': 'reveal metrics ./src --detail summary', 'description': 'Aggregate summary only, no per-file array — for large repos where the full file list is impractical to consume directly', 'output_type': 'stats_summary'},
+    {'uri': 'reveal metrics src/core.py', 'description': 'File-level statistics', 'output_type': 'stats_file'},
+    {'uri': 'reveal metrics ./src --view hotspots --limit 0', 'description': 'Every ranked hotspot file (--limit 0 is uncapped)', 'output_type': 'stats_summary'},
+    {'uri': 'reveal metrics ./src --view provenance', 'description': 'Provenance tag of every analyzable file, with exclusions by extension (was classify://)', 'output_type': 'classify_report'},
 ]
 
 _SCHEMA_NOTES = [
@@ -427,7 +427,7 @@ class MetricsAdapter(ResourceAdapter):
         return {
             'adapter': 'metrics',
             'description': 'Codebase metrics, quality analysis, file hotspots and provenance',
-            'uri_syntax': 'metrics://<path> [--view VIEW] [--where EXPR]... [--limit N]',
+            'uri_syntax': 'reveal metrics <path> [--view VIEW] [--where EXPR]... [--limit N]',
             'resource': MetricsAdapter.RESOURCE_SPEC.schema(),
             'execution_policy': {'default_fail_on': MetricsAdapter.DEFAULT_FAIL_ON,
                                  'fail_on': list(MetricsAdapter.FINDINGS_POLICIES)},
@@ -1050,14 +1050,14 @@ class MetricsAdapter(ResourceAdapter):
 
 
 def _stats_spelling(example: str) -> str:
-    """A metrics example as the retired stats:// spells it: ``metrics://./src --view hotspots --limit 0`` is
+    """A metrics example as the retired stats:// spells it: ``reveal metrics ./src --view hotspots --limit 0`` is
     ``stats://./src?view=hotspots&limit=0``, a bare flag ``--code-only`` is ``code-only=true``."""
-    uri, *words = shlex.split(example)
+    _reveal, _noun, path, *words = shlex.split(example)
     pairs = []
     while words:
         key = words.pop(0)[2:]
         pairs.append(f'{key}={words.pop(0)}' if words and not words[0].startswith('--') else f'{key}=true')
-    return 'stats://' + uri[len('metrics://'):] + ('?' + '&'.join(pairs) if pairs else '')
+    return 'stats://' + path + ('?' + '&'.join(pairs) if pairs else '')
 
 
 @register_adapter('stats')

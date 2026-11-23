@@ -225,7 +225,7 @@ class PatchesAdapter(ResourceAdapter):
         return {
             'adapter': 'patches',
             'description': 'Patch pressure scanner for Python and TypeScript/JavaScript tests',
-            'uri_syntax': 'patches://<path> [--view VIEW] [--limit N]',
+            'uri_syntax': 'reveal patches <path> [--view VIEW] [--limit N]',
             'resource': PatchesAdapter.RESOURCE_SPEC.schema(),
             'query_params': param_schema(PatchesAdapter.PARAM_SPECS),
             'elements': {},
@@ -261,8 +261,8 @@ class PatchesAdapter(ResourceAdapter):
                 },
             ],
             'example_queries': [
-                {'uri': 'patches://tests', 'description': 'Summarize patch pressure', 'output_type': 'patches_scan'},
-                {'uri': 'patches://tests --view test --min 3', 'description': 'Find patch-heavy tests', 'output_type': 'patches_scan'},
+                {'uri': 'reveal patches tests', 'description': 'Summarize patch pressure', 'output_type': 'patches_scan'},
+                {'uri': 'reveal patches tests --view test --min 3', 'description': 'Find patch-heavy tests', 'output_type': 'patches_scan'},
             ],
             'notes': [
                 'Default selection uses the selected project test/support policy, including configured additional paths. Raw scans stay within the target, including direct files; narrowing within a project retains its file roles. Markerless roots use a disclosed fallback.',

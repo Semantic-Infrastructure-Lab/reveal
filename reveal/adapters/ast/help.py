@@ -460,47 +460,47 @@ _SCHEMA_OUTPUT_TYPES = [
 
 _SCHEMA_EXAMPLE_QUERIES = [
     {
-        'uri': 'ast://./src',
+        'uri': 'reveal ast ./src',
         'description': 'All code structure in src directory',
         'output_type': 'ast_query'
     },
     {
-        'uri': "ast://./src --where 'lines>50'",
+        'uri': "reveal ast ./src --where 'lines>50'",
         'description': 'Functions with more than 50 lines',
         'output_type': 'ast_query'
     },
     {
-        'uri': "ast://./src --where 'complexity>10'",
+        'uri': "reveal ast ./src --where 'complexity>10'",
         'description': 'Complex functions (high cyclomatic complexity)',
         'output_type': 'ast_query'
     },
     {
-        'uri': 'ast://main.py --kind function',
+        'uri': 'reveal ast main.py --kind function',
         'description': 'Functions and methods (not classes); --kind method for methods only',
         'output_type': 'ast_query'
     },
     {
-        'uri': "ast://. --where 'name=test_*'",
+        'uri': "reveal ast . --where 'name=test_*'",
         'description': 'All functions/classes starting with test_',
         'output_type': 'ast_query'
     },
     {
-        'uri': 'ast://. --where decorator=property',
+        'uri': 'reveal ast . --where decorator=property',
         'description': 'Find all @property decorated methods',
         'output_type': 'ast_query'
     },
     {
-        'uri': "ast://. --where 'lines>30' --where 'complexity<5'",
+        'uri': "reveal ast . --where 'lines>30' --where 'complexity<5'",
         'description': 'Long but simple functions',
         'output_type': 'ast_query'
     },
     {
-        'uri': 'ast://src/ --view dict-heatmap',
+        'uri': 'reveal ast src/ --view dict-heatmap',
         'description': 'Untyped dicts (params, loop vars, locals) ranked by keys read',
         'output_type': 'ast_dict_heatmap'
     },
     {
-        'uri': 'ast://src/ --view dict-schemas',
+        'uri': 'reveal ast src/ --view dict-schemas',
         'description': 'Dict shapes read in several places, and TypedDicts that already cover them',
         'output_type': 'ast_dict_schemas'
     },
@@ -597,7 +597,7 @@ def get_schema() -> Dict[str, Any]:
     return {
         'adapter': 'ast',
         'description': 'Query code as an AST database - find functions, classes, methods by properties',
-        'uri_syntax': 'ast://<path> [--where EXPR]... [--kind KIND] [--view VIEW] [--reveal-type NAME] [--sort FIELD] [--limit N]',
+        'uri_syntax': 'reveal ast <path> [--where EXPR]... [--kind KIND] [--view VIEW] [--reveal-type NAME] [--sort FIELD] [--limit N]',
         'query_params': _SCHEMA_QUERY_PARAMS,
         'operators': {
             '>': 'Greater than (numeric)',

@@ -1029,7 +1029,7 @@ class ContractsAdapter(ResourceAdapter):
         return {
             'adapter': 'contracts',
             'description': 'Contract and architectural-seam scanner (ABCs, Protocols, interfaces, traits, mixins)',
-            'uri_syntax': 'contracts://<path> [--abstract-only] [--implementations off]',
+            'uri_syntax': 'reveal contracts <path> [--abstract-only] [--implementations off]',
             'resource': ContractsAdapter.RESOURCE_SPEC.schema(),
             'execution_policy': {'default_fail_on': ContractsAdapter.DEFAULT_FAIL_ON,
                                  'fail_on': list(ContractsAdapter.FINDINGS_POLICIES)},
@@ -1054,7 +1054,7 @@ class ContractsAdapter(ResourceAdapter):
                 },
             ],
             'example_queries': [
-                {'uri': 'contracts://src', 'description': 'All contracts in src/', 'output_type': 'contracts', 'task': 'codebase'},
+                {'uri': 'reveal contracts src', 'description': 'All contracts in src/', 'output_type': 'contracts', 'task': 'codebase'},
             ],
             'notes': [
                 'Polyglot repos (more than one supported language present) nest results under by_language.',

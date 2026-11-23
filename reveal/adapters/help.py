@@ -1652,7 +1652,7 @@ class HelpAdapter(ResourceAdapter):
                 'reveal help://examples          # browse all task-based query recipes',
                 'reveal help://examples/security # security query recipes',
                 'reveal help://agent             # AI agent usage guide',
-                'reveal help://schemas/index     # thin index of every adapter schema (~1K tokens)',
+                'reveal help://schemas/index     # thin index of every adapter schema (~1.4K tokens)',
                 'reveal help://schemas/all       # full machine-readable schema for every adapter (~3K tokens)',
                 'reveal help://rules             # pattern-detection rule catalog',
                 'reveal help://languages         # supported languages + analyzer depth',

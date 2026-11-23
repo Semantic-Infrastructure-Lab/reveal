@@ -164,79 +164,79 @@ _SCHEMA_OUTPUT_TYPES = [
 
 _SCHEMA_EXAMPLE_QUERIES = [
     {
-        'uri': 'markdown://.',
+        'uri': 'reveal markdown .',
         'description': 'List all markdown files in current directory',
         'output_type': 'markdown_query'
     },
     {
-        'uri': 'markdown://docs/',
+        'uri': 'reveal markdown docs/',
         'description': 'List all markdown files in docs/ directory',
         'path': 'docs/',
         'output_type': 'markdown_query'
     },
     {
-        'uri': 'markdown://sessions/ --where topics=reveal',
+        'uri': 'reveal markdown sessions/ --where topics=reveal',
         'description': 'Find files where topics contains "reveal"',
         'path': 'sessions/',
         'output_type': 'markdown_query'
     },
     {
-        'uri': 'markdown://docs/ --where tags=python --where status=active',
+        'uri': 'reveal markdown docs/ --where tags=python --where status=active',
         'description': 'Multiple filters (AND logic)',
         'output_type': 'markdown_query'
     },
     {
-        'uri': "markdown://. --where '!topics'",
+        'uri': "reveal markdown . --where '!topics'",
         'description': 'Find files missing topics field',
         'output_type': 'markdown_query'
     },
     {
-        'uri': "markdown://. --where 'type=*guide*'",
+        'uri': "reveal markdown . --where 'type=*guide*'",
         'description': 'Wildcard matching (case-insensitive)',
         'output_type': 'markdown_query'
     },
     {
-        'uri': 'markdown://docs/ --match nginx',
+        'uri': 'reveal markdown docs/ --match nginx',
         'description': 'Body text search — files whose body mentions "nginx"',
         'output_type': 'markdown_query'
     },
     {
-        'uri': 'markdown://docs/ --match nginx --match ssl',
+        'uri': 'reveal markdown docs/ --match nginx --match ssl',
         'description': 'Body text search — AND logic, both terms must appear',
         'output_type': 'markdown_query'
     },
     {
-        'uri': 'markdown://docs/ --match authentication --explain',
+        'uri': 'reveal markdown docs/ --match authentication --explain',
         'description': 'Ranked body text search — best match first, with a per-term score breakdown',
         'output_type': 'markdown_query'
     },
     {
-        'uri': 'markdown://docs/ --view aggregate --field type',
+        'uri': 'reveal markdown docs/ --view aggregate --field type',
         'description': 'Frequency table of "type" field values across all docs',
         'output_type': 'markdown_aggregate'
     },
     {
-        'uri': 'markdown://sessions/ --view aggregate --field beth_topics',
+        'uri': 'reveal markdown sessions/ --view aggregate --field beth_topics',
         'description': 'Topic distribution — list fields expanded per item',
         'output_type': 'markdown_aggregate'
     },
     {
-        'uri': 'markdown://docs/ --view links',
+        'uri': 'reveal markdown docs/ --view links',
         'description': 'Bidirectional link graph for every doc — forward links, backlinks, orphans',
         'output_type': 'markdown_link_graph'
     },
     {
-        'uri': 'markdown://docs/ --backlinks auth.md',
+        'uri': 'reveal markdown docs/ --backlinks auth.md',
         'description': 'Who links to auth.md — pre-edit staleness check before renaming/restructuring',
         'output_type': 'markdown_backlinks'
     },
     {
-        'uri': 'markdown://docs/ --view lint',
+        'uri': 'reveal markdown docs/ --view lint',
         'description': 'Maintenance queue: malformed YAML frontmatter and files with no frontmatter at all',
         'output_type': 'markdown_frontmatter_lint'
     },
     {
-        'uri': 'markdown://docs/ --view lint --lint-fields title,type',
+        'uri': 'reveal markdown docs/ --view lint --lint-fields title,type',
         'description': 'Same lint queue, also flagging files missing required frontmatter fields',
         'output_type': 'markdown_frontmatter_lint'
     }
@@ -315,7 +315,7 @@ def get_schema() -> Dict[str, Any]:
     return {
         'adapter': 'markdown',
         'description': 'Query markdown files by frontmatter fields (exact match, wildcards, missing fields) and body text',
-        'uri_syntax': ('markdown://[path/] [--where EXPR]... [--match TERM]... [--view list|links|aggregate|lint] '
+        'uri_syntax': ('reveal markdown [path/] [--where EXPR]... [--match TERM]... [--view list|links|aggregate|lint] '
                        '[--field FIELD] [--backlinks DOC] [--lint-fields A,B] [--columns A,B] [--explain] [--sort [-]FIELD] '
                        '[--limit N] [--offset N]'),
         'query_params': param_schema(PARAM_SPECS),

@@ -1041,7 +1041,7 @@ class PackAdapter(ResourceAdapter):
         return {
             'adapter': 'pack',
             'description': 'Token-budgeted context snapshot: ranked file selection for LLM consumption',
-            'uri_syntax': 'pack://<path> [--budget N] [--focus PATTERN] [--since REF]',
+            'uri_syntax': 'reveal pack <path> [--budget N] [--focus PATTERN] [--since REF]',
             'resource': PackAdapter.RESOURCE_SPEC.schema(),
             'execution_policy': {'default_fail_on': 'none', 'fail_on': ['none']},
             'query_params': {
@@ -1066,7 +1066,7 @@ class PackAdapter(ResourceAdapter):
                 },
             ],
             'example_queries': [
-                {'uri': 'pack://src', 'description': 'Default 2000-token pack for src/', 'output_type': 'pack'},
+                {'uri': 'reveal pack src', 'description': 'Default 2000-token pack for src/', 'output_type': 'pack'},
             ],
             'notes': [
                 '--architecture and --focus both build reveal\'s own import/dependency graph via imports:// machinery.',

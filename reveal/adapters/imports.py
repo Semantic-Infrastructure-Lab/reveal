@@ -662,65 +662,65 @@ _SCHEMA_OUTPUT_TYPES += [
 
 _SCHEMA_EXAMPLE_QUERIES = [
     {
-        'uri': 'imports://src',
+        'uri': 'reveal imports src',
         'description': 'Analyze all imports in src directory',
         'output_type': 'imports'
     },
     {
-        'uri': 'imports://src --unused',
+        'uri': 'reveal imports src --unused',
         'description': 'Find unused imports',
         'cli_flag': '--unused',
         'output_type': 'unused_imports'
     },
     {
-        'uri': 'imports://src --circular',
+        'uri': 'reveal imports src --circular',
         'description': 'Detect circular dependencies',
         'cli_flag': '--circular',
         'output_type': 'circular_dependencies'
     },
     {
-        'uri': 'imports://src --violations',
+        'uri': 'reveal imports src --violations',
         'description': 'Check layer violations (requires .reveal.yaml layers config)',
         'cli_flag': '--violations',
         'output_type': 'layer_violations'
     },
     {
-        'uri': 'imports://src/main.py',
+        'uri': 'reveal imports src/main.py',
         'description': 'Analyze imports for a single file (no cycle detection)',
         'output_type': 'imports'
     },
     {
-        'uri': 'imports://src --sort=-fan-in',
+        'uri': 'reveal imports src --sort=-fan-in',
         'description': 'Rank all files by fan-in — surface core abstractions and entry points',
         'output_type': 'fan_in_ranking'
     },
     {
-        'uri': 'imports://src --sort=-fan-in --limit 20',
+        'uri': 'reveal imports src --sort=-fan-in --limit 20',
         'description': 'Top-20 files by fan-in',
         'output_type': 'fan_in_ranking'
     },
     {
-        'uri': 'imports://src --sort=-fan-in --lazy exclude',
+        'uri': 'reveal imports src --sort=-fan-in --lazy exclude',
         'description': 'Fan-in over load-time (module-level) imports only: the architecture view',
         'output_type': 'fan_in_ranking'
     },
     {
-        'uri': 'imports://src --circular --lazy include',
+        'uri': 'reveal imports src --circular --lazy include',
         'description': 'Cycles counting function-level (lazy) imports too',
         'output_type': 'circular_dependencies'
     },
     {
-        'uri': 'imports://src/utils.py --importers',
+        'uri': 'reveal imports src/utils.py --importers',
         'description': 'Who imports utils.py, from anywhere under the project root',
         'output_type': 'module_importers'
     },
     {
-        'uri': 'imports://src --importers --tests exclude',
+        'uri': 'reveal imports src --importers --tests exclude',
         'description': 'Every module under src with its importers, test importers not counted',
         'output_type': 'importer_summary'
     },
     {
-        'uri': 'imports://src --external',
+        'uri': 'reveal imports src --external',
         'description': 'Unresolved (third-party) and stdlib packages by use',
         'output_type': 'external_packages'
     },
@@ -1688,7 +1688,7 @@ class ImportsAdapter(ResourceAdapter):
         return {
             'adapter': 'imports',
             'description': 'Import graph analysis for detecting unused imports, circular dependencies, and layer violations',
-            'uri_syntax': 'imports://<path> [--unused|--circular|--violations|--importers|--sort=-fan-in]',
+            'uri_syntax': 'reveal imports <path> [--unused|--circular|--violations|--importers|--sort=-fan-in]',
             'query_params': param_schema(PARAM_SPECS),
             'elements': {},
             'cli_flags': ['--verbose'],

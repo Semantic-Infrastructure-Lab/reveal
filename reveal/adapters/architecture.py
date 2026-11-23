@@ -34,7 +34,7 @@ class ArchitectureAdapter(OverviewAdapter):
         schema.update(
             adapter='architecture',
             uri_syntax='architecture://<path>?limit=5&imports=off|against=REF',
-            example_queries=[{**example, 'uri': example['uri'].replace('overview://', 'architecture://', 1)}
+            example_queries=[{**example, 'uri': example['uri'].replace('reveal overview ', 'architecture://', 1)}
                              for example in schema['example_queries']],
             notes=['Retired spelling of overview:// (the same canonical overview or overview_diff answer).',
                    *schema['notes']],

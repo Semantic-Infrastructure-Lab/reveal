@@ -284,10 +284,10 @@ _HELP: Dict[str, Any] = {
 _SCHEMA: Dict[str, Any] = {
     'adapter': 'calls',
     'description': 'Cross-file call graph — who calls X (?callers) or what does X call (?callees)?',
-    'uri_syntax': 'calls://<path> --callers NAME [--depth N] [--format text|dot|json]\n'
-                  '             calls://<path> --callees NAME|FILE:NAME [--depth N] [--detail]\n'
-                  '             calls://<path> --sort=-callers [--limit N]\n'
-                  '             calls://<path>:<name>  # shorthand for --callers <name>',
+    'uri_syntax': 'reveal calls <path> --callers NAME [--depth N] [--format text|dot|json]\n'
+                  '             reveal calls <path> --callees NAME|FILE:NAME [--depth N] [--detail]\n'
+                  '             reveal calls <path> --sort=-callers [--limit N]\n'
+                  '             reveal calls <path>:<name>  # shorthand for --callers <name>',
     'resource': _RESOURCE.schema(),
     'execution_policy': {'default_fail_on': 'none', 'fail_on': ['none']},
     'query_params': param_schema(_PARAM_SPECS),
@@ -430,37 +430,37 @@ _SCHEMA: Dict[str, Any] = {
     ],
     'example_queries': [
         {
-            'uri': 'calls://src/ --callers validate_item',
+            'uri': 'reveal calls src/ --callers validate_item',
             'description': 'Who calls validate_item? (reverse lookup across whole project)',
             'output_type': 'calls_query',
         },
         {
-            'uri': 'calls://src/ --callers validate_item --depth 2',
+            'uri': 'reveal calls src/ --callers validate_item --depth 2',
             'description': 'Callers and callers-of-callers (transitive, 2 levels)',
             'output_type': 'calls_query',
         },
         {
-            'uri': 'calls://src/ --callees validate_item',
+            'uri': 'reveal calls src/ --callees validate_item',
             'description': 'What does validate_item call? (builtins hidden by default)',
             'output_type': 'calls_callees',
         },
         {
-            'uri': 'calls://src/ --callees validate_item --builtins',
+            'uri': 'reveal calls src/ --callees validate_item --builtins',
             'description': 'Include Python builtins (len, str, sorted, ValueError, etc.)',
             'output_type': 'calls_callees',
         },
         {
-            'uri': 'calls://src/ --callees validate_item --depth 3',
+            'uri': 'reveal calls src/ --callees validate_item --depth 3',
             'description': 'Callee walk, level by level (not measured beyond depth 1: W-CALLS-9)',
             'output_type': 'calls_callees',
         },
         {
-            'uri': 'calls://src/ --callers main --format dot',
+            'uri': 'reveal calls src/ --callers main --format dot',
             'description': 'Export callers graph as Graphviz dot format',
             'output_type': 'calls_query',
         },
         {
-            'uri': 'calls://src/ --callers main --format json',
+            'uri': 'reveal calls src/ --callers main --format json',
             'description': 'Machine-readable callers result',
             'output_type': 'calls_query',
         },

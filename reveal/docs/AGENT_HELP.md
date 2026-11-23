@@ -185,7 +185,7 @@ reveal help://examples/sessions --format=json        # Claude Code and Codex CLI
 **What you get:**
 - **Query parameters**: All available filters with types and operators
 - **Output schemas**: JSON Schema definitions of adapter outputs
-- **Example queries**: Canonical examples for each adapter
+- **Example queries**: Canonical examples for each adapter (an analysis noun's are its subcommand, `reveal ast ./src ...`)
 - **CLI flags**: Available command-line flags
 - **Elements**: Available element-based queries
 - **Notes**: Adapter-specific gotchas, behavior details, and usage patterns
@@ -196,7 +196,7 @@ reveal help://examples/sessions --format=json        # Claude Code and Codex CLI
 ```json
 {
   "adapter": "ast",
-  "uri_syntax": "ast://<path> [--where EXPR]... [--kind KIND] [--view VIEW] [--reveal-type NAME] [--sort FIELD] [--limit N]",
+  "uri_syntax": "reveal ast <path> [--where EXPR]... [--kind KIND] [--view VIEW] [--reveal-type NAME] [--sort FIELD] [--limit N]",
   "filter_fields": {
     "lines": {
       "type": "integer",
@@ -211,7 +211,7 @@ reveal help://examples/sessions --format=json        # Claude Code and Codex CLI
   },
   "example_queries": [
     {
-      "uri": "ast://./src --where 'complexity>10'",
+      "uri": "reveal ast ./src --where 'complexity>10'",
       "description": "Find complex functions",
       "output_type": "ast_query"
     }

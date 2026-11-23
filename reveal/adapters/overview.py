@@ -600,7 +600,7 @@ class OverviewAdapter(ResourceAdapter):
     @staticmethod
     def get_schema() -> Dict[str, Any]:
         return {'adapter': 'overview', 'description': 'Compact project map',
-                'uri_syntax': 'overview://<path> [--limit N] [--imports off] | [--against REF]',
+                'uri_syntax': 'reveal overview <path> [--limit N] [--imports off] | [--against REF]',
                 'resource': OverviewAdapter.RESOURCE_SPEC.schema(),
                 'execution_policy': {'default_fail_on': 'none', 'fail_on': ['none']},
                 'query_params': {**param_schema(OverviewAdapter.PARAM_SPECS),
@@ -611,8 +611,8 @@ class OverviewAdapter(ResourceAdapter):
                     'schema': {'type': 'object', 'properties': {'map': {'type': ['object', 'null']},
                                'map_status': {'type': 'string'}, 'scope': {'type': 'object'}}}},
                     {'type': 'overview_diff', 'description': 'Architecture comparison with basis and per-side snapshot proof'}],
-                'example_queries': [{'uri': 'overview://src', 'description': 'Compact project map', 'output_type': 'overview'},
-                    {'uri': 'overview://. --against HEAD', 'description': 'Compare the live working tree with HEAD',
+                'example_queries': [{'uri': 'reveal overview src', 'description': 'Compact project map', 'output_type': 'overview'},
+                    {'uri': 'reveal overview . --against HEAD', 'description': 'Compare the live working tree with HEAD',
                      'output_type': 'overview_diff'}],
                 'notes': ['Ordinary overview is a bounded static import map, not a quality assessment.',
                           'Comparison uses the live working tree and retains required snapshot losses.']}
