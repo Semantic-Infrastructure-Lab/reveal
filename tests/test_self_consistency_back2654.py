@@ -349,7 +349,8 @@ def _diff_side(side):
     (proj); a placeholder (LEFT, <left-uri>, <file>) is a file. The kind is kept; the names are the fixture's."""
     git = side.startswith('git://')
     path = side.removeprefix('git://').partition('@')[0]
-    directory = path.endswith(('/', '.')) or not re.search(r'\.\w{1,4}$|^<[^>]*>$|^[A-Z][A-Z_-]*$', path.split('/')[-1])
+    name = path.split('/')[-1]  # noqa: win-path (a side as a doc prints it, never a filesystem path)
+    directory = path.endswith(('/', '.')) or not re.search(r'\.\w{1,4}$|^<[^>]*>$|^[A-Z][A-Z_-]*$', name)
     if directory:
         return 'proj'
     return 'git://proj/app.py@v1' if git else 'proj/app.py'
