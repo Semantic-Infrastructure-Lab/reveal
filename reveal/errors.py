@@ -49,6 +49,16 @@ class MissingResourceError(RequestValidationError):
     """
 
 
+class ElementNotFoundError(MissingResourceError):
+    """The element a resource names is not there (``diff://a.py:b.py/nope``): an invalid request, exit 2, answered as
+    every element miss is, with the adapter's element names (``available_elements``; the router's
+    ``_fail_element_not_found``). For an adapter whose structure call answers an element its resource names (BACK-2214)."""
+
+    def __init__(self, element: str):
+        super().__init__(f"Element '{element}' not found")
+        self.element = element
+
+
 class ConfigValidationError(RequestValidationError):
     """A setting the answer reads cannot be used as given: ``REVEAL_CONFIG`` names a file that does not exist,
     or a value fails the config schema (``ignore: 5``, a non-integer ``REVEAL_C901_THRESHOLD``). An invalid

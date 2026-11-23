@@ -13,8 +13,8 @@ from contextlib import ExitStack, contextmanager, nullcontext
 from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable, Iterator, List, NoReturn, Optional, Tuple, cast
 
-from ...errors import (ConfigLoadError, ConfigValidationError, MissingResourceError, NotApplicableError,
-                       RequestValidationError, TestLayoutValidationError, UnreadControlError)
+from ...errors import (ConfigLoadError, ConfigValidationError, ElementNotFoundError, MissingResourceError,
+                       NotApplicableError, RequestValidationError, TestLayoutValidationError, UnreadControlError)
 from ...adapters.base import unread_element_message
 from ...rendering.base import emit_rendered
 from ...reveal_types import CONTRACT_VERSION, RevealResult
@@ -143,6 +143,12 @@ def _call_adapter(call: Callable[[], Any], scheme: str, resource: str,
         return call()
     except NotApplicableError as e:
         _decline(scheme, resource, e.reason, adapter_class, adapter)
+    except ElementNotFoundError as e:
+        if adapter is None:
+            _fail(scheme, resource, str(e), adapter_class=adapter_class, result_type=result_type, code='element_not_found',
+                  request_error=e, failure_cause=FailureCause.INVALID_REQUEST)
+        # An element the resource names (diff://a.py:b.py/nope) misses as a named element does: its names listed.
+        _fail_element_not_found(adapter, e.element, None, resource, scheme)
     except Exception as e:  # boundary-ok: broad-except -- the router's boundary for every adapter: the query ends as a failed result via _fail, exit 1
         logger.debug('%s:// adapter call raised', scheme, exc_info=True)
         # A setting that cannot be used is the request's fault (2) or unknown input (3) on every operation, legacy
