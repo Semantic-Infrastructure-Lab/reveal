@@ -122,7 +122,8 @@ class UriUsageError(Exception):
 
 
 def _call_adapter(call: Callable[[], Any], scheme: str, resource: str,
-                  adapter_class: Any = None, *, classify_validation=False, adapter: Any = None) -> Any:
+                  adapter_class: Any = None, *, classify_validation=False, adapter: Any = None,
+                  result_type: Optional[str] = None) -> Any:
     """Run one call into an adapter; what it raises becomes a result like any returned one.
 
     Every call the router makes into an adapter goes through here: constructing it,
@@ -135,7 +136,8 @@ def _call_adapter(call: Callable[[], Any], scheme: str, resource: str,
     twice in text, carried contract_version 1.0 and source_type 'file', and wrote no
     --also-json (BACK-1553). The result leaves as an _Answered, not an exit, so stdin
     --batch gets it as a result too (BACK-1554). *adapter* is the instance being called, if any: a decline names the
-    declared controls it gave and never read (BACK-2696).
+    declared controls it gave and never read (BACK-2696). *result_type* is the type the failed result keeps, when the
+    owner predicts its answer's identity (``uri_result_type``); without one it is the scheme.
     """
     try:
         return call()
@@ -150,7 +152,7 @@ def _call_adapter(call: Callable[[], Any], scheme: str, resource: str,
                                   UnreadControlError))
                    or (classify_validation and isinstance(e, RequestValidationError)))
         code = 'invalid_request' if invalid else 'adapter_error'
-        _fail(scheme, resource, _exception_message(e), adapter_class=adapter_class,
+        _fail(scheme, resource, _exception_message(e), adapter_class=adapter_class, result_type=result_type,
               test_layout_failure=isinstance(e, (TestLayoutValidationError, ConfigValidationError, ConfigLoadError)),
               exception=None if code == 'invalid_request' else e, code=code,
               request_error=e if invalid and isinstance(e, RequestValidationError) else None,
@@ -183,11 +185,12 @@ def _source_type_of(resource: str, adapter_class: Any = None) -> str:
     return 'unknown'
 
 
-def _router_result(scheme: str, resource: str, adapter_class: Any = None, **fields: Any) -> RevealResult:
+def _router_result(scheme: str, resource: str, adapter_class: Any = None, *,
+                   result_type: Optional[str] = None, **fields: Any) -> RevealResult:
     """The result the router builds when an adapter gave none: it raised, declined, or has no
-    such element. ``type`` is the scheme."""
+    such element. ``type`` is *result_type* if the caller knows the answer's identity, else the scheme."""
     return ResultBuilder.create(
-        result_type=scheme,
+        result_type=result_type or scheme,
         source=resource,
         contract_version=CONTRACT_VERSION,
         source_type=_source_type_of(resource, adapter_class),
@@ -196,7 +199,7 @@ def _router_result(scheme: str, resource: str, adapter_class: Any = None, **fiel
 
 
 def _fail(scheme: str, resource: str, message: str, *,
-          adapter_class: Any = None, code: str = 'adapter_error',
+          adapter_class: Any = None, code: str = 'adapter_error', result_type: Optional[str] = None,
           detail: Optional[Callable[[], None]] = None,
           exception: Optional[Exception] = None, failure_cause: Optional[FailureCause] = None,
           test_layout_failure: bool = False, request_error: Optional[RequestValidationError] = None,
@@ -207,7 +210,7 @@ def _fail(scheme: str, resource: str, message: str, *,
     ``element_not_found``, ...), which is how JSON tells a router-built failure from one an
     adapter returned. ``detail`` prints hints after the error line, on stderr, in text only.
     """
-    result = _router_result(scheme, resource, adapter_class,
+    result = _router_result(scheme, resource, adapter_class, result_type=result_type,
                             errors=[{'code': code, 'message': message}], error=message, **fields)
     facts = failure_execution_facts(failure_cause) if failure_cause is not None else None
     raise _Answered(result, detail, exception, facts, test_layout_failure=test_layout_failure, request_error=request_error)
@@ -1452,10 +1455,13 @@ def _structure_answer(adapter, renderer_class: type[Any], args: 'Namespace',
 
     # Get structure from adapter
     scheme_name, source = scheme or 'unknown', resource or ''
+    # A failure keeps the identity the owner predicts for this answer (reveal:// unknown section, BACK-2761).
+    predict = getattr(type(adapter), 'uri_result_type', None)
+    failure_type = expected_type or (predict(source) if predict is not None else None)
     # A qualified owner may reject the request only once it reads (sqlite: no such table, BACK-2521).
     result = _call_adapter(lambda: adapter.get_structure(**structure_kwargs),
                            scheme_name, source, type(adapter), classify_validation=facts_of is not None,
-                           adapter=adapter)
+                           adapter=adapter, result_type=failure_type)
 
     if facts_of is not None:
         from .declared import qualify_declared_answer
@@ -1470,7 +1476,8 @@ def _structure_answer(adapter, renderer_class: type[Any], args: 'Namespace',
     if post_process is not None:
         processed = result
         result = _call_adapter(lambda: adapter.post_process(processed, args),
-                               scheme_name, source, type(adapter), classify_validation=facts_of is not None)
+                               scheme_name, source, type(adapter), classify_validation=facts_of is not None,
+                               result_type=failure_type)
         if facts_of is not None:
             from ...utils.results import merge_execution_facts
             result = qualify_declared_answer(result, adapter, source, expected_type, prior_facts=facts)

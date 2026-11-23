@@ -97,3 +97,44 @@ def test_check_answers_as_before():
     run, doc = _json('reveal://', '--check', '--select', 'V001')
     assert run.returncode == 0, run.stderr
     assert 'error' not in doc
+
+
+# The router seam (cli/routing/uri.py): a failure the router answers for a structure call keeps the type the owner
+# predicts for that answer (``uri_result_type``); an owner with no predictor keeps the scheme, as every legacy adapter
+# did. Qualified owners already had their type set by ``_answer``, so only a predictor without execution facts changes.
+
+class _Renderer:
+    @staticmethod
+    def render_structure(*args, **kwargs):
+        raise AssertionError('a failed structure is not rendered as an answer')
+
+
+class _Predicting:
+    @staticmethod
+    def uri_result_type(resource):
+        return f'predicted_{resource}'
+
+    def get_structure(self, **kwargs):
+        raise MissingResourceError('not there')
+
+
+class _Plain:
+    def get_structure(self, **kwargs):
+        raise MissingResourceError('not there')
+
+
+@pytest.mark.parametrize('owner,expected', [(_Predicting, 'predicted_x'), (_Plain, 'fake')],
+                         ids=['predictor', 'no-predictor-control'])
+def test_a_router_failure_keeps_the_predicted_answer_type(owner, expected):
+    from argparse import Namespace
+    from reveal.cli.routing import uri
+    answer = uri._answer(lambda: uri._structure_answer(owner(), _Renderer, Namespace(), 'fake', 'x'),
+                         'fake', Namespace())
+    assert answer.result['type'] == expected
+    assert [e['code'] for e in answer.result['meta']['errors']] == ['invalid_request']
+
+
+def test_router_result_names_the_scheme_without_a_type():
+    from reveal.cli.routing import uri
+    assert uri._router_result('fake', 'x')['type'] == 'fake'
+    assert uri._router_result('fake', 'x', result_type='fake_answer')['type'] == 'fake_answer'
