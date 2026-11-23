@@ -1256,11 +1256,19 @@ def _argument_options(spec: ParamSpec, cli: CliBinding) -> Dict[str, Any]:
 
 
 def add_declared_arguments(parser: argparse.ArgumentParser, specs: Iterable[ParamSpec],
-                           resource: Optional[ResourceSpec]) -> None:
+                           resource: Optional[ResourceSpec], *, joined: bool = False) -> None:
     """Generate local arguments; global presentation/exclusion owners remain unchanged. *resource* None: no positional
-    (the main parser's path read keeps its own, BACK-2627). A control whose flags the parser already owns keeps that
-    argument (``_owned_by_parser``); a declared noun's parser owns none of its controls' flags."""
-    if resource is not None:
+    (the main parser's path read keeps its own, BACK-2627). A resource spelled in several words (``ResourceSpec.parts``)
+    gets one positional each, the first required as the resource is; *joined* (a URI request's parser, which reads the
+    URI's path) gives it the one positional named ``resource.name`` instead. A control whose flags the parser already
+    owns keeps that argument (``_owned_by_parser``); a declared noun's parser owns none of its controls' flags."""
+    if resource is not None and resource.parts and not joined:
+        first, *rest = resource.parts
+        parser.add_argument(first, nargs=None if resource.required else '?', default=resource.cli_default,
+                            metavar=first.upper())
+        for part in rest:
+            parser.add_argument(part, nargs='?', default=None, metavar=part.upper())
+    elif resource is not None:
         parser.add_argument(resource.name, nargs=None if resource.required else '?',
                             default=resource.cli_default)
     groups: Dict[str, Any] = {}
@@ -1282,6 +1290,17 @@ def add_declared_arguments(parser: argparse.ArgumentParser, specs: Iterable[Para
         owner.add_argument(*(flag for flag in cli.flags if flag not in separate), **options)
         _add_legacy_rider_arguments(parser, spec, cli, options, separate)
         _add_legacy_flag_arguments(parser, spec)
+
+
+def typed_resource(resource: ResourceSpec, args: Any) -> Any:
+    """The resource a declared parser's positionals spell (``add_declared_arguments``): its one positional, or its words
+    joined by ``resource.joiner`` (``reveal diff a.py b.py`` is ``a.py:b.py``; one word is the resource as its URI
+    spells it). A parser that read the joined positional (a URI request's) answers that."""
+    if not resource.parts or resource.name in vars(args):
+        return getattr(args, resource.name, None)
+    words = [getattr(args, part, None) for part in resource.parts]
+    given = [word for word in words if word is not None]
+    return resource.joiner.join(given) if given else resource.cli_default
 
 
 def _resource_exists(path: str) -> bool:

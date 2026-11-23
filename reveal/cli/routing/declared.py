@@ -187,12 +187,13 @@ class _DeclaredParser(JsonUsageParser):
         super().error(message)
 
     def invalid_request(self, message: str, args):
+        from ...utils.query_binding import typed_resource
         adapter = declared_adapter_class(self.noun)
         if self.uri_query is not None:  # a URI request: its document keeps the operation the query selects
-            path = getattr(args, adapter.RESOURCE_SPEC.name, None) or ''
+            path = typed_resource(adapter.RESOURCE_SPEC, args) or ''
             return _invalid_prepared_answer(adapter, self.noun, path, '?' + self.uri_query if self.uri_query else '',
                                             message, args)
-        path = getattr(args, adapter.RESOURCE_SPEC.name, None) or '.'
+        path = typed_resource(adapter.RESOURCE_SPEC, args) or '.'
         return _invalid_answer(adapter, self.noun, path, message, args)
 
 
@@ -357,7 +358,7 @@ def declared_uri_request(argv, main_modes=()) -> Optional[tuple]:
     adapter = declared_adapter_class(noun)
     if adapter is None:  # a plugin registered over the noun's scheme (BACK-2631)
         return None
-    parser = create_declared_parser(noun)
+    parser = create_declared_parser(noun, uri_request=True)
     if _main_parser_reads(noun, adapter, parser, argv, main_modes):
         return None
     parser.uri_query = resource.partition('?')[2]
@@ -395,7 +396,10 @@ def _spellings_of(parser, action) -> set:
                  if spec.cli and action.dest == (spec.cli.dest or spec.name)), set())
 
 
-def create_declared_parser(name: str) -> '_DeclaredParser':
+def create_declared_parser(name: str, *, uri_request: bool = False) -> '_DeclaredParser':
+    """The noun's subcommand parser, generated from its declarations. *uri_request*: the parser that reads a URI request
+    of the noun (``declared_uri_request``), whose resource is the URI's path in one positional even where the
+    subcommand spells it in several words (``ResourceSpec.parts``: ``reveal diff LEFT RIGHT``)."""
     from ..parser import (_build_global_options_parser, _add_universal_filter_flags, _add_base_path_option,
                           add_declared_presentation_options, scalar_settings)
     from ..global_flags import add_exclude_argument, add_gitignore_arguments
@@ -419,7 +423,7 @@ def create_declared_parser(name: str) -> '_DeclaredParser':
     parser.add_argument('--all', action='store_true',
                         help='Show all results: lift the cap of the selected answer (the same as --all on the URI '
                              'form; an answer with no cap answers as without it)')
-    add_declared_arguments(parser, adapter.PARAM_SPECS, adapter.RESOURCE_SPEC)
+    add_declared_arguments(parser, adapter.PARAM_SPECS, adapter.RESOURCE_SPEC, joined=uri_request)
     add_declared_presentation_options(parser, getattr(adapter, 'CLI_PRESENTATION_FLAGS', ()))
     _offer_noun_formats(parser, adapter)
     if callable(getattr(adapter, 'reconfigure_base_path', None)):
@@ -604,14 +608,14 @@ def _refuse_element(name: str, path: str, element: str, args, answer_consumer=No
 def run_declared_command(name: str, args, *, answer_consumer=None, uri_query: Optional[str] = None) -> None:
     """Bind original argparse values; no URI string is constructed. *uri_query*: the query of the URI these flags
     followed, the request's second source (joined under "Conflicting values", BACK-2673)."""
-    from ...utils.query_binding import convert_flag_only
+    from ...utils.query_binding import convert_flag_only, typed_resource
     adapter = declared_adapter_class(name)
     _note_retired_flags(name, adapter)
     convert_flag_only(adapter.PARAM_SPECS, args)
     source, spelled = typed_source(
         adapter.PARAM_SPECS, args,
         carried=lambda spec, source, spelled: _bind_global_carried(adapter, spec, args, uri_query, source, spelled))
-    _run_declared(name, args, getattr(args, adapter.RESOURCE_SPEC.name), source, 'typed',
+    _run_declared(name, args, typed_resource(adapter.RESOURCE_SPEC, args), source, 'typed',
                   answer_consumer=answer_consumer, spelled=spelled, uri_query=uri_query)
 
 

@@ -360,6 +360,12 @@ class ResourceSpec:
     # The characters that start an address part of the resource beyond its path (git's ``@REF``): a resource holding one
     # names more than a path, so a guide keeps its URI rather than the subcommand's plain path (BACK-2726 form ruling).
     address: str = ''
+    # The positional words a subcommand spells the resource in, joined by *joiner* into the one resource its URI names
+    # (diff's ``reveal diff LEFT RIGHT`` is ``diff://LEFT:RIGHT``). Every word after the first is optional: one word is
+    # the resource as the URI spells it. Empty: one positional named *name*. A URI request's own parser reads the URI's
+    # path as one positional named *name* either way (``add_declared_arguments(joined=True)``).
+    parts: Tuple[str, ...] = ()
+    joiner: str = ''
 
     def schema(self) -> Dict[str, Any]:
         result = {'name': self.name, 'required': self.required,
@@ -371,6 +377,8 @@ class ResourceSpec:
             result['filesystem'] = False
         if self.address:
             result['address'] = self.address
+        if self.parts:
+            result['parts'], result['joiner'] = list(self.parts), self.joiner
         if self.kind is not None:
             result['kind'] = self.kind
         return result
