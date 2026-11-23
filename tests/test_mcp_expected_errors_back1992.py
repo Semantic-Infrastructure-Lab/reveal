@@ -14,12 +14,13 @@ from mcp.server.mcpserver.exceptions import ToolError
 pytestmark = [pytest.mark.mcp, pytest.mark.component]
 
 # Exercise the real registered structure tool with deterministic capture outcomes.
-# Injection happens in the child, so subprocess/fork patch inheritance is irrelevant.
+# Injection happens in the child, so subprocess/fork patch inheritance is irrelevant. The tool runs the CLI's file
+# route (BACK-2762), which reads show_structure from the reveal.display package, so both bindings are patched.
 _CAPTURE_SERVER = '''
-from reveal import mcp_server
+from reveal import display as display_package, mcp_server
 from reveal.display import structure
 
-def display(analyzer, *args):
+def display(analyzer, *args, **kwargs):
     name = analyzer.path
     from pathlib import Path
     scenario = Path(name).stem
@@ -39,6 +40,7 @@ def display(analyzer, *args):
         raise SystemExit(1)
 
 structure.show_structure = display
+display_package.show_structure = display
 mcp_server.main()
 '''
 
@@ -131,7 +133,8 @@ def test_trace_success_and_fresh_result_after_edit_reach_stdio_client(tmp_path):
     ('literal', False, '[reveal error: literal source text]', ''),
     ('partial', False, 'usable partial narrative', ''),
     ('negative', False, 'negative finding', ''),
-    ('empty', False, '[reveal exited with code 3]', ''),
+    # An exit with nothing printed is a failure: reveal_structure maps the CLI's outcome as reveal_run does (BACK-2762).
+    ('empty', True, 'reveal exited with code 3', ''),
 ])
 def test_stdio_preserves_capture_origin_and_narrative(tmp_path, name, is_error, visible, hidden):
     path = tmp_path / f'{name}.py'
@@ -266,6 +269,8 @@ def test_registered_crash_logging_cannot_enter_sibling_capture(tmp_path, monkeyp
         return mcp_server._run_and_capture(render)
 
     monkeypatch.setattr(structure, 'show_structure', crash)
+    import reveal.display
+    monkeypatch.setattr(reveal.display, 'show_structure', crash)  # the file route's binding (BACK-2762)
     monkeypatch.setattr(mcp_server, '_raise_if_tool_failure', classify)
     from reveal.adapters.surface import SurfaceAdapter
     monkeypatch.setattr(SurfaceAdapter, 'get_structure', crash)

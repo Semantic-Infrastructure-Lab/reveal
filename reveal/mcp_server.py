@@ -447,50 +447,27 @@ def reveal_structure(path: str, depth: int = 3, ext: str = '', exclude: str = ''
         files: Flat mtime-sorted file list instead of a tree — matches the
             CLI's `--files` (directories only)
     """
-    from pathlib import Path
-
-    p = Path(path)
-    if not p.exists():
+    # `path` is a filesystem path, never a URI or a command word: the existence check keeps a missing name from being
+    # read as either, and `--` below keeps a path named like a subcommand (`check/`) a path.
+    if not Path(path).exists():
         return _tool_failure(f"path not found: {path}")
+    return _run_command(_structure_command(path, depth, ext, exclude, files))
 
-    args = _default_args(path=str(p))
 
-    if p.is_dir():
-        from .cli.routing.file import _parse_ext_arg
-        include_extensions = _parse_ext_arg(ext or None)
-        exclude_patterns = [e.strip() for e in exclude.split(',') if e.strip()] or None
-
-        if files:
-            from .tree_view import show_file_list
-            return show_file_list(
-                str(p),
-                respect_gitignore=args.respect_gitignore,
-                exclude_patterns=exclude_patterns,
-                include_extensions=include_extensions,
-                max_entries=args.max_entries,
-            )
-
-        from .tree_view import show_directory_tree
-        return show_directory_tree(
-            str(p),
-            depth=depth,
-            max_entries=args.max_entries,
-            dir_limit=args.dir_limit,
-            fast=args.fast,
-            respect_gitignore=args.respect_gitignore,
-            exclude_patterns=exclude_patterns,
-            include_extensions=include_extensions,
-        )
-
-    from .registry import get_analyzer
-    from .display.structure import show_structure
-
-    analyzer_class = get_analyzer(str(p), allow_fallback=True)
-    if not analyzer_class:
-        return _tool_failure(f"no analyzer found for {path}")
-
-    analyzer = analyzer_class(str(p))
-    return _run_and_capture(show_structure, analyzer, 'text', args)
+def _structure_command(path: str, depth: int, ext: str, exclude: str, files: bool) -> list[str]:
+    """The CLI command line reveal_structure answers: ``reveal PATH`` in text, plus the directory controls on a
+    directory (a file view reads none of them; the tool ignores them there, as it always did). The file route then
+    gives the answer and the outcome: a file that failed to parse is a tool error naming the cause, a directory under
+    a missing ``REVEAL_CONFIG`` the invalid request (BACK-2762)."""
+    options = ['--format', 'text']
+    if Path(path).is_dir():
+        options += ['--files'] if files else ['--depth', str(depth)]
+        if ext:
+            options += ['--ext', ext]
+        for pattern in (e.strip() for e in exclude.split(',')):
+            if pattern:
+                options += ['--exclude', pattern]
+    return [*options, '--', path]
 
 
 @mcp_tool(annotations=_LOCAL_READONLY, title='Reveal: Extract Function/Class')
