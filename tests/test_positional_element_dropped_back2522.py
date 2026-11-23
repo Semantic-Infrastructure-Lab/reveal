@@ -37,7 +37,7 @@ def tree(tmp_path, monkeypatch):
     ('sqlite://x.db', 'users', 'sqlite:///path/to/db.db[/table]'),
     ('sqlite://x.db', 'nope', 'sqlite:///path/to/db.db[/table]'),
     ('json://f.json', 'a', 'json://<file>[/key] [--where EXPR]... [--view VIEW]'),
-    ('ast://src', 'foo', 'ast://<path> [--where EXPR]'),  # the URI plus flags (BACK-2613)
+    ('ast://src', 'foo', 'spell the request as: reveal ast <path> [--where EXPR]'),  # the subcommand (BACK-2769)
 ])
 def test_a_uri_element_the_adapter_has_no_view_for_exits_2(tree, uri, element, syntax):
     response = _run_reveal_direct(uri, element, '--format', 'json')
@@ -87,7 +87,7 @@ def test_an_element_view_still_reports_a_miss_as_its_own_error(tree):
     assert [e['code'] for e in json.loads(response.stdout)['meta']['errors']] == ['element_not_found']
 
 
-@pytest.mark.parametrize('uri,syntax', [('calls://src', 'calls://'), ('imports://src', 'imports://')])
+@pytest.mark.parametrize('uri,syntax', [('calls://src', 'reveal calls <path>'), ('imports://src', 'reveal imports <path>')])
 def test_a_declared_noun_refuses_an_element_with_the_same_envelope(tree, uri, syntax):
     """It printed one stderr line and wrote nothing on stdout, so --format json had no answer (BACK-2526)."""
     response = _run_reveal_direct(uri, 'foo', '--format', 'json')
