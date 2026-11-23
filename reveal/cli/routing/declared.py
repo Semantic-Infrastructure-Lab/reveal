@@ -8,7 +8,7 @@ import os
 import sys
 from contextlib import nullcontext
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, TypeGuard
 
 from ..argparsing import RevealArgumentParser
 from .ledger import FlagLedger, complete, delegate, ledger_of, mark, peek
@@ -234,7 +234,7 @@ def uri_flag_message(target, message: str) -> str | None:
     return unsupported_controls_message(declared[0].PARAM_SPECS, flags)
 
 
-def is_path_read(target) -> bool:
+def is_path_read(target: Any) -> TypeGuard[str]:
     """Whether the request's target is a path read (a file or directory), not a URI or an ``@file`` list."""
     return isinstance(target, str) and bool(target) and '://' not in target and not target.startswith('@')
 
