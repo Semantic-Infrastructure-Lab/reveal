@@ -27,5 +27,17 @@
       "standing": [],
       "detail_supported": false
     }
+  },
+  "surface": {
+    "default": {
+      "uri": "surface://proj",
+      "exit": 0,
+      "fields": [
+        "test_scope.basis",
+        "_meta.known_limits"
+      ],
+      "standing": [],
+      "detail_supported": false
+    }
   }
 }
