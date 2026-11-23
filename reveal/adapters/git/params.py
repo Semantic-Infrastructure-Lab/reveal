@@ -48,6 +48,22 @@ def raw_detail(value: Any) -> Any:
         raise ParamValueError(f'raw must be a valid boolean, got {value!r}: use detail=raw (--detail raw)') from None
 
 
+def commit_prefixes(value: Any) -> list[str]:
+    """Blame's suppressed commits: hash prefixes, comma-separated, from one value or every repeat of it."""
+    values = value if isinstance(value, (list, tuple)) else [value]
+    if any(not isinstance(item, str) or '\x00' in item for item in values):
+        raise ParamValueError(f'ignore-commits must be commit hash prefixes, got {value!r}')
+    prefixes = [part.strip() for item in values for part in item.split(',') if part.strip()]
+    if not prefixes:
+        raise ParamValueError(f'ignore-commits needs a commit hash prefix, got {value!r}: --ignore-commits SHA[,SHA...]')
+    return list(dict.fromkeys(prefixes))
+
+
+def _ignore_off(raw: Any) -> bool:
+    """Whether a legacy ``ignore`` value is ``off`` (any case): it turned auto-ignore off."""
+    return isinstance(raw, str) and raw.strip().lower() == 'off'
+
+
 # The commit fields where filters and bare URI keys read (COMMAND_MODEL "Bare URI keys": a closed field set), each
 # described once: the schema's filter_fields and the where declaration read this table.
 COMMIT_FILTER_FIELDS = {
@@ -72,7 +88,7 @@ def string(name, description, *, legacy=(), choices=(), role=None, answers=()):
 # The answers each control is read by (COMMAND_MODEL "Applicability", BACK-2656). The repository overview, a ref's
 # history, a path's history and a timeline walk commits: they read the commit filter and the merge policy; ownership
 # reads the row controls and merges but aggregates unfiltered; scan-limit budgets the aggregates' commit input; blame
-# reads detail and ignore, a diff context, and the element narrows a file's history, blame, diff and timeline. A file's
+# reads detail, ignore-commits and auto-ignore, a diff context, and the element narrows a file's history, blame, diff and timeline. A file's
 # content reads raw (detail=raw selects it). The repository's timeline is the timeline type too: its element check is
 # validate_resource_controls' (a repository has no element).
 _COMMITS = ('git_repository', 'git_ref', 'git_file_history', 'git_directory_history', 'git_timeline')
@@ -125,11 +141,24 @@ OFFSET = ParamSpec('offset', 'integer', 'Rows skipped after sorting', 0,
 CONTEXT = ParamSpec('context', 'integer', 'Context lines for a diff', None,
                     lambda v: nonnegative_display_limit(v, name='context'), minimum=0,
                     cli=CliBinding(('--context',)), answers=(_DIFF,))
+# Blame's suppression is two controls (Scott 2026-11-22, BACK-2733): the commits to suppress (they filter, so they repeat
+# and commas join) and the auto-ignore switch (.git-blame-ignore-revs and the noise heuristic; COMMAND_MODEL "Switches").
+# The older word ignore carried both in one scalar: ignore=off is auto-ignore=off and ignore=SHAS the commits, so its
+# value decides its target (LegacySpelling.sets_when); its answers are the same, its row notes the replacement.
+IGNORE_COMMITS = ParamSpec('ignore-commits', 'array', 'Blame commit hash prefixes to suppress (comma-separated; repeat '
+                           'to add more)', None, commit_prefixes, aliases=('ignore_commits',), repeatable=True,
+                           cli=CliBinding(('--ignore-commits',), dest='ignore_commits'), answers=(_BLAME,),
+                           legacy=(LegacySpelling('ignore', flag='--ignore', sets=(('auto-ignore', 'off'),),
+                                                  sets_when=_ignore_off,
+                                                  codec=lambda raw: None if _ignore_off(raw) else raw),))
+AUTO_IGNORE = ParamSpec('auto-ignore', 'boolean', 'Auto-ignore noise commits in blame (.git-blame-ignore-revs and the '
+                        'noise heuristic): on (the default) or off', None, switch_value, aliases=('auto_ignore',),
+                        cli=CliBinding(('--auto-ignore',), dest='auto_ignore'), answers=(_BLAME,))
 PARAM_SPECS = (VIEW, WHERE, DETAIL, MERGES, SORT, LIMIT, SCAN_LIMIT, OFFSET, CONTEXT,
                string('ref', 'Starting branch, tag or commit'),
                string('element', 'Semantic element name', answers=('git_file_history', _BLAME, _DIFF, 'git_timeline')),
                string('bucket', 'Timeline period: week or month', choices=('week', 'month'), answers=('git_timeline',)),
-               string('ignore', 'Blame commit hash prefixes to suppress', answers=(_BLAME,)),
+               IGNORE_COMMITS, AUTO_IGNORE,
                # since/until are settings (one bound each, COMMAND_MODEL "Conflicting values") in the one time-window
                # grammar (COMMAND_MODEL "Time window", BACK-2728), compared at the bound's precision as date>=/date<=
                *(time_window_param(name, description, answers=_COMMITS)
@@ -150,12 +179,14 @@ def runtime_query(params):
     values, aggregate_control = _aggregate_controls(params, dict(peek_query_items(params)))
     query = QueryParams({key: value for key, value in values.items()
                          if value is not None and value != []
-                         and key not in ('where', 'view', 'detail', 'merges', 'scan-limit')})
+                         and key not in ('where', 'view', 'detail', 'merges', 'scan-limit', 'ignore-commits',
+                                         'auto-ignore')})
     view = VIEW.read(params)
     if view is not None:
         query['type'] = 'history' if view == 'log' else view
     _runtime_detail(params, query)
     _runtime_merges(params, query)
+    _runtime_ignore(params, query)
     items: list[tuple[str, Any]] = list(peek_query_items(query))
     for expression in WHERE.read(params):
         for part in expression.split('&'):
@@ -238,6 +269,15 @@ def _runtime_detail(params, query):
         query['raw'] = '1'
     elif level is not None:
         query['detail'] = 'summary' if level == 'normal' else level
+
+
+def _runtime_ignore(params, query):
+    """Blame's suppressed commits (a list of prefixes) and its auto-ignore switch, as the blame reader takes them."""
+    commits = IGNORE_COMMITS.read(params)
+    if commits:
+        query['ignore-commits'] = list(commits)
+    if AUTO_IGNORE.read(params) is False:
+        query['auto-ignore'] = 'off'
 
 
 def _runtime_merges(params, query):

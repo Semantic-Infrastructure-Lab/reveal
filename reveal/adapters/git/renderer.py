@@ -211,7 +211,7 @@ class GitRenderer:
         auto_ignored = [e for e in ignored if e.get('source') in ('auto-detect', 'ignore-revs')]
         explicit_ignored = [e for e in ignored if e.get('source') not in ('auto-detect', 'ignore-revs')]
         if auto_ignored:
-            print(f"Auto-ignored {len(auto_ignored)} noise commit(s) — --ignore off includes them:")
+            print(f"Auto-ignored {len(auto_ignored)} noise commit(s) — --auto-ignore off includes them:")
             for entry in auto_ignored:
                 src = '.git-blame-ignore-revs' if entry.get('source') == 'ignore-revs' else 'noise heuristic'
                 print(f"  {entry['hash']}  {entry['lines']:4} lines  {entry['message'][:55]}  [{src}]")

@@ -433,6 +433,9 @@ RETIREMENTS: Dict[str, Retirement] = {
     'param:git.type': Retirement('git ?type=VIEW', '--view VIEW, the same answer'),
     'param:git.no_merges': Retirement('git ?no_merges (--no-merges)', '--merges off'),
     'param:git.raw': Retirement('git ?raw=1', '--detail raw, the historical file text'),
+    # Blame's ignore was two controls in one scalar (BACK-2733): its value decides which it is, the same answer.
+    'param:git.ignore': Retirement('git ?ignore=SHAS|off (--ignore)',
+                                   '--ignore-commits SHAS; ignore=off is --auto-ignore off, the same answer'),
     'value:git.view=log': Retirement('git --view log (?type=log)', '--view history, the same answer'),
     'value:git.detail=summary': Retirement('git --detail summary', '--detail normal, the same answer'),
     'param:pack.verbose': Retirement('pack ?verbose (--verbose)',

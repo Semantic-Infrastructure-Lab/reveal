@@ -257,7 +257,7 @@ def test_a_conflict_exits_2_naming_both_spellings(repo, request_argv, names):
     run, doc = _json(*request_argv)
     assert run.returncode == 2, (run.stdout[:300], run.stderr)
     message = _error(run, doc)
-    assert 'conflicting spellings' in message or 'given twice' in message, message
+    assert any(words in message for words in ('conflicting spellings', 'given twice', 'set twice')), message
     assert all(name in message for name in names), message
 
 

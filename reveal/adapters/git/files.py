@@ -641,14 +641,12 @@ def get_file_blame(
                 element_name, hunks, path, subpath, get_element_line_range_func
             )
 
-        # --ignore off disables all auto-ignore and shows raw blame.
-        ignore_off = query.get('ignore', '').strip().lower() == 'off'
-        explicit_shas: List[str] = []
+        # --ignore-commits suppresses the commits named; --auto-ignore off turns off .git-blame-ignore-revs and the
+        # noise heuristic, with or without them (BACK-2733).
+        explicit_shas: List[str] = list(query.get('ignore-commits') or [])
         ignore_revs_shas: List[str] = []
         auto_shas: List[str] = []
-        if not ignore_off:
-            ignore_raw = query.get('ignore', '')
-            explicit_shas = [s.strip() for s in ignore_raw.split(',') if s.strip()] if ignore_raw else []
+        if query.get('auto-ignore') != 'off':
             ignore_revs_shas = _read_blame_ignore_revs(getattr(repo, 'workdir', None))
             auto_shas = _detect_noise_commits(hunks)
 
