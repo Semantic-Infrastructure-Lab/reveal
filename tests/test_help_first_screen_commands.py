@@ -28,7 +28,7 @@ def test_first_screen_shows_a_command_when_the_guide_has_one(full, short):
 def test_diff_first_screen_skips_its_contents_and_reaches_quick_start():
     content = _ADAPTER._load_static_help('diff')['content']
     assert '## Table of Contents' not in content
-    assert 'reveal diff://' in content.split('\n── ', 1)[0]
+    assert 'reveal diff app.py backup/app.py' in content.split('\n── ', 1)[0]  # the quick start's first command (BACK-2214)
 
 
 def test_contents_section_is_dropped_only_at_level_two():
