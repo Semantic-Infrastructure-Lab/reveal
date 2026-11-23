@@ -1,0 +1,31 @@
+{
+  "pack": {
+    "default": {
+      "uri": "pack://proj",
+      "exit": 0,
+      "fields": [
+        "meta.relevance_warning"
+      ],
+      "standing": [],
+      "detail_supported": false
+    },
+    "architecture": {
+      "uri": "pack://proj?architecture",
+      "exit": 0,
+      "fields": [
+        "edge_rule.text"
+      ],
+      "standing": [],
+      "detail_supported": false
+    },
+    "focus": {
+      "uri": "pack://proj?focus=app",
+      "exit": 0,
+      "fields": [
+        "edge_rule.text"
+      ],
+      "standing": [],
+      "detail_supported": false
+    }
+  }
+}

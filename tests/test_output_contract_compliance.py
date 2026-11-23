@@ -1218,6 +1218,8 @@ _RULE_BUDGET_CASES = {
     # Patches (every view) and the retired testability, which shares the pressure renderer: the test-path basis and
     # the standing caveats (advisory, best-effort target resolution) behind the pointer.
     **json.loads((Path(__file__).parent / 'fixtures' / 'patches_rule_text_back2599.json').read_text(encoding='utf-8')),
+    # The remaining nouns (BACK-2599): each case names its rule fields; the full sentences are read from the answer's JSON.
+    **json.loads((Path(__file__).parent / 'fixtures' / 'rule_budget_registry_back2599.json').read_text(encoding='utf-8')),
 }
 _RULE_BUDGET_STANDING = frozenset({'analysis_limit', 'scope_limit', 'derived_signal',
                                  'implicit_exclusion', 'not_measured', 'advisory', 'complexity_is_unweighted'})
@@ -1296,6 +1298,42 @@ def test_rule_budget_patches_text_points_and_json_keeps_the_rule(harness, noun, 
         assert sentence not in text, f'{case}: default text repeats the standing caveat: {sentence}'
     scope = payload['test_scope']
     assert f"Test scope: {scope['rule']} ({scope['files_scanned']} test files scanned)" in text
+
+
+_RULE_BUDGET_REGISTRY = [(noun, case) for noun, cases in json.loads(
+    (Path(__file__).parent / 'fixtures' / 'rule_budget_registry_back2599.json').read_text(encoding='utf-8')).items()
+    for case in cases]
+
+
+@pytest.mark.parametrize('noun,case', _RULE_BUDGET_REGISTRY)
+def test_rule_budget_registry_text_points_and_json_keeps_the_rule(harness, noun, case):
+    """BACK-2599: neither stdout nor stderr repeats a rule sentence or a standing caveat the pointer names; the JSON
+    keeps each one verbatim."""
+    expected = _RULE_BUDGET_CASES[noun][case]
+    _, payload, _ = harness.run(expected['uri'])
+    _, text, err = harness.run_raw(expected['uri'])
+    for path in expected['fields']:
+        value = _rule_value(payload, path)
+        for sentence in value if isinstance(value, list) else [value]:
+            assert isinstance(sentence, str) and len(sentence) > 20, (path, sentence)
+            assert sentence not in text and sentence not in err, f'{case}: answer repeats the rule: {sentence[:60]}'
+    standing = [w['message'] for key in ('meta', '_meta') for w in (payload.get(key) or {}).get('warnings', [])
+                if w.get('type') in _RULE_BUDGET_STANDING]
+    assert standing == expected['standing'], 'full standing caveats must remain verbatim in JSON'
+    for message in standing:
+        assert message not in text and message not in err, f'{case}: {message[:60]}'
+
+
+def test_rule_budget_pack_default_points_and_names_the_next_step(harness):
+    """pack without --architecture or --focus: the standing notice (it ranks by filename/entry-point heuristics and
+    recency) was a stderr warning; it is the Rules pointer plus a next step naming the two flags (BACK-2599)."""
+    _, text, err = harness.run_raw('pack://proj')
+    lines = text.splitlines()
+    assert 'Rules: --format json (meta.relevance_warning)' in lines
+    assert 'Next: --architecture ranks by import fan-in; --focus PATTERN by graph relevance' in lines
+    assert 'Warning:' not in err, err
+    _, focused, focused_err = harness.run_raw('pack://proj?focus=app')
+    assert 'Next: ' not in focused and 'meta.relevance_warning' not in focused and not focused_err  # control
 
 
 def test_patches_pressure_header_names_no_retiring_noun(harness):
