@@ -84,13 +84,15 @@ No comparative agent-effectiveness claim follows from that diagnostic coverage.
 
 **Next, in priority order**
 
-1. **Reliable requests and shared controls.** Every declared noun gets both spellings (`reveal NOUN
-   TARGET --option` and `NOUN://TARGET?option=value`) generated from one declaration, and a
-   shared idea gets one option name with one meaning on every noun (BACK-2598).
-   Counting rules shrink to one line in text output and stay in full in the
-   JSON (BACK-2599). Old names keep working with a note until the cut. Switching working
-   element and distinct operation selectors to a single view option is deferred;
-   decide those names before the 1.0 freeze, using realistic-task evidence.
+1. **Reliable requests and shared controls.** One spelling: options are flags on the noun's
+   subcommand (`reveal NOUN TARGET --option`), generated from one declaration, and a shared
+   idea gets one option name with one meaning on every noun (BACK-2598). A URI only names a
+   resource (`git://app.py@main`, `diff://app.py:old.py/handle_request`) and takes the same
+   flags, with the same answer and exit code; the remaining resource readers bind their
+   options through the same declarations (BACK-2214). Old names, query-string options
+   included, keep working with a note until the cut. Counting rules already print as one
+   pointer line in text, with the full text in the JSON. Element views and operation
+   selectors become one view option on every noun that has them (BACK-2627).
 2. **One import graph.** The retired `depends`, `deps` and `calls ?modules` already answer
    through `imports`; finish per-language parity before the old names stop working (BACK-2079, BACK-2063);
    the public-path recall gate and the oracle-free graph invariants run in CI and stay green
