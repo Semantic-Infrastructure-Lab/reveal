@@ -313,8 +313,9 @@ def _run_hotspots(path: Optional[Path],
         hotspots: List[Dict[str, Any]] = []
         for target in targets:
             try:
-                # Declared parameters, not a query string: top=0 is every hotspot, cut once above.
-                data = MetricsAdapter(str(target), params={'hotspots': True, 'top': 0}).get_structure()
+                # Declared parameters, not a query string: metrics' hotspots view, limit=0 is every hotspot, cut once
+                # above. Its legacy hotspots/top words go at the cut, and reveal_review keeps answering (BACK-2149).
+                data = MetricsAdapter(str(target), params={'view': 'hotspots', 'limit': 0}).get_structure()
                 if data.get('error'):
                     warnings.append({'type': 'analysis_failed', 'count': 1,
                                      'message': f"hotspots: {target}: {data['error']}"})
