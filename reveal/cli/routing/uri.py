@@ -741,11 +741,12 @@ def _resolve(adapter_class: type, renderer_class: type[Any], scheme: str, resour
     # and api.query do (BACK-2694).
     from ...adapters.factory import uses_bound_query_call
     from ..invocation import element_retirement
-    if element and (uses_bound_query_call(adapter_class) or (
+    # A scheme whose element is a legacy spelling answers it with its note until the cut, whether or not it binds its
+    # query (help://, reveal:// BACK-2764; diff:// BACK-2768); without a row, a bound noun refuses it.
+    legacy_element = element_retirement(scheme) if element else None
+    if element and legacy_element is None and (uses_bound_query_call(adapter_class) or (
             not hasattr(renderer_class, 'render_element') and not getattr(adapter_class, 'LEGACY_INIT', True))):
-        # A scheme whose element is a legacy spelling answers it with its note until the cut (BACK-2764).
-        if element_retirement(scheme) is None:
-            _fail_unread_element(adapter_class, scheme, resource, element)
+        _fail_unread_element(adapter_class, scheme, resource, element)
     # A class that binds its query in its constructor refuses a control it does not take there: the request's fault
     # (exit 2) whether or not its operation is qualified (help://, reveal://; BACK-2764).
     binds_query = facts_of is not None or uses_bound_query_call(adapter_class)
