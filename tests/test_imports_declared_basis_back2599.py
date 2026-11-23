@@ -53,4 +53,4 @@ def test_imports_text_shows_a_declared_basis(project, paths, basis):
     text = run('imports', str(project))
     assert text.returncode == 0, text.stderr
     assert basis in text.stdout
-    assert 'Rules: --format json (edge_rule.text)' in text.stdout.splitlines()
+    assert 'Rules: --format json (edge_rule.text)' in [line.strip() for line in text.stdout.splitlines()]

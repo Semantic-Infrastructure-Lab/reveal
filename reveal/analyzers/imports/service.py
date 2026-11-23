@@ -384,10 +384,12 @@ def test_scope_note(scope: Optional[Dict[str, Any]]) -> str:
     return f" Test paths: {scope['basis']}; anchor {scope['anchor']}." if scope else ''
 
 
-def _fallback_test_scope_note(scope: Optional[Dict[str, Any]]) -> str:
-    """The test-path basis when this scan found no project boundary (the scan-root fallback: the scan root's own name
-    counts as a test path, BACK-2391): a fact of this request, so it stays in the text beside the rule pointer."""
-    return test_scope_note(scope) if scope and scope.get('include_anchor_name') else ''
+def _departing_test_scope_note(scope: Optional[Dict[str, Any]]) -> str:
+    """The test-path basis when it departs from a selected project's default: no project boundary (the scan-root
+    fallback: the scan root's own name counts as a test path, BACK-2391) or a declared test_layout (additional paths, or
+    the whole scope by '.'). A fact of this request, so it stays in the text beside the rule pointer, as patches and
+    surface keep it (BACK-2599)."""
+    return test_scope_note(scope) if scope and (scope.get('include_anchor_name') or 'additional_paths' in scope) else ''
 
 
 def _ungated_scanned(at: ResolvedAt, scanned: Iterable[Path]) -> set:
@@ -464,7 +466,7 @@ def _wildcard_note(wildcards: Dict[str, Any]) -> str:
 def edge_rule_disclosures(rule: Optional[Dict[str, Any]]) -> List[str]:
     """The request-specific sentences of a counting rule, from its structured fields: edges of unknown import scope,
     edges outside the scan root, uncounted package wildcards, ungated languages and a test-path basis with no project
-    boundary. A text answer that points at the rule (``edge_rule_fields``) keeps these visible (BACK-2599 note #1,
+    boundary or a declared test_layout. A text answer that points at the rule (``edge_rule_fields``) keeps these visible (BACK-2599 note #1,
     BACK-2685); the rule's text states them too."""
     if not rule:
         return []
@@ -472,7 +474,7 @@ def edge_rule_disclosures(rule: Optional[Dict[str, Any]]) -> List[str]:
              _outside_root_note(rule.get('outside_root_edges', 0)),
              _wildcard_note(rule['package_wildcards']) if rule.get('package_wildcards') else '',
              _ungated_note(rule.get('ungated_languages', ()), rule.get('ungated_edges', 0)),
-             _fallback_test_scope_note(rule.get('test_scope'))]
+             _departing_test_scope_note(rule.get('test_scope'))]
     return [note.strip() for note in notes if note]
 
 
