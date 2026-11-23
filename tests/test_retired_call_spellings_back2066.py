@@ -249,6 +249,7 @@ def test_mcp_reveal_trace_and_the_server_instructions_point_at_calls():
     pytest.importorskip('mcp')
     from reveal.mcp_server import mcp, reveal_trace
     doc = reveal_trace.__doc__ or ''
-    assert 'calls://' in doc and 'callees=' in doc, doc
+    # BACK-2713: taught as the subcommand on reveal_run, the one spelling (D20), not as a calls:// query.
+    assert "reveal_run(['calls'" in doc and "'--callees'" in doc, doc
     item6 = next(line for line in mcp.instructions.split('\n') if line.startswith('6. '))
-    assert 'callees=' in item6, item6
+    assert "reveal_run(['calls'" in item6 and "'--callees'" in item6, item6

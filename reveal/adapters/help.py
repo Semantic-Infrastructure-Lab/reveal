@@ -1532,17 +1532,17 @@ class HelpAdapter(ResourceAdapter):
     # here — see BACK-1154's original complaint (15 of 33 adapters absent).
     _CURATED_DECISION_TREE: List[Dict[str, str]] = [
         {'want': 'get oriented in an unfamiliar codebase (compact map: scope, components, imports)',
-         'use': 'overview://', 'example': "reveal overview://src/"},
+         'use': 'reveal overview', 'example': "reveal overview src/"},
         {'want': 'read one function or class by name',
          'use': 'reveal FILE NAME', 'example': "reveal src/app.py load_config"},
         {'want': 'query functions by complexity, size, type or decorator',
-         'use': 'ast://', 'example': "reveal 'ast://src/?kind=function&complexity>10&sort=-complexity&limit=10'"},
+         'use': 'reveal ast', 'example': "reveal ast src/ --where 'complexity>10' --kind function --sort=-complexity --limit 10"},
         {'want': 'find the riskiest files (quality and complexity hotspots, with a --fail-on findings gate)',
-         'use': 'metrics://', 'example': "reveal metrics src/ --view hotspots"},
+         'use': 'reveal metrics', 'example': "reveal metrics src/ --view hotspots"},
         {'want': 'know who calls a function',
-         'use': 'calls://', 'example': "reveal 'calls://src/?callers=my_fn'"},
+         'use': 'reveal calls', 'example': "reveal calls src/ --callers my_fn"},
         {'want': 'follow what a function calls, level by level',
-         'use': 'calls://', 'example': "reveal 'calls://src/?callees=my_fn&depth=2'"},
+         'use': 'reveal calls', 'example': "reveal calls src/ --callees my_fn --depth 2"},
         {'want': "see a function's inputs, side effects (db/http/file/env) and exits",
          'use': '--view boundary / --view effects', 'example': "reveal src/app.py my_fn --view boundary"},
         {'want': 'map HTTP routes',
@@ -1554,7 +1554,7 @@ class HelpAdapter(ResourceAdapter):
         {'want': 'check a file or directory for quality issues (lint-style rules)',
          'use': 'reveal check', 'example': "reveal check src/app.py"},
         {'want': 'check import health / circular deps',
-         'use': 'imports://', 'example': "reveal imports://src/"},
+         'use': 'reveal imports', 'example': "reveal imports src/"},
         {'want': 'compare files or git revisions',
          'use': 'diff://', 'example': "reveal diff://git://HEAD~1/.:git://HEAD/."},
         {'want': 'SSL/TLS certificate status',
@@ -1566,17 +1566,17 @@ class HelpAdapter(ResourceAdapter):
         {'want': 'domain DNS / WHOIS / email health',
          'use': 'domain://', 'example': "reveal domain://example.com"},
         {'want': 'search git commit history by message, author, or date',
-         'use': 'git://', 'example': "reveal git . --view history --where 'message~=fix'"},
+         'use': 'reveal git', 'example': "reveal git . --view history --where 'message~=fix'"},
         {'want': 'search markdown docs or notes by content',
          'use': 'reveal markdown', 'example': 'reveal markdown docs/ --match keyword'},
         {'want': 'read one section of a markdown document',
          'use': 'reveal FILE --section HEADING', 'example': 'reveal README.md --section "Building"'},
         {'want': 'inspect a SQLite database or Excel workbook',
-         'use': 'sqlite:// / xlsx://', 'example': "reveal sqlite:///path/to/app.db"},
+         'use': 'reveal sqlite or reveal xlsx', 'example': "reveal sqlite path/to/app.db"},
         {'want': 'inspect environment variables',
-         'use': 'env://', 'example': "reveal env"},
+         'use': 'reveal env', 'example': "reveal env"},
         {'want': 'search prior Claude sessions by topic or project',
-         'use': 'claude://', 'example': "reveal 'claude://sessions/?search=auth-refactor' --format=json"},
+         'use': 'claude://', 'example': "reveal claude://sessions/ --match auth-refactor --format json"},
         {'want': 'review a session as prompt/answer pairs, not raw messages',
          'use': 'claude://.../exchanges', 'example': "reveal claude://session/my-session/exchanges"},
         {'want': "search OpenAI Codex CLI sessions by content (or --where 'session~=TEXT' by title)",
@@ -1592,7 +1592,9 @@ class HelpAdapter(ResourceAdapter):
         adapter that's already visible elsewhere on the same page."""
         mentioned = set()
         for entry in self._CURATED_DECISION_TREE:
+            # A row names its noun as a resource scheme (``diff://``) or as a subcommand (``reveal calls``).
             mentioned.update(re.findall(r'([a-zA-Z_]+)://', entry['use']))
+            mentioned.update(re.findall(r'\breveal ([a-z]+)\b', entry['use']))
         # Already shown with a concrete example in the top-N commands block
         # (QUICK_RANK is set) — repeating it here as a bare name would be
         # noise, not new information.

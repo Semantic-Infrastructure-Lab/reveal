@@ -108,7 +108,7 @@ mcp = MCPServer(
         "reveal URI (scheme://...) only. `target` = either, tool-dependent "
         "(reveal_health: path or URI; reveal_review: path or git range).\n\n"
         "Core workflow:\n"
-        "0. reveal_query('overview://<dir>') — orient in an unfamiliar "
+        "0. reveal_run(['overview', '<dir>']) — orient in an unfamiliar "
         "codebase first: a compact map of scope, components and import "
         "relationships, one screen. This is reveal's own best answer to \"what is this repo\" — "
         "start here before structure/element/nav on unfamiliar code.\n"
@@ -126,7 +126,7 @@ mcp = MCPServer(
         "   varflow     — trace one variable's reads and writes\n"
         "5. reveal_grep(path, pattern) — \"where is X used?\" cross-file "
         "search grouped by enclosing function (use instead of shell grep).\n"
-        "6. reveal_query('calls://<dir>?callees=FN&depth=2&detail') — \"what "
+        "6. reveal_run(['calls', '<dir>', '--callees', 'FN', '--depth', '2', '--detail']) — \"what "
         "happens when X runs?\" level-by-level callee walk with params and side "
         "effects (reveal_trace(dir, entry_point) renders the same walk as a "
         "depth-indented narrative).\n"
@@ -716,33 +716,28 @@ def reveal_nav(path: str, element: str, flag: str, flag_value: str = '', *,
 
 @mcp_tool(annotations=_OPEN_WORLD_READONLY, title='Reveal: URI Query')
 def reveal_query(uri: str, provenance: bool = False) -> str:
-    """Run a reveal URI query across any adapter (``scheme://resource?query`` syntax).
+    """Read one reveal resource URI (``scheme://resource``): a help topic, a git object, a session, a table.
 
-    Use for anything outside the file/nav workflow: call graphs, import
-    health, git history, SSL/domain checks, database/Excel
-    inspection, doc search, and more — one URI syntax for every adapter; the
-    query keys each adapter accepts are its own (see below).
+    A resource URI names what a path cannot: help://TOPIC, git://FILE@REF,
+    claude://session/NAME, sqlite://DB/TABLE, json://FILE/KEY, ssl://HOST,
+    diff://LEFT:RIGHT. Analysis (call graphs, imports, metrics, AST queries,
+    the project overview) is a subcommand, and every option is a flag: use
+    reveal_run, e.g. reveal_run(['imports', '.', '--unused']) or
+    reveal_run(['git', '<file>', '--view', 'history', '--limit', '5']).
 
     Lost, or need an adapter you don't know the name of? Start with
     reveal_query('help://quick') — a map of every adapter and common task.
 
-    CLI-only global flags (--severity, --select, --format) do NOT pass
-    through to this tool — there's no argv for them to come from here.
-    '?limit=N', '?sort=field' (or '?sort=-field' for desc) and '?offset=M'
-    are each adapter's own controls, read by the answers its schema lists:
-    calls:// and imports:// cap their rankings ('?sort=-callers&limit=N',
-    '?sort=-fan-in&limit=N'), patches://?view=pressure takes '?limit=N' too. A noun
-    that declares its controls refuses a key it does not take, or one the
-    selected answer does not read, with an error naming the ones it does;
-    other adapters answer "Unknown query param ... ignored".
-    Every other per-adapter option is that adapter's own '?key=value'
-    vocabulary, not a generic CLI-flag passthrough — check
-    reveal_query('help://schemas/<adapter>') for what a given scheme accepts.
+    This tool takes the URI alone: no CLI flags (--format, --limit, --severity)
+    pass through it, since there's no argv for them to come from here;
+    reveal_run takes the same command line as the CLI. A query string on a
+    noun's URI still answers until 1.0, with a note naming its reveal_run
+    form. Each adapter's controls are listed by reveal_query('help://schemas/<adapter>').
     For severity/select filtering, use a dedicated typed tool instead
     (reveal_check has severity/select/ignore).
 
     Args:
-        uri: Full reveal URI, e.g. 'calls://src/?callers=my_fn' or 'help://quick'
+        uri: Full reveal resource URI, e.g. 'help://quick' or 'git://<file>@HEAD~1'
         provenance: When true, attach a '--provenance' execution manifest
             (git state, command, timestamp) to the result, for callers that
             need to cite evidence provenance (e.g. a DD finding contract).
@@ -1149,8 +1144,8 @@ def reveal_grep(path: str, pattern: str, ignore_case: bool = False) -> str:
 def reveal_trace(path: str, entry_point: str, depth: int = 2) -> str:
     """Walk the call graph from a named entry point as a depth-indented execution narrative.
 
-    The narrative view of the calls:// callee walk: the same walk as
-    reveal_query('calls://<path>?callees=FUNC&depth=N&detail'), which replaces it (the CLI's
+    The narrative view of the calls callee walk: the same walk as
+    reveal_run(['calls', '<path>', '--callees', 'FUNC', '--depth', 'N', '--detail']), which replaces it (the CLI's
     `reveal trace` and `trace://` already print a replaced-by note; this tool keeps its name for
     now). Each frame shows the function's location, parameters, classified side effects
     (db/http/log/file/...), and what it calls next — useful for "walk me through what happens

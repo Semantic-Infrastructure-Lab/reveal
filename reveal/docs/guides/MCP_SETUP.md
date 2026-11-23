@@ -132,31 +132,29 @@ is read-only: `--stdin`, `--copy`, file sinks (`--output FORMAT=PATH`) and the `
 
 ### `reveal_query(uri, provenance=False)`
 
-Run any reveal URI query across all adapters. Same syntax as the CLI. `reveal_run` takes the
-same requests as a command line; `reveal_query` and its query-string options retire at 1.0.
+Read one resource URI: a help topic, a git object, a session, a database table or a host.
+Analysis nouns (call graphs, imports, metrics, AST queries, the overview) and every option go
+through `reveal_run`, the same command line as the CLI. A query string on a noun's URI still
+answers until 1.0, with a note naming its `reveal_run` form.
 
 ```
-reveal_query("ast://src/?complexity>10&sort=-complexity")
-reveal_query("calls://src/?callers=validate_token&depth=3")
 reveal_query("ssl://api.example.com")
 reveal_query("domain://example.com")
-reveal_query("imports://src/?unused")
 reveal_query("diff://git://main/.:git://HEAD/.")
-reveal_run(['xlsx', 'model.xlsx', '--powerpivot', 'tables'])
-reveal_query("ast://src/?name=validate_token", provenance=True)
+reveal_query("help://quick")
+reveal_run(["ast", "src/", "--where", "complexity>10", "--sort=-complexity"])
+reveal_run(["calls", "src/", "--callers", "validate_token", "--depth", "3"])
+reveal_run(["imports", "src/", "--unused"])
+reveal_run(["xlsx", "model.xlsx", "--powerpivot", "tables"])
+reveal_query("git://src/auth.py@HEAD~1", provenance=True)
 ```
 
-CLI-only global flags (`--severity`, `--select`, `--format`) don't pass
-through here — write `?limit=N`, `?sort=field`/`?sort=-field`, and
-`?offset=M` directly in the URI instead. Only `ast://`, `markdown://`,
-`json://`, `git://` and `metrics://` (`stats://` is a deprecated alias) apply these
-(`metrics://?view=hotspots` pages its ranked rows with them); `patches://?view=pressure` caps with
-`?top=N`; `calls://` and `imports://?sort=-fan-in` (which replaces the deprecated `depends://`) cap with
-`?limit=N`; a declared noun that does not take one of them, or whose selected answer does not
-read it (`git://FILE?view=blame&limit=5`), answers an invalid request naming its controls (exit 2),
-and other adapters answer `Unknown query param ... ignored`. Everything else is each
-adapter's own `?key=value` vocabulary — check `reveal_query('help://schemas/
-<adapter>')` for what a given scheme accepts, or use a dedicated typed tool
+`reveal_query` takes the URI alone: no CLI flag passes through it. Options are flags on
+`reveal_run` (`--limit N`, `--sort [-]FIELD`, `--offset M`, `--format json`); each noun lists
+its own with `reveal_run(["NOUN", "--help"])`, and `reveal_query('help://schemas/<adapter>')`
+gives them as machine data. A declared noun refuses a flag it does not take, or one its
+selected answer does not read (`reveal_run(["git", "FILE", "--view", "blame", "--limit", "5"])`),
+naming its controls (exit 2). For severity/select filtering use the typed tool
 (`reveal_check` has `severity`/`select`/`ignore`).
 
 `--provenance`: the one exception to the CLI-flag-passthrough
@@ -243,7 +241,7 @@ reveal_grep("src/auth.py", "validate_.*token", ignore_case=True)
 
 Depth-indented call-graph narrative from one entry point — each frame shows
 location, parameters, classified side effects, and what it calls next. It is
-the same callee walk as `reveal_query("calls://src/?callees=process_order&depth=2&detail")`,
+the same callee walk as `reveal_run(["calls", "src/", "--callees", "process_order", "--depth", "2", "--detail"])`,
 which replaces it: the CLI's `reveal trace` and `trace://` are retired and print a
 replaced-by note; this tool keeps its name for now and prints none.
 Both trace spellings retain a normal MCP response when canonical evidence proves the
@@ -325,7 +323,7 @@ a tool call every time an agent needs to check valid syntax. All four mirror
 
 ```
 # 0. Orient in an unfamiliar codebase first
-reveal_query("overview://src/")             # compact scope, component and import map with coverage
+reveal_run(["overview", "src/"])            # compact scope, component and import map with coverage
 
 # 1. Understand the shape of a codebase area
 reveal_structure("src/")                    # ~100-3,000 tokens by size: what files exist
@@ -340,27 +338,28 @@ reveal_element("src/auth.py", "validate_token")  # ~100-600 tokens: one function
 reveal_pack("src/", since="main", budget=8000, content=True)
 
 # 5. Check whether a function is used before removing it
-reveal_query("calls://src/?callers=validate_item")
+reveal_run(["calls", "src/", "--callers", "validate_item"])
 
 # 6. Impact analysis before changing a function
-reveal_query("calls://src/?callers=validate_token&depth=3")
+reveal_run(["calls", "src/", "--callers", "validate_token", "--depth", "3"])
 ```
 
 ## Cross-Resource Workflows
 
-Reveal adapters cover more than source code. Use `reveal_query` for any URI adapter:
+Reveal adapters cover more than source code. A resource URI takes the same flags on `reveal_run`;
+`reveal_query` reads one URI alone:
 
 ```
 # Search prior Claude sessions for a topic
-reveal_query("claude://sessions/?match=validate_token")
-reveal_query("claude://sessions/?match=auth&since=2026-03-01")
+reveal_run(["claude://sessions/", "--match", "validate_token"])
+reveal_run(["claude://sessions/", "--match", "auth", "--since", "2026-03-01"])
 
 # Search OpenAI Codex CLI sessions
-reveal_query("codex://sessions/?where=session~=validate_token")
-reveal_query("codex://sessions/?match=authentication")
+reveal_run(["codex://sessions/", "--where", "session~=validate_token"])
+reveal_run(["codex://sessions/", "--match", "authentication"])
 
 # Git history — commits mentioning a keyword
-reveal_query("git://.?message~=fix")
+reveal_run(["git", ".", "--view", "history", "--where", "message~=fix"])
 
 # Markdown docs — full-text + metadata filter
 reveal_run(["markdown", "docs/", "--where", "type=procedure", "--match", "retry"])
@@ -389,7 +388,7 @@ reveal_query("help://quick")   # compact intent router, ~1,600 tokens
 | `reveal_structure(file)` | ~150–750 (~1,300 for 1,000 lines) | 3.9× less than cat, with `reveal_element` (BENCHMARKS.md) |
 | `reveal_element(file, fn)` | ~100–600 | — |
 | `reveal_pack(dir, budget=8000)` | a few hundred to a few thousand (the budget bounds the files picked, not the answer) | One call instead of N calls |
-| `reveal_query("calls://...?callers=NAME")` | ~100 | 6.7× less than grep (BENCHMARKS.md, scenario 4) |
+| `reveal_run(["calls", DIR, "--callers", NAME])` | ~100 | 6.7× less than grep (BENCHMARKS.md, scenario 4) |
 | `reveal_grep(dir, pattern)` | 100–500 | each hit's line, grouped by function, vs raw grep output |
 | `reveal_trace(dir, entry_point)` | 300–1000 | one call vs manual multi-file call chasing |
 

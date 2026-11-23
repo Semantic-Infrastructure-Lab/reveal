@@ -23,8 +23,8 @@ help_category: ai_guides
 
 **For progressive, low-token discovery** (one topic at a time), use `reveal 'help://<topic>'`:
 - `reveal help://` — index of all topics
-- `reveal help://ast` — ast:// quick start (first section only; ~750 tokens)
-- `reveal help://ast/full` — complete ast:// guide (~10,000 tokens)
+- `reveal help://ast` — AST quick start (first section only; ~750 tokens)
+- `reveal help://ast/full` — complete AST guide (~10,000 tokens)
 - `reveal help://tricks` — RECIPES guide first section
 - `reveal help://tricks/full` — complete RECIPES guide
 - `reveal 'help://schemas/<adapter>'` — machine-readable adapter schema
@@ -45,28 +45,28 @@ Guides >200 lines show the first section by default (progressive disclosure). Ap
 
 | Task | Command |
 |------|---------|
-| Orient in an unfamiliar repo | `reveal overview://src/` |
+| Orient in an unfamiliar repo | `reveal overview src/` |
 | Outline a file | `reveal src/app.py` |
 | Read one function or class | `reveal src/app.py load_config` (also `Class.method`, `:120-160`) |
 | Riskiest code | `reveal metrics src/ --view hotspots` (files) and `reveal ast src/ --where 'complexity>=10' --sort=-complexity --limit 10` (functions) |
 | Query functions by complexity/size/type | `reveal ast src/ --where 'complexity>10' --kind function --sort=-complexity --limit 10` |
-| Who calls a function | `reveal 'calls://src/?callers=my_fn'` |
-| What a function calls, level by level | `reveal 'calls://src/?callees=my_fn&depth=2'` |
+| Who calls a function | `reveal calls src/ --callers my_fn` |
+| What a function calls, level by level | `reveal calls src/ --callees my_fn --depth 2` |
 | A function's inputs, side effects, exits | `reveal src/app.py my_fn --view boundary` (or `--view effects`, `--view exits`) |
 | Files importing FILE | `reveal imports DIR --importers FILE` |
 | Documents linking to FILE | `reveal markdown DIR/ --backlinks FILE` |
 | Abstract interfaces / contracts | `reveal contracts DIR` |
-| Unused or circular imports | `reveal 'imports://src/?unused'` / `?circular` |
+| Unused or circular imports | `reveal imports src/ --unused` / `--circular` |
 | HTTP routes | `reveal surface src/ --kind http` |
 | Env vars, network/db/fs access, the whole external boundary | `reveal surface src/` |
 | Text search, grouped by enclosing function | `reveal src/ --grep 'pattern'` (Python regex syntax) |
 | File history / commit search | `reveal git src/app.py --view history`, `reveal git . --view history --where 'message~=fix'` |
 | One section of a markdown doc | `reveal doc.md "Heading"` |
 | Review a commit range | `reveal check --changed main..HEAD` (rules on the files the range changed); structure: `reveal 'diff://git://main/.:git://HEAD/.'` |
-| Prior Claude sessions | `reveal 'claude://sessions/?match=auth-refactor'` |
+| Prior Claude sessions | `reveal claude://sessions/ --match auth-refactor` |
 | Databases, env, SSL, nginx, other resources | `reveal help://adapters` |
 
-- **Limit results:** `calls --sort=-callers` and `imports --sort=-fan-in` accept `--limit N` (legacy `--top N` and `--rank` note their replacements); `overview --limit N` caps each map section. Caps depend on the selected answer: Calls caller/callee walks and the default Imports summary do not read `limit`, so `--limit` there exits 2 naming the answers that read it, and `--all` on an answer with no cap answers as without it. Other nouns and URI forms list their caps in `help://schemas/<adapter>`. `--head N` slices list output.
+- **Limit results:** `calls --sort=-callers` and `imports --sort=-fan-in` accept `--limit N` (legacy `--top N` and `--rank` note their replacements); `overview --limit N` caps each map section. Caps depend on the selected answer: Calls caller/callee walks and the default Imports summary do not read `limit`, so `--limit` there exits 2 naming the answers that read it, and `--all` on an answer with no cap answers as without it. Each noun's `--help` lists its caps (machine-readable: `help://schemas/<noun>`). `--head N` slices list output.
 - **Scripting:** `--format json` puts the whole answer on stdout, its warnings and notes inside it (`meta.warnings`), with nothing printed beside it; `--breadcrumbs off` (or `-q`) drops the next-step hints. A target that cannot render a `--format` value exits 2.
 - **Machine-readable discovery:** `reveal 'help://schemas/<adapter>'` gives one adapter's query params and output shape; `reveal --discover` gives every adapter's schema (query params, flags, output types, examples) as one JSON document (large: ~15,000 tokens); rules are `reveal --rules`.
 - **Exit codes:** `check` 0 clean, 1 issues found, 2 usage error, 3 scan incomplete or a requested `--output json=PATH` artifact that could not be written (`--fail-on none` reports issues without exit 1 but never hides an incomplete scan; the legacy `--exit-zero` does, and cannot be combined with it); `health` 0 pass, 1 findings (warnings or failing checks), 2 usage, 3 a check failed, could not reach its target or was incomplete (a target the check does not apply to never fails the run; `--fail-on none` skips 1); `check --changed RANGE` uses `check`'s codes, with 2 for an unusable range; `imports` defaults to no findings gate, with `--fail-on findings` for exit 1 on a `--circular`, `--unused` or `--violations` row, usage 2 and incomplete/output failure 3; `metrics --view hotspots` (and the retired `hotspots`) defaults to no findings gate; `--fail-on findings` exits 1 for an analysed file with quality below 70 or a function with complexity above 20, usage exits 2, and incomplete/output failure exits 3.
@@ -74,12 +74,10 @@ Guides >200 lines show the first section by default (progressive disclosure). Ap
 **How options work (every noun):**
 
 ```text
-reveal NOUN TARGET --option value  ==  NOUN://TARGET?option=value  (same answer, same exit)
-A resource URI takes the noun's flags, with the same answer and exit (git://FILE --view history --limit 5).
-One name per idea: --limit/--offset, --sort [-]FIELD, --where 'FIELD OP VALUE',
+reveal NOUN TARGET --option value; a resource URI takes the same flags (git://FILE --view history --limit 5)
+One name per idea: --limit/--offset (0 = no cap), --sort [-]FIELD, --where 'FIELD OP VALUE',
   --match TEXT, --detail LEVEL, --view NAME, --since/--until DATE, --against REF, --tests MODE
---limit 0 means no cap. A DATE is YYYY, YYYY-MM, YYYY-MM-DD, a time (YYYY-MM-DDTHH:MM) or today.
-On a URI, ?FIELD OP VALUE is the same filter as --where.
+A DATE is YYYY, YYYY-MM, YYYY-MM-DD, a time (YYYY-MM-DDTHH:MM) or today.
 Switches take on/off: --churn off, --breadcrumbs off, --respect-gitignore off.
 Filters and selections repeat and combine; settings take one value (twice, differently: exit 2).
 One answer per request; an option the selected answer does not use exits 2 and names the ones it does.
