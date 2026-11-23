@@ -3,8 +3,10 @@ query keep answering a positional element, with its note, until the cut; a bound
 
 Shared owners: ``cli/invocation.py`` (the rows and ``element_retirement``), the CLI's URI route (``uri._resolve``, which
 also classifies a bound constructor's refusal as the request's fault) and ``api.query``. Effect on every noun: only
-``help://`` and ``reveal://`` have a row; every other bound noun (env, stats, sqlite, json, the analysis nouns...)
-refuses an element exactly as before, and unbound adapters and plugins never reach the check.
+``help://``, ``reveal://`` and ``diff://`` have a row; every other bound noun (env, stats, sqlite, json, the analysis
+nouns...) refuses an element exactly as before. The row is read whether or not the scheme binds its query (BACK-2768):
+``diff://`` binds nothing and its element answered unnoted; every other unbound adapter and plugin has no row, so its
+element answers exactly as before.
 """
 import json
 import sys
@@ -20,17 +22,61 @@ from reveal.cli.invocation import RETIREMENTS, element_retirement  # noqa: E402
 pytestmark = [pytest.mark.unit]
 
 
-def test_only_help_and_reveal_keep_a_positional_element():
+def test_only_help_reveal_and_diff_keep_a_positional_element():
     rows = sorted(key for key in RETIREMENTS if key.startswith('target:') and key.endswith('.element'))
-    assert rows == ['target:help.element', 'target:reveal.element']
+    assert rows == ['target:diff.element', 'target:help.element', 'target:reveal.element']
     assert all(RETIREMENTS[key].stage == 'note' for key in rows)
     assert element_retirement('help') == 'target:help.element'
     assert element_retirement('reveal') == 'target:reveal.element'
+    assert element_retirement('diff') == 'target:diff.element'
 
 
 def test_the_notes_name_the_replacement():
     assert RETIREMENTS['target:help.element'].text == 'help:// TOPIC is deprecated and works until 1.0; use help://TOPIC.'
     assert 'reveal PATH ELEMENT' in RETIREMENTS['target:reveal.element'].text
+    assert RETIREMENTS['target:diff.element'].text == ('diff://LEFT:RIGHT ELEMENT is deprecated and works until 1.0; '
+                                                      'use diff://LEFT:RIGHT/ELEMENT.')
+
+
+def test_of_the_unbound_schemes_only_diff_has_a_row():
+    """Effect on every noun of reading the row for an unbound scheme too (BACK-2768): diff:// alone gains a note."""
+    import reveal.adapters  # noqa: F401
+    from reveal.adapters.base import get_adapter_class, list_supported_schemes
+    from reveal.adapters.factory import uses_bound_query_call
+    unbound = [s for s in list_supported_schemes() if not uses_bound_query_call(get_adapter_class(s))]
+    assert 'diff' in unbound and 'git' in unbound
+    assert [s for s in unbound if element_retirement(s)] == ['diff']
+
+
+def _diff_pair(tmp_path):
+    a, b = tmp_path / 'ok.py', tmp_path / 'ok2.py'
+    a.write_text('def ok():\n    return 1\n', encoding='utf-8')
+    b.write_text('def ok():\n    return 2\n', encoding='utf-8')
+    return f'diff://{a.as_posix()}::{b.as_posix()}'
+
+
+def _noted(doc):
+    return [w['field'] for w in (doc.get('meta') or {}).get('warnings') or [] if w.get('code') == 'retired_spelling']
+
+
+def test_cli_an_unbound_scheme_with_a_row_answers_its_element_with_the_note(tmp_path, monkeypatch):
+    uri = _diff_pair(tmp_path)
+    run = _run_reveal_direct(uri, 'ok', '--format', 'json')
+    assert run.returncode == 0, run.stderr
+    assert _noted(json.loads(run.stdout)) == ['target:diff.element']
+    monkeypatch.delitem(RETIREMENTS, 'target:diff.element')  # the row is the whole switch: without it, no note
+    run = _run_reveal_direct(uri, 'ok', '--format', 'json')
+    assert run.returncode == 0 and _noted(json.loads(run.stdout)) == [], run.stderr
+
+
+def test_api_an_unbound_scheme_with_a_row_answers_its_element_with_the_note(tmp_path, monkeypatch):
+    from reveal import api
+    uri = _diff_pair(tmp_path)
+    doc = api.query(uri, 'ok')
+    assert doc['type'] == 'diff_element' and _noted(doc) == ['target:diff.element']
+    monkeypatch.delitem(RETIREMENTS, 'target:diff.element')
+    doc = api.query(uri, 'ok')
+    assert doc['type'] == 'diff_element' and _noted(doc) == []
 
 
 # --- the CLI's URI route (uri._resolve) ------------------------------------------------------------------------------

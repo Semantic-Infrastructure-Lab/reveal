@@ -25,11 +25,12 @@ from reveal.errors import RequestValidationError, UnsupportedOverrideError  # no
 
 pytestmark = [pytest.mark.component]
 
-# help:// and reveal:// are declared nouns (BACK-2767). diff:// is held: its positional element is the only spelling
-# for a URI side (diff://git://A/f.py:git://B/f.py NAME; the embedded /NAME splits plain file paths only), so a note
-# naming diff://LEFT:RIGHT/ELEMENT would name a replacement that does not answer (BACK-2768).
-DIFF_HELD = pytest.mark.xfail(strict=True, reason='BACK-2768 diff:// held: the element form has no replacement for a '
-                                                  'URI side yet (pathread P5 section 4)')
+# help:// and reveal:// are declared nouns (BACK-2767). diff:// is not declared yet: its positional element is noted,
+# since the embedded /NAME answers for git:// sides too (BACK-2768), but an unknown key is disclosed as on every
+# adapter that reads no query (unknown_query_param, the answer runs) and an API keyword is forwarded; the refusal
+# (exit 2, UnsupportedOverrideError) comes with diff's declaration (BACK-2214, sized in the declare D3 report).
+DIFF_HELD = pytest.mark.xfail(strict=True, reason='BACK-2214 diff:// is not a declared noun: an unknown key is a '
+                                                  'warning until its declaration (declare D3 report)')
 
 ELEMENT_FORMS = {
     # key -> (CLI words, the answer's type, what the note names)
@@ -88,12 +89,7 @@ def test_mcp_refuses_an_unknown_query_key(pair, scheme):
 
 # --- the element form: the same answer, plus one note naming the replacement ----------------------------------------
 
-def _element_keys():
-    return [pytest.param(key, marks=DIFF_HELD) if key.startswith('target:diff.') else key
-            for key in sorted(ELEMENT_FORMS)]
-
-
-@pytest.mark.parametrize('key', _element_keys())
+@pytest.mark.parametrize('key', sorted(ELEMENT_FORMS))
 def test_cli_element_form_answers_with_its_note(pair, key):
     words, answer_type, replacement = ELEMENT_FORMS[key]
     run = _run_reveal_direct(*(w.format(**pair) for w in words), '--format', 'json')
@@ -105,7 +101,7 @@ def test_cli_element_form_answers_with_its_note(pair, key):
     assert replacement in notes[0]['message'], notes[0]['message']
 
 
-@pytest.mark.parametrize('key', _element_keys())
+@pytest.mark.parametrize('key', sorted(ELEMENT_FORMS))
 def test_api_element_form_answers_with_its_note(pair, key):
     words, answer_type, replacement = ELEMENT_FORMS[key]
     uri, element = (w.format(**pair) for w in words)
