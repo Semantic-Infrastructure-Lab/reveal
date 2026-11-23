@@ -762,6 +762,30 @@ def test_composed_queries_are_canonical(bindings, harness):
     assert not failures, '\n'.join(failures)
 
 
+def test_review_compositions_are_canonical(bindings, harness):
+    """``reveal review`` and the MCP tool ``reveal_review`` are no declared noun, so the sweep above never runs them, yet
+    both rank files through metrics in-process. The cut deletes metrics' legacy hotspots and top, and reveal_review
+    keeps its name and answer past it (BACK-2071), so each review, whole tree and diff-scoped, binds metrics' declared
+    controls only (BACK-2149)."""
+    from reveal import mcp_server
+    # The harness root is the repository: wide/app.py changed after the branch ``first``.
+    targets = ['proj'] + (['first..HEAD'] if (harness.root / '.git').exists() else [])
+    failures = []
+    for target in targets:
+        start = len(bindings)
+        failures += _built_legacy(bindings, harness, [('review', target), ('review', target, '--format', 'json')])
+        mcp_start = len(bindings)
+        with harness._hermetic():
+            assert mcp_server.reveal_review(target).lstrip().startswith(f'Review: {target}')
+        failures += sorted({f'reveal_review({target!r}) binds {key!r} ({row}) on {scheme}'
+                            for declarations, scheme, keys in bindings[mcp_start:] for key in keys
+                            if (row := _legacy_key(declarations, key, scheme or '?'))})
+        # Positive control: the recorder saw metrics composed by the CLI and by the MCP tool for this target.
+        assert {scheme for _, scheme, _ in bindings[start:mcp_start]} & {'metrics', 'stats'}, target
+        assert {scheme for _, scheme, _ in bindings[mcp_start:]} & {'metrics', 'stats'}, target
+    assert not failures, '\n'.join(failures)
+
+
 def test_the_collector_reads_hints_and_maps_placeholders():
     """The collector's controls: a quoted URI, a command cut at its prose, a template mapped onto the fixture."""
     text = ("Next: reveal 'ast://src/?kind=function&sort=-complexity'\n"
