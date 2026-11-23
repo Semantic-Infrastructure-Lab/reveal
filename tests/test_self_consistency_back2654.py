@@ -428,15 +428,22 @@ def _raw_problems(harness, argv):
     if code == 2 and any(e.get('code') == 'invalid_request' for e in errors):
         problems.append(('invalid request', '', str(doc.get('error'))))
     for warning in meta.get('warnings') or []:
-        # The URI request's own note is not a printed spelling's fault: reveal's own hints and examples still teach URI forms
-        # (BACK-2713), counted by test_doc_uri_requests_only_fall (BACK-2716).
-        if isinstance(warning, dict) and warning.get('code') == 'retired_spelling' and not is_request_note(warning):
-            problems.append(('note', warning.get('field', ''), str(warning.get('message'))))
+        if isinstance(warning, dict) and warning.get('code') == 'retired_spelling':
+            kind = 'request note' if is_request_note(warning) else 'note'
+            problems.append((kind, warning.get('field', ''), str(warning.get('message'))))
     return problems
+
+
+# The first screens teach one spelling (BACK-2713): on them the URI request's own note is a fault as well. Elsewhere it
+# is not yet a printed spelling's fault: reveal's other hints and examples still teach URI forms (BACK-2713's later
+# steps), counted by test_doc_uri_requests_only_fall (BACK-2716).
+_ONE_SPELLING_SURFACES = re.compile(r'^(?:--agent-help|help://quick|MCP \w+)$')
 
 
 def _excused(problem, surface):
     kind, field, _ = problem
+    if kind == 'request note':
+        return not _ONE_SPELLING_SURFACES.match(surface)
     return kind == 'note' and _own_scheme_note(field, surface)
 
 
@@ -725,6 +732,10 @@ def test_the_judge_bites(harness):
     assert _problems(harness, ['ast://proj?depth>1'], 'test') == []
     _, out, _, _ = harness.run_subcommand(*_json_argv(['ast://proj?depth>1']))
     assert any(is_request_note(w) and '--where' in w['message'] for w in json.loads(out)['meta']['warnings'])
+    # ... except on the first screens, which teach one spelling (BACK-2713)
+    for surface in ('--agent-help', 'help://quick', 'MCP reveal_query'):
+        assert any(p.startswith('request note:') for p in _problems(harness, ['ast://proj?kind=function'], surface))
+    assert _problems(harness, ['ast', 'proj', '--kind', 'function'], '--agent-help') == []
     # a retired scheme's own help may name it; another surface may not
     assert _problems(harness, ['deps://proj'], 'help://deps') == []
     assert _problems(harness, ['deps://proj'], 'overview://proj')
