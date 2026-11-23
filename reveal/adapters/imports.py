@@ -170,10 +170,10 @@ def _importers_value(value: Any) -> Any:
 SCOPE_ROOT, SCOPE_PATH = 'root', 'path'
 _SCOPE = ParamSpec(
     'scope', 'string',
-    'root (default): resolve at the project root the climb finds (?root=, .reveal.yaml root: true, '
+    'root (default): resolve at the project root the climb finds (--root, .reveal.yaml root: true, '
     'package marker, VCS root, else the requested directory) and show rows under the requested path, '
     'counting importers from anywhere under the root. path: the requested path is the scan root, '
-    'as imports:// resolved before (architecture, overview, pack and diff pass it)',
+    'as imports resolved before (architecture, overview, pack and diff pass it)',
     SCOPE_ROOT, _choice_value,
     examples=('imports://src?sort=-fan-in&scope=path',), choices=(SCOPE_ROOT, SCOPE_PATH),
     role='analysis', cli=_request_cli('scope'),
@@ -203,8 +203,7 @@ _ROOT = ParamSpec(
 _SCAN_LIMIT = ParamSpec(
     'scan-limit', 'integer',
     'Source files the walk may keep (default 20000, minimum 1): an input budget, not a row cap; a capped walk '
-    'is incomplete (exit 3), disclosed in metadata.scan_budget and as a warning, never silently partial. '
-    'Legacy max_files (--max-files) is the same budget',
+    'is incomplete (exit 3), disclosed in metadata.scan_budget and as a warning, never silently partial',
     import_analysis.DEFAULT_FILE_CAP, _max_files_value, examples=('imports://.?importers&scan-limit=50000',), minimum=1,
     role='analysis', aliases=('scan_limit',), legacy=(LegacySpelling('max_files', flag='--max-files'),),
     cli=CliBinding(('--scan-limit',), dest='scan_limit', metavar='N'),
@@ -308,12 +307,12 @@ _EXTERNAL = ParamSpec(
     'Package table (the deps:// dashboard\'s, as JSON): every import of the files under the path classified on '
     'resolution truth first -- resolved in the tree (internal), stdlib (a language rule or marker, never Python\'s '
     'list for another language) or unresolved (third-party or an unresolved local) -- with uses per package, the '
-    'languages importing each unresolved package, and import statements per file. &tests=exclude drops test files',
+    'languages importing each unresolved package, and import statements per file. --tests exclude drops test files',
     False, boolean_value, ('imports://src?external', 'imports://src?external&scope=path'),
     role='operation', cli=CliBinding(('--external',), action='store_true'))
 _DETAIL = ParamSpec('detail', 'string', 'How much of the answer: normal (a summary) or full (every file in a cycle '
                     'group plus its cycle edges, all unused imports, all violations, every package; JSON adds '
-                    '"verbose": true). Legacy verbose and the global --verbose mean full. The default, ranking, '
+                    '"verbose": true). The default, ranking, '
                     'component and entry-point views refuse it', 'normal', _detail_value,
                     ('imports://src?circular&detail=full',), choices=_DETAIL_LEVELS, role='presentation',
                     legacy=(verbose_legacy('full', 'detail=full (--detail full)'),),

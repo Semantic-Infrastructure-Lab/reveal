@@ -103,7 +103,7 @@ def _flag_spec(name: str, description: str, role: str = 'analysis', dest: Option
 
 
 _CALLERS = _name_spec('callers', 'Function name to find callers of (reverse lookup): a bare NAME, since the '
-                      'callers index has no file filter (FILE:NAME exits 2); calls://<path>:<name> is shorthand '
+                      'callers index has no file filter (FILE:NAME exits 2); reveal calls <path>:<name> is shorthand '
                       'when no mode is given', 'callers=validate_item')
 # target is callers' older word: the same mode and answer (the parity probe proves it), noted (BACK-2654).
 _CALLERS = replace(_CALLERS, legacy=(LegacySpelling('target', flag='--target'),))
@@ -212,16 +212,14 @@ def _dot_rejection(mode: str, supplied: Dict[str, Any]) -> Optional[str]:
 _HELP: Dict[str, Any] = {
     'name': 'calls',
     'description': 'Cross-file call graph queries — find callers or callees of any function.',
-    'syntax': 'calls://<path>?callers=<function>[&depth=N][&format=dot|json]\n'
-              '         calls://<path>?callees=<function>|<file>:<function>[&depth=N][&detail]\n'
-              '         calls://<path>:<function>           # shorthand — infers ?callers=<function>\n'
-              '         reveal calls <path> --callers NAME [--depth N] | --callees NAME [--depth N] [--detail] | '
-              '--sort=-callers [--limit N] | --uncalled | --modules',
+    'syntax': 'reveal calls <path> --callers NAME [--depth N] [--format dot]\n'
+              '         reveal calls <path> --callees NAME|FILE:NAME [--depth N] [--detail] [--format dot]\n'
+              '         reveal calls <path> --sort=-callers [--limit N]\n'
+              '         reveal calls <path>:<function>           # shorthand for --callers <function>',
     'parameters': {spec.name: spec.description for spec in _PARAM_SPECS},
-    'epilog': 'One mode per request: --callers, --callees, --sort, --uncalled or --modules '
-              '(calls://<path>?callers=NAME and the rest are the same request). Two modes exit 2. A callee '
-              'walk beyond depth 1 and --detail are not measured (W-CALLS-9). The retired --target and --root '
-              '(?target=, ?root=) still answer, with a note naming --callers and --callees NAME --depth N.',
+    'epilog': 'One mode per request: --callers, --callees or --sort. Two modes exit 2. A callee walk beyond '
+              'depth 1 and --detail are not measured (W-CALLS-9). (legacy --target, --root, --uncalled and '
+              '--modules still answer, with a note naming the replacement)',
     'examples': [
         {'uri': 'calls://src/?callers=validate_item',
          'description': 'Who calls validate_item? (reverse lookup)'},

@@ -17,12 +17,12 @@ _SCHEMA_QUERY_PARAMS = {
     },
     'until': {
         'type': 'string',
-        'description': 'Upper date bound, the whole day included. Pairs with ?since= for date range queries. Applies to session listings and cross-session search',
+        'description': 'Upper date bound, the whole day included. Pairs with --since for date range queries. Applies to session listings and cross-session search',
         'examples': ['?since=2026-06-10&until=2026-06-12', '?until=2026-06-01']
     },
     'word': {
         'type': 'flag',
-        'description': 'Whole-word match for ?match= (cross-session search only). Prevents substring matches.',
+        'description': 'Whole-word match for --match (cross-session search only). Prevents substring matches.',
         'examples': ['?match=auth&word']
     },
     'snippet': {
@@ -52,7 +52,7 @@ _SCHEMA_QUERY_PARAMS = {
     },
     'patches': {
         'type': 'boolean',
-        'description': 'Include file patch/diff content in the files-touched view (?patches=true)',
+        'description': 'Include file patch/diff content in the files-touched view (--patches true)',
         'examples': ['?patches=true']
     },
     'digest': {

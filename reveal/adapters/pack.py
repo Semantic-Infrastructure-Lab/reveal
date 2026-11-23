@@ -882,7 +882,7 @@ _CONTENT = ParamSpec('content', 'boolean', 'Include tiered file content (full/st
 # Pack's verbose adds detail (the per-file breakdown): detail=full, keeping the JSON verbose key (COMMAND_MODEL
 # "Detail", BACK-2654 rule 4).
 _DETAIL = ParamSpec('detail', 'string', 'normal, or full: adds the per-file token/line-count breakdown (JSON '
-                    '"verbose": true). Legacy verbose and the global --verbose mean full', 'normal', str,
+                    '"verbose": true)', 'normal', str,
                     ('detail=full',), choices=('normal', 'full'), role='presentation',
                     legacy=(verbose_legacy('full', 'detail=full (--detail full)'),),
                     cli=CliBinding(('--detail',), metavar='LEVEL'))

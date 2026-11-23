@@ -1096,7 +1096,7 @@ class ClaudeAdapter(ResourceAdapter):
                 "  reveal claude sessions --where 'session~=auth' --limit 10\n"
                 '  reveal claude session/NAME --view messages --sort=-message_index --limit 3\n'
                 '  reveal claude session/NAME --view errors --match failed\n'
-                'One-string form: claude://session/NAME?view=messages&limit=3\n'
+                'Resource form: claude://session/NAME --view messages --limit 3\n'
                 'Input/source budgets remain separate from row pagination.'
             ),
             'examples': _HELP_EXAMPLES,

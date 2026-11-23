@@ -203,7 +203,7 @@ def get_help() -> Dict[str, Any]:
         'syntax': 'reveal json FILE[/KEY] [--where EXPR] [--view VIEW]',
         'epilog': ('Array predicates: --where EXPR (repeat to AND); --sort FIELD; --limit N; --offset N.\n'
                    'Views: value, schema, flatten, type, keys, length. Flatten text: --detail raw.\n'
-                   'URI: json://FILE[/KEY]?where=EXPR&view=VIEW (percent-encode canonical expressions).\n'
+                   'URI: json://FILE[/KEY] takes the same flags (--where EXPR --view VIEW).\n'
                    'Legacy first bare selectors, including ?gron&data-only, still work.\n'
                    'Reads one JSON file; directory-walking exclusions do not apply.'),
         'path_syntax': get_path_syntax(),
