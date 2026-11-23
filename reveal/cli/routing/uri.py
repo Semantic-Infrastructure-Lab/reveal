@@ -740,15 +740,21 @@ def _resolve(adapter_class: type, renderer_class: type[Any], scheme: str, resour
     # its query as a declared noun reads none, whatever its renderer offers: the retired stats:// refuses as metrics://
     # and api.query do (BACK-2694).
     from ...adapters.factory import uses_bound_query_call
+    from ..invocation import element_retirement
     if element and (uses_bound_query_call(adapter_class) or (
             not hasattr(renderer_class, 'render_element') and not getattr(adapter_class, 'LEGACY_INIT', True))):
-        _fail_unread_element(adapter_class, scheme, resource, element)
+        # A scheme whose element is a legacy spelling answers it with its note until the cut (BACK-2764).
+        if element_retirement(scheme) is None:
+            _fail_unread_element(adapter_class, scheme, resource, element)
+    # A class that binds its query in its constructor refuses a control it does not take there: the request's fault
+    # (exit 2) whether or not its operation is qualified (help://, reveal://; BACK-2764).
+    binds_query = facts_of is not None or uses_bound_query_call(adapter_class)
     if isinstance(adapter_class, type) and hasattr(adapter_class, 'from_uri'):
         adapter = _call_adapter(lambda: adapter_class.from_uri(scheme, resource, element),
-                                scheme, resource, adapter_class, classify_validation=facts_of is not None)
+                                scheme, resource, adapter_class, classify_validation=binds_query)
     else:
         adapter = _call_adapter(lambda: _default_from_uri(adapter_class, scheme, resource, element),
-                                scheme, resource, adapter_class, classify_validation=facts_of is not None)
+                                scheme, resource, adapter_class, classify_validation=binds_query)
 
     _configure_base_path(adapter, args, scheme, resource, adapter_class, qualified=facts_of is not None)
 
