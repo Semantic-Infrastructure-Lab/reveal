@@ -62,11 +62,11 @@ what Reveal does that normal code utilities do not.
 ### Architectural gravity and impact radius
 
 ```bash
-reveal 'calls://src/?sort=-callers&limit=20'
-reveal 'calls://src/?callers=main&format=dot' | dot -Tsvg > callgraph.svg
+reveal calls src/ --sort=-callers --limit 20
+reveal calls src/ --callers main --format dot | dot -Tsvg > callgraph.svg
 ```
 
-**Why this matters:** `calls://` gives you coupling hotspots, impact radius,
+**Why this matters:** `reveal calls` gives you coupling hotspots, impact radius,
 and graph export from the CLI.
 
 ### Agent-ready PR context
@@ -82,7 +82,7 @@ runs the quality rules on exactly the files the range touched.
 ### Testability pressure
 
 ```bash
-reveal 'patches://tests?view=target&limit=20'
+reveal patches tests --view target --limit 20
 reveal patches src --view pressure --tests tests
 ```
 
@@ -104,7 +104,7 @@ orphan detection.
 
 ```bash
 reveal claude://
-reveal 'claude://sessions/?match=auth'
+reveal claude://sessions/ --match auth
 reveal claude://config
 ```
 
@@ -238,16 +238,16 @@ reveal ast ./src --where 'complexity>10' --where 'lines>50'
 
 ```bash
 # See all imports
-reveal imports://src/
+reveal imports src/
 
 # Find circular dependencies
-reveal 'imports://src?circular'
+reveal imports src --circular
 
 # Check layer violations
-reveal 'imports://src?violations'
+reveal imports src --violations
 
 # Get statistics
-reveal metrics://./src
+reveal metrics ./src
 ```
 
 ### Cross-codebase analysis
@@ -291,8 +291,8 @@ reveal ast src --where 'name=*exception*'
 reveal src/handlers.py error_handler
 
 # Check environment configuration
-reveal env://
-reveal env://DATABASE_URL
+reveal env
+reveal env DATABASE_URL
 ```
 
 ### Self-referential diagnosis
@@ -382,10 +382,10 @@ reveal ast ./src --where 'complexity>10' --where 'lines<50'
 
 ```bash
 # What do tests patch most often?
-reveal 'patches://tests?view=target&limit=20'
+reveal patches tests --view target --limit 20
 
 # Which tests need many patches?
-reveal 'patches://tests?view=test&min=3'
+reveal patches tests --view test --min 3
 
 # Join patch pressure with production boundary fan-out
 reveal patches src --view pressure --tests tests
@@ -403,7 +403,7 @@ Follow up on a reported function:
 ```bash
 reveal src/module.py function_name --view boundary
 reveal src/module.py function_name --view effects
-reveal 'calls://src?callees=function_name'
+reveal calls src --callees function_name
 ```
 
 ### Complexity analysis
@@ -548,7 +548,7 @@ reveal src/module.py --outline
 # After: Verify improvements
 reveal diff://git://HEAD/src/module.py:src/module.py
 reveal check src/module.py
-reveal 'imports://src?circular'
+reveal imports src --circular
 ```
 
 ### Find duplication
@@ -565,39 +565,39 @@ reveal check src/module.py --select D001,D002
 
 ```bash
 # Who calls this function across the whole project? (reverse/impact)
-reveal 'calls://src/?callers=validate_item'
+reveal calls src/ --callers validate_item
 
-# Shorthand — colon syntax (equivalent to ?callers=)
-reveal 'calls://src/auth.py:validate_item'
+# Shorthand — colon syntax (equivalent to --callers)
+reveal calls src/auth.py:validate_item
 
 # What does this function call? (forward/dependency, builtins hidden)
-reveal 'calls://src/?callees=process_request'
+reveal calls src/ --callees process_request
 
 # Include Python builtins — useful to audit for eval/open/exec
-reveal 'calls://src/?callees=process_request&builtins=true'
+reveal calls src/ --callees process_request --builtins
 
 # Transitive: callers-of-callers (2 levels deep)
-reveal 'calls://src/?callers=validate_item&depth=2'
+reveal calls src/ --callers validate_item --depth 2
 
 # Most-called functions in the project (coupling hotspots)
-reveal 'calls://src/?sort=-callers'
-reveal 'calls://src/?sort=-callers&limit=20'
+reveal calls src/ --sort=-callers
+reveal calls src/ --sort=-callers --limit 20
 
 # Generate Graphviz call graph (pipe to dot)
-reveal 'calls://src/?callers=main&format=dot' | dot -Tsvg > callgraph.svg
+reveal calls src/ --callers main --format dot | dot -Tsvg > callgraph.svg
 ```
 
-**Before refactoring a function:** run `?callers=fn` to see impact radius — everything that calls it.
-**Before splitting a function:** run `?callees=fn` to see its full dependency surface.
-**Is it used?** If `?callers=fn` returns 0 callers, check for dynamic use (`getattr`, framework hooks, entry points) before removing it. For a project-wide dead-code list use the language's own tool (vulture, knip, staticcheck/deadcode, rustc `dead_code`, Roslyn IDE0051, Periphery, Psalm); `calls ?uncalled` is retired.
+**Before refactoring a function:** run `--callers fn` to see impact radius — everything that calls it.
+**Before splitting a function:** run `--callees fn` to see its full dependency surface.
+**Is it used?** If `--callers fn` returns 0 callers, check for dynamic use (`getattr`, framework hooks, entry points) before removing it. For a project-wide dead-code list use the language's own tool (vulture, knip, staticcheck/deadcode, rustc `dead_code`, Roslyn IDE0051, Periphery, Psalm); `calls --uncalled` is retired.
 
 Functions imported under aliases are resolved — `from utils import helper as h` means a call to `h` is a caller of `helper`.
 
 ```bash
 # What does process call, and what do those call? (forward walk)
-reveal 'calls://src/?callees=process&depth=2'
-# Each function's calls/called_by lists for one file (the ast:// calls=, callee_of= and
-# show=calls filters are retired and print a note naming calls://)
+reveal calls src/ --callees process --depth 2
+# Each function's calls/called_by lists for one file (AST's calls, callee_of and show=calls
+# filters are retired and print a note naming reveal calls)
 reveal ast src/auth.py --kind function --format json
 ```
 
@@ -605,32 +605,32 @@ reveal ast src/auth.py --kind function --format json
 
 ### Trace module-level dependencies (reverse import graph)
 
-`imports://<path>?importers` answers "what imports *this*?" (`depends://` is its retired spelling: a note, the old answer, until the cut).
+`reveal imports <path> --importers` answers "what imports *this*?" (`depends://` is its retired spelling: a note, the old answer, until the cut).
 
 ```bash
 # Who imports this module?
-reveal 'imports://src/utils.py?importers'
+reveal imports src/utils.py --importers
 
 # Who imports anything in models/?
-reveal 'imports://src/models?importers'
+reveal imports src/models --importers
 
 # Most-imported (high-coupling) modules — change these carefully
-reveal 'imports://src?sort=-fan-in&limit=10'
+reveal imports src --sort=-fan-in --limit 10
 
 # Full reverse dependency graph (pipe to Graphviz)
-reveal 'imports://src?importers&format=dot' | dot -Tsvg > deps.svg
+reveal imports src --importers --format dot | dot -Tsvg > deps.svg
 ```
 
 **Key use cases:**
-- **Impact analysis before refactoring** — run `imports://src/utils.py?importers` to see every importer before touching a module
+- **Impact analysis before refactoring** — run `reveal imports src/utils.py --importers` to see every importer before touching a module
 - **Safe deletion** — verify `count: 0` before removing a module
-- **Coupling audit** — `?sort=-fan-in&limit=N` ranks modules by fan-in; high fan-in = high blast radius if changed
+- **Coupling audit** — `--sort=-fan-in --limit N` ranks modules by fan-in; high fan-in = high blast radius if changed
 
-| Adapter | Question | Direction |
+| Command | Question | Direction |
 |---------|----------|-----------|
-| `imports://src` | What does this code import? | Forward |
-| `imports://src/module.py?importers` | What imports this module? | Reverse |
-| `calls://src/?callers=fn` | Who calls this function? | Reverse (function level) |
+| `reveal imports src` | What does this code import? | Forward |
+| `reveal imports src/module.py --importers` | What imports this module? | Reverse |
+| `reveal calls src/ --callers fn` | Who calls this function? | Reverse (function level) |
 
 **Limitations:** Dynamic imports (`importlib.import_module`) and `TYPE_CHECKING`-only imports are not tracked.
 
@@ -1136,27 +1136,27 @@ The `claude://` adapter reads Claude Code session files (`.jsonl` in `~/.claude/
 reveal claude://
 
 # Filter by project
-reveal 'claude://?where=session~=reveal'
+reveal claude:// --where 'session~=reveal'
 
 # Sessions from today only
-reveal 'claude://?since=today'
+reveal claude:// --since today
 ```
 
 ### Search across sessions
 
 ```bash
 # Find all sessions that mention a keyword
-reveal 'claude://?match=migration'
+reveal claude:// --match migration
 
 # Scope to recent sessions (recommended for large histories)
-reveal 'claude://?match=authentication&since=today'
-reveal 'claude://?match=deployment&since=2026-03-01'
+reveal claude:// --since today --match authentication
+reveal claude:// --since 2026-03-01 --match deployment
 
 # Path-style alias (same result)
 reveal 'claude://search/migration'
 ```
 
-**Why:** With 2,000+ sessions, scanning manually doesn't scale. `?search=` pre-filters with a parallel byte scan; add `since=` to bound the scan on large histories.
+**Why:** With 2,000+ sessions, scanning manually doesn't scale. `--match` keeps the sessions that mention the term; add `--since` to bound the scan on large histories.
 
 ### Track file history across sessions
 
@@ -1168,7 +1168,7 @@ reveal 'claude://files/src/auth.py'
 reveal 'claude://files/auth.py'
 
 # Scope to recent sessions
-reveal 'claude://files/operations.py?since=today'
+reveal claude://files/operations.py --since today
 ```
 
 **What you get:** Session name, project, date, and Read/Edit/Write counts per session. Answers "what sessions changed this?" at the AI-interaction level — `git log` doesn't capture this.
@@ -1186,7 +1186,7 @@ reveal claude://session/my-session-name/messages
 reveal claude://session/my-session-name/files
 
 # Errors encountered
-reveal 'claude://my-session-name?errors'
+reveal claude://my-session-name --errors
 
 # Workflow (tool call sequence, collapsed duplicates)
 reveal claude://session/my-session-name/workflow
@@ -1196,10 +1196,10 @@ reveal claude://session/my-session-name/workflow
 
 ```bash
 # Last assistant message (fast session recovery)
-reveal 'claude://session/my-session-name/messages?sort=-message_index&limit=1'
+reveal claude://session/my-session-name/messages --limit 1 --sort=-message_index
 
 # Latest 5 assistant turns, latest-first
-reveal 'claude://session/my-session-name/messages?sort=-message_index&limit=5'
+reveal claude://session/my-session-name/messages --limit 5 --sort=-message_index
 ```
 
 ### Inspect Claude install state
@@ -1210,11 +1210,11 @@ reveal claude://info
 
 # MCP registrations and install flags
 reveal claude://config
-reveal 'claude://config?key=installMethod'
+reveal claude://config --key installMethod
 
 # Prompt history across all projects
 reveal claude://history
-reveal 'claude://history?match=deploy'
+reveal claude://history --match deploy
 
 # Saved plans, memory, agents, and hooks
 reveal claude://plans
@@ -1254,7 +1254,7 @@ reveal src/app.py --format=json | jq '.structure.functions'
 reveal ast src --where 'lines>100' --kind function --format=json | jq '.results[] | {file, name, line_count}'
 
 # Get complexity metrics
-reveal metrics://src/ --format=json | jq '.summary.avg_quality_score'
+reveal metrics src/ --format=json | jq '.summary.avg_quality_score'
 ```
 
 ### Batch operations
@@ -1494,7 +1494,7 @@ reveal analysis.ipynb --format=json
 ## Advanced Multi-Adapter Patterns
 
 ### Pattern 1: The Complexity Drill-Down
-**Combine**: `metrics://` → `ast://` → `diff://` → `git://`
+**Combine**: `reveal metrics` → `reveal ast` → `diff://` → `reveal git`
 
 ```bash
 # 1. Find hotspots
@@ -1511,11 +1511,11 @@ reveal git src/hotspot.py --view blame --element complex_function
 ```
 
 ### Pattern 2: The Import Archaeology
-**Combine**: `imports://` → `ast://` → `git://`
+**Combine**: `reveal imports` → `reveal ast` → `reveal git`
 
 ```bash
 # 1. Find circular dependencies
-reveal 'imports://src?circular'
+reveal imports src --circular
 
 # 2. Identify functions involved in cycle
 reveal ast src/module_a.py --kind function
@@ -1527,7 +1527,7 @@ reveal git src/module_b.py --view history
 ```
 
 ### Pattern 3: The Config Drift Detector
-**Combine**: `json://` → shell `diff` → `env://`
+**Combine**: `reveal json` → shell `diff` → `reveal env`
 
 ```bash
 # 1. Understand config structure
@@ -1537,11 +1537,11 @@ reveal json config.json --view schema
 diff <(reveal json config.dev.json --view flatten) <(reveal json config.prod.json --view flatten)
 
 # 3. Check environment variables
-reveal env://
+reveal env
 ```
 
 ### Pattern 4: The Security Sweep
-**Combine**: `ast://` → `git://` → `env://`
+**Combine**: `reveal check` → `reveal git` → `reveal env`
 
 ```bash
 # 1. Check for code-level security issues (B001-B006, S001, S701)
@@ -1551,11 +1551,11 @@ reveal check src/ --select B,S
 reveal git src/insecure.py --view blame --element bad_function
 
 # 3. Check for secrets in env
-reveal env:// --format=json | jq '[.categories[] | .[] | select(.sensitive==true)]'
+reveal env --format=json | jq '[.categories[] | .[] | select(.sensitive==true)]'
 ```
 
 ### Pattern 5: The Documentation Validator
-**Combine**: `markdown://` → `ast://` → `diff://`
+**Combine**: `reveal check` → `diff://`
 
 ```bash
 # 1. Check for broken links across all docs
@@ -1579,7 +1579,7 @@ reveal diff://git://HEAD~1/docs:docs
 reveal src/
 
 # Layer 2: Stats (~200 tokens)
-reveal metrics://./src
+reveal metrics ./src
 
 # Layer 3: Hotspots (~500 tokens)
 reveal metrics ./src --view hotspots
@@ -1600,7 +1600,7 @@ Each layer costs hundreds of tokens instead of whole files; measured savings are
 reveal ast ./src --where 'complexity>15' --format=json
 
 # "Are there circular dependencies?"
-reveal 'imports://src?circular'
+reveal imports src --circular
 
 # "Who wrote this function?"
 reveal git src/app.py --view blame --element process
@@ -1644,10 +1644,10 @@ reveal app.py --format=json | \
 ### Scenario: Technical Due Diligence
 
 ```bash
-reveal metrics://./src > due_diligence/stats.txt
+reveal metrics ./src > due_diligence/stats.txt
 reveal metrics ./src --view hotspots > due_diligence/hotspots.txt
 reveal ast ./src --where 'complexity>20' > due_diligence/complex_functions.txt
-reveal 'imports://src?circular' > due_diligence/circular_deps.txt
+reveal imports src --circular > due_diligence/circular_deps.txt
 find src/ -name "*.py" | reveal --stdin --check --select=B,S > due_diligence/security.txt
 reveal mysql://prod > due_diligence/db_health.txt
 reveal git://.
@@ -1665,17 +1665,17 @@ reveal ast ./src --where 'complexity>20'
 reveal ast ./src --where 'lines>100'
 
 # Track improvement
-reveal metrics://./src --format=json > perf_before.json
+reveal metrics ./src --format=json > perf_before.json
 # ... optimize ...
-reveal metrics://./src --format=json > perf_after.json
+reveal metrics ./src --format=json > perf_after.json
 ```
 
 ### Scenario: Security Audit
 
 ```bash
 find src/ -name "*.py" | reveal --stdin --check --select=B,S
-reveal env:// --format=json | jq '[.categories[] | .[] | select(.sensitive==true)]'
-reveal 'imports://src' | grep -v "^from \."   # external deps
+reveal env --format=json | jq '[.categories[] | .[] | select(.sensitive==true)]'
+reveal imports src | grep -v "^from \."   # external deps
 reveal git://.                                  # maintainer activity
 ```
 
@@ -1692,13 +1692,13 @@ reveal .                                 # Map directory structure
 reveal src/                              # Explore subdirectory
 reveal ast ./src --where 'name=*pattern*'      # Find by name
 reveal ast ./src --where 'complexity>10'       # Find by complexity
-reveal 'imports://src?circular'          # Find circular imports
+reveal imports src --circular          # Find circular imports
 reveal metrics ./src --view hotspots         # Find technical debt
-reveal 'calls://src/?callers=fn'          # Who calls fn? (cross-file reverse)
-reveal 'calls://src/file.py:fn'          # Shorthand for ?callers=fn
-reveal 'calls://src/?callees=fn'         # What does fn call? (cross-file forward)
-reveal 'calls://src/?sort=-callers'       # Most-called functions (coupling metrics)
-reveal 'claude://?match=term'           # Search session history for keyword
+reveal calls src/ --callers fn          # Who calls fn? (cross-file reverse)
+reveal calls src/file.py:fn          # Shorthand for --callers fn
+reveal calls src/ --callees fn         # What does fn call? (cross-file forward)
+reveal calls src/ --sort=-callers       # Most-called functions (coupling metrics)
+reveal claude:// --match term           # Search session history for keyword
 reveal 'claude://files/path/to/file.py'  # Sessions that touched this file
 reveal markdown docs/ --view links     # Cross-file doc link graph
 reveal markdown docs/ --view aggregate --field type # Frontmatter field frequency table
@@ -1738,7 +1738,7 @@ reveal diff://git://main/.:git://feat/.  # Branch comparison
 
 ```bash
 reveal reveal://config                   # Show active config
-reveal env://                            # Environment variables
+reveal env                               # Environment variables
 ```
 
 ### AST query operators

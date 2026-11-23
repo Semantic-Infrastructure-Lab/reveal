@@ -95,7 +95,7 @@ Config that cannot be used fails the request: missing or invalid exits 2, unread
 
 ```bash
 # CLI discovery flags — what reveal can do
-reveal --adapters                # List every URI adapter (ast://, git://, claude://, ...)
+reveal --adapters                # List every URI adapter (git://, claude://, json://, ...)
 reveal --languages               # List every supported language
 reveal --discover                # Dump full adapter registry as JSON (schemas + params)
 reveal --capabilities <file>     # What can be extracted from this file (JSON)
@@ -246,7 +246,7 @@ reveal help://examples/sessions --format=json        # Claude Code and Codex CLI
 4. **Deep** - Read tool on extracted function only (last resort)
 
 **Why this isn't just about tokens:**
-Reading structure before content isn't a savings hack — it's how you avoid a confident conclusion built on a fragment. A function read in isolation looks safe to change; the same function read after `reveal calls://` shows it's three call sites deep in a hot path. Skipping straight to content gets you an answer, but not one you can trust: it looks the same whether it's right or wrong, because you never saw the shape it sits in. Orient (what's here) → navigate (what's relevant) → focus (show me this) is the order that makes an agent's conclusions checkable — by you, and by the agent itself before it acts.
+Reading structure before content isn't a savings hack — it's how you avoid a confident conclusion built on a fragment. A function read in isolation looks safe to change; the same function read after `reveal calls` shows it's three call sites deep in a hot path. Skipping straight to content gets you an answer, but not one you can trust: it looks the same whether it's right or wrong, because you never saw the shape it sits in. Orient (what's here) → navigate (what's relevant) → focus (show me this) is the order that makes an agent's conclusions checkable — by you, and by the agent itself before it acts.
 
 ---
 
@@ -460,16 +460,16 @@ reveal file.py --name test --type function --sort=-complexity
 **Why use convenience flags?**
 - **Ergonomic**: Simpler syntax for common operations (80% use case)
 - **Familiar**: Similar to grep/find command patterns
-- **Progressive**: Use flags for simple queries, URI syntax for complex ones
+- **Progressive**: Use convenience flags for simple queries, `reveal ast` flags for complex ones
 
-**Convenience flags vs URI syntax:**
+**Convenience flags vs `reveal ast` flags:**
 
-| Task | Convenience Flags | URI Syntax |
+| Task | Convenience Flags | `reveal ast PATH` |
 |------|------------------|------------|
-| Find by name | `--name pattern` | `?name~=pattern` |
-| Filter type | `--type function` | `?type=function` |
-| Sort results | `--sort field` | `?sort=field` |
-| Complex query | ❌ (use URI) | `?complexity>10&lines>50&sort=-complexity` |
+| Find by name | `--name pattern` | `--where 'name~=pattern'` |
+| Filter type | `--type function` | `--kind function` |
+| Sort results | `--sort field` | `--sort field` |
+| Complex query | ❌ (use `reveal ast`) | `--where 'complexity>10' --where 'lines>50' --sort=-complexity` |
 
 **Example: Replace grep workflow**
 ```bash
@@ -527,10 +527,10 @@ cap, and `--head/--tail/--range` pick hits. `--format json` gives every group's 
 | `--name pattern` | Named elements whose **name** matches (functions, headings, classes) | Element list with line/complexity |
 | `--grep pattern` | Every **line** matching the text, grouped by enclosing element | Each hit's line text, by section/function |
 
-**When to use URI syntax instead:**
-- Multiple conditions: `?complexity>10&lines>50`
-- Range queries: `?lines=10..50`
-- Boolean logic: `?type=function|method`
+**When to use `reveal ast` instead:**
+- Multiple conditions: `--where 'complexity>10' --where 'lines>50'`
+- Range queries: `--where 'lines=10..50'`
+- Boolean logic: `--kind 'class|method'`
 - Advanced operators: `!=`, `~=`, `..`
 
 ---
@@ -662,9 +662,9 @@ rules:
 **Pattern:**
 ```bash
 # Raw patch pressure in tests
-reveal patches://tests
-reveal 'patches://tests?view=target&limit=20'
-reveal 'patches://tests?view=test&min=3'
+reveal patches tests
+reveal patches tests --view target --limit 20
+reveal patches tests --view test --min 3
 
 # Combined report: test patches + production boundary fan-out
 reveal patches src --view pressure --tests tests
@@ -680,7 +680,7 @@ reveal patches src --view pressure --tests tests --format json
 ```bash
 reveal src/module.py function_name --view boundary
 reveal src/module.py function_name --view effects
-reveal 'calls://src?callees=function_name'
+reveal calls src --callees function_name
 reveal surface src
 ```
 
@@ -855,7 +855,7 @@ reveal app.py process_batch --callsites               # all calls in the functio
 # L10:  results.append(value)
 # L12:  log_error(e)
 ```
-> **Disambiguation**: `--callsites` (this flag) lists call sites *within a line range* — it's a sub-element analysis tool. `calls://` (the URI adapter) is a project-level call graph — use `reveal 'calls://file.py?callers=myfunc'` to find which functions *across the project* call `myfunc`. Different scope, different question.
+> **Disambiguation**: `--callsites` (this flag) lists call sites *within a line range* — it's a sub-element analysis tool. `reveal calls` (the noun) is a project-level call graph — use `reveal calls src/ --callers myfunc` to find which functions *across the project* call `myfunc`. Different scope, different question.
 
 **`--around N` → verbatim context centered on a line**
 ```bash
@@ -1123,11 +1123,10 @@ reveal conversation.jsonl 42           # Record 42 (as --range 42-42 does)
 
 **JSONL is different:** Each line is a separate JSON object (common for logs, LLM conversations, datasets). `--head`, `--tail`, `--range` pick the records shown; the whole file is parsed either way. With none, the view shows the first 10 and says so.
 
-**json:// query parameters:**
-- `?schema` - Show JSON structure (types, keys)
-- `?flatten` - Gron-style output (greppable)
-- `?pretty` - Pretty-print JSON
-- `?keys` - List all keys at current path
+**`reveal json` views (`--view`):**
+- `--view schema` - Show JSON structure (types, keys)
+- `--view flatten` - Gron-style output (greppable)
+- `--view keys` - List all keys at current path
 
 **Example outputs:**
 ```bash
@@ -1220,7 +1219,7 @@ reveal git src/auth.py --view history --where 'content~=AuditLog'       # commit
 reveal git src/auth.py --view history --where 'content~=CURLOPT_TIMEOUT' --merges off
 
 # Element-scoped history — commits that actually changed a specific function
-# Runs analyzer per commit — use ?limit=N to keep it fast
+# Runs analyzer per commit — use --limit N to keep it fast
 reveal git src/auth.py --view history --element process_payment
 reveal git src/auth.py --view history --limit 10 --element process_payment
 
@@ -1252,18 +1251,18 @@ reveal git . --view ownership --scan-limit 500                      # cap the hi
 ```
 
 **When to use each mode:**
-- `?type=diff` — "what exactly did this commit change?" (replaces `git show`)
-- `?type=history&element=func` — "when was this function changed and by whom?" (replaces file history + manual grep)
-- `?type=history&content~=X` — "which commits introduced or removed this string?" (pickaxe search)
-- `?type=blame` — "who really owns these *lines*?" (surviving-line attribution; noise commits auto-suppressed; use `--auto-ignore off` for raw)
-- `?type=ownership` — "who owns this file/dir/repo by *commit-share*?" (primary author, contributor count, last touch — the input to a bus-factor / key-person read)
-- `?element=L128-L162` — blame for a procedural file or specific line range (no named element needed)
+- `--view diff` — "what exactly did this commit change?" (replaces `git show`)
+- `--view history --element func` — "when was this function changed and by whom?" (replaces file history + manual grep)
+- `--view history --where 'content~=X'` — "which commits introduced or removed this string?" (pickaxe search)
+- `--view blame` — "who really owns these *lines*?" (surviving-line attribution; noise commits auto-suppressed; use `--auto-ignore off` for raw)
+- `--view ownership` — "who owns this file/dir/repo by *commit-share*?" (primary author, contributor count, last touch — the input to a bus-factor / key-person read)
+- `--view blame --element L128-L162` — blame for a procedural file or specific line range (no named element needed)
 
-**Blame vs. ownership:** `?type=blame` is line-level (who wrote the *surviving lines* of one file). `?type=ownership` is commit-level and aggregates across a directory or repo (who has *committed* most). For a bus-factor map, compose `?type=ownership` per critical module — the fan-in ranking and key-person verdict are the consumer's call, reveal just surfaces the shares.
+**Blame vs. ownership:** `--view blame` is line-level (who wrote the *surviving lines* of one file). `--view ownership` is commit-level and aggregates across a directory or repo (who has *committed* most). For a bus-factor map, compose `--view ownership` per critical module — the fan-in ranking and key-person verdict are the consumer's call, reveal just surfaces the shares.
 
-**Shallow clone warning:** On a `--depth 1` clone (common for CI and security-review scans), `?type=blame` and `?type=ownership` print `⚠ Shallow clone detected — attribution is limited to the fetched history`. Run `git fetch --unshallow` first to get accurate key-person / bus-factor data.
+**Shallow clone warning:** On a `--depth 1` clone (common for CI and security-review scans), `--view blame` and `--view ownership` print `⚠ Shallow clone detected — attribution is limited to the fetched history`. Run `git fetch --unshallow` first to get accurate key-person / bus-factor data.
 
-**Performance note:** `?type=history&element=func` runs the analyzer once per commit per file. Use `?limit=10` or `?limit=20` for large file histories.
+**Performance note:** `--view history --element func` runs the analyzer once per commit per file. Use `--limit 10` or `--limit 20` for large file histories.
 
 ---
 
@@ -1273,22 +1272,22 @@ Use each view for its question:
 
 ```bash
 # Forward import graph: what modules does this tree import?
-reveal imports://src/
+reveal imports src/
 
 # Reverse imports: what depends on this module?
-reveal 'imports://src/?importers=validators.py'
+reveal imports src/ --importers validators.py
 
 # Declared contracts and their implementations (for supported contract kinds)
 reveal contracts src/
 
 # Rank modules by incoming import edges (fan-in)
-reveal 'imports://src/?sort=-fan-in'
+reveal imports src/ --sort=-fan-in
 
 # Named functions in the tree
 reveal ast src/ --kind function
 
-# Module edges: each module under src/ with the files that import it (calls ?modules is its retired spelling)
-reveal 'imports://src/?importers&scope=path'
+# Module edges: each module under src/ with the files that import it (calls --modules is its retired spelling)
+reveal imports src/ --scope path --importers
 ```
 
 For a class hierarchy within one file, use `reveal app.py --outline`.
@@ -1303,55 +1302,55 @@ inspect their warnings and confirm important edges in source.
 **Pattern:**
 ```bash
 # Cross-file: who calls a function across the entire project? (reverse)
-reveal 'calls://src/?callers=validate_item'
+reveal calls src/ --callers validate_item
 
 # Cross-file: what does a function call? (forward, builtins hidden by default)
-reveal 'calls://src/?callees=validate_item'
+reveal calls src/ --callees validate_item
 
 # ... and what those call, level by level, with params and effects (not measured: W-CALLS-9)
-reveal 'calls://src/?callees=validate_item&depth=2&detail'
+reveal calls src/ --callees validate_item --depth 2 --detail
 
 # Include Python builtins — useful to audit for eval/open/exec
-reveal 'calls://src/?callees=validate_item&builtins=true'
+reveal calls src/ --callees validate_item --builtins
 
 # Transitive: callers-of-callers (2 levels)
-reveal 'calls://src/?callers=validate_item&depth=2'
+reveal calls src/ --callers validate_item --depth 2
 
 # Graphviz: pipe to dot for SVG
-reveal 'calls://src/?callers=main&format=dot' | dot -Tsvg > callgraph.svg
+reveal calls src/ --callers main --format dot | dot -Tsvg > callgraph.svg
 
 # Coupling metrics: rank all functions by how many unique callers they have
-reveal 'calls://src/?sort=-callers'             # Top 10 most-called functions
-reveal 'calls://src/?sort=-callers&limit=20'      # Top 20
-reveal 'calls://src/?sort=-callers&builtins=true'  # Also rank builtins and library methods (dict.get)
+reveal calls src/ --sort=-callers             # Top 10 most-called functions
+reveal calls src/ --sort=-callers --limit 20      # Top 20
+reveal calls src/ --sort=-callers --builtins  # Also rank builtins and library methods (dict.get)
 
 # The same queries as a subcommand: one flag per query key, equal JSON
 reveal calls src/ --callers validate_item --depth 2
 reveal calls src/ --sort=-callers --limit 20
 ```
 
-One mode per request (`callers`, `callees`, `sort`, `modules`, or the retired `uncalled`): two exit 2 and name
-both, and a malformed value (`depth=abc`, `top=-1`, `callers=a.py:f`, `detail` without `callees`)
-exits 2 naming the parameter. The retired `?target=` and `?root=` still answer, with a note naming
-`?callers=` and `?callees=NAME&depth=N`. A name that names nothing (callees: no definition;
+One mode per request (`--callers`, `--callees`, `--sort`, or the retired `--modules` and `--uncalled`): two exit 2 and name
+both, and a malformed value (`--depth abc`, `--limit -1`, `--callers a.py:f`, `--detail` without `--callees`)
+exits 2 naming the parameter. The retired `--target` and `--root` still answer, with a note naming
+`--callers` and `--callees NAME --depth N`. A name that names nothing (callees: no definition;
 callers: no definition and no call site) exits 2 with the empty answer. Exit 3 means a file or
 directory could not be read, or a file has syntax tree-sitter could only recover from (`parse_recovered`, as in
-`ast://`); the answer still prints with its warning naming the files, and such a tree never claims a name is
+`reveal ast`); the answer still prints with its warning naming the files, and such a tree never claims a name is
 absent. A callee walk beyond depth 1
 and `detail` are not measured in any language (W-CALLS-9; the JSON `walk_rule` and the text `Rules:` pointer disclose
-so), a scanned call-source language with no recall snapshot (Elixir, Objective-C) withholds the confidence (W-CALLS-10), and so does a scope with no source file counted (W-CALLS-12). The retired `?uncalled` still answers, with a note and no confidence in any language (W-CALLS-11 names the measured precision for JS/TS, Java and PHP); use `?callers=NAME`.
+so), a scanned call-source language with no recall snapshot (Elixir, Objective-C) withholds the confidence (W-CALLS-10), and so does a scope with no source file counted (W-CALLS-12). The retired `--uncalled` still answers, with a note and no confidence in any language (W-CALLS-11 names the measured precision for JS/TS, Java and PHP); use `--callers NAME`.
 
-**Two adapters — different scopes:**
+**Two commands — different scopes:**
 
-| Adapter | Scope | Use For |
+| Command | Scope | Use For |
 |---------|-------|---------|
-| `calls://src/?callers=fn` | Cross-file, whole project | "Who calls fn anywhere?" (reverse) |
-| `calls://src/?callees=fn` | Cross-file, whole project | "What does fn call?" (forward, builtins hidden; add `&builtins=true` to include) |
-| `calls://src/?sort=-callers` | Cross-file, whole project | "Which functions are called most?" (coupling metrics) |
+| `reveal calls src/ --callers fn` | Cross-file, whole project | "Who calls fn anywhere?" (reverse) |
+| `reveal calls src/ --callees fn` | Cross-file, whole project | "What does fn call?" (forward, builtins hidden; add `--builtins` to include) |
+| `reveal calls src/ --sort=-callers` | Cross-file, whole project | "Which functions are called most?" (coupling metrics) |
 | `reveal ast src/ --kind function` | Per file | Each function's `calls`/`called_by` lists (JSON) |
 
-The `ast://` call filters `calls=`, `callee_of=` and `show=calls` are retired: each still answers with
-a note naming `calls://?callers=`/`?callees=` (or `--grep` for a `calls=*pattern*`).
+AST's call filters `calls=`, `callee_of=` and `show=calls` are retired: each still answers with
+a note naming `reveal calls --callers`/`--callees` (or `--grep` for a `calls=*pattern*`).
 
 **JSON output — call fields per function:**
 ```bash
@@ -1362,16 +1361,15 @@ reveal ast src/auth.py --kind function --format=json | \
 Fields:
 - `calls` — outgoing calls from this function
 - `called_by` — within-file callers
-- where each call lands across files: `calls://<path>?callees=FILE:NAME&depth=2` (`resolved_calls` is retired)
+- where each call lands across files: `reveal calls <path> --callees FILE:NAME --depth 2` (`resolved_calls` is retired)
 
-**See also:** `CALLS_ADAPTER_GUIDE.md` for full `calls://` documentation.
+**See also:** `CALLS_ADAPTER_GUIDE.md` for full `reveal calls` documentation.
 
 **Execution narrative — the callee walk with `--detail`:**
 
 ```bash
 # Level-by-level: what main calls, what those call, with params and classified side effects
 reveal calls src/ --callees main --depth 2 --detail
-reveal 'calls://src/?callees=main&depth=3&detail'          # the same request as a URI
 reveal calls src/ --callees src/app.py:main --depth 2      # FILE:NAME picks one file's definitions
 ```
 
@@ -1412,13 +1410,13 @@ On the next `reveal` run, `.myfmt` files are handled by `MyFormatAnalyzer` autom
 
 **Pattern:**
 ```bash
-reveal 'calls://src/?callers=validate_item'          # every caller the index sees, with file and line
-reveal 'calls://src/?callers=validate_item&depth=2'  # and their callers
+reveal calls src/ --callers validate_item          # every caller the index sees, with file and line
+reveal calls src/ --callers validate_item --depth 2  # and their callers
 ```
 
-For a whole-project dead-code list use the language's own tool: vulture (Python), knip (JS/TS), staticcheck or deadcode (Go), rustc `dead_code` (Rust), Roslyn IDE0051 (C#), Periphery (Swift), Psalm (PHP). `calls ?uncalled` is retired (D8): bare-name matching measured too imprecise to list candidates, so it still answers, with a note and no confidence, until the cut.
+For a whole-project dead-code list use the language's own tool: vulture (Python), knip (JS/TS), staticcheck or deadcode (Go), rustc `dead_code` (Rust), Roslyn IDE0051 (C#), Periphery (Swift), Psalm (PHP). `calls --uncalled` is retired (D8): bare-name matching measured too imprecise to list candidates, so it still answers, with a note and no confidence, until the cut.
 
-**Interpreting absence of evidence:** "No callers found" means no *static* callers were detected in the scanned path. It does not mean the function is dead: runtime dispatch (callbacks, plugin loaders, framework hooks, `getattr`-based dispatch) may call it without leaving a static trace. A function referenced without being called (a callback, `&Class::method`, `X::m`, `+= OnEvent`, a JSX component, a Ruby `before_action :x` symbol) counts as used. When `.gitignore` hid the whole scanned tree, the empty answer carries `⚠ No files left to analyze: N entries hidden by .gitignore (use --respect-gitignore off to show)` (a `scope_hidden` warning in JSON `meta.warnings`); imports://, depends:// and surface:// say the same.
+**Interpreting absence of evidence:** "No callers found" means no *static* callers were detected in the scanned path. It does not mean the function is dead: runtime dispatch (callbacks, plugin loaders, framework hooks, `getattr`-based dispatch) may call it without leaving a static trace. A function referenced without being called (a callback, `&Class::method`, `X::m`, `+= OnEvent`, a JSX component, a Ruby `before_action :x` symbol) counts as used. When `.gitignore` hid the whole scanned tree, the empty answer carries `⚠ No files left to analyze: N entries hidden by .gitignore (use --respect-gitignore off to show)` (a `scope_hidden` warning in JSON `meta.warnings`); `reveal imports`, `reveal surface` and the retired `depends://` say the same.
 
 ---
 
@@ -1427,45 +1425,45 @@ For a whole-project dead-code list use the language's own tool: vulture (Python)
 **Pattern:**
 ```bash
 # Codebase-wide fan-in ranking — which files are most central?
-reveal 'imports://src?sort=-fan-in'
-reveal 'imports://src?sort=-fan-in&limit=10'
+reveal imports src --sort=-fan-in
+reveal imports src --sort=-fan-in --limit 10
 
 # Who imports this specific file? (each importer with its import line)
-reveal 'imports://src/utils.py?importers'
+reveal imports src/utils.py --importers
 
 # Who imports anything in models/?
-reveal 'imports://src/models?importers'
+reveal imports src/models --importers
 
 # Full module graph in GraphViz DOT format
-reveal 'imports://src?importers&format=dot' | dot -Tsvg > deps.svg
+reveal imports src --importers --format dot | dot -Tsvg > deps.svg
 ```
 
 **Key use cases:**
 - **Architectural orientation** — three complementary views from the import graph:
-  - `imports://src?sort=-fan-in` — ranks every file by importer count. High fan-in = core abstractions (change carefully); zero = entry points or dead code.
-  - `imports://src?entrypoints` — lists only the fan-in=0 files, sorted by fan-out. High fan-out = real CLI/runner; zero = likely dead code.
-  - `imports://src?components` — scores each directory as a component: cohesion (how self-contained), coupling (incoming/outgoing), top bridge file. Low cohesion = not a real component. Cohesion is `null`/`n/a` (with `cohesion_reason` and one `cohesion_rule`) for a directory mostly in Go, Java, Kotlin, C#, Scala or Swift: same-package files need no import, so the number would be a structural 0.
-- **Impact analysis before refactoring** — before changing `utils.py`, run `imports://src/utils.py?importers` to see every direct importer
-- **Safe deletion** — verify `count: 0` (via `?importers`) before removing a module
+  - `reveal imports src --sort=-fan-in` — ranks every file by importer count. High fan-in = core abstractions (change carefully); zero = entry points or dead code.
+  - `reveal imports src --entrypoints` — lists only the fan-in=0 files, sorted by fan-out. High fan-out = real CLI/runner; zero = likely dead code.
+  - `reveal imports src --components` — scores each directory as a component: cohesion (how self-contained), coupling (incoming/outgoing), top bridge file. Low cohesion = not a real component. Cohesion is `null`/`n/a` (with `cohesion_reason` and one `cohesion_rule`) for a directory mostly in Go, Java, Kotlin, C#, Scala or Swift: same-package files need no import, so the number would be a structural 0.
+- **Impact analysis before refactoring** — before changing `utils.py`, run `reveal imports src/utils.py --importers` to see every direct importer
+- **Safe deletion** — verify `count: 0` (via `--importers`) before removing a module
 
 **How the tools relate:**
 
 | Tool | Question | Granularity |
 |------|----------|-------------|
-| `imports://src?sort=-fan-in` | Which files are most central? | Codebase ranking |
-| `imports://src?entrypoints` | Where does execution start? | Fan-in=0 subset |
-| `imports://src?components` | Which directories are real components? | Per-directory |
-| `imports://src/module.py?importers` | What exactly imports this file? | Per-file reverse |
-| `imports://src` | What does each file import? | Forward, all files |
-| `calls://src/?callers=fn` | Who calls this function? | Function level |
+| `reveal imports src --sort=-fan-in` | Which files are most central? | Codebase ranking |
+| `reveal imports src --entrypoints` | Where does execution start? | Fan-in=0 subset |
+| `reveal imports src --components` | Which directories are real components? | Per-directory |
+| `reveal imports src/module.py --importers` | What exactly imports this file? | Per-file reverse |
+| `reveal imports src` | What does each file import? | Forward, all files |
+| `reveal calls src/ --callers fn` | Who calls this function? | Function level |
 
-Use the three `imports://` views for orientation; `?importers` for targeted impact analysis before a specific change. `depends://` is the retired spelling of `?importers`: it prints a note and answers as before (its shapes, exit 0 on a partial answer) until the cut.
+Use the three `reveal imports` views for orientation; `--importers` for targeted impact analysis before a specific change. `depends://` is the retired spelling of `--importers`: it prints a note and answers as before (its shapes, exit 0 on a partial answer) until the cut.
 
-**Which edges count:** every view counts function-level (lazy) imports except `?circular` (and `metadata.has_cycles`), where a lazy back-edge is not an import-time cycle. `&lazy=exclude` gives the load-time (architecture) view, `&lazy=include` makes `?circular` count lazy edges, `&lazy=only` shows only them. Each answer prints its rule: a `Rule:` line in text, `edge_rule` in JSON. Python, PHP, JavaScript, TypeScript, TSX and Rust record import scope (a Rust `use` in a closure outside every `fn` stays unclassified). Ruby qualifies a bounded [literal-loader subset](adapters/IMPORTS_ADAPTER_GUIDE.md#which-edges-count-lazy); unsupported and convention edges remain unclassified and disclosed, retained by `exclude` and omitted by `only`.
+**Which edges count:** every view counts function-level (lazy) imports except `--circular` (and `metadata.has_cycles`), where a lazy back-edge is not an import-time cycle. `--lazy exclude` gives the load-time (architecture) view, `--lazy include` makes `--circular` count lazy edges, `--lazy only` shows only them. Each answer prints its rule: a `Rule:` line in text, `edge_rule` in JSON. Python, PHP, JavaScript, TypeScript, TSX and Rust record import scope (a Rust `use` in a closure outside every `fn` stays unclassified). Ruby qualifies a bounded [literal-loader subset](adapters/IMPORTS_ADAPTER_GUIDE.md#which-edges-count-lazy); unsupported and convention edges remain unclassified and disclosed, retained by `exclude` and omitted by `only`.
 
-**Enforce architectural layers (`?violations`):**
+**Enforce architectural layers (`--violations`):**
 ```bash
-reveal 'imports://src?violations'
+reveal imports src --violations
 ```
 Flags any import that crosses a layer boundary in the wrong direction (e.g. domain importing infrastructure). Requires `.reveal.yaml` with a `layers:` + `allowed_deps:` config:
 ```yaml
@@ -1484,9 +1482,9 @@ Output: one line per violation with file, line, and direction. Clean output = �
 
 **Scan root tip**: scan from the project root (not a subdirectory) when imports use absolute package paths (e.g. `from myapp.utils import x`). Scanning too deep causes the resolver to miss edges, producing false fan-in=0 entries.
 
-**Limitations:** Dynamic imports (`importlib.import_module`) and `TYPE_CHECKING`-only imports are not tracked (same as `imports://`); function-level `import` statements are counted. Static resolution can miss edges or infer false edges, especially through name-based fallbacks. Confirm consequential relationships in source.
+**Limitations:** Dynamic imports (`importlib.import_module`) and `TYPE_CHECKING`-only imports are not tracked (same as `reveal imports`); function-level `import` statements are counted. Static resolution can miss edges or infer false edges, especially through name-based fallbacks. Confirm consequential relationships in source.
 
-**Interpreting absence of evidence:** An empty `?importers` answer means no *static* importer was found in the scanned path. Dynamic imports (plugin loaders, `importlib.import_module`, `__import__`) are not tracked and will not appear here; an `import` statement inside a function is tracked. Confirm a module is truly unused before deleting it if the codebase uses runtime import patterns.
+**Interpreting absence of evidence:** An empty `--importers` answer means no *static* importer was found in the scanned path. Dynamic imports (plugin loaders, `importlib.import_module`, `__import__`) are not tracked and will not appear here; an `import` statement inside a function is tracked. Confirm a module is truly unused before deleting it if the codebase uses runtime import patterns.
 
 ---
 
@@ -1506,11 +1504,11 @@ long or deeply nested functions, churn), each with its quality score, issues and
 `provenance` tag (`test`/`vendor`/`minified`, `null` = first party). `summary.has_findings` is true when
 any analysed file has quality below 70 or a function with complexity above 20, taken over every analysed
 file before filters and cuts; `--fail-on findings` exits 1 on it, the default `--fail-on none` reports it.
-The `ast://` query ranks functions by cyclomatic complexity across the tree (text keeps that global order
+The `reveal ast` query ranks functions by cyclomatic complexity across the tree (text keeps that global order
 and names the file on each row, as JSON does).
 
 `reveal hotspots` (and `hotspots://`) is retired: it answers as before until the cut and prints a note
-naming these two commands; `--files-only` is `metrics --view hotspots`, `--functions-only` the `ast://` query
+naming these two commands; `--files-only` is `metrics --view hotspots`, `--functions-only` the `reveal ast` query
 (`--min-complexity N` is `complexity>=N`, `--top N` is `limit=N`). Its `has_test_hint` field is retired with
 no replacement: it was an unmeasured test-name heuristic, not coverage; use the language's coverage tool.
 See the [metrics guide](adapters/METRICS_ADAPTER_GUIDE.md#findings-gate).
@@ -1584,7 +1582,7 @@ reveal pack ./src --since main --architecture --budget 8000  # PR context + arch
 ```
 
 **`--architecture` does two things:**
-1. Queries `imports://` fan-in data and boosts widely-imported files in the priority score (fan-in ≥1: +1pt, ≥5: +3pt, ≥15: +5pt); fan-in counts all static import edges except `TYPE_CHECKING` ones, function-level imports and test importers included, and the output states that rule (`Rule:` line, `edge_rule` in JSON)
+1. Queries the `reveal imports` fan-in data and boosts widely-imported files in the priority score (fan-in ≥1: +1pt, ≥5: +3pt, ≥15: +5pt); fan-in counts all static import edges except `TYPE_CHECKING` ones, function-level imports and test importers included, and the output states that rule (`Rule:` line, `edge_rule` in JSON)
 2. Prepends an **Architecture Hint** before the tier list:
 ```
 ── Architecture Hint ──
@@ -1715,7 +1713,7 @@ reveal contracts src/ --implementations-limit 0          # Display every impleme
 
 **Use case:** Before refactoring or extending a module, see the *interfaces* it ships rather than the implementation. Pairs well with `reveal overview` (scope and import map) and `reveal surface` (external boundaries): **overview** → **contracts** → **surface**.
 
-Direct `reveal contracts` and `contracts://` share declarations and output.
+`contracts://` is the retiring URI spelling: it answers the same, with a note naming `reveal contracts`.
 `--implementations off` maps to `implementations=off`; `--implementations-limit N` is a text cap
 (default 5, zero all) and preserves full JSON arrays and `impls_cap`. Whole decimal
 `3.0` means 3; booleans, fractions, negative values and scientific notation are
@@ -1761,7 +1759,7 @@ reveal 'diff://app.py:git://app.py@HEAD~1'     # Working copy vs. a git revision
 reveal 'diff://config.yaml:config_new.yaml'    # Works on any analyzer-supported type
 ```
 
-**Discovery:** `reveal help://schemas/diff --format=json` for the full param list. Note: for git-history diffs prefer `git://file@sha?type=diff`, which is git-aware; `diff://` is for arbitrary on-disk pairs.
+**Discovery:** `reveal help://schemas/diff --format=json` for the full param list. Note: for git-history diffs prefer `reveal git://file@sha --view diff`, which is git-aware; `diff://` is for arbitrary on-disk pairs.
 
 **Use case:** Compare two checked-out versions of a file (e.g. `cp file.py file.py.bak`, edit, then diff) without `git stash`/branch acrobatics; or diff configs across environments where neither side is in git.
 
@@ -2536,13 +2534,13 @@ reveal claude://session/my-session-0302/files
 reveal claude://session/my-session-0302/tools
 
 # Errors with full context
-reveal 'claude://session/my-session-0302?errors'
+reveal claude://session/my-session-0302 --errors
 
 # Thinking blocks with token estimates
 reveal claude://session/my-session-0302/thinking
 
 # Filter to specific tool
-reveal 'claude://session/my-session-0302?tools=Bash'
+reveal claude://session/my-session-0302 --tools Bash
 
 # Human-typed prompts only (excludes tool-result wrapper turns)
 reveal claude://session/my-session-0302/prompts
@@ -2551,8 +2549,8 @@ reveal claude://session/my-session-0302/prompts
 reveal claude://session/my-session-0302/messages
 
 # Bulk/forensic: every raw user or assistant record unfiltered
-reveal 'claude://session/my-session-0302/prompts?detail=raw'
-reveal 'claude://session/my-session-0302/messages?detail=raw'
+reveal claude://session/my-session-0302/prompts --detail raw
+reveal claude://session/my-session-0302/messages --detail raw
 
 # Composed readable view: overview + prompts + narrative in one call
 reveal claude://session/my-session-0302/digest
@@ -2561,14 +2559,14 @@ reveal claude://session/my-session-0302/digest
 reveal claude://session/my-session-0302/exchanges
 
 # Fast session recovery — last assistant turn
-reveal 'claude://session/my-session-0302/messages?sort=-message_index&limit=1'
+reveal claude://session/my-session-0302/messages --limit 1 --sort=-message_index
 
 # Cross-session content search
-reveal 'claude://sessions/?match=validate_token'
+reveal claude://sessions/ --match validate_token
 
 # Prompt history across all projects
 reveal claude://history
-reveal 'claude://history?match=validate_token'
+reveal claude://history --match validate_token
 ```
 
 **Claude install introspection:**
@@ -2578,20 +2576,20 @@ reveal claude://info
 
 # Settings (~/.claude/settings.json)
 reveal claude://settings
-reveal 'claude://settings?key=model'
+reveal claude://settings --key model
 
 # Per-install config (~/.claude.json): MCP servers, flags
 reveal claude://config
-reveal 'claude://config?key=installMethod'
+reveal claude://config --key installMethod
 
 # Saved plans (~/.claude/plans/)
 reveal claude://plans
-reveal 'claude://plans?match=token'
+reveal claude://plans --match token
 reveal claude://plans/my-plan-name
 
 # Memory files across all projects
 reveal claude://memory
-reveal 'claude://memory?match=feedback'
+reveal claude://memory --match feedback
 reveal claude://memory/my-project
 
 # Agent definitions (~/.claude/agents/)
@@ -2612,8 +2610,8 @@ reveal claude://hooks/PostToolUse
 - `claude://session/<name>/thinking` — thinking blocks with character counts and token estimates
 - `claude://session/<name>/errors` — tool errors with full input/output context
 - `claude://session/<name>/context` — directory and branch changes during session
-- `claude://session/<name>/prompts` — human-typed prompts only; add `?raw` for every raw user record unfiltered
-- `claude://session/<name>/messages` — assistant narrative turns (text only); add `?raw` for every raw assistant record unfiltered
+- `claude://session/<name>/prompts` — human-typed prompts only; add `--detail raw` for every raw user record unfiltered
+- `claude://session/<name>/messages` — assistant narrative turns (text only); add `--detail raw` for every raw assistant record unfiltered
 - `claude://session/<name>/message/<n>` — single message by zero-based JSONL index (negative indexes from the end)
 - `claude://session/<name>/digest` — composed view: overview + prompts + narrative in one call
 - `claude://session/<name>/exchanges` — each prompt paired with the assistant's final text answer to it
@@ -2622,11 +2620,11 @@ reveal claude://hooks/PostToolUse
 
 **claude:// install views:**
 - `claude://info` — diagnostic path dump (all resolved dirs, env vars)
-- `claude://settings` — `~/.claude/settings.json` with `?key=` extraction
-- `claude://config` — `~/.claude.json` (MCP servers, feature flags) with `?key=` extraction
-- `claude://history` — prompt history; `?search=`, `?project=`, `?since=` filters
-- `claude://plans[/<name>]` — list or read `~/.claude/plans/`; `?search=`
-- `claude://memory[/<project>]` — memory files from `~/.claude/projects/*/memory/`; `?search=`
+- `claude://settings` — `~/.claude/settings.json` with `--key` extraction
+- `claude://config` — `~/.claude.json` (MCP servers, feature flags) with `--key` extraction
+- `claude://history` — prompt history; `--match`, `--project`, `--since` filters
+- `claude://plans[/<name>]` — list or read `~/.claude/plans/`; `--match`
+- `claude://memory[/<project>]` — memory files from `~/.claude/projects/*/memory/`; `--match`
 - `claude://agents[/<name>]` — list or read `~/.claude/agents/`
 - `claude://hooks[/<event>]` — list hook events or read a specific script
 
@@ -2637,12 +2635,12 @@ reveal claude://hooks/PostToolUse
 | "What did this session do?" | `reveal 'claude://session/<name>'` |
 | "What order did things happen?" | `.../workflow` |
 | "Which files were changed?" | `.../files` |
-| "Why did a tool keep failing?" | `?errors` |
+| "Why did a tool keep failing?" | `--errors` |
 | "How many tokens did thinking use?" | `.../thinking` |
 | "What was the original prompt?" | `.../prompts` |
 | "What did Claude output?" | `.../messages` (or `.../exchanges` for prompt → answer pairs) |
 | "Where did the session stop?" | `view=messages&sort=-message_index&limit=1` |
-| "Find sessions about X" | `claude://sessions/?match=X` |
+| "Find sessions about X" | `claude://sessions/ --match X` |
 | "What MCP servers are configured?" | `claude://config` |
 | "What memory does this project have?" | `claude://memory/<project>` |
 
@@ -2652,7 +2650,7 @@ reveal claude://hooks/PostToolUse
 reveal claude://session/my-session-0302
 
 # 2. Check for errors if something went wrong
-reveal 'claude://session/my-session-0302?errors'
+reveal claude://session/my-session-0302 --errors
 
 # 3. See the workflow if the sequence matters
 reveal claude://session/my-session-0302/workflow
@@ -2776,9 +2774,9 @@ reveal 'codex://plugins'
 **codex:// session views:**
 - `codex://` — list all user sessions (subagent sessions filtered out)
 - `codex://<UUID>` — overview: turns, tool calls, tokens, duration, git branch
-- `codex://<UUID>?last` — last agent message — fastest recovery
-- `codex://<UUID>?tokens` — per-turn table: INPUT / CACHED / OUTPUT / REASON / TOTAL
-- `codex://<UUID>?goal` — thread goal from `goals_1.sqlite` (objective, status, token budget)
+- `codex://<UUID> --view last` — last agent message — fastest recovery
+- `codex://<UUID> --view tokens` — per-turn table: INPUT / CACHED / OUTPUT / REASON / TOTAL
+- `codex://<UUID> --view goal` — thread goal from `goals_1.sqlite` (objective, status, token budget)
 - `codex://<UUID>/messages` — user + agent conversation turns with memory citations
 - `codex://<UUID>/digest` — composed readable view: overview + prompts + agent narrative in one call
 - `codex://<UUID>/exchanges` — each user prompt paired with the agent's final reply before the next prompt
@@ -2792,7 +2790,7 @@ reveal 'codex://plugins'
 **codex:// install views:**
 - `codex://info` — diagnostic path dump (resolved dirs, DB stats)
 - `codex://history` — prompt history from `~/.codex/history.jsonl`
-- `codex://config` — `~/.codex/config.toml` with secrets masked (`?key=<dotpath>` for a single value, applied after masking)
+- `codex://config` — `~/.codex/config.toml` with secrets masked (`--key <dotpath>` for a single value, applied after masking)
 - `codex://memories` — `~/.codex/memories/` tree with file content
 - `codex://memories/pipeline` — Stage1/Stage2 consolidation status from `stage1_outputs`
 - `codex://rules` — Starlark permission rules from `~/.codex/rules/*.rules`
@@ -2807,13 +2805,13 @@ reveal 'codex://plugins'
 | "What did I ask, what did it finally say?" | `.../exchanges` |
 | "What order did things happen?" | `.../workflow` |
 | "What was every event?" | `.../timeline` |
-| "How many tokens did it use?" | `...?tokens` |
+| "How many tokens did it use?" | `... --view tokens` |
 | "What shell commands ran?" | `.../shell` |
 | "Which tools were called?" | `.../tools` |
 | "Why did something fail?" | `.../errors` |
-| "Where did the session stop?" | `...?last` |
-| "What was the goal?" | `...?goal` |
-| "Find sessions titled/about X" | `codex://sessions/?filter=X` |
+| "Where did the session stop?" | `... --view last` |
+| "What was the goal?" | `... --view goal` |
+| "Find sessions titled/about X" | `codex://sessions/ --where 'session~=X'` |
 | "Has X been discussed?" | `codex://sessions/?search=X` |
 | "What's in memory?" | `codex://memories` |
 | "Is memory pipeline running?" | `codex://memories/pipeline` |
@@ -2887,7 +2885,7 @@ reveal file.py --format text         # an explicit --format always wins
 
 `REVEAL_FORMAT` sets the default `--format` for every entry point — files, `uri://` adapters and subcommands (`reveal metrics`, `reveal check`, …). An explicit `--format` on the command line overrides it.
 
-**Where each format works.** `text` and `json` work everywhere. `grep` works for a single file (structure and element), `--grep` on a file or directory (one `path:line:text` row per hit), `ast://`, `env://`, `markdown://` and `reveal check`; `typed` for single-file structure and element extraction (element views such as `--view boundary` render text and JSON only). Anywhere else an explicit `--format grep`/`typed` exits 2 with the supported list, instead of printing text (a `REVEAL_FORMAT` default falls back to text with a note).
+**Where each format works.** `text` and `json` work everywhere. `grep` works for a single file (structure and element), `--grep` on a file or directory (one `path:line:text` row per hit), `reveal ast`, `reveal env`, `reveal markdown` and `reveal check`; `typed` for single-file structure and element extraction (element views such as `--view boundary` render text and JSON only). Anywhere else an explicit `--format grep`/`typed` exits 2 with the supported list, instead of printing text (a `REVEAL_FORMAT` default falls back to text with a note).
 
 `--output FORMAT=PATH` writes a file with supported URI requests, `reveal check`, and adapter-backed commands. It repeats for several destinations; FORMAT alone selects stdout. A requested JSON file is written even with JSON stdout. The retired `--also-json PATH` spelling follows the same rule. Unsupported formats and two stdout destinations exit 2 before analysis; a failed file write exits 3 while the primary answer and other successful files survive. Ordinary file/directory views reject file sinks rather than silently ignoring them.
 
@@ -2898,13 +2896,13 @@ reveal file.py --format text         # an explicit --format always wins
 # Stop after N results (text and JSON both respect this)
 reveal ast ./src --where 'complexity>5' --max-items 20
 
-# Truncate long string values to N chars (useful for calls:// call lists, git messages, etc.)
-reveal 'calls://./src?sort=-callers' --max-snippet-chars 80
+# Truncate long string values to N chars (useful for `reveal calls` call lists, git messages, etc.)
+reveal calls ./src --sort=-callers --max-snippet-chars 80
 
 # Combine: first 50 items, strings max 80 chars
-reveal 'calls://./src?sort=-callers' --max-items 50 --max-snippet-chars 80
+reveal calls ./src --sort=-callers --max-items 50 --max-snippet-chars 80
 ```
-Any cut list is disclosed the same way, whatever cut it (`--max-items`, `--head`, `?limit=`, an adapter's default cap): text output ends with `⚠ Truncated <field>: showing N of M — <how to see more>`, and JSON carries it as a `meta.warnings` entry `{"type": "truncated", "field", "shown", "total", "cause", "message"}`. When a URI result has one list, `--max-items` also adds `meta.budget` with a cursor for pagination. A result with several lists (`hotspots://`, `reveal://`) and a file's lists are each cut on their own, like `--head`, so they carry only the per-list entries. A truncated result exits 0.
+Any cut list is disclosed the same way, whatever cut it (`--max-items`, `--head`, `--limit`, an adapter's default cap): text output ends with `⚠ Truncated <field>: showing N of M — <how to see more>`, and JSON carries it as a `meta.warnings` entry `{"type": "truncated", "field", "shown", "total", "cause", "message"}`. When a URI result has one list, `--max-items` also adds `meta.budget` with a cursor for pagination. A result with several lists (`hotspots://`, `reveal://`) and a file's lists are each cut on their own, like `--head`, so they carry only the per-list entries. A truncated result exits 0.
 
 ### JSON Format Details
 
@@ -3360,16 +3358,15 @@ reveal docs/setup.md --links --link-type internal
 `reveal src/ --hotspots` exits 2 and names the command. The legacy `reveal metrics . --hotspots` still
 answers (files plus the ranking), with a note naming `--view hotspots`.
 
-**Correct — on metrics (the subcommand or the URI):**
+**Correct — the metrics subcommand:**
 ```bash
 reveal metrics . --view hotspots                  # Hotspots in current directory
 reveal metrics ./src --view hotspots --limit 20     # Show top 20 instead of default 10
-reveal 'metrics://.?view=hotspots'           # The same answer as a URI
 reveal metrics . --view hotspots --format json    # JSON output for CI/scripting
 ```
 
 **`reveal metrics --help`** — full options. The retired `reveal hotspots` still answers and prints a note
-naming `metrics --view hotspots` (files) and the `ast://` complexity sort (functions).
+naming `metrics --view hotspots` (files) and the `reveal ast` complexity sort (functions).
 
 ---
 
@@ -3593,7 +3590,7 @@ reveal deep_dir/
 | nginx `--validate-nginx-acme` / `--check-acl` / `--cpanel-certs`, `cpanel://USER/full-audit`, `nginx:// --audit` | pass | — | failure / gaps found | — |
 | Direct `deps` / `hotspots` / `imports` / `metrics` (subcommand or URI) | complete without an enabled gate matching | explicit `--fail-on findings` matches (imports: the `--circular`, `--unused` or `--violations` answer has a row; metrics: the `--view hotspots` answer has `summary.has_findings`) | invalid request, including `--fail-on findings` on a view with no findings verdict (imports without `--circular`/`--unused`/`--violations`, metrics without `--view hotspots` or with `--view provenance`) | incomplete analysis/output failure |
 | Direct `surface` / `contracts` / `overview` / `pack` / `testability` / `trace`, including retired aliases (subcommand or URI) | completed requested analysis | — | invalid resource/parameter or unsupported gate | required analysis/output incomplete or failed |
-| Other URI commands given a path that doesn't exist (`markdown://`, `json://`, `git://` outside every repository, ...) | — | — | `Error: … Path not found` (a directory that exists outside a repository is `git://`'s not-applicable answer, exit `0`); inside a repository, `git://` on a file not in the tree at the ref (`File not found at <ref>`) or an unknown ref (`Cannot resolve ref`); `reveal markdown DIR --backlinks DOC` for a doc no document in DIR is (`backlinks target … is not a document under DIR`) | — |
+| Other commands given a path that doesn't exist (`reveal markdown`, `json://`, `git://` outside every repository, ...) | — | — | `Error: … Path not found` (a directory that exists outside a repository is `git://`'s not-applicable answer, exit `0`); inside a repository, `git://` on a file not in the tree at the ref (`File not found at <ref>`) or an unknown ref (`Cannot resolve ref`); `reveal markdown DIR --backlinks DOC` for a doc no document in DIR is (`backlinks target … is not a document under DIR`) | — |
 | The retired `stats://` and `classify://`, and `diff://`, given a path that doesn't exist | — | `Error: … not found` | — | — |
 | `reveal FILE`, `reveal FILE NAME` with its element flags, `reveal FILE --grep`, `--stdin` | answered | an invalid `--grep` pattern | missing path or element, a file no analyzer reads | the file exists but could not be read, or an element flag could not follow code nested too deeply (`--stdin`: a listed file could not be read; the others are still answered, and a listed path that no longer exists is skipped with a warning and exit `0`) |
 | An argument the run would ignore: a path given to a mode that reads none (`reveal a.py --rules`, `--adapters`, `--languages`, `--list-schemas`, `--explain`, `--stdin`, ...), a second path given to a flag that reads no element (`reveal a.py b.py --check`, `reveal a.html b.html --metadata`, `--links`, `--typed`), an element beside `--section` (`reveal a.md b.md --section X`), an element no view reads (`reveal DIR NAME`, `reveal FILE NAME` beside `--grep`/`--name`/`--type`/`--sort`, `reveal sqlite://x.db TABLE` on an adapter with no element view: name it in the URI), `--stdin` beside `--section`, or `--stdin` beside `--decorator-stats`/`--explain-file`/`--capabilities`/`--show-ast` (those read one path; loop over the paths instead) | — | — | usage error: stderr names the flag and the ignored argument, nothing runs | — |
@@ -3770,7 +3767,7 @@ CMD ["python", "app.py"]
 - Complexity > 10 suggests function is too complex
 - Consider breaking into smaller functions
 - Default threshold 10 (override in `.reveal.yaml`: `rules: {C901: {threshold: 15}}`); `reveal --explain C901` describes the rule but does not print the threshold
-- One shared score: C901, `reveal ast --where complexity` and `metrics://` (its `--view hotspots` ranking included) report the same number for every language — `if`/loops/`catch`, `&&`/`||`/`??`/`?:`, and match/switch arms count (a catch-all `default`/`else`/`_` arm does not); Rust `?` and Zig `try` count as early exits
+- One shared score: C901, `reveal ast --where complexity` and `reveal metrics` (its `--view hotspots` ranking included) report the same number for every language — `if`/loops/`catch`, `&&`/`||`/`??`/`?:`, and match/switch arms count (a catch-all `default`/`else`/`_` arm does not); Rust `?` and Zig `try` count as early exits
 
 **C902: Function too long**
 - Function exceeds maximum line count
@@ -3832,14 +3829,14 @@ def process():
 **I001: Unused import**
 - Import is never referenced in the file
 - Applies to Python, JS/TS, Rust, Go (multi-language)
-- Other languages with an import extractor (Java, C#, Kotlin, PHP, ...) are not checked: `imports://?unused`/`deps` say "Unused imports not checked", `check` (single-file and recursive) adds a W-CAP-2 note
+- Other languages with an import extractor (Java, C#, Kotlin, PHP, ...) are not checked: `reveal imports --unused`/`deps` say "Unused imports not checked", `check` (single-file and recursive) adds a W-CAP-2 note
 
 **I002: Circular dependency**
 - Module A imports B which imports A (directly or transitively)
 - Can cause `ImportError` or subtle initialization bugs
-- Reads the same graph and default edge rule as `imports://<path>?circular` (load-time imports; `TYPE_CHECKING` and function-level imports are no cycle edge), so the files it flags are the members of `?circular`'s cycle groups
+- Reads the same graph and default edge rule as `reveal imports <path> --circular` (load-time imports; `TYPE_CHECKING` and function-level imports are no cycle edge), so the files it flags are the members of `--circular`'s cycle groups
 - One finding per file per cycle group, naming "group k of N (S files)" and a shortest cycle through the file
-- Checks only languages where a load-time cycle breaks the program (Python, JavaScript/TypeScript, PHP, Lua, Ruby); elsewhere (Rust, Zig, Java, Kotlin, C#, ...) a cycle is legal, `check` adds a W-CAP-3 note and `imports://<path>?circular` still lists the cycles
+- Checks only languages where a load-time cycle breaks the program (Python, JavaScript/TypeScript, PHP, Lua, Ruby); elsewhere (Rust, Zig, Java, Kotlin, C#, ...) a cycle is legal, `check` adds a W-CAP-3 note and `reveal imports <path> --circular` still lists the cycles
 
 **I003: Architectural layer violation**
 - Import crosses a forbidden layer boundary (e.g., data layer importing presentation)
@@ -4507,8 +4504,8 @@ Use that guidance - it tells you exactly what to do next!
 ❌ grep -rn "API_TIMEOUT" src/       # flat lines, no code context, often several scoped calls
 ✅ reveal src/ --grep 'API_TIMEOUT'  # each hit's line, grouped by enclosing function/section
 ```
-Use `--grep` for any text or identifier that isn't a named element `ast://` can filter on
-(constants, string literals, config keys). For a *definition* by name, use `ast://?name=X`
+Use `--grep` for any text or identifier that isn't a named element `reveal ast` can filter on
+(constants, string literals, config keys). For a *definition* by name, use `reveal ast . --where name=X`
 (e.g. `reveal ast src/ --where name=load_config`) — both beat `grep -rn`.
 
 ### Mistake 6: Using sed/grep line-windows instead of resolving the semantic unit
