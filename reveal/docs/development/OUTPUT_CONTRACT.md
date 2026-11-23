@@ -1142,7 +1142,12 @@ normalization; mutating a normalized container requires rebinding. Optional perc
 scalar and comma-percent list codecs decode exactly once, splitting lists before
 item decoding and preserving plus signs. Comma-percent's empty query represents an
 empty list; empty list members are rejected. Existing raw queries, exclude and filter
-codecs are not globally reinterpreted.
+codecs are not globally reinterpreted. A typed key no declaration spells (a name, alias,
+legacy word or CLI destination) raises `UnsupportedOverrideError` with the unsupported-controls
+message, as an `api.query` keyword does; it is never dropped (BACK-2772). Noun constructors
+bind through `bound_constructor_params()` (`prepared_constructor_params()` for JSON, which
+binds after reading its source): params the declarations built pass unchanged, a mapping
+binds as typed values, and a parsed but unbound query binds as the query text it came from.
 
 The binder also exposes source preparation separately from conversion. A mode-aware
 adapter's `result_type_for(params)` reads prepared parameter presence without
