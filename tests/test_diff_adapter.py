@@ -618,8 +618,9 @@ class TestDirectoryDiff(unittest.TestCase):
         adapter = DiffAdapter("/nonexistent/path", str(self.temp_dir))
         with self.assertRaises(ValueError) as ctx:
             adapter.get_structure()
-        # When directory doesn't exist, it's treated as a file with no analyzer
-        self.assertIn("No analyzer found", str(ctx.exception))
+        # A side that does not exist is an absent target whatever its name, an invalid request (BACK-2214): it was
+        # treated as a file with no analyzer ("No analyzer found", a failed analysis)
+        self.assertIn("File not found: /nonexistent/path", str(ctx.exception))  # noqa: win-path (a side as typed)
 
 
 class TestGitDiff(unittest.TestCase):
