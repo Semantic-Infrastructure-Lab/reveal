@@ -413,6 +413,9 @@ RETIREMENTS: Dict[str, Retirement] = {
     'target:help.element': Retirement('help:// TOPIC', 'help://TOPIC'),
     'target:reveal.element': Retirement('reveal://FILE ELEMENT', 'reveal PATH ELEMENT on that source file '
                                         '(reveal reveal://FILE names its path)'),
+    # diff:// names its element in the URI (rule 1 composes addresses; BACK-2768): diff://LEFT:RIGHT/ELEMENT answers
+    # for plain-file and git:// sides alike, so the positional element after it is the older spelling.
+    'target:diff.element': Retirement('diff://LEFT:RIGHT ELEMENT', 'diff://LEFT:RIGHT/ELEMENT'),
     # trace merged into calls (BACK-2066): both spellings keep trace's frames shape until the cut
     # (decision c); the MCP tool reveal_trace keeps its name until Phase 7 (decision g).
     'subcommand:trace': Retirement('reveal trace', 'reveal calls <path> --callees FUNC --depth N --detail'),

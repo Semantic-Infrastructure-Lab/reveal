@@ -419,6 +419,8 @@ PRODUCTION_CASES = {
     # BACK-2767: help:// and reveal:// keep their positional element, noted, until the cut.
     'target:help.element': lambda f: ['help://', 'quick'],
     'target:reveal.element': lambda f: ['reveal://adapters/env.py', 'EnvAdapter'],
+    # BACK-2768: the diff:// element names itself in the URI (diff://L:R/ELEMENT), for git:// sides too.
+    'target:diff.element': lambda f: [f'diff://{Path(f).as_posix()}::{Path(f).as_posix()}', 'auth_gate'],
     # Phase 3 step 5 (BACK-2069): stats became metrics and absorbed classify; tests/test_metrics_acceptance_back2069.py
     # proves each old spelling answers like the new one.
     'scheme:stats': lambda f: [f'stats://{Path(f).parent}'],

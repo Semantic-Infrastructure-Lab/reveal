@@ -184,7 +184,8 @@ def _sample(key):
     if key == 'target:nav.outline':
         return 'reveal app.py work --outline'
     if kind == 'target' and rest.endswith('.element'):
-        return {'help': 'reveal help:// quick', 'reveal': 'reveal reveal://adapters/env.py EnvAdapter'}.get(
+        return {'help': 'reveal help:// quick', 'reveal': 'reveal reveal://adapters/env.py EnvAdapter',
+                'diff': 'reveal diff://app.py:old.py handle_request'}.get(
             rest[:-len('.element')], f"reveal {rest[:-len('.element')]}://x NAME")
     raise AssertionError(f'no sample for {key}')
 

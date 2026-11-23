@@ -44,7 +44,7 @@ def test_of_the_unbound_schemes_only_diff_has_a_row():
     from reveal.adapters.base import get_adapter_class, list_supported_schemes
     from reveal.adapters.factory import uses_bound_query_call
     unbound = [s for s in list_supported_schemes() if not uses_bound_query_call(get_adapter_class(s))]
-    assert 'diff' in unbound and 'git' in unbound
+    assert 'diff' in unbound and 'domain' in unbound
     assert [s for s in unbound if element_retirement(s)] == ['diff']
 
 
