@@ -1301,6 +1301,7 @@
             "avg_quality_score": 100.0,
             "excluded": 0,
             "excluded_by_extension": {},
+            "findings_rule": "a file below quality 70 or a function above complexity 20, over every analysed file before filters and cuts",
             "has_findings": false,
             "total_classes": 0,
             "total_code_lines": 11,
