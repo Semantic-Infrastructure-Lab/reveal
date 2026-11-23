@@ -16,27 +16,12 @@ import sys
 
 import pytest
 
-from teaching_patterns import ANALYSIS_URI, QUERY_OPTION
-
-# ``help://TOPIC`` (``help://search?search=TERM`` included) and ``diff://A:B`` have no flag form: rule 1 keeps them.
-_EXEMPT_URI = re.compile(r"\b(?:help|diff)://[^\s'\"`]*")
-# A query string on any URI, the ``/?key=`` form included, which QUERY_OPTION leaves to it.
-_URI_QUERY = re.compile(r"\b[A-Za-z][\w+.-]*://[^\s'\"`]*?\?[A-Za-z_]")
+from teaching_patterns import retiring_lines
 
 # COMMAND_MODEL "Cross-noun rules and conformance": the first line of the published "How options work" block.
 TARGET_LINE = ('reveal NOUN TARGET --option value; a resource URI takes the same flags '
                '(git://FILE --view history --limit 5)')
 AGENT_HELP_BUDGET = 150  # COMMAND_MODEL rule 6
-
-
-def retiring_lines(text):
-    """Each line of *text* that teaches an analysis-only scheme or a URI query option."""
-    found = []
-    for line in text.splitlines():
-        judged = _EXEMPT_URI.sub('', line)
-        if ANALYSIS_URI.search(judged) or QUERY_OPTION.search(judged) or _URI_QUERY.search(judged):
-            found.append(line.strip())
-    return found
 
 
 def _nouns(text):
