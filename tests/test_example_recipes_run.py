@@ -95,10 +95,9 @@ def _findings_exits(argv):
 # consumer sweep (BACK-2071), so the clean-stderr check does not fail on the note itself.
 REQUEST_NOTE = re.compile(r'^(?:note: )?an? \w+:// request is deprecated(?: and works until 1\.0)?; use ')
 PROBLEM_LINE = re.compile(r'(?i)\b(error|warning|note|no effect|unknown|not recognized|ignored)\b')
-# stderr lines that are the test environment talking, not the recipe -- or a standing
-# disclosure true of every run of that command (pack without --architecture/--focus, BACK-1006).
-ENVIRONMENT_NOISE = ('not yet downloaded',
-                     'fan-in and graph-relevance signals were not computed (pass --architecture')
+# stderr lines that are the test environment talking, not the recipe. (pack's standing not-requested notice,
+# BACK-1006, left stderr for its Rules pointer, BACK-2599.)
+ENVIRONMENT_NOISE = ('not yet downloaded',)
 # meta.warnings that mean the query itself drifted. The standing disclosures (W-CALLS-1
 # "dynamic dispatch is not resolved", complexity_is_unweighted) are true of every run.
 DRIFT_WARNING = re.compile(r'^(?:unknown_|unused_flag$|unused_query_param$)')

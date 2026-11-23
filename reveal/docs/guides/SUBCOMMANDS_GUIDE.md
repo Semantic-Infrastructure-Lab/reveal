@@ -212,8 +212,8 @@ other changed files are not added to a single-file selection.
 | `--detail full` | Show per-file token/line counts (replaced `--verbose`) |
 | `--format json` | Machine-readable output |
 
-`--architecture` fan-in and `--focus` relevance read the import graph and state their rule: a `Rule:` line under
-the header, `edge_rule` in JSON, and none when neither flag is given. Every static import edge except
+`--architecture` fan-in and `--focus` relevance read the import graph and state their rule in `edge_rule` (JSON),
+which the text names in its `Rules:` line under the header; neither flag given, there is no edge rule. Every static import edge except
 `TYPE_CHECKING` ones counts, function-level imports and test importers included. `pack` takes no `--lazy`;
 `reveal imports <dir> --sort=-fan-in --lazy exclude` is the load-time view.
 
@@ -299,7 +299,9 @@ A plain `reveal pack` ranks by name, size and path and parses no file, so it nev
 
 `meta.relevance_warning` is advisory and keeps exit 0. It is present when no graph signal was computed:
 without `--architecture`/`--focus` (the signals were not requested), or when building the graph raised
-(it then names the cause). Files are then ranked by filename/entry-point heuristics and recency. An
+(it then names the cause). Files are then ranked by filename/entry-point heuristics and recency. In text, the
+not-requested notice is the `Rules:` line naming `meta.relevance_warning` and a `Next:` line naming both flags; a
+graph that could not be built is a stderr warning. An
 unusable `--since` ref is advisory in the same way, with its cause in `meta.since_error`.
 
 Lost candidate discovery or file measurement is different: Pack exits 3 (incomplete, or

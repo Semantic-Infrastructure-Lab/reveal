@@ -19,7 +19,7 @@ from .base import ResourceAdapter, register_adapter, register_renderer
 from ..analyzers.imports import service as import_analysis
 from ..analyzers.imports.types import LAZY_INCLUDE
 from ..conventions import conventions_for_path
-from ..rendering.adapters.pack import PackRenderer
+from ..rendering.adapters.pack import RELEVANCE_NOT_REQUESTED, PackRenderer
 from ..utils.path_utils import (
     DISPLAY,
     _walk_code_files,
@@ -913,9 +913,9 @@ _HELP_EPILOG = (
     "  5. Other files (fills remaining budget); tests, vendor and docs last\n"
     "  Ties go to the most recently modified file.\n"
     "\n"
-    "--architecture and --focus rank by import edges and print the rule they\n"
-    "counted by (a Rule: line; edge_rule in JSON): function-level imports and\n"
-    "test importers count.\n"
+    "--architecture and --focus rank by import edges and state the rule they\n"
+    "counted by (edge_rule in JSON, named by the Rules: line): function-level\n"
+    "imports and test importers count.\n"
     "--budget counts the raw size of the files selected, not the output.\n"
     "With --content: changed files are shown raw (first 500 lines), key files\n"
     "as structure, and the remaining selected files by name only.\n"
@@ -1026,7 +1026,7 @@ class PackAdapter(ResourceAdapter):
             'notes': [
                 'Token counts are approximate (chars / 4), not a real tokenizer.',
                 'architecture=true and focus= rank by import edges and state the rule they counted by '
-                '(a Rule: line in text, edge_rule in JSON); function-level imports and test importers count.',
+                '(edge_rule in JSON, named by the Rules: line in text); function-level imports and test importers count.',
             ],
             'see_also': [
                 'reveal pack <path> - CLI subcommand form',
@@ -1117,11 +1117,7 @@ class PackAdapter(ResourceAdapter):
                 "-- files are ranked by filename/entry-point heuristics and recency only"
             )
         elif not architecture and not focus:
-            self.relevance_warning = (
-                "fan-in and graph-relevance signals were not computed (pass "
-                "--architecture and/or --focus to enable) -- files are "
-                "ranked by filename/entry-point heuristics and recency only"
-            )
+            self.relevance_warning = RELEVANCE_NOT_REQUESTED
 
         discovery_failures: List[OSError] = []
         file_failures: List[_FileMeasurementFailure] = []

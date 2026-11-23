@@ -1582,7 +1582,7 @@ reveal pack ./src --since main --architecture --budget 8000  # PR context + arch
 ```
 
 **`--architecture` does two things:**
-1. Queries the `reveal imports` fan-in data and boosts widely-imported files in the priority score (fan-in ≥1: +1pt, ≥5: +3pt, ≥15: +5pt); fan-in counts all static import edges except `TYPE_CHECKING` ones, function-level imports and test importers included, and the output states that rule (`Rule:` line, `edge_rule` in JSON)
+1. Queries the `reveal imports` fan-in data and boosts widely-imported files in the priority score (fan-in ≥1: +1pt, ≥5: +3pt, ≥15: +5pt); fan-in counts all static import edges except `TYPE_CHECKING` ones, function-level imports and test importers included, and the output states that rule (`edge_rule` in JSON, named by the text's `Rules:` line)
 2. Prepends an **Architecture Hint** before the tier list:
 ```
 ── Architecture Hint ──

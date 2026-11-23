@@ -1143,7 +1143,10 @@ class TestRunPackSince(unittest.TestCase):
                     run_pack(args)
             finally:
                 sys.stderr = old_err
-            self.assertIn('fan-in and graph-relevance', stderr_buf.getvalue())
+            # The standing notice is the Rules pointer plus a next step in the answer, not a stderr warning (BACK-2599).
+            self.assertNotIn('fan-in and graph-relevance', stderr_buf.getvalue())
+            self.assertIn('Rules: --format json (meta.relevance_warning)', buf.getvalue())
+            self.assertIn('Next: --architecture ranks by import fan-in', buf.getvalue())
 
     def test_relevance_warning_absent_with_focus(self):
         import io
@@ -1162,6 +1165,7 @@ class TestRunPackSince(unittest.TestCase):
             finally:
                 sys.stderr = old_err
             self.assertNotIn('fan-in and graph-relevance', stderr_buf.getvalue())
+            self.assertNotIn('meta.relevance_warning', buf.getvalue())
 
     def test_relevance_warning_in_json_meta(self):
         import io, json

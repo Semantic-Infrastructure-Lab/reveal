@@ -61,12 +61,13 @@ def _diagnostic_lines(result):
 ])
 def test_migrated_subcommands_emit_each_diagnostic_once(tmp_path, command):
     # Six .sh files have no import extraction, so every subcommand has something to warn about
-    # (pack warns on stderr, the others on stdout). The compact architecture alias
+    # (the others on stdout). Pack's standing not-requested notice is its Rules pointer now (BACK-2599), so
+    # pack is given an unusable --since ref, which it warns about on stderr. The compact architecture alias
     # supplies a central retirement note independently of assessment diagnostics.
     (tmp_path / 'app.py').write_text('def small():\n    return 1\n', encoding='utf-8')
     for index in range(6):
         (tmp_path / f'foreign_{index}.sh').write_text('echo hi\n', encoding='utf-8')
-    result = _run(command, tmp_path)
+    result = _run(command, tmp_path, *(('--since', 'nosuchref_zz') if command == 'pack' else ()))
     assert result.returncode in (0, 1, 3)
     warnings = _diagnostic_lines(result)
     assert warnings, f'{command}: fixture produced no diagnostic, so "once" proves nothing'

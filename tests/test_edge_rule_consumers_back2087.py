@@ -209,8 +209,10 @@ def test_pack_architecture_states_its_rule(project):
         k: imports_rule[k] for k in data['edge_rule'] if k not in ('text', 'subject')}
     _assert_rule(data['edge_rule'], HEADLINE)
     assert 'fan-in' in data['edge_rule']['text'] and 'pack takes no &lazy' in data['edge_rule']['text']
+    # The text names the field in its one Rules pointer since BACK-2599; the JSON states the rule in full.
     text = _run('pack', to_posix(project), '--architecture')
-    assert 'Rule: ' in text and 'function-level (lazy) imports included (default)' in text
+    assert 'Rules: --format json (edge_rule.text)' in text.splitlines()
+    assert data['edge_rule']['text'] not in text
 
 
 def test_pack_focus_states_its_rule(project):
@@ -218,20 +220,24 @@ def test_pack_focus_states_its_rule(project):
     data = _json('pack', to_posix(project), '--focus', 'late')
     _assert_rule(data['edge_rule'], HEADLINE)
     assert 'relevance' in data['edge_rule']['text']
-    assert 'Rule: ' in _run('pack', to_posix(project), '--focus', 'late')
+    text = _run('pack', to_posix(project), '--focus', 'late')
+    assert 'Rules: --format json (edge_rule.text)' in text.splitlines() and data['edge_rule']['text'] not in text
 
 
 def test_pack_without_graph_flags_states_no_rule(project):
     """Negative control: no import edge ranked anything."""
     assert 'edge_rule' not in _json('pack', to_posix(project))
-    assert 'Rule: ' not in _run('pack', to_posix(project))
+    text = _run('pack', to_posix(project))
+    assert 'Rule: ' not in text and 'edge_rule' not in text  # its pointer names only meta.relevance_warning
 
 
 def test_pack_over_mcp_states_its_rule(project):
     from reveal.mcp_server import reveal_pack
     text = reveal_pack(str(project), architecture=True)
-    assert 'Rule: fan-in counts' in text and 'function-level (lazy) imports included (default)' in text
-    assert 'Rule: ' not in reveal_pack(str(project))
+    assert 'Rules: --format json (edge_rule.text)' in text.splitlines()  # the CLI text's pointer (BACK-2599)
+    assert 'Rule: fan-in counts' not in text
+    plain = reveal_pack(str(project))
+    assert 'Rule' not in plain and 'Next: ' not in plain  # the MCP layout leaves out the not-requested notice
 
 
 # ------------------------------------------------------------------ deps

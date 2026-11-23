@@ -3,10 +3,26 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
-from ...analyzers.imports.service import edge_rule_lines
 from ..base import BaseRenderer, capped_section
 from ...utils.results import outcome_of
-from ...utils.warning_render import meta_warning_lines
+from ...utils.warning_render import meta_warning_lines, rule_text_lines
+
+# The standing notice of a pack that asked for neither graph signal (BACK-1006), kept in meta.relevance_warning. The text
+# answer points at that field and names the two flags as the next step (BACK-2599); a requested signal whose graph could
+# not be built keeps its own warning, which this sentence is not.
+RELEVANCE_NOT_REQUESTED = ("fan-in and graph-relevance signals were not computed (pass "
+                           "--architecture and/or --focus to enable) -- files are "
+                           "ranked by filename/entry-point heuristics and recency only")
+_GRAPH_SIGNALS_NEXT = 'Next: --architecture ranks by import fan-in; --focus PATTERN by graph relevance'
+
+
+def pack_rule_lines(result: Dict[str, Any], *, relevance_note: bool = True) -> List[str]:
+    """The one Rules pointer: the import-edge rule the ranking read (``edge_rule``, BACK-2087) and, unless
+    ``relevance_note`` is off (the MCP layout leaves it out), the standing not-requested notice with its next step."""
+    standing = relevance_note and (result.get('meta') or {}).get('relevance_warning') == RELEVANCE_NOT_REQUESTED
+    fields = ('edge_rule.text',) + (('meta.relevance_warning',) if standing else ())
+    lines = rule_text_lines(result, fields=fields, standing_types=frozenset())
+    return [*lines, _GRAPH_SIGNALS_NEXT] if standing else lines
 
 def _format_architecture_brief(selected: List[Dict[str, Any]]) -> List[str]:
     """Format a concise architecture hint derived from fan-in and priority."""
@@ -224,7 +240,7 @@ class PackRenderer(BaseRenderer):
         meta = result.get('meta') or {}
         if meta.get('since_error'):
             print(f"Warning: --since: {meta['since_error']}", file=sys.stderr)
-        if meta.get('relevance_warning'):
+        if meta.get('relevance_warning') and meta['relevance_warning'] != RELEVANCE_NOT_REQUESTED:
             print(f"Warning: {meta['relevance_warning']}", file=sys.stderr)
 
     @classmethod
@@ -234,7 +250,7 @@ class PackRenderer(BaseRenderer):
         body = pack_text(Path(result['path']), result['files'], meta,
                          result.get('verbose', verbose), meta.get('budget_tokens'),
                          meta.get('budget_lines'), result.get('architecture', architecture),
-                         rule_lines=edge_rule_lines(result))
+                         rule_lines=pack_rule_lines(result))
         if content or 'content' in result:
             body += "\n".join(_content_lines(result.get('content', []))) + "\n"
         return body
