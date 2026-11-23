@@ -49,6 +49,13 @@ class MissingResourceError(RequestValidationError):
     """
 
 
+class PathNotFoundError(MissingResourceError, FileNotFoundError):
+    """The path a request names does not exist: an invalid resource, exit 2 (D6), and still the FileNotFoundError a
+    library caller catches, as ``UnsupportedOverrideError`` is still a TypeError. The one class for a missing path on
+    every transport (BACK-2325, D21); it is an ``OSError`` too, so MCP reads its message as public. Raise it with a
+    message: ``ValueError`` comes first in its bases, so ``errno`` and ``filename`` stay None."""
+
+
 class ElementNotFoundError(MissingResourceError):
     """The element a resource names is not there (``diff://a.py:b.py/nope``): an invalid request, exit 2, answered as
     every element miss is, with the adapter's element names (``available_elements``; the router's
