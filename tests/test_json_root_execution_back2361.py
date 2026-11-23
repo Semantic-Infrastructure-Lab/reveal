@@ -163,7 +163,7 @@ def test_element_remains_legacy_and_stdin_batches_exit_like_the_request(files, m
                               (files / 'object.json').as_posix(), 'scalar', _default_args())
     # The JSON renderer has no element route: the element is refused, not dropped (BACK-2522).
     assert element.result['meta']['errors'][0]['code'] == 'invalid_request'
-    assert "json://<file>[/path/to/key]" in element.result['error']
+    assert "json://<file>[/key]" in element.result["error"]  # the schema syntax line (BACK-2713)
     # api.query's element is the CLI's positional element: refused the same way; the URI names it (BACK-2687).
     with pytest.raises(RequestValidationError, match=r"json:// takes no positional element \('scalar'\)"):
         api.query(uri(files / 'object.json'), 'scalar')
