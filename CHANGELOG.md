@@ -18,6 +18,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Behavior changes
 
+- A path read refused in `--format json` (`reveal FILE`, `FILE ELEMENT --view V`, `--outline`, `--head`, a directory) now answers the invalid-request JSON document on stdout, exit 2, instead of empty stdout, and an element request given a flag it has no control for (`reveal FILE ELEMENT --view boundary --offset 1`, an unknown flag) exits 2 naming the element controls instead of argparse's usage error (BACK-2756).
+- `REVEAL_CONFIG` naming no file now exits 2 naming it on every path read (`reveal FILE`, element views, `--outline`, `--grep`, a `--stdin` file line, MCP `reveal_nav`) as on every subcommand, and an unparseable config file exits 3 on the plain file read instead of exiting 0 without a word; `REVEAL_NO_CONFIG=1` runs without config (BACK-2756).
 - `reveal sqlite DB[/TABLE]` is a subcommand answering as `sqlite://DB[/TABLE]`, and the integrity check is `--view health` (`--check` and `?check` still work, with a deprecation note). `--view health` gates on findings by default: a failed integrity check now exits 1 like a foreign-key violation (it exited 2), `--fail-on none` reports them with 0, and an unreadable database exits 3 (it exited 1 under `--check`). Query keys and flags sqlite never read (`?limit`, `--limit`, `--head`, `--lint`, `--only-failures`) exit 2 naming `view` instead of a note (BACK-2626, BACK-2753).
 - `reveal xlsx FILE` is a subcommand answering as `xlsx://FILE`, and its options are flags on both: `--sheet`, `--cells` (was `?range=`), `--match` (was `?search=`; repeat it to require every term in a row), `--limit`, `--formulas on|off`, `--powerpivot`, `--powerquery`, `--names`, `--connections` and `--format csv`. The query-string keys still work with a note until 1.0. `--limit 0` and `--all` give every row (0 meant the default 100), the search JSON's `pattern` is a list of terms, and two views, an unknown, unread or repeated key, a positional sheet or `--format csv` outside the sheet view exit 2 instead of a warning (BACK-2626).
 
@@ -161,6 +163,7 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
+- A value flag typed without its value before `--format json` (`reveal ast proj --limit --format json`) answers the invalid-request JSON document instead of argparse's text usage with empty stdout, on every subcommand and URI (BACK-2763).
 - xlsx: `sheets_with_matches` counts the sheets of every match, not of the matches a `--limit` shows, and `reveal.api.query('xlsx', FILE, sheet=..., limit=...)` binds its keywords (they were dropped, so the overview answered) (BACK-2626).
 - `reveal.api.query('env://NAME')` answers that variable, as `reveal env://NAME --format json` does; it returned the whole environment listing. A variable that is not set raises `RequestValidationError`, where the CLI exits 2 (BACK-2626).
 
