@@ -501,7 +501,7 @@ class TestHelpAdapter(unittest.TestCase):
         self.assertEqual(len(recipes), 1)
         recipe = recipes[0]
         self.assertNotIn('uncalled', recipe['query'])
-        self.assertIn('?callers=NAME', recipe['description'])
+        self.assertIn('reveal calls <repo> --callers NAME', recipe['description'])  # the subcommand, BACK-2713
         self.assertIn('not proof of dead code', recipe['description'])
 
     def test_examples_rendered(self):

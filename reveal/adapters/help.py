@@ -140,9 +140,9 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
         'task': 'security',
         'description': 'Security review — auth code, complex query construction, certificate expiry, the external attack surface',
         'recipes': [
-            {'goal': 'Find authentication functions', 'query': 'ast://src?name~=auth&kind=function', 'description': 'Locate authentication-related code', 'output_type': 'ast_query'},
+            {'goal': 'Find authentication functions', 'query': "reveal ast src --where 'name~=auth' --kind function", 'description': 'Locate authentication-related code', 'output_type': 'ast_query'},
             {'goal': 'Check SSL certificate expiry', 'query': 'ssl://example.com --expiring-within=30', 'description': 'Find certificates expiring soon', 'output_type': 'ssl_check'},
-            {'goal': 'Find SQL query construction', 'query': 'ast://src?name~=query&complexity>5', 'description': 'Locate complex database queries (SQL injection risk)', 'output_type': 'ast_query'},
+            {'goal': 'Find SQL query construction', 'query': "reveal ast src --where 'name~=query' --where 'complexity>5'", 'description': 'Locate complex database queries (SQL injection risk)', 'output_type': 'ast_query'},
             {'goal': 'Map the external attack surface', 'query': 'reveal surface src', 'description': 'Every CLI, HTTP route, env var, network call, and filesystem write the system touches — taxonomy-based, project-specific clients outside known libraries not detected', 'output_type': 'surface_scan'},
         ]
     },
@@ -152,10 +152,10 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
         'description': 'Codebase exploration and understanding',
         'recipes': [
             {'goal': 'Get project overview', 'query': 'reveal src/', 'description': 'Progressive disclosure: structure first'},  # a directory_tree; file-mode views declare no adapter schema
-            {'goal': 'Find entry points', 'query': 'ast://src?name=main*&kind=function', 'description': 'Locate main() and main_* entry point functions', 'output_type': 'ast_query'},
-            {'goal': 'List all classes', 'query': 'ast://src?kind=class&sort=name', 'description': 'Enumerate class hierarchy for structural overview', 'output_type': 'ast_query'},
-            {'goal': 'Find complex code', 'query': 'ast://src?complexity>15', 'description': 'Locate high-complexity functions', 'output_type': 'ast_query'},
-            {'goal': 'Find architectural seams', 'query': 'contracts://src', 'description': 'ABCs, Protocols, TypedDicts, dataclasses, BaseModels — where the interface boundaries are', 'output_type': 'contracts'},
+            {'goal': 'Find entry points', 'query': "reveal ast src --where 'name=main*' --kind function", 'description': 'Locate main() and main_* entry point functions', 'output_type': 'ast_query'},
+            {'goal': 'List all classes', 'query': 'reveal ast src --kind class --sort name', 'description': 'Enumerate class hierarchy for structural overview', 'output_type': 'ast_query'},
+            {'goal': 'Find complex code', 'query': "reveal ast src --where 'complexity>15'", 'description': 'Locate high-complexity functions', 'output_type': 'ast_query'},
+            {'goal': 'Find architectural seams', 'query': 'reveal contracts src', 'description': 'ABCs, Protocols, TypedDicts, dataclasses, BaseModels — where the interface boundaries are', 'output_type': 'contracts'},
         ]
     },
     'due-diligence': {
@@ -164,12 +164,12 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
         'description': 'Technical due-diligence workflow — orient, find risk, quantify coupling, blast-radius, duplication, test honesty (run in order)',
         'recipes': [
             {'goal': '0. Map the project', 'query': 'reveal overview <repo>', 'description': 'Recognized code-file/language counts, major components, bounded static import relationships and coverage. Follow targeted queries for deeper assessment; capped scans disclose their limits', 'output_type': 'overview'},
-            {'goal': '1. What fraction of this is first-party', 'query': "reveal 'metrics://<repo>?view=provenance'", 'description': 'Provenance (first_party/test/vendor/minified) for every file, full population — not the ranked subset the metrics view=hotspots entries tag. Run this before ranking anything, so noise (vendored/generated/test code) doesn\'t dominate the rest of this workflow', 'output_type': 'classify_report'},
-            {'goal': '2. Where is the risk concentrated', 'query': "reveal 'ast://<repo>?complexity>25&sort=-complexity'", 'description': 'The files/functions carrying disproportionate complexity — where future incidents will trace back to (files: reveal metrics <repo> --view hotspots)', 'output_type': 'ast_query'},
-            {'goal': '3. How coupled is it', 'query': "reveal 'imports://<repo>?circular=true'", 'description': 'Circular-dependency groups — a concrete, checkable architectural-debt number for a DD memo', 'output_type': 'circular_dependencies'},
-            {'goal': '4. If I touch this, what breaks', 'query': "reveal 'imports://<repo>/<module>?importers'", 'description': 'Who imports this module (blast radius), each importer with its import line (depends://<repo>/<module> is the retired spelling). For a function: reveal <repo>/<file> <fn> --view effects (note: intra-procedural only — "none" means none in this body, not safe to change)', 'output_type': 'module_importers'},
-            {'goal': "5. What's duplicated or unused", 'query': "reveal check <repo> --select D,I", 'description': "Duplicate functions (D001) and import problems, unused imports among them (I rules). To ask whether one function is used, list its callers: reveal 'calls://<repo>?callers=NAME' (an empty answer is not proof of dead code: dynamic dispatch and framework hooks leave no static call)"},
-            {'goal': '6. Is the test suite honest', 'query': "reveal 'patches://<repo>/tests?view=target&limit=15'", 'description': 'Mock/patch-pressure grouped by target (Python/TS-JS) — which boundaries are over-mocked, a test-trust smell', 'output_type': 'patches_scan'},
+            {'goal': '1. What fraction of this is first-party', 'query': 'reveal metrics <repo> --view provenance', 'description': 'Provenance (first_party/test/vendor/minified) for every file, full population — not the ranked subset the metrics view=hotspots entries tag. Run this before ranking anything, so noise (vendored/generated/test code) doesn\'t dominate the rest of this workflow', 'output_type': 'classify_report'},
+            {'goal': '2. Where is the risk concentrated', 'query': "reveal ast <repo> --where 'complexity>25' --sort=-complexity", 'description': 'The files/functions carrying disproportionate complexity — where future incidents will trace back to (files: reveal metrics <repo> --view hotspots)', 'output_type': 'ast_query'},
+            {'goal': '3. How coupled is it', 'query': 'reveal imports <repo> --circular', 'description': 'Circular-dependency groups — a concrete, checkable architectural-debt number for a DD memo', 'output_type': 'circular_dependencies'},
+            {'goal': '4. If I touch this, what breaks', 'query': 'reveal imports <repo>/<module> --importers', 'description': 'Who imports this module (blast radius), each importer with its import line (depends://<repo>/<module> is the retired spelling). For a function: reveal <repo>/<file> <fn> --view effects (note: intra-procedural only — "none" means none in this body, not safe to change)', 'output_type': 'module_importers'},
+            {'goal': "5. What's duplicated or unused", 'query': "reveal check <repo> --select D,I", 'description': "Duplicate functions (D001) and import problems, unused imports among them (I rules). To ask whether one function is used, list its callers: reveal calls <repo> --callers NAME (an empty answer is not proof of dead code: dynamic dispatch and framework hooks leave no static call)"},
+            {'goal': '6. Is the test suite honest', 'query': 'reveal patches <repo>/tests --view target --limit 15', 'description': 'Mock/patch-pressure grouped by target (Python/TS-JS) — which boundaries are over-mocked, a test-trust smell', 'output_type': 'patches_scan'},
             {'goal': '7. Did recent changes hold up', 'query': 'reveal check --changed <old-tag>..<new-tag>', 'description': 'Quality rules over the files a git range changed (or main..feature for an open PR); structure of the same range: reveal diff://git://<old-tag>/.:git://<new-tag>/. — CLI flag, no URI adapter form'},
             {'goal': '8. Diff structure across two revisions', 'query': "reveal 'diff://git://<file>@<refA>:git://<file>@<refB>'", 'description': 'Structural diff between two revisions of a file. For a whole-repo architecture delta, use reveal overview <repo> --against <ref> instead', 'output_type': 'diff_comparison'},
             {'goal': 'Bonus: curate an LLM-ready context snapshot', 'query': 'reveal pack <repo> --architecture', 'description': 'Token-budgeted export of the whole tree, boosted toward widely imported files using import fan-in — for handing the codebase to another agent, not for the DD memo itself', 'output_type': 'pack'},
@@ -180,10 +180,10 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
         'task': 'debugging',
         'description': 'Debugging and error investigation',
         'recipes': [
-            {'goal': 'Find error handlers', 'query': 'ast://src?name~=error&kind=function', 'description': 'Locate error handling code', 'output_type': 'ast_query'},
+            {'goal': 'Find error handlers', 'query': "reveal ast src --where 'name~=error' --kind function", 'description': 'Locate error handling code', 'output_type': 'ast_query'},
             {'goal': 'Check recent changes', 'query': 'reveal git . --view history', 'description': 'Review recent commit history', 'output_type': 'git_ref'},
-            {'goal': 'Find large functions', 'query': 'ast://src?lines>100&kind=function', 'description': 'Locate potentially problematic large functions', 'output_type': 'ast_query'},
-            {'goal': 'Walk the call chain from an entry point', 'query': 'calls://src?callees=main&depth=2&detail', 'description': 'Level-by-level callee walk with params and side effects — see the actual path a bug report walks', 'output_type': 'calls_callees'},
+            {'goal': 'Find large functions', 'query': "reveal ast src --where 'lines>100' --kind function", 'description': 'Locate potentially problematic large functions', 'output_type': 'ast_query'},
+            {'goal': 'Walk the call chain from an entry point', 'query': 'reveal calls src --callees main --depth 2 --detail', 'description': 'Level-by-level callee walk with params and side effects — see the actual path a bug report walks', 'output_type': 'calls_callees'},
         ]
     },
     'quality': {
@@ -191,13 +191,13 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
         'task': 'quality',
         'description': 'Code quality and hotspot analysis',
         'recipes': [
-            {'goal': 'Find quality hotspots', 'query': 'metrics://src?view=hotspots', 'description': 'Files ranked by hotspot score, each with its quality score, issues and path-only provenance tag; --fail-on findings exits 1 for a file below quality 70 or a function above complexity 20 (replaces hotspots://)', 'output_type': 'stats_summary'},
-            {'goal': 'Rank the most complex functions', 'query': 'ast://src?complexity>=10&sort=-complexity&limit=10', 'description': 'Functions by descending cyclomatic complexity across the tree (the function half of the retired hotspots://; JSON keeps the global order)', 'output_type': 'ast_query'},
-            {'goal': 'Get an overall quality score', 'query': 'metrics://src', 'description': 'Codebase-wide metrics — lines, functions, quality score — the raw numbers the hotspot ranking scores', 'output_type': 'stats_summary'},
-            {'goal': 'Check code complexity', 'query': 'ast://src?complexity>10', 'description': 'High complexity functions', 'output_type': 'ast_query'},
-            {'goal': 'Find long functions lacking simplicity', 'query': 'ast://src?kind=function&lines>50&sort=-lines', 'description': 'Large functions sorted by size — prime documentation/refactor targets', 'output_type': 'ast_query'},
-            {'goal': 'Which third-party and stdlib packages the code uses', 'query': 'imports://src?external', 'description': 'Unresolved (third-party or unresolved-local) and stdlib packages by use, with the languages importing each — pair with ?circular and ?unused for the rest of a dependency health check', 'output_type': 'external_packages'},
-            {'goal': 'Where test mocking hides real coupling', 'query': 'patches://src?view=pressure', 'description': 'Joins test patch/mock pressure with production boundary fan-out — over-mocked boundaries are untested boundaries', 'output_type': 'testability_report'},
+            {'goal': 'Find quality hotspots', 'query': 'reveal metrics src --view hotspots', 'description': 'Files ranked by hotspot score, each with its quality score, issues and path-only provenance tag; --fail-on findings exits 1 for a file below quality 70 or a function above complexity 20 (replaces hotspots://)', 'output_type': 'stats_summary'},
+            {'goal': 'Rank the most complex functions', 'query': "reveal ast src --where 'complexity>=10' --sort=-complexity --limit 10", 'description': 'Functions by descending cyclomatic complexity across the tree (the function half of the retired hotspots://; JSON keeps the global order)', 'output_type': 'ast_query'},
+            {'goal': 'Get an overall quality score', 'query': 'reveal metrics src', 'description': 'Codebase-wide metrics — lines, functions, quality score — the raw numbers the hotspot ranking scores', 'output_type': 'stats_summary'},
+            {'goal': 'Check code complexity', 'query': "reveal ast src --where 'complexity>10'", 'description': 'High complexity functions', 'output_type': 'ast_query'},
+            {'goal': 'Find long functions lacking simplicity', 'query': "reveal ast src --where 'lines>50' --kind function --sort=-lines", 'description': 'Large functions sorted by size — prime documentation/refactor targets', 'output_type': 'ast_query'},
+            {'goal': 'Which third-party and stdlib packages the code uses', 'query': 'reveal imports src --external', 'description': 'Unresolved (third-party or unresolved-local) and stdlib packages by use, with the languages importing each — pair with ?circular and ?unused for the rest of a dependency health check', 'output_type': 'external_packages'},
+            {'goal': 'Where test mocking hides real coupling', 'query': 'reveal patches src --view pressure', 'description': 'Joins test patch/mock pressure with production boundary fan-out — over-mocked boundaries are untested boundaries', 'output_type': 'testability_report'},
         ]
     },
     'infrastructure': {
@@ -239,10 +239,10 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
         'description': 'Claude Code and Codex CLI session analysis — tool usage, files, errors, prompt/answer pairs, search',
         'recipes': [
             {'goal': 'Session overview', 'query': 'reveal claude://session/my-session', 'description': 'Message count, tool calls, duration, tool summary', 'output_type': 'claude_session_overview'},
-            {'goal': 'Search across all sessions', 'query': "reveal 'claude://sessions/?match=validate_token'", 'description': 'Cross-session content search', 'output_type': 'claude_cross_session_search'},
+            {'goal': 'Search across all sessions', 'query': 'reveal claude://sessions/ --match validate_token', 'description': 'Cross-session content search', 'output_type': 'claude_cross_session_search'},
             {'goal': 'Session tool usage', 'query': 'reveal claude://session/my-session/tools', 'description': 'Tool call counts and success rates', 'output_type': 'claude_tool_summary'},
             {'goal': 'Files touched in a session', 'query': 'reveal claude://session/my-session/files', 'description': 'All Read/Write/Edit operations', 'output_type': 'claude_files'},
-            {'goal': 'Session errors', 'query': "reveal 'claude://session/my-session?errors'", 'description': 'All errors with context', 'output_type': 'claude_errors'},
+            {'goal': 'Session errors', 'query': 'reveal claude://session/my-session --errors', 'description': 'All errors with context', 'output_type': 'claude_errors'},
             {'goal': 'Prompt/answer pairs for a session', 'query': 'reveal claude://session/my-session/exchanges', 'description': 'Each human prompt paired with the assistant\'s final answer, skipping thinking-only and tool-only turns in between', 'output_type': 'claude_exchanges'},
             {'goal': 'Codex session overview', 'query': 'reveal codex://SESSION-ID', 'description': 'Turns, tools, tokens, duration for a Codex CLI session', 'output_type': 'codex_session_overview'},
             {'goal': 'Filter Codex sessions by title', 'query': "reveal codex://sessions/ --where 'session~=validate_token'", 'description': 'Metadata filter by title or first message (SQLite index, no JSONL scan)', 'output_type': 'codex_session_list'},
@@ -255,8 +255,8 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
         'description': 'Prompt history and session discovery across all projects',
         'recipes': [
             {'goal': 'Recent prompts', 'query': 'reveal claude://history', 'description': 'Last 50 prompts across all projects', 'output_type': 'claude_history'},
-            {'goal': 'Search prompt history', 'query': "reveal 'claude://history?match=deploy&since=2026-03-01'", 'description': 'Filter prompts by keyword and date', 'output_type': 'claude_history'},
-            {'goal': 'Prompts for a specific project', 'query': "reveal 'claude://history?project=my-project'", 'description': 'Scope history to one project', 'output_type': 'claude_history'},
+            {'goal': 'Search prompt history', 'query': 'reveal claude://history --since 2026-03-01 --match deploy', 'description': 'Filter prompts by keyword and date', 'output_type': 'claude_history'},
+            {'goal': 'Prompts for a specific project', 'query': 'reveal claude://history --project my-project', 'description': 'Scope history to one project', 'output_type': 'claude_history'},
             {'goal': 'List all sessions', 'query': 'reveal claude://sessions/', 'description': 'All sessions with metadata', 'output_type': 'claude_session_list'},
         ]
     },
@@ -269,7 +269,7 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
             {'goal': 'Inspect a table', 'query': 'reveal sqlite:///path/to/app.db/users', 'description': 'Columns and types, indexes, foreign keys, row count, CREATE statement (schema only: sqlite:// returns no row data)', 'output_type': 'sqlite_table'},
             {'goal': 'MySQL server overview', 'query': 'reveal mysql://user:pass@host', 'description': 'Server health: connections, InnoDB, replication, storage (the path names a section, e.g. mysql://host/databases, not a database)', 'output_type': 'mysql_server'},
             {'goal': 'Inspect an Excel workbook', 'query': 'reveal xlsx:///path/to/data.xlsx', 'description': 'Sheet names numbered for --sheet N, dimensions, row and column counts (reveal data.xlsx is the file view of the same sheets)', 'output_type': 'xlsx_workbook'},
-            {'goal': 'Query a JSON file by path', 'query': 'json://config.json?flatten', 'description': 'Flatten to grep-able dotted-path format (also: ?schema for type structure, ?gron as an alias for ?flatten)', 'output_type': 'json_flatten'},
+            {'goal': 'Query a JSON file by path', 'query': 'reveal json config.json --view flatten', 'description': 'Flatten to grep-able dotted-path format (also: ?schema for type structure, ?gron as an alias for ?flatten)', 'output_type': 'json_flatten'},
         ]
     },
     'runtime': {
@@ -1697,17 +1697,17 @@ class HelpAdapter(ResourceAdapter):
                         ('surface', 'metrics', 'attack-surface map + quality score for the same tree'),
                         ('contracts', 'ast', 'architectural seams + full structure for the same classes'),
                         ('contracts', 'calls', 'contracts + who calls into their implementations'),
-                        ('hotspots', 'metrics', 'hotspots is retired: metrics://?view=hotspots is its file ranking and findings gate'),
-                        ('hotspots', 'ast', 'hotspots is retired: ast://?complexity>=10&sort=-complexity is its function ranking'),
-                        ('metrics', 'ast', '?view=hotspots ranks files; ast\'s complexity sort ranks the functions inside them'),
-                        ('classify', 'metrics', 'classify is retired: metrics://?view=provenance gives the same report'),
-                        ('stats', 'metrics', 'stats is retired: metrics:// is the same adapter under its new name'),
-                        ('deps', 'imports', 'deps is retired: imports://?external, ?circular and ?unused give its sections from one graph build'),
+                        ('hotspots', 'metrics', 'hotspots is retired: reveal metrics --view hotspots is its file ranking and findings gate'),
+                        ('hotspots', 'ast', "hotspots is retired: reveal ast --where 'complexity>=10' --sort=-complexity is its function ranking"),
+                        ('metrics', 'ast', '--view hotspots ranks files; ast\'s complexity sort ranks the functions inside them'),
+                        ('classify', 'metrics', 'classify is retired: reveal metrics --view provenance gives the same report'),
+                        ('stats', 'metrics', 'stats is retired: metrics is the same adapter under its new name'),
+                        ('deps', 'imports', 'deps is retired: reveal imports --external, --circular and --unused give its sections from one graph build'),
                         ('architecture', 'overview', 'architecture is retired: overview owns the compact map and Git-ref comparison'),
                         ('overview', 'ast', 'comparison composes AST complexity; ordinary maps use imports and census only'),
                         ('overview', 'imports', 'bounded map facts use the shared import service and counting rules'),
                         ('testability', 'patches', 'testability joins the same patch scan against production boundary fan-out'),
-                        ('trace', 'calls', 'trace is retired: its frames come from the calls://?callees=&depth= callee walk that replaces it'),
+                        ('trace', 'calls', 'trace is retired: its frames come from the reveal calls --callees NAME --depth N callee walk that replaces it'),
                         ('pack', 'imports', '--architecture/--focus ranking is built on the same import/dependency graph'),
                     ],
                 },
@@ -1759,12 +1759,12 @@ class HelpAdapter(ResourceAdapter):
                 {
                     'adapters': ['ast', 'calls'],
                     'description': 'Core code understanding: structure + relationships',
-                    'example': "reveal src/auth.py  &&  reveal 'calls://src/?callers=validate_token'",
+                    'example': "reveal src/auth.py  &&  reveal calls src/ --callers validate_token",
                 },
                 {
                     'adapters': ['pack', 'ast'],
                     'description': 'PR review: changed context + complex functions',
-                    'example': "reveal pack src/ --since main --content  &&  reveal 'ast://src/?complexity>10'",
+                    'example': "reveal pack src/ --since main --content  &&  reveal ast src/ --where 'complexity>10'",
                 },
                 {
                     'adapters': ['nginx', 'ssl'],
