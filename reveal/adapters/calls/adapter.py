@@ -1031,7 +1031,7 @@ def _callees_rule(depth: int, include_builtins: bool, declined: List[str]) -> Di
             "(call text de-duplicated per definition); a call resolves within the caller's language family to "
             "its one definition, except that a call through an import that resolves to no project file is external; "
             "else a same-file one or the one its imports name, else it is ambiguous and "
-            f"not expanded; builtins {builtins}{'' if include_builtins else ' (builtins=true shows them)'}; "
+            f"not expanded; builtins {builtins}{'' if include_builtins else ' (--builtins shows them)'}; "
             f"depth {depth} (clamped 1-5). Measured: depth-1 call lists only.")
     if declined:
         text += f" No recall snapshot: {', '.join(declined)}."

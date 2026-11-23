@@ -31,7 +31,7 @@
     "uri": "calls://proj?callees=main",
     "exit": 0,
     "fields": {
-      "walk_rule.text": "Rule: callees by definition: each definition of the name, then each definition a call reaches, is expanded once, at its shallowest level; every call site of an expanded definition is an edge (call text de-duplicated per definition); a call resolves within the caller's language family to its one definition, except that a call through an import that resolves to no project file is external; else a same-file one or the one its imports name, else it is ambiguous and not expanded; builtins hidden (builtins=true shows them); depth 1 (clamped 1-5). Measured: depth-1 call lists only."
+      "walk_rule.text": "Rule: callees by definition: each definition of the name, then each definition a call reaches, is expanded once, at its shallowest level; every call site of an expanded definition is an edge (call text de-duplicated per definition); a call resolves within the caller's language family to its one definition, except that a call through an import that resolves to no project file is external; else a same-file one or the one its imports name, else it is ambiguous and not expanded; builtins hidden (--builtins shows them); depth 1 (clamped 1-5). Measured: depth-1 call lists only."
     },
     "standing": [
       "Dynamic dispatch (getattr/setattr, importlib, eval/exec) is not resolved.",
@@ -45,7 +45,7 @@
     "uri": "calls://proj?callees=main&depth=2",
     "exit": 0,
     "fields": {
-      "walk_rule.text": "Rule: callees by definition: each definition of the name, then each definition a call reaches, is expanded once, at its shallowest level; every call site of an expanded definition is an edge (call text de-duplicated per definition); a call resolves within the caller's language family to its one definition, except that a call through an import that resolves to no project file is external; else a same-file one or the one its imports name, else it is ambiguous and not expanded; builtins hidden (builtins=true shows them); depth 2 (clamped 1-5). Measured: depth-1 call lists only."
+      "walk_rule.text": "Rule: callees by definition: each definition of the name, then each definition a call reaches, is expanded once, at its shallowest level; every call site of an expanded definition is an edge (call text de-duplicated per definition); a call resolves within the caller's language family to its one definition, except that a call through an import that resolves to no project file is external; else a same-file one or the one its imports name, else it is ambiguous and not expanded; builtins hidden (--builtins shows them); depth 2 (clamped 1-5). Measured: depth-1 call lists only."
     },
     "standing": [
       "Dynamic dispatch (getattr/setattr, importlib, eval/exec) is not resolved.",
@@ -60,7 +60,7 @@
     "uri": "calls://proj?callees=main&depth=2&detail",
     "exit": 0,
     "fields": {
-      "walk_rule.text": "Rule: callees by definition: each definition of the name, then each definition a call reaches, is expanded once, at its shallowest level; every call site of an expanded definition is an edge (call text de-duplicated per definition); a call resolves within the caller's language family to its one definition, except that a call through an import that resolves to no project file is external; else a same-file one or the one its imports name, else it is ambiguous and not expanded; builtins hidden (builtins=true shows them); depth 2 (clamped 1-5). Measured: depth-1 call lists only."
+      "walk_rule.text": "Rule: callees by definition: each definition of the name, then each definition a call reaches, is expanded once, at its shallowest level; every call site of an expanded definition is an edge (call text de-duplicated per definition); a call resolves within the caller's language family to its one definition, except that a call through an import that resolves to no project file is external; else a same-file one or the one its imports name, else it is ambiguous and not expanded; builtins hidden (--builtins shows them); depth 2 (clamped 1-5). Measured: depth-1 call lists only."
     },
     "standing": [
       "Dynamic dispatch (getattr/setattr, importlib, eval/exec) is not resolved.",
@@ -75,7 +75,7 @@
     "uri": "calls://proj?sort=-callers",
     "exit": 0,
     "fields": {
-      "rule": "unique callers of each function, method or class defined under the path, matched by name as ?callers=NAME counts them (a name shared with a library method also counts its calls); names defined elsewhere are not ranked (builtins=true ranks them)"
+      "rule": "unique callers of each function, method or class defined under the path, matched by name as --callers NAME counts them (a name shared with a library method also counts its calls); names defined elsewhere are not ranked (--builtins ranks them)"
     },
     "standing": [
       "Dynamic dispatch (getattr/setattr, importlib, eval/exec) is not resolved.",

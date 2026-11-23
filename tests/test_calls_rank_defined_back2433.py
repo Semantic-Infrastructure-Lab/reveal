@@ -61,7 +61,8 @@ def test_ranking_states_its_rule_and_the_unranked_names(tmp_path):
     result = _ranked(tmp_path)
     assert result['total_unique_callees'] == 3
     assert result['undefined_callees'] >= 4  # get, append, Path and the qualified spellings
-    assert 'defined' in result['rule'] and '?callers=' in result['rule']
+    # The rule names the --callers count it matches (it named ?callers= until BACK-2599).
+    assert 'defined' in result['rule'] and '--callers NAME' in result['rule']
 
 
 def test_builtins_true_keeps_every_index_key_for_the_graph_invariants(tmp_path):

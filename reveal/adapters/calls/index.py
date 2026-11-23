@@ -1908,8 +1908,8 @@ def find_uncalled(
 
 
 _RANK_RULE = ('unique callers of each function, method or class defined under the path, matched by name as '
-              '?callers=NAME counts them (a name shared with a library method also counts its calls); names '
-              'defined elsewhere are not ranked (builtins=true ranks them)')
+              '--callers NAME counts them (a name shared with a library method also counts its calls); names '
+              'defined elsewhere are not ranked (--builtins ranks them)')
 _RANK_RULE_ALL = ('unique callers of every called name the callers index records, builtins and library '
                   'methods included, under each spelling it is keyed by (bare and receiver-qualified)')
 
