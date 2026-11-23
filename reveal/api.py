@@ -296,13 +296,14 @@ def _legacy_element(adapter_class: Any, scheme: str, element_name: Optional[str]
     """The RETIREMENTS row of a positional element a declared noun still answers until the cut, or None. A declared
     noun reads no positional element: the CLI's refusal, before the adapter is built, never in get_element (V020: a
     missing element is None there); plugin subclasses keep forwarding (BACK-2687). A scheme whose element is a legacy
-    spelling (``target:SCHEME.element``: help://, reveal://) answers it through get_element with its note (BACK-2767)."""
-    from .adapters.factory import uses_bound_query_call
-    if not element_name or not uses_bound_query_call(adapter_class):
+    spelling (``target:SCHEME.element``: help://, reveal://, and the unbound diff://) answers it through get_element
+    with its note (BACK-2767, BACK-2768)."""
+    if not element_name:
         return None
+    from .adapters.factory import uses_bound_query_call
     from .cli.invocation import element_retirement
     legacy = element_retirement(scheme)
-    if legacy is None:
+    if legacy is None and uses_bound_query_call(adapter_class):
         from .adapters.base import unread_element_message
         from .errors import RequestValidationError
         raise RequestValidationError(unread_element_message(adapter_class, scheme, element_name))
