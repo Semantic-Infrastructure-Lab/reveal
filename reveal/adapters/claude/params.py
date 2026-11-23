@@ -2,7 +2,7 @@
 from dataclasses import replace
 from typing import Any, Callable, cast
 
-from ...utils.query_binding import (bind_declared_params, legacy_presence_value as presence, runtime_controls,
+from ...utils.query_binding import (bound_constructor_params, legacy_presence_value as presence, runtime_controls,
                                     string_value as text)
 from ...utils.query_parser import CliBinding, LegacySpelling, ParamSpec, ParamValueError, where_param, nonnegative_display_limit, nonempty_scalar, legacy_check, legacy_slices
 from ...utils.time_window import time_window_param
@@ -172,7 +172,7 @@ def translate_request(query, params, resource=''):
     """The resource and the runtime controls a request selects, before Claude's own request checks: a view becomes
     its path, a detail level its legacy control, match the reader's search, contains or match. The answer predictor
     reads this, so a request the checks will refuse still names the answer it selects."""
-    bound = bind_declared_params(PARAM_SPECS, query or '', transport='uri') if params is None else params
+    bound = bound_constructor_params(PARAM_SPECS, query, params)  # a plain mapping binds too (BACK-2772)
     # presence readers never mistake a False/None override for a flag; reading where reads legacy filter and a bare
     # ?session~=TEXT folded into it (last: tail)
     runtime = runtime_controls(PARAM_SPECS, bound)

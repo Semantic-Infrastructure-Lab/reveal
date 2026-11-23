@@ -668,7 +668,8 @@ class CallsAdapter(ResourceAdapter):
     def __init__(self, resource: str, query: Optional[str] = None, *,
                  params: Optional[Dict[str, Any]] = None):
         expanded = os.path.expanduser(resource)  # raises TypeError for non-str path (contract)
-        self.query_params = bound_constructor_params(self.PARAM_SPECS, query if isinstance(query, str) else None, params)
+        self.query_params = bound_constructor_params(self.PARAM_SPECS, query if isinstance(query, str) else None,
+                                                     params)
         path, name = self._split_name_shorthand(expanded)
         # path:name is the callers mode: with an explicit mode it is a second one (BACK-2102).
         self._shorthand_conflict = resource if name and _selected_modes(self.query_params) else None

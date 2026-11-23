@@ -451,6 +451,8 @@ class AstAdapter(ResourceAdapter):
 
         try:
             self._prepare_query(query_string, params)
+        except RequestValidationError:
+            raise  # the binder's own class (an unknown params key's UnsupportedOverrideError stays a TypeError)
         except ValueError as exc:
             raise RequestValidationError(str(exc)) from exc
 

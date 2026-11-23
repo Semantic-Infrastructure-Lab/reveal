@@ -1,7 +1,7 @@
 """Codex query controls, bound before SQLite and JSONL session reads."""
 from dataclasses import replace
 
-from ...utils.query_binding import (bind_declared_params, boolean_value, legacy_switch, runtime_controls,
+from ...utils.query_binding import (bound_constructor_params, boolean_value, legacy_switch, runtime_controls,
                                     string_value)
 from ...utils.query_parser import (CliBinding, LegacySpelling, ParamSpec, ParamValueError, legacy_check,
                                    legacy_slices, nonnegative_display_limit, where_param, whole_number)
@@ -128,7 +128,7 @@ PARAM_SPECS = (WHERE, SEARCH, MATCH, SINCE, UNTIL, KEY, VIEW, DETAIL, _MATCHES, 
 
 
 def bind_query(query, params):
-    bound = bind_declared_params(PARAM_SPECS, query or '', transport='uri') if params is None else params
+    bound = bound_constructor_params(PARAM_SPECS, query, params)  # a plain mapping binds too (BACK-2772)
     runtime = runtime_controls(PARAM_SPECS, bound)
     for spec in PARAM_SPECS:
         if spec.name in dict.keys(runtime):
