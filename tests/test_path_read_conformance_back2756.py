@@ -84,7 +84,7 @@ def test_mcp_reveal_run_gives_the_same_teaching(element_workspace):
     assert unsupported_controls_message(ELEMENT_VIEW_SPECS, ['--offset']) in text and 'usage:' not in text
 
 
-# The file route's owner of cell 3's message, unit by unit: one answer per route the main parser's error reaches.
+# The owner of cell 3's message (beside the URI's, uri_flag_message), unit by unit: one answer per route the main parser's error reaches.
 def _reread(*argv):
     from reveal.cli.parser import create_argument_parser
     args, _unknown = create_argument_parser('').parse_known_args(list(argv))
@@ -103,7 +103,7 @@ def _reread(*argv):
     ((ELEMENT_FILE, ELEMENT, *VIEW), 'unrecognized arguments: extra', False),             # an extra positional
 ], ids=['element-view', 'varflow', 'extraction', 'file', 'directory', 'uri', 'at-file', 'other-error', 'positional'])
 def test_path_read_flag_message_answers_only_element_requests(argv, message, taught):
-    from reveal.cli.routing.file import path_read_flag_message
+    from reveal.cli.routing.declared import path_read_flag_message
     flags = [word for word in message.partition(':')[2].split() if word.startswith('-')]
     expected = unsupported_controls_message(ELEMENT_VIEW_SPECS, flags) if taught else None
     assert path_read_flag_message(_reread(*argv), message) == expected
@@ -112,5 +112,5 @@ def test_path_read_flag_message_answers_only_element_requests(argv, message, tau
 @pytest.mark.parametrize('target, path_read', [('a.py', True), ('proj/', True), ('-', True), ('ast://proj', False),
                                                ('@list.txt', False), ('', False), (None, False)])
 def test_is_path_read(target, path_read):
-    from reveal.cli.routing.file import is_path_read
+    from reveal.cli.routing.declared import is_path_read
     assert is_path_read(target) is path_read

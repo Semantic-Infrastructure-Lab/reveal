@@ -17,6 +17,7 @@ from typing import Optional
 # Module-level imports so callers can mock reveal.cli.routing.file.handle_uri
 # and reveal.cli.routing.file.handle_file in tests.
 from .uri import handle_uri  # noqa: E402
+from .declared import is_path_read  # noqa: E402
 from .formats import (  # noqa: E402
     DEFAULT_OUTPUT_FORMATS, reject_unhonored_also_json, require_supported_format,
 )
@@ -442,28 +443,6 @@ PATHLESS_FLAGS = {
 # `--stdin` cannot reach them, so the pipe the other flags are pointed at is no answer for these
 # (it scanned '.' for --decorator-stats and printed a usage line for the rest, BACK-1764).
 STDIN_BLIND_FLAGS = frozenset({'explain_file', 'capabilities', 'show_ast', 'decorator_stats'})
-
-
-def is_path_read(target) -> bool:
-    """Whether the request's target is a path read (a file or directory), not a URI or an ``@file`` list."""
-    return isinstance(target, str) and bool(target) and '://' not in target and not target.startswith('@')
-
-
-def path_read_flag_message(args: 'Namespace', message: str) -> Optional[str]:
-    """Rule 3's one message for flags the main parser does not have on an element request of a path read, or None
-    (argparse's own error stands: another error, a URI, a path read that is no element request, BACK-2756 cell 3).
-    *args*: the request as the main parser re-read it. A path read that is not an element request has no declaration
-    to name and keeps BACK-522's scoped usage; an element request names its declarations (``ELEMENT_VIEW_SPECS``),
-    as its refusal of a known main-parser flag does (``_reject_unsupported_element_controls``)."""
-    from ...nav_params import ELEMENT_VIEW_SPECS, element_request_given
-    from ...utils.query_binding import unsupported_controls_message
-    from .declared import typed_source
-    flags = [token for token in message.partition(':')[2].split() if token.startswith('-')]
-    if not is_path_read(getattr(args, 'path', None)) or not message.startswith('unrecognized arguments:') or not flags:
-        return None
-    if not element_request_given(typed_source(ELEMENT_VIEW_SPECS, args)[0]):
-        return None
-    return unsupported_controls_message(ELEMENT_VIEW_SPECS, flags)
 
 
 def _given_flags(args: 'Namespace', table: dict) -> list:
