@@ -385,17 +385,12 @@ def query(
 
     _refuse_removed_controls(scheme, uri, kwargs)
     from .adapters.factory import _canonical_init, uses_bound_query_call
-    from .cli.invocation import element_retirement
-    legacy_element = None
     if element_name and uses_bound_query_call(adapter_class):
         # A declared noun reads no positional element: the CLI's refusal, before the adapter is built, never in
-        # get_element (V020: a missing element is None there). Plugin subclasses keep forwarding (BACK-2687). A scheme
-        # whose element is a legacy spelling answers it through get_element with its note until the cut (BACK-2764).
-        legacy_element = element_retirement(scheme)
-        if legacy_element is None:
-            from .adapters.base import unread_element_message
-            from .errors import RequestValidationError
-            raise RequestValidationError(unread_element_message(adapter_class, scheme, element_name))
+        # get_element (V020: a missing element is None there). Plugin subclasses keep forwarding (BACK-2687).
+        from .adapters.base import unread_element_message
+        from .errors import RequestValidationError
+        raise RequestValidationError(unread_element_message(adapter_class, scheme, element_name))
 
     from .utils.request_cache import host_request
     from .utils.invocation_log import log_scope
@@ -411,7 +406,7 @@ def query(
     # One invocation log for the whole call, so a config problem met while the adapter is
     # built reaches the answer as the CLI's JSON carries it (BACK-2659).
     with host_request(), log_scope(to_stderr=False), gitignore_scope(respect_gitignore):
-        if uses_bound_query_call(adapter_class) and legacy_element is None:
+        if uses_bound_query_call(adapter_class):
             bound = _canonical_init(adapter_class, resource, overrides=kwargs)
             def bound_answer(bound=bound):
                 from .utils.exclusions import exclusion_scope
@@ -428,7 +423,7 @@ def query(
         # Only a class's own declaration adopts the check, as with BOUND_QUERY_CALL: a plugin subclass that inherits
         # PARAM_SPECS keeps forwarding its keywords to its own structure call.
         declarations = vars(adapter_class).get('PARAM_SPECS') if isinstance(adapter_class, type) else None
-        if (not element_name or legacy_element) and kwargs and declarations is not None:
+        if not element_name and kwargs and declarations is not None:
             # A declared noun whose structure call takes the overrides itself: an undeclared one is the same invalid
             # request, with the same message, as on a bound noun (rule 3, BACK-2654).
             from .utils.query_binding import reject_unsupported_overrides
@@ -439,12 +434,7 @@ def query(
             adapter = _default_from_uri(adapter_class, scheme, resource, element_name)
 
         if element_name:
-            def element_answer():
-                if legacy_element:
-                    from .cli.invocation import retirement_note
-                    retirement_note(legacy_element)  # inside the scope, so it reaches meta.warnings
-                return adapter.get_element(element_name, **kwargs)
-            result = _noted_answer(scheme, uri, kwargs, element_answer)
+            result = _noted_answer(scheme, uri, kwargs, lambda: adapter.get_element(element_name, **kwargs))
             if result is None:
                 raise ValueError(f"Element {element_name!r} not found in {uri}")
             return _spelled(result)
