@@ -114,9 +114,9 @@ def _build_adapter_examples() -> str:
   reveal reveal://config                      # Show configuration sources and values
   reveal reveal://config --format json        # Config as JSON for scripts
 
-  reveal 'ast://./src?complexity>10'          # Find complex functions
-  reveal 'ast://app.py?lines>50'              # Find long functions
-  reveal 'ast://.?kind=function' --format=json  # All functions as JSON
+  reveal ast ./src --where 'complexity>10'    # Find complex functions
+  reveal ast app.py --where 'lines>50'        # Find long functions
+  reveal ast . --kind function --format=json  # All functions as JSON
 
   # Universal operation flags (work across all adapters with --check)
   reveal ssl://example.com --check --advanced        # SSL deep health check
