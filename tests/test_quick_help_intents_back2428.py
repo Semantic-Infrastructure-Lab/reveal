@@ -74,9 +74,9 @@ def test_markdown_section_intent_returns_body_not_outline(tmp_path, monkeypatch)
 
 def test_callers_intent_is_unchanged_and_finds_the_caller(tmp_path, monkeypatch):
     row = intent('know who calls a function')
-    assert row == {
-        'want': 'know who calls a function', 'use': 'calls://',
-        'example': "reveal 'calls://src/?callers=my_fn'"}
+    assert row == {  # BACK-2713: taught as the subcommand (D20), the same request as the calls:// query it replaced
+        'want': 'know who calls a function', 'use': 'reveal calls',
+        'example': 'reveal calls src/ --callers my_fn'}
     src = tmp_path / 'src'
     src.mkdir()
     (src / 'app.py').write_text(
