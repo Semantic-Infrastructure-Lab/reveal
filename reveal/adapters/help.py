@@ -668,16 +668,12 @@ class HelpAdapter(ResourceAdapter):
                 structure call gives it back to the topic it belongs to.
             params: Already-bound or typed controls (``api.query('help://search', search=TERM)``), in place of *query*.
         """
-        from ..utils.query_binding import bind_declared_params
-        from ..utils.query_parser import QueryParams
+        from ..utils.query_binding import bound_constructor_params
+        self.query_params = bound_constructor_params(HELP_PARAM_SPECS, query, params)
         if params is not None:
-            self.query_params = params if isinstance(params, QueryParams) else bind_declared_params(
-                HELP_PARAM_SPECS, params, transport='typed')
             from urllib.parse import urlencode
             given = {key: value for key, value in self.query_params.items() if value is not None}
             query = query or (urlencode(given) if given else None)  # the topic reads its query string
-        else:
-            self.query_params = bind_declared_params(HELP_PARAM_SPECS, query or '', transport='uri')
         self.topic = resource or None
         self._topic_query = query
         # Merge auto-discovered guides with manual STATIC_HELP entries

@@ -15,8 +15,8 @@ from reveal.reveal_types import CONTRACT_VERSION
 from .base import ResourceAdapter, register_adapter, register_renderer
 from .imports import ImportsAdapter
 from ..analyzers.imports import service as import_analysis
-from ..utils.query_parser import CliBinding, ParamSpec, QueryParams, ResourceSpec, nonnegative_display_limit, param_schema
-from ..utils.query_binding import bind_declared_params, boolean_value, verbose_legacy
+from ..utils.query_parser import CliBinding, ParamSpec, ResourceSpec, nonnegative_display_limit, param_schema
+from ..utils.query_binding import bound_constructor_params, boolean_value, verbose_legacy
 from ..rendering.adapters.deps import DepsRenderer
 from ..utils.results import (AnalysisCompleteness, ExecutionFacts, ResultBuilder, lost_evidence, merge_execution_facts,
                              result_execution_facts)
@@ -331,11 +331,7 @@ class DepsAdapter(ResourceAdapter):
 
     def __init__(self, resource: str, query: Optional[str] = None, *, params: Optional[Dict[str, Any]] = None):
         self.path = str(Path(resource).expanduser())
-        if params is not None:
-            self.query_params = params if isinstance(params, QueryParams) else bind_declared_params(
-                self.PARAM_SPECS, params, transport='typed')
-        else:
-            self.query_params = bind_declared_params(self.PARAM_SPECS, query or '', transport='uri')
+        self.query_params = bound_constructor_params(self.PARAM_SPECS, query, params)
 
     @staticmethod
     def answer_requirement_error(result, expected_type, prior_facts=None):

@@ -31,8 +31,8 @@ from ...utils.query_eval import unknown_filter_field_warning
 from ...utils.results import ResultBuilder, note_truncation
 from ...errors import RequestValidationError
 from ...utils.path_utils import failure_of
-from ...utils.query_parser import ResourceSpec, param_cli_flags, QueryParams, param_schema
-from ...utils.query_binding import bind_declared_params, prepare_declared_params
+from ...utils.query_parser import ResourceSpec, param_cli_flags, param_schema
+from ...utils.query_binding import bound_constructor_params, prepare_declared_params
 from .params import PARAM_SPECS, VIEW, VIEWS, BUILTINS, REVEAL_TYPE, ast_query, echo_query, result_control
 
 # Filter aliases that name a differently-named element field (see filtering.py).
@@ -458,10 +458,7 @@ class AstAdapter(ResourceAdapter):
 
     def _prepare_query(self, query_string, params=None):
         """Bind controls once; preserve raw legacy expressions at the shared binder."""
-        if params is None:
-            params = bind_declared_params(PARAM_SPECS, query_string or '', transport='uri')
-        elif not isinstance(params, QueryParams):
-            params = bind_declared_params(PARAM_SPECS, params, transport='typed')
+        params = bound_constructor_params(PARAM_SPECS, query_string, params)
         self.query_params = params
         self.query = ast_query(params)
         self.result_control = result_control(params)

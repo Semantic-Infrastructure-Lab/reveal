@@ -10,7 +10,8 @@ from reveal import api
 from reveal.adapters.base import ResourceAdapter
 from reveal.adapters.factory import _canonical_init
 from reveal.adapters.surface import SurfaceAdapter
-from reveal.utils.query_parser import QueryParams, collect_query_keys
+from reveal.utils.query_binding import bind_declared_params
+from reveal.utils.query_parser import collect_query_keys
 
 
 @pytest.fixture
@@ -113,7 +114,8 @@ def test_factory_overlay_preserves_existing_resource_codec_and_single_constructi
     adapter = _canonical_init(Target, f'{project}?type=env', overrides={'source_only': True})
     assert len(calls) == 1 and calls[0][0] == str(project) and calls[0][1] is None
     assert adapter.get_structure()['total'] == 1
-    bound = QueryParams({'type': 'env'})
+    # bound by the declarations, so construction keeps it (a hand-built dict is bound like any mapping, BACK-2772)
+    bound = bind_declared_params(SurfaceAdapter.PARAM_SPECS, {'type': 'env'}, transport='typed')
     literal = _canonical_init(Target, 'literal?name%26+path', params=bound)
     assert literal.path == 'literal?name%26+path' and literal.query_params is bound
     with pytest.raises(TypeError):

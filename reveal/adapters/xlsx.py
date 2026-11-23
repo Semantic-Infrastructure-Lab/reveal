@@ -17,9 +17,9 @@ from .base import ResourceAdapter, register_adapter, register_renderer
 from ..analyzers.office.openxml import XlsxAnalyzer
 from ..utils import print_json_result
 from ..utils.query import parse_query_params
-from ..utils.query_binding import bind_declared_params, switch_value
+from ..utils.query_binding import bound_constructor_params, switch_value
 from ..utils.query_parser import (
-    CliBinding, LegacySpelling, ParamSpec, ParamValueError, QueryParams, ResourceSpec, legacy_check, param_schema,
+    CliBinding, LegacySpelling, ParamSpec, ParamValueError, ResourceSpec, legacy_check, param_schema,
     peek_query_items, whole_number,
 )
 from ..utils.path_utils import failure_records, to_posix
@@ -852,11 +852,7 @@ class XlsxAdapter(ResourceAdapter):
         resource, _, embedded = resource.partition('?')
         query = query or embedded
         self.connection_string = resource + (f'?{query}' if query else '')
-        if params is not None:
-            self.query_params = params if isinstance(params, QueryParams) else bind_declared_params(
-                PARAM_SPECS, params, transport='typed')
-        else:
-            self.query_params = bind_declared_params(PARAM_SPECS, query or '', transport='uri')
+        self.query_params = bound_constructor_params(PARAM_SPECS, query, params)
         self.file_path: Optional[Path] = None
         self.analyzer: Optional[XlsxAnalyzer] = None
 

@@ -23,10 +23,10 @@ from ...utils.query import (
 from ...utils.query_control import sort_failed_warning, sort_nulls_last
 from ...utils.query_eval import find_unknown_filter_fields
 from ...utils.query_parser import (
-    CliBinding, LegacySpelling, ParamSpec, ParamValueError, QueryParams, ResourceSpec, filter_expression, param_schema,
+    CliBinding, LegacySpelling, ParamSpec, ParamValueError, ResourceSpec, param_schema,
     exclude_param, peek_query_items, split_exclude_param, where_param, whole_number,
  legacy_slices)
-from ...utils.query_binding import (bind_declared_params, boolean_value, given_controls, legacy_switch, switch_value,
+from ...utils.query_binding import (bound_constructor_params, boolean_value, given_controls, legacy_switch, switch_value,
                                    unread_by_data_warning)
 from ...utils.gitignore import respect_gitignore_param
 from ...utils.time_window import bound_start, time_window_param
@@ -499,16 +499,9 @@ class MetricsAdapter(ResourceAdapter):
         self._traversal_failures: List[PathFailure] = []
 
         # Every transport binds through PARAM_SPECS (BACK-2621): the raw-query constructor that library
-        # callers use validates and normalizes as the URI does; keys no parameter claims stay operator filters.
-        if params is None:
-            params = bind_declared_params(PARAM_SPECS, query or '', transport='uri')
-        elif not isinstance(params, QueryParams):
-            params = bind_declared_params(PARAM_SPECS, params, transport='typed')
-        elif not params._normalized and dict(peek_query_items(params)):
-            # A parsed but unbound query (a library caller's parse_query_params): bind its text so bare
-            # operator keys become where's terms as on the URI.
-            params = bind_declared_params(PARAM_SPECS, '&'.join(filter_expression(key, value) for key, value
-                                                                 in peek_query_items(params)), transport='uri')
+        # callers use validates and normalizes as the URI does; keys no parameter claims stay operator filters, and a
+        # parsed but unbound query (a library caller's parse_query_params) binds as its text, as on the URI.
+        params = bound_constructor_params(PARAM_SPECS, query, params)
         _validate_request(params)
         # Metrics reads the rule settings (check-issue counts, hotspot thresholds): one that cannot be used fails the
         # request before analysis (COMMAND_MODEL "Configuration failures", BACK-2677), not per file as lost evidence.

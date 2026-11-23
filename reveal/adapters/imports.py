@@ -35,7 +35,7 @@ from ..analyzers.imports.layers import load_layer_config
 from ..utils.query_parser import (CliBinding, LegacySpelling, ParamSpec, ParamValueError, QueryParams, ResourceSpec,
                                   exclude_param, param_schema, peek_query_items, whole_number, legacy_slices)
 from ..errors import RequestValidationError
-from ..utils.query_binding import bind_declared_params, boolean_value, verbose_legacy
+from ..utils.query_binding import bind_declared_params, bound_constructor_params, boolean_value, verbose_legacy
 from ..analyzers.imports.views import ImportView, _unused_not_checked  # noqa: F401 -- checks.py imports _unused_not_checked from here (BACK-2255)
 from ..analyzers.imports import diagnostics as import_diagnostics
 from ..analyzers.imports.diagnostics import file_loss_warnings
@@ -1495,10 +1495,7 @@ class ImportsAdapter(ResourceAdapter):
         # - absolute path (imports:///absolute/path → '/absolute/path')
         self._target_path: Optional[Path] = Path(path).resolve() if path else None
         # Every transport binds through PARAM_SPECS: aliases normalize, values validate once (BACK-2620).
-        if params is None:
-            params = bind_declared_params(PARAM_SPECS, query or '', transport='uri')
-        elif not isinstance(params, QueryParams):
-            params = bind_declared_params(PARAM_SPECS, params, transport='typed')
+        params = bound_constructor_params(PARAM_SPECS, query, params)
         self._query_params = params
         self.query_params = self._query_params  # the name the declared route reads (D6)
         self._local_names_cache: Optional[frozenset] = None  # BACK-1190, lazy

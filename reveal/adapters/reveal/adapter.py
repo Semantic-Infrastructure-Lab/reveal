@@ -86,11 +86,8 @@ class RevealAdapter(ResourceAdapter):
             query: The URI's query string; reveal:// declares no key, so any is refused.
             params: Already-bound or typed controls, in place of *query* (none is declared).
         """
-        from ...utils.query_binding import bind_declared_params
-        from ...utils.query_parser import QueryParams
-        self.query_params = (params if isinstance(params, QueryParams) else
-                             bind_declared_params((), params if params is not None else query or '',
-                                                  transport='typed' if params is not None else 'uri'))
+        from ...utils.query_binding import bound_constructor_params
+        self.query_params = bound_constructor_params((), query, params)
         self.component = resource or None
         self.reveal_root = self._find_reveal_root()
 

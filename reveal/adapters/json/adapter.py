@@ -8,8 +8,8 @@ from ..base import ResourceAdapter, register_adapter, register_renderer
 from ...utils.results import (AnalysisCompleteness, FailureCause, ResultBuilder, note_truncation,
                              note_warning, result_execution_facts)
 from ...utils.path_utils import to_posix
-from ...utils.query_parser import note_query_parsed, QueryParams, ResourceSpec, param_schema
-from ...utils.query_binding import bind_prepared_params, prepare_declared_params, apply_declared_overrides
+from ...utils.query_parser import note_query_parsed, ResourceSpec, param_schema
+from ...utils.query_binding import bind_prepared_params, prepared_constructor_params, apply_declared_overrides
 from .params import (PARAM_SPECS, VIEW, WHERE, DETAIL, result_type, uri_result_type,
                      result_control, validate_request, DATA_ONLY, array_controls_unread_by_data)
 from ...utils.query import (
@@ -148,10 +148,7 @@ class JsonAdapter(ResourceAdapter):
         # Selector syntax precedes loading; a complete source read precedes controls.
         self.file_path, self.json_path, self.slice_spec = parse_path(resource)
         self.data = load_json(self.file_path)
-        if params is None:
-            params = prepare_declared_params(PARAM_SPECS, query or '', 'uri')
-        elif not isinstance(params, QueryParams):
-            params = prepare_declared_params(PARAM_SPECS, params, 'typed')
+        params = prepared_constructor_params(PARAM_SPECS, query, params)
         params = bind_prepared_params(PARAM_SPECS, params, transport=params._transport)
         validate_request(params)
         params = apply_declared_overrides(PARAM_SPECS, params, overrides)

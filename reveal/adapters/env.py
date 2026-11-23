@@ -5,8 +5,8 @@ import re
 from typing import Dict, Any, Optional, Tuple
 from .base import ResourceAdapter, Stability, register_adapter, register_renderer
 from ..errors import RequestValidationError
-from ..utils.query_binding import bind_declared_params
-from ..utils.query_parser import ParamSpec, QueryParams, ResourceSpec, legacy_check, param_schema
+from ..utils.query_binding import bound_constructor_params
+from ..utils.query_parser import ParamSpec, ResourceSpec, legacy_check, param_schema
 from ..utils.results import AnalysisCompleteness, ResultBuilder, result_execution_facts
 from reveal.reveal_types import CONTRACT_VERSION
 
@@ -343,11 +343,7 @@ class EnvAdapter(ResourceAdapter):
             query: The URI query, bound through the declaration: env takes no control, so any key is an invalid request
             params: Already-bound or typed controls, in place of *query*
         """
-        if params is not None:
-            self.query_params = params if isinstance(params, QueryParams) else bind_declared_params(
-                PARAM_SPECS, params, transport='typed')
-        else:
-            self.query_params = bind_declared_params(PARAM_SPECS, query or '', transport='uri')
+        self.query_params = bound_constructor_params(PARAM_SPECS, query, params)
         self.resource = resource
         self.variables = dict(os.environ)
 

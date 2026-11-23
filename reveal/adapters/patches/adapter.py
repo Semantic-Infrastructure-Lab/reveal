@@ -13,7 +13,7 @@ from reveal.reveal_types import CONTRACT_VERSION
 from reveal.testability.patches import (group_patches, language_not_scanned_warning, no_scannable_tests_reason,
                                         scan_patches)
 from reveal.utils.path_utils import TestLayout, to_posix
-from reveal.utils.query_binding import bind_declared_params, boolean_value, legacy_switch, switch_value
+from reveal.utils.query_binding import bound_constructor_params, boolean_value, legacy_switch, switch_value
 from reveal.utils.query_parser import (CliBinding, LegacySpelling, ParamSpec, ParamValueError, QueryParams, ResourceSpec,
                                        exclude_param, expression_list, legacy_slices, param_schema, peek_query_items,
                                        whole_number, where_param)
@@ -155,11 +155,7 @@ class PatchesAdapter(ResourceAdapter):
 
     def __init__(self, resource: str, query: Optional[str] = None, *, params: Optional[Dict[str, Any]] = None):
         self.path = to_posix(Path(resource).expanduser())  # '/' on every OS (BACK-1586)
-        if params is not None:
-            self.query_params = params if isinstance(params, QueryParams) else bind_declared_params(
-                self.PARAM_SPECS, params, transport='typed')
-        else:
-            self.query_params = bind_declared_params(self.PARAM_SPECS, query or '', transport='uri')
+        self.query_params = bound_constructor_params(self.PARAM_SPECS, query, params)
 
     @staticmethod
     def result_type_for(params) -> str:

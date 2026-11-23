@@ -31,8 +31,8 @@ from ..utils.path_utils import (
     PathFailure,
     failure_records,
 )
-from ..utils.query_binding import bind_declared_params, boolean_value, verbose_legacy
-from ..utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSpec, exclude_param, legacy_slices, param_schema,
+from ..utils.query_binding import bound_constructor_params, boolean_value, verbose_legacy
+from ..utils.query_parser import (CliBinding, ParamSpec, ResourceSpec, exclude_param, legacy_slices, param_schema,
                                   split_exclude_param)
 from ..utils.results import LOST_EVIDENCE, PARSE_RECOVERED, AnalysisCompleteness, ResultBuilder, result_execution_facts
 from reveal.utils.lines import split_lines
@@ -968,11 +968,7 @@ class PackAdapter(ResourceAdapter):
     def __init__(self, resource: str, query: Optional[str] = None, *,
                  params: Optional[Dict[str, Any]] = None):
         self.path = str(Path(resource).expanduser())
-        if params is not None:
-            self.query_params = params if isinstance(params, QueryParams) else bind_declared_params(
-                self.PARAM_SPECS, params, transport='typed')
-        else:
-            self.query_params = bind_declared_params(self.PARAM_SPECS, query or '', transport='uri')
+        self.query_params = bound_constructor_params(self.PARAM_SPECS, query, params)
         # Populated by get_structure(); CLI needs this for its stderr warning,
         # but it's not part of the JSON contract (only meta.since is).
         self.since_error: Optional[str] = None

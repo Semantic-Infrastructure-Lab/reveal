@@ -6,8 +6,8 @@ from typing import Dict, Any, List, NoReturn, Optional
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from ..help_data import load_help_data
 from ...errors import RequestValidationError
-from ...utils.query_binding import bind_declared_params, boolean_value
-from ...utils.query_parser import (CliBinding, LegacySpelling, ParamSpec, ParamValueError, QueryParams, ResourceSpec,
+from ...utils.query_binding import bound_constructor_params, boolean_value
+from ...utils.query_parser import (CliBinding, LegacySpelling, ParamSpec, ParamValueError, ResourceSpec,
                                    param_schema, parse_query_params, peek_query_items)
 from ...utils.results import (AnalysisCompleteness, ExecutionFacts, FailureCause, ResultBuilder,
                               result_execution_facts)
@@ -296,11 +296,7 @@ class SQLiteAdapter(ResourceAdapter):
             raise RequestValidationError("sqlite requires a database path: reveal sqlite path/to/db.db "
                                          "(or sqlite://path/to/db.db)")
 
-        if params is not None:
-            self.query_params = params if isinstance(params, QueryParams) else bind_declared_params(
-                PARAM_SPECS, params, transport='typed')
-        else:
-            self.query_params = bind_declared_params(PARAM_SPECS, query or '', transport='uri')
+        self.query_params = bound_constructor_params(PARAM_SPECS, query, params)
         self.connection_string = connection_string
         self._connection: Optional[sqlite3.Connection] = None
         db_path, self.table = _split_connection_string(connection_string)

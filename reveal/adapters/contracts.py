@@ -27,8 +27,8 @@ from ..utils.path_utils import (
     traversal_failed_warning,
     failure_of,
 )
-from ..utils.query_binding import bind_declared_params, boolean_value, legacy_switch, switch_value
-from ..utils.query_parser import (CliBinding, LegacySpelling, ParamSpec, QueryParams, ResourceSpec,
+from ..utils.query_binding import bound_constructor_params, boolean_value, legacy_switch, switch_value
+from ..utils.query_parser import (CliBinding, LegacySpelling, ParamSpec, ResourceSpec,
                                   exclude_param, nonnegative_display_limit, param_schema)
 from ..utils.results import PARSE_RECOVERED, ResultBuilder
 from ..rendering.adapters.contracts import ContractsRenderer
@@ -979,11 +979,7 @@ class ContractsAdapter(ResourceAdapter):
     def __init__(self, resource: str, query: Optional[str] = None, *,
                  params: Optional[Dict[str, Any]] = None):
         self.path = str(Path(resource).expanduser())
-        if params is not None:
-            self.query_params = params if isinstance(params, QueryParams) else bind_declared_params(
-                self.PARAM_SPECS, params, transport='typed')
-        else:
-            self.query_params = bind_declared_params(self.PARAM_SPECS, query or '', transport='uri')
+        self.query_params = bound_constructor_params(self.PARAM_SPECS, query, params)
 
     @staticmethod
     def execution_facts(result):

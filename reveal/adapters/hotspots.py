@@ -15,9 +15,9 @@ from ..conventions import LanguageConventions, conventions_for, family_for_path
 from ..defaults import TEST_DIR_NAMES, VENDOR_DIR_NAMES
 from ..rendering.adapters.hotspots import HotspotsRenderer
 from ..utils.path_utils import EVIDENCE, resolve_project_root, walk_tree
-from ..utils.query_parser import (CliBinding, LegacySpelling, ParamSpec, legacy_slices, QueryParams, ResourceSpec,
+from ..utils.query_parser import (CliBinding, LegacySpelling, ParamSpec, legacy_slices, ResourceSpec,
                                   nonnegative_display_limit, param_schema, whole_number)
-from ..utils.query_binding import bind_declared_params, boolean_value, verbose_legacy
+from ..utils.query_binding import bound_constructor_params, boolean_value, verbose_legacy
 from ..utils.results import LOST_EVIDENCE, PARSE_RECOVERED, AnalysisCompleteness, ResultBuilder, result_execution_facts
 
 
@@ -361,11 +361,7 @@ class HotspotsAdapter(ResourceAdapter):
 
     def __init__(self, resource: str, query: Optional[str] = None, *, params: Optional[Dict[str, Any]] = None):
         self.path = str(Path(resource).expanduser())
-        if params is not None:
-            self.query_params = params if isinstance(params, QueryParams) else bind_declared_params(
-                self.PARAM_SPECS, params, transport='typed')
-        else:
-            self.query_params = bind_declared_params(self.PARAM_SPECS, query or '', transport='uri')
+        self.query_params = bound_constructor_params(self.PARAM_SPECS, query, params)
         # Populated by get_structure(); text rendering needs the raw set for
         # its coverage overlay, but it must never appear in the JSON contract
         # (only the per-function `has_test_hint` boolean derived from it does).

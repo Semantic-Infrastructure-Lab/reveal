@@ -41,10 +41,10 @@ from ..utils.path_utils import (
     failure_of,
 )
 from ..utils.query_parser import (
-    CliBinding, LegacySpelling, ParamSpec, QueryParams, ResourceSpec, exclude_param, nonnegative_display_limit,
+    CliBinding, LegacySpelling, ParamSpec, ResourceSpec, exclude_param, nonnegative_display_limit,
     param_schema,
 )
-from ..utils.query_binding import bind_declared_params, legacy_switch
+from ..utils.query_binding import bound_constructor_params, legacy_switch
 from .ast.surface_matrix import CATEGORIES, RECOVERED_KEY, UNPARSED_KEY, coverage_matrix
 from .surface_file_cache import scan_file_cached
 from .ast.nav_surface_common import ROUTE_CLASSES_KEY, resolve_inherited_route_prefixes
@@ -503,11 +503,7 @@ class SurfaceAdapter(ResourceAdapter):
     def __init__(self, resource: str, query: Optional[str] = None, *,
                  params: Optional[Dict[str, Any]] = None):
         self.path = str(Path(resource).expanduser())
-        if params is not None:
-            self.query_params = params if isinstance(params, QueryParams) else bind_declared_params(
-                self.PARAM_SPECS, params, transport='typed')
-        else:
-            self.query_params = bind_declared_params(self.PARAM_SPECS, query or '', transport='uri')
+        self.query_params = bound_constructor_params(self.PARAM_SPECS, query, params)
 
     @staticmethod
     def execution_facts(result):

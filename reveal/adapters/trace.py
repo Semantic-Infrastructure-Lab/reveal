@@ -33,8 +33,8 @@ from reveal.reveal_types import CONTRACT_VERSION
 from .base import ResourceAdapter, register_adapter, register_renderer
 from .calls.index import CalleeNode, CalleeSource, walk_callees
 from ..utils import print_json_result
-from ..utils.query_binding import bind_declared_params
-from ..utils.query_parser import (CliBinding, ParamSpec, QueryParams, ResourceSpec, clamped_whole,
+from ..utils.query_binding import bound_constructor_params
+from ..utils.query_parser import (CliBinding, ParamSpec, ResourceSpec, clamped_whole,
                                   nonempty_scalar, param_schema, peek_query_items)
 from ..utils.path_utils import to_posix
 from ..utils.results import ResultBuilder, lost_evidence
@@ -560,11 +560,7 @@ class TraceAdapter(ResourceAdapter):
     def __init__(self, resource: str, query: Optional[str] = None, *,
                  params: Optional[Dict[str, Any]] = None):
         self.path = to_posix(Path(resource).expanduser())
-        if params is not None:
-            self.query_params = params if isinstance(params, QueryParams) else bind_declared_params(
-                self.PARAM_SPECS, params, transport='typed')
-        else:
-            self.query_params = bind_declared_params(self.PARAM_SPECS, query or '', transport='uri')
+        self.query_params = bound_constructor_params(self.PARAM_SPECS, query, params)
 
     def answer_requirement_error(self, result, expected_type, prior_facts=None):
         from ..utils.results import AnalysisCompleteness, FailureCause

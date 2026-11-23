@@ -23,8 +23,8 @@ from ..utils.gitignore import gitignore_scope, respect_gitignore_param
 from ..utils.path_utils import (HiddenTally, as_spelled, failure_of, hidden_entries_warning,
                                traversal_failed_warning)
 from ..errors import RequestValidationError
-from ..utils.query_binding import bind_declared_params, boolean_value, legacy_switch, switch_value, verbose_legacy
-from ..utils.query_parser import (CliBinding, LegacySpelling, ParamSpec, ParamValueError, QueryParams, ResourceSpec,
+from ..utils.query_binding import bound_constructor_params, boolean_value, legacy_switch, switch_value, verbose_legacy
+from ..utils.query_parser import (CliBinding, LegacySpelling, ParamSpec, ParamValueError, ResourceSpec,
                                   exclude_param, nonempty_scalar, nonnegative_display_limit, param_schema,
                                   split_exclude_param)
 from ..utils.query_parser import peek_query_items
@@ -497,9 +497,7 @@ class OverviewAdapter(ResourceAdapter):
 
     def __init__(self, resource: str, query: Optional[str] = None, *, params: Optional[Dict[str, Any]] = None):
         self.path = str(Path(resource).expanduser())
-        self.query_params = (params if isinstance(params, QueryParams) else bind_declared_params(
-            self.PARAM_SPECS, params if params is not None else query or '',
-            transport='typed' if params is not None else 'uri'))
+        self.query_params = bound_constructor_params(self.PARAM_SPECS, query, params)
         _top_conflict(self.query_params)
         self.exclude_patterns = split_exclude_param(self.query_params.get('exclude'))
         self.respect_gitignore = respect_gitignore_param(self.query_params)

@@ -18,8 +18,8 @@ from . import operations
 from . import files
 from . import filtering
 from .results import LINK_GRAPH_RULES, BodySearchAnalysis, valid_source_analysis
-from ...utils.query_parser import QueryParams, ResourceSpec, param_schema
-from ...utils.query_binding import bind_declared_params, prepare_declared_params
+from ...utils.query_parser import ResourceSpec, param_schema
+from ...utils.query_binding import bound_constructor_params, prepare_declared_params
 from .params import (PARAM_SPECS, MATCH, BACKLINKS, FIELD, LINT_FIELDS, FIELDS, EXPLAIN,
                      selected_view, result_type, result_control, filter_state, describe_request, request_flags,
                      validate_request)
@@ -227,10 +227,7 @@ class MarkdownQueryAdapter(ResourceAdapter):
 
     def __init__(self, resource: str = '', query: Optional[str] = None, *,
                  params: Optional[Dict[str, Any]] = None, **kwargs: Any):
-        if params is None:
-            params = bind_declared_params(PARAM_SPECS, query or '', transport='uri')
-        elif not isinstance(params, QueryParams):
-            params = bind_declared_params(PARAM_SPECS, params, transport='typed')
+        params = bound_constructor_params(PARAM_SPECS, query, params)
         try:
             validate_request(params)
         except ValueError as exc:

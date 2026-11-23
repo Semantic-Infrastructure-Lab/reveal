@@ -5,14 +5,14 @@ import os
 import re
 import stat
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Tuple, TypeGuard, Union
 from urllib.parse import quote, unquote
 
 from ..errors import RequestValidationError, UnreadControlError, UnsupportedOverrideError
 from .match_terms import PATTERN_EXAMPLES, TERM_EXAMPLES, TermValue, empty_term_error, is_blank_term
 from .query_parser import (SHARED_CONTROL_NAMES, CliBinding, LegacySpelling, ParamSpec, ParamValueError, QueryParams,
-                           ResourceSpec, exclude_param, mark_query_keys, parse_query_params, peek_query_items,
-                           _spelling_variants, query_key, query_key_recorder, whole_number)
+                           ResourceSpec, exclude_param, filter_expression, mark_query_keys, parse_query_params,
+                           peek_query_items, _spelling_variants, query_key, query_key_recorder, whole_number)
 
 
 def boolean_value(value: Any) -> bool:
@@ -591,12 +591,14 @@ def prepare_declared_params(declarations: Iterable[ParamSpec],
             raise TypeError('URI parameters must be a raw query string')
         params = _prepare_uri_params(tuple(declarations), source)
         params._transport = transport
-        return params
-    if transport != 'typed':
-        raise ValueError(f'Unknown parameter transport {transport!r}')
-    if isinstance(source, str):
-        raise TypeError('Typed parameters must be a mapping')
-    return _prepare_typed_params(declarations, source, spelled)
+    else:
+        if transport != 'typed':
+            raise ValueError(f'Unknown parameter transport {transport!r}')
+        if isinstance(source, str):
+            raise TypeError('Typed parameters must be a mapping')
+        params = _prepare_typed_params(declarations, source, spelled)
+    params._prepared = True
+    return params
 
 
 def flag_conflicts_with_uri_message(flag: str, key: str, value: str) -> str:
@@ -671,6 +673,7 @@ def join_uri_and_flags(declarations: Iterable[ParamSpec], uri_params: QueryParam
     joined._supplied_aliases = set(uri_params._supplied_aliases) | set(typed_params._supplied_aliases)
     joined._given = set(uri_params._given)
     joined._transport = 'uri'
+    joined._prepared = True
     query = [part for part in (getattr(uri_params, '_source_query', None) or '').split('&') if part]
     typed = dict(peek_query_items(typed_params))
     for spec in declarations:
@@ -754,6 +757,42 @@ def bind_declared_params(specs: Iterable[ParamSpec], source: Union[str, Mapping[
     params = apply_declared_overrides(declarations, params, overrides)
     reject_two_answers(declarations, params)
     return params
+
+
+def _binder_made(params: Any) -> TypeGuard[QueryParams]:
+    """*params* came out of a noun's declarations (prepared, or prepared and bound): its keys are already controls."""
+    return isinstance(params, QueryParams) and (params._prepared or bool(params._normalized))
+
+
+def _constructor_source(query: Optional[str], params: Any) -> Tuple[Union[str, Mapping[str, Any]], str]:
+    """(source, transport) of a constructor's request that the binder has not seen: the URI query when no *params* are
+    given, a parsed query string (``parse_query_params``) as the text it was parsed from, so it binds as that URI
+    does, and any other mapping as typed values."""
+    if params is None:
+        return query or '', 'uri'
+    if isinstance(params, QueryParams):
+        return '&'.join(filter_expression(key, value) for key, value in peek_query_items(params)), 'uri'
+    return params, 'typed'
+
+
+def bound_constructor_params(specs: Iterable[ParamSpec], query: Optional[str], params: Any) -> QueryParams:
+    """A noun constructor's controls, bound once (S8, BACK-2772): params bound by the declarations pass unchanged
+    (the declared route and ``api.query`` hand them on); a typed mapping binds as typed values, a parsed but unbound
+    query rebinds as its text, and no params bind the URI *query*. Each constructor calls this, so none keeps
+    treating an unbound dict as bound."""
+    if _binder_made(params):
+        return params
+    source, transport = _constructor_source(query, params)
+    return bind_declared_params(specs, source, transport=transport)
+
+
+def prepared_constructor_params(specs: Iterable[ParamSpec], query: Optional[str], params: Any) -> QueryParams:
+    """``bound_constructor_params`` for a noun that reads its source before its controls convert
+    (``SOURCE_BEFORE_CONTROLS``: JSON): the request prepared by the declarations, not yet bound."""
+    if _binder_made(params):
+        return params
+    source, transport = _constructor_source(query, params)
+    return prepare_declared_params(specs, source, transport)
 
 
 def _selects(spec: ParamSpec, value: Any) -> bool:

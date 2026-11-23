@@ -17,7 +17,7 @@ from ...utils.query import (
     ResultControl
 )
 from ...utils.query_eval import find_unknown_filter_fields
-from ...utils.query_binding import bind_declared_params
+from ...utils.query_binding import bound_constructor_params
 from ...utils.query_parser import ResourceSpec, param_cli_flags, param_schema, QueryParams, filter_expression, mark_query_keys, peek_query_items, query_key
 from ...utils.results import note_warning
 from ...utils.time_window import resolve_today
@@ -419,11 +419,8 @@ class GitAdapter(ResourceAdapter):
         # Parse and initialize attributes
         self._parse_and_initialize_attributes(resource, ref, subpath, query, inline_query=params is None,
                                               literal_paths=params is not None and getattr(params, '_transport', 'typed') == 'typed')
-        if params is None:
-            legacy_query = '&'.join(filter_expression(key, value) for key, value in self._query_items)
-            params = bind_declared_params(PARAM_SPECS, legacy_query, transport='uri')
-        elif not isinstance(params, QueryParams):
-            params = bind_declared_params(PARAM_SPECS, params, transport='typed')
+        legacy_query = '&'.join(filter_expression(key, value) for key, value in self._query_items)
+        params = bound_constructor_params(PARAM_SPECS, legacy_query, params)
         validate_resource_controls(params, self.subpath)
         self.query_params = params
         self.query, self._query_items, self.aggregate_control = runtime_query(params)

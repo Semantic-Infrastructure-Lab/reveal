@@ -127,6 +127,9 @@ class QueryParams(Dict[str, Any]):
         self._given: set[str] = set()
         self._transport = "typed"
         self._normalized: Dict[str, Tuple[Any, Any, Any]] = {}
+        # Built by a noun's declarations (``prepare_declared_params``, ``join_uri_and_flags``): its keys are the noun's
+        # controls, bound or ready to bind. ``parse_query_params`` and a hand-built dict are not (BACK-2772).
+        self._prepared = False
 
     def declaration(self, name: str) -> Optional['ParamSpec']:
         """The declaration *name* was bound through, or None (not bound by a declaration, or changed since)."""

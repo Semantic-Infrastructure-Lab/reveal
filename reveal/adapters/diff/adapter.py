@@ -12,8 +12,7 @@ from .resolution import (resolve_uri, extract_metadata, find_element, element_na
 from .help import PARAM_SPECS, RESOURCE_SPEC, get_schema as _get_schema, get_help as _get_help
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from .renderer import DiffRenderer
-from ...utils.query_binding import bind_declared_params
-from ...utils.query_parser import QueryParams
+from ...utils.query_binding import bound_constructor_params
 from ...utils.results import (AnalysisCompleteness, FailureCause, ResultBuilder,
                               result_execution_facts)
 
@@ -125,11 +124,7 @@ class DiffAdapter(ResourceAdapter):
             TypeError: When no pair is given (the generic handler's no-argument pattern, V019)
             ValueError: When the pair has no ``:`` between two sides, or a control is given
         """
-        if params is not None:
-            self.query_params = params if isinstance(params, QueryParams) else bind_declared_params(
-                PARAM_SPECS, params, transport='typed')
-        else:
-            self.query_params = bind_declared_params(PARAM_SPECS, query or '', transport='uri')
+        self.query_params = bound_constructor_params(PARAM_SPECS, query, params)
         if not resource:
             raise TypeError("diff requires a pair: reveal diff LEFT RIGHT, or diff://LEFT:RIGHT")
         self.resource = resource
