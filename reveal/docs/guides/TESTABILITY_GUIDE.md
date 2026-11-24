@@ -20,8 +20,8 @@ boundary fan-out overlap.
 
 ```bash
 # Raw patch pressure in tests
-reveal patches://tests
-reveal 'patches://tests?view=target&limit=20'
+reveal patches tests
+reveal patches tests --view target --limit 20
 
 # Combined workflow: test patches + production boundaries
 reveal patches src --view pressure --test-paths tests
@@ -29,9 +29,9 @@ reveal patches src --view pressure --test-paths tests --limit 20
 reveal patches src --view pressure --test-paths tests --format json
 
 # the same view as a queryable URI (testability:// is its retired spelling)
-reveal 'patches://src?view=pressure'
-reveal 'patches://src?view=pressure&test-paths=tests,integration_tests'
-reveal 'patches://src?view=pressure&limit=10'
+reveal patches src --view pressure
+reveal patches src --view pressure --test-paths tests integration_tests
+reveal patches src --view pressure --limit 10
 ```
 
 Read the output as a ranked review queue:
@@ -156,7 +156,7 @@ reveal surface src
 Use JSON for agents, dashboards, and CI experiments:
 
 ```bash
-reveal 'patches://tests?view=target' --format json
+reveal patches tests --view target --format json
 reveal patches src --view pressure --test-paths tests --format json
 ```
 
