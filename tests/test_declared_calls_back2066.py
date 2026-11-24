@@ -128,11 +128,17 @@ def test_malformed_depth_is_usage_naming_depth(project, depth):
         assert 'Traceback' not in result.stderr
 
 
-@pytest.mark.parametrize('depth,effective', [('9', 5), ('-2', 1), ('+3', 3), ('0', 1)])
-def test_depth_is_clamped_one_to_five(project, depth, effective):
+@pytest.mark.parametrize('depth', ['9', '-2', '0'])
+def test_depth_outside_one_to_five_is_refused(project, depth):
+    # it was clamped (9 walked five levels, 0 and -2 one); BACK-2793 refuses it on both forms
     for result in uri_first(['--target', 'helper', '--depth', depth], f'target=helper&depth={depth}', '--format', 'json'):
+        assert result.returncode == 2 and f'depth must be 1..5, got {int(depth)}' in result.stderr, result.stderr
+
+
+def test_a_signed_in_range_depth_answers(project):
+    for result in uri_first(['--target', 'helper', '--depth', '+3'], 'target=helper&depth=+3', '--format', 'json'):
         assert result.returncode == 0, result.stderr
-        assert json.loads(result.stdout)['depth'] == effective
+        assert json.loads(result.stdout)['depth'] == 3
 
 
 def test_numeric_name_is_a_name_not_a_crash(project):
@@ -276,7 +282,7 @@ def test_generated_help_names_every_mode_and_its_exits():
     listed = [line.strip().split('  ')[0] for line in result.stdout.splitlines() if line.startswith('  -')]
     for flag in ('--target', '--root', '--rank', '--top', '--uncalled', '--modules', '--external'):
         assert not [line for line in listed if flag in line.replace(',', ' ').split()], flag
-    assert 'clamped 1-5' in result.stdout
+    assert '1..5 levels to walk' in result.stdout
     assert 'Exit codes:' in result.stdout
     assert '\n  3  ' in result.stdout
     assert '\n  1  ' not in result.stdout, 'calls has no findings gate'

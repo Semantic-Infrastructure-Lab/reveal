@@ -51,12 +51,19 @@ def test_canonical_from_overlay_changes_actual_root(project):
     assert len(answer['frames']) == 1
 
 
-@pytest.mark.parametrize('value,expected', [(0, 1), (-2, 1), (None, 2), (8, 5)])
-def test_depth_zero_none_clamping_and_omission(project, value, expected):
+@pytest.mark.parametrize('value,expected', [(None, 2), (1, 1), (5, 5)])
+def test_depth_none_and_in_range_overrides(project, value, expected):
     query = uri(project, 'from=main&depth=3')
     assert api.query(query)['depth'] == 3
     answer = api.query(query, depth=value)
     assert answer == api.query(uri(project, f'from=main&depth={expected}'))
+
+
+@pytest.mark.parametrize('value', [0, -2, 8])
+def test_depth_outside_one_to_five_is_refused(project, value):
+    from reveal.errors import RequestValidationError
+    with pytest.raises(RequestValidationError, match=f'depth must be 1\\.\\.5, got {value}'):  # was clamped (BACK-2793)
+        api.query(uri(project, 'from=main&depth=3'), depth=value)
 
 
 @pytest.mark.parametrize('value', [False, True, '1.5', '1e2'])

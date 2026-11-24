@@ -33,8 +33,8 @@ from ..ast.analysis import collect_structures
 from ...core.definition_names import name_matches
 from .renderer import render_calls_structure
 from ...utils.query_binding import bound_constructor_params, boolean_value, detail_level
-from ...utils.query_parser import (CliBinding, LegacySpelling, ParamSpec, ParamValueError, ResourceSpec,
-                                   clamped_whole, exclude_param, nonempty_scalar, nonnegative_display_limit,
+from ...utils.query_parser import (WALK_DEPTH, CliBinding, LegacySpelling, ParamSpec, ParamValueError, ResourceSpec,
+                                   depth_param, exclude_param, nonempty_scalar, nonnegative_display_limit,
                                    param_schema, peek_query_items, legacy_slices)
 from ...utils.path_utils import to_posix, named_path_candidates, to_relative_display
 from ...errors import RequestValidationError
@@ -48,10 +48,6 @@ def _name_value(name: str):
             raise ParamValueError(f"'{name}' needs a function name: {name}=<name>")
         return nonempty_scalar(value)
     return convert
-
-
-def _calls_depth(value: Any) -> int:
-    return clamped_whole(value, 1, 5)
 
 
 def _calls_top(value: Any) -> int:
@@ -109,11 +105,9 @@ _ROOT = _name_spec('root', 'Retired (use callees=NAME&depth=N, the same walk; pr
                    'call site of an expanded definition is an edge (call_expr), one to a definition already '
                    'reached with expanded: false. Totals count edges: total_edges = total_resolved (ambiguous '
                    'included, also counted in total_ambiguous) + total_unresolved', '--root main')
-_DEPTH = ParamSpec('depth', 'integer', 'Levels to walk, a signed whole integer clamped 1-5: callers (default 1), '
-                   'callees (default 1; beyond 1 is not measured, W-CALLS-9), the retired root '
-                   '(default 2); other modes refuse it',
-                   None, _calls_depth, examples=('--depth 2',), role='analysis',
-                   cli=CliBinding(('--depth',), metavar='N'), answers=(_Q, _C, _R))
+_DEPTH = depth_param('levels to walk: callers (default 1), callees (default 1; beyond 1 is not measured, W-CALLS-9), '
+                     'the retired root (default 2); other modes refuse it', examples=('--depth 2',),
+                     answers=(_Q, _C, _R))
 _RANK = ParamSpec('sort', 'string', 'Select caller ranking, most-called first: -callers (legacy --rank callers)', None,
                   _calls_sort, examples=('--sort=-callers',), choices=('-callers',), role='operation',
                   legacy=(LegacySpelling('rank', codec=_calls_rank, flag='--rank'),),
@@ -208,7 +202,7 @@ def _dot_rejection(mode: str, supplied: Dict[str, Any]) -> Optional[str]:
     """Why format=dot cannot answer *mode* as supplied, or None when the view draws a graph."""
     if mode == 'callees':
         walked = ('detail' in supplied and _DETAIL.validate(_DETAIL.canonical_value('detail', supplied['detail'])) == 'full'
-                  or 'depth' in supplied and _calls_depth(supplied['depth']) > 1)
+                  or 'depth' in supplied and _DEPTH.validate(supplied['depth']) > 1)
         return None if walked else _DOT_REJECTION.format(view='callees at depth 1')
     if mode == 'uncalled':  # the ranking does not read format at all (its declaration refuses it)
         return _DOT_REJECTION.format(view=mode)
@@ -554,8 +548,9 @@ def _calls_proof_error(result: Any) -> Optional[str]:
 
 
 def _calls_depth_or_error(result: Dict[str, Any]) -> Optional[str]:
-    """A depth outside 1-5, or an error that is not the canonical absence of the answer's name."""
-    if 'depth' in result and not (type(result['depth']) is int and 1 <= result['depth'] <= 5):
+    """A depth outside WALK_DEPTH, or an error that is not the canonical absence of the answer's name."""
+    low, high = WALK_DEPTH
+    if 'depth' in result and not (type(result['depth']) is int and low <= result['depth'] <= high):
         return 'Calls required depth is missing or malformed'
     if result.get('error') and not _calls_absence_claimed(result):
         return 'Calls answer is not a completed calls result'
@@ -1009,7 +1004,7 @@ def _callers_rule(name: str, depth: int, declined: List[str]) -> Dict[str, Any]:
             f"to no file defining {name} (json.loads is no caller of a project loads); level k+1 looks each caller "
             f"up by name carrying its definition site; explicit imports label module-level function targets without filtering candidates, "
             f"same-named candidates still join; each (file, caller) once; depth {depth} "
-            "(clamped 1-5). Measured: levels 1 and 2.")
+            f"({WALK_DEPTH[0]}..{WALK_DEPTH[1]}). Measured: levels 1 and 2.")
     if declined:
         text += f" No recall snapshot: {', '.join(declined)}."
     return {
@@ -1034,7 +1029,7 @@ def _callees_rule(depth: int, include_builtins: bool, declined: List[str]) -> Di
             "its one definition, except that a call through an import that resolves to no project file is external; "
             "else a same-file one or the one its imports name, else it is ambiguous and "
             f"not expanded; builtins {builtins}{'' if include_builtins else ' (--builtins shows them)'}; "
-            f"depth {depth} (clamped 1-5). Measured: depth-1 call lists only.")
+            f"depth {depth} ({WALK_DEPTH[0]}..{WALK_DEPTH[1]}). Measured: depth-1 call lists only.")
     if declined:
         text += f" No recall snapshot: {', '.join(declined)}."
     return {

@@ -258,8 +258,8 @@ class TestBuildTrace(unittest.TestCase):
         for key in ('root', 'path', 'depth', 'frames', 'total_resolved', 'total_unresolved'):
             self.assertIn(key, report)
 
-    def test_depth_capped_at_five_externally(self):
-        """run_trace caps depth; _build_trace passes it through unchanged."""
+    def test_depth_passes_through_build_trace(self):
+        """The declaration refuses a depth outside 1..5; _build_trace passes it through unchanged."""
         self._make_two_file_project()
         report = _build_trace(self.tmpdir, 'main', 1)
         self.assertEqual(report['depth'], 1)
@@ -555,23 +555,16 @@ class TestRunTrace(unittest.TestCase):
         self.assertEqual(data['root'], 'start')
         self.assertIn('frames', data)
 
-    def test_depth_capped_at_five(self):
+    def test_depth_outside_one_to_five_exits_2(self):
+        """99 was capped to 5 and 0 floored to 1; both are invalid requests now (BACK-2793)."""
         self._make_project()
-        args = Namespace(path=self.tmpdir, root='start', depth=99, format='json')
-        buf = StringIO()
-        with patch('sys.stdout', buf):
-            run_trace(args)
-        data = json.loads(buf.getvalue())
-        self.assertLessEqual(data['depth'], 5)
-
-    def test_depth_floored_at_one(self):
-        self._make_project()
-        args = Namespace(path=self.tmpdir, root='start', depth=0, format='json')
-        buf = StringIO()
-        with patch('sys.stdout', buf):
-            run_trace(args)
-        data = json.loads(buf.getvalue())
-        self.assertGreaterEqual(data['depth'], 1)
+        for depth in (99, 0):
+            args = Namespace(path=self.tmpdir, root='start', depth=depth, format='json')
+            err = StringIO()
+            with patch('sys.stdout', StringIO()), patch('sys.stderr', err), self.assertRaises(SystemExit) as ctx:
+                run_trace(args)
+            self.assertEqual(ctx.exception.code, 2)
+            self.assertIn(f'depth must be 1..5, got {depth}', err.getvalue())
 
     def test_unknown_from_exits_nonzero(self):
         self._make_project()

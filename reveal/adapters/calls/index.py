@@ -1212,7 +1212,7 @@ def walk_callees(path: str, root: str, depth: int = 2, include_builtins: bool = 
     Args:
         path: Root directory (or file) to search.
         root: Entry-point name, or ``FILE:NAME``.
-        depth: Levels of edges to walk (the caller clamps it to 1..5).
+        depth: Levels of edges to walk (the caller's declaration refuses a value outside 1..5, WALK_DEPTH).
         include_builtins: Keep calls to language builtins (hidden by default).
         source: ``callee_source`` of the directory the caller already holds (trace builds
             it from the structures it validated); ``callee_source(path)`` when None.

@@ -1085,8 +1085,8 @@ adapters:
       reason: --all conventionally lifts a RESULTS cap (top=N/limit=N); trace's cap
         (trace.py:26-30, default depth=2) is a BFS TRAVERSAL-DEPTH bound, a different
         axis -- 'show all' would mean 'traverse arbitrarily deep', which risks a runaway
-        walk on a large or cyclic call graph (sibling code in calls/adapter.py:412
-        deliberately clamps depth for the same reason). --depth=N is already the documented,
+        walk on a large or cyclic call graph (every walk depth is bounded 1..5 for the same
+        reason, BACK-2793). --depth=N is already the documented,
         working escape hatch for a user who wants more.
       review: not-applicable
       via: []

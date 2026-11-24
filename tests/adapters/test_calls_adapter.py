@@ -587,12 +587,10 @@ def caller_b(x):
         result = adapter.get_structure()
         self.assertIn('error', result)
 
-    def test_depth_capped_at_5(self):
-        """depth=99 should be silently capped to 5 without crashing."""
-        adapter = CallsAdapter(self.tmpdir, 'target=helper&depth=99')
-        result = adapter.get_structure()
-        # Should complete successfully regardless of depth cap
-        self.assertIn('levels', result)
+    def test_depth_above_5_is_refused(self):
+        """depth=99 was silently capped to 5; it is an invalid request now (BACK-2793)."""
+        with self.assertRaisesRegex(ValueError, r'depth must be 1\.\.5, got 99'):
+            CallsAdapter(self.tmpdir, 'target=helper&depth=99').get_structure()
 
     def test_result_has_path(self):
         adapter = CallsAdapter(self.tmpdir, 'target=helper')
@@ -2460,11 +2458,11 @@ class TestRootCalleeWalk(unittest.TestCase):
         self.assertEqual(result['total_resolved'], 1)
         self.assertEqual(result['total_unresolved'], 1)
 
-    def test_depth_capped_at_5_via_adapter(self):
+    def test_depth_above_5_is_refused_via_adapter(self):
         from reveal.adapters.calls.adapter import CallsAdapter
-        adapter = CallsAdapter(self.tmp, 'root=entry&depth=99')
-        result = adapter.get_structure()
-        self.assertLessEqual(result['depth'], 5)
+        with self.assertRaisesRegex(ValueError, r'depth must be 1\.\.5, got 99'):  # it was capped to 5 (BACK-2793)
+            CallsAdapter(self.tmp, 'root=entry&depth=99').get_structure()
+        self.assertEqual(CallsAdapter(self.tmp, 'root=entry&depth=5').get_structure()['depth'], 5)
 
 
 class TestCallsAdapterRoot(unittest.TestCase):

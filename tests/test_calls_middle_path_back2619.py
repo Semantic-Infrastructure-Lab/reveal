@@ -127,7 +127,6 @@ class TestPreservation:
         ('callees=top&detail=false', {'callees': 'top', 'detail': False}),
         ('callees=top&detail=false', {'callees': 'top', 'detail': None}),
         ('callers=sink&depth=1', {'callers': 'sink', 'depth': None}),
-        ('callers=sink&depth=1', {'callers': 'sink', 'depth': 0}),
     ])
     def test_api_false_zero_none_are_real_overrides(self, project, controls, typed):
         # each request's own note spells its own form (BACK-2716)

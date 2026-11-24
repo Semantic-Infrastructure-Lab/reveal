@@ -41,7 +41,7 @@ def requests(root, entry='main', depth=None):
     return cli, uri
 
 
-@pytest.mark.parametrize('depth', [None, '-2', '+2', '0', '8'])
+@pytest.mark.parametrize('depth', [None, '+2', '1', '5'])
 @pytest.mark.parametrize('provenance', [False, True])
 def test_canonical_parity(project, depth, provenance):
     options = ['--format', 'json', '--respect-gitignore=off'] + (['--provenance'] if provenance else [])
@@ -237,8 +237,19 @@ def test_transport_noops_and_explicit_exclusions(project):
         assert not any(frame['file'].endswith('hidden.py') for frame in after['frames'])
 
 
+@pytest.mark.parametrize('depth', ['-2', '0', '8'])
+def test_an_out_of_range_depth_is_refused_alike_on_both_spellings(project, depth):
+    """They were clamped to 1 or 5 (BACK-2793): the CLI and the URI now give the same invalid-request document."""
+    results = [run(*argv, '--format', 'json') for argv in requests(project, depth=depth)]
+    assert [result.returncode for result in results] == [2, 2]
+    assert [json.loads(result.stdout)['error'] for result in results] == [f'depth must be 1..5, got {int(depth)}'] * 2
+
+
+# depth takes the shared integer grammar (whole_number, depth_param): a whole float such as 2.0 binds as 2 on a direct
+# typed call, as limit does; 1.5, a bool and an out-of-range value are refused (BACK-2793).
 @pytest.mark.parametrize('values,field', [
-    ({'root': 'main', 'depth': True}, 'depth'), ({'root': 'main', 'depth': 2.0}, 'depth'),
+    ({'root': 'main', 'depth': True}, 'depth'), ({'root': 'main', 'depth': 1.5}, 'depth'),
+    ({'root': 'main', 'depth': 0}, 'depth'),
     ({'root': True}, 'from'), ({'root': []}, 'from'), ({'root': '   '}, 'from'),
 ])
 def test_direct_typed_binding_rejects_nonscalar_or_nonwhole_values(project, values, field):

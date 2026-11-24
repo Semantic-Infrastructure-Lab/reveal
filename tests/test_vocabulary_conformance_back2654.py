@@ -864,9 +864,12 @@ def _repeatable(spec):
 
 
 def _distinct_values(spec):
-    """(a, b): a valid value and a different one, distinctive enough to find in a message (b None: one value)."""
+    """(a, b): a valid value and a different one, distinctive enough to find in a message (b None: one value). Both lie
+    inside a declared maximum (depth 1..5: 4 and 2), or a conflict probe would measure the range refusal instead."""
     if spec.type in ('integer', 'number'):
         low = spec.minimum or 0
+        if spec.maximum is not None:
+            return str(min(low + 3, spec.maximum)), str(low + 1)
         return str(low + 3), str(low + 7)
     values = _candidate_values(spec)
     return values[0], (values[1] if len(values) > 1 else None)

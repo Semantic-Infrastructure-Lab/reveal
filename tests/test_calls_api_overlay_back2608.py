@@ -46,9 +46,16 @@ def test_actual_answers_equal_uri_and_generated_cli(project, mode, name, control
         assert len(expected['entries']) == 1
 
 
-@pytest.mark.parametrize('value,expected', [(0, 1), (None, 1), (2, 2)])
+@pytest.mark.parametrize('value,expected', [(None, 1), (2, 2), (5, 5)])
 def test_depth_overrides_and_defaults(project, value, expected):
     assert ask(project, 'callers=sink&depth=3', depth=value) == ask(project, f'callers=sink&depth={expected}')
+
+
+def test_a_zero_depth_override_is_refused(project):
+    # it answered as depth 1 (the clamp); a depth outside 1..5 is an invalid request (BACK-2793)
+    from reveal.errors import RequestValidationError
+    with pytest.raises(RequestValidationError, match=r'depth must be 1\.\.5, got 0'):
+        ask(project, 'callers=sink&depth=3', depth=0)
 
 
 def test_false_zero_and_none_are_effective(project):

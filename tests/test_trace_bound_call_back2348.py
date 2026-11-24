@@ -66,13 +66,13 @@ def test_direct_public_and_private_method_kwargs_reject(project, method):
         getattr(adapter, method)(depth=3)
 
 
-def test_depth_none_zero_omission_and_clamps_preserve_policy(project):
+def test_depth_none_and_omission_preserve_policy_and_out_of_range_is_refused(project):
     assert query(project)['depth'] == 1
     assert query(project, depth=None)['depth'] == 2
-    assert query(project, depth=0)['depth'] == 1
-    assert query(project, depth=-2)['depth'] == 1
-    assert query(project, depth=99)['depth'] == 5
     assert query(project, 'from=main')['depth'] == 2
+    for value in (0, -2, 99):  # they were clamped to 1 or 5 (BACK-2793)
+        with pytest.raises(RequestValidationError, match=f'depth must be 1\\.\\.5, got {value}'):
+            query(project, depth=value)
 
 
 def test_required_original_selector_and_invalid_uri_validate_before_overlay(project):

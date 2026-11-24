@@ -34,7 +34,7 @@ from .base import ResourceAdapter, register_adapter, register_renderer
 from .calls.index import CalleeNode, CalleeSource, walk_callees
 from ..utils import print_json_result
 from ..utils.query_binding import bound_constructor_params
-from ..utils.query_parser import (CliBinding, ParamSpec, ResourceSpec, clamped_whole,
+from ..utils.query_parser import (WALK_DEPTH, CliBinding, ParamSpec, ResourceSpec, depth_param,
                                   nonempty_scalar, param_schema, peek_query_items)
 from ..utils.path_utils import to_posix
 from ..utils.results import ResultBuilder, lost_evidence
@@ -434,10 +434,6 @@ class TraceRenderer:
         _render_trace(result)
 
 
-def _trace_depth(value: Any) -> int:
-    return clamped_whole(value, 1, 5)
-
-
 def _trace_parameters_valid(frame: Dict[str, Any]) -> bool:
     return 'params' in frame and (frame['params'] is None or _trace_strings(frame['params']))
 
@@ -552,9 +548,7 @@ class TraceAdapter(ResourceAdapter):
                   nonempty_scalar, required=True, uri_codec='percent', role='analysis',
                   examples=('from=main', 'from=src/app.py:run'),
                   cli=CliBinding(('--from',), dest='root', required=True, metavar='FUNC')),
-        ParamSpec('depth', 'integer', 'Call levels to expand (signed whole integer, clamped 1-5)', 2,
-                  _trace_depth, role='analysis', examples=('depth=4',),
-                  cli=CliBinding(('--depth',), metavar='N')),
+        depth_param('call levels to expand', default=2, examples=('depth=4',)),
     )
 
     def __init__(self, resource: str, query: Optional[str] = None, *,
@@ -616,7 +610,7 @@ class TraceAdapter(ResourceAdapter):
                 'Unresolved (external/stdlib) callees marked [external]',
             ],
             'notes': [
-                'depth is clamped to 1-5.',
+                f'A depth outside {WALK_DEPTH[0]}..{WALK_DEPTH[1]} is an invalid request (exit 2), never clamped.',
                 'A same-named definition in an unrelated language is not conflated with the real target (BACK-405).',
             ],
             'see_also': [
