@@ -73,3 +73,30 @@ def test_an_invalid_request_without_an_error_of_its_own_carries_one_with_the_doc
     answer = path_read_refusal('x.rst', "Error: No analyzer found for file 'x.rst'\n\nContext:\n", _args('x.rst'))
     assert type(answer.request_error) is RequestValidationError
     assert str(answer.request_error) == "No analyzer found for file 'x.rst'" == answer.result['error']
+
+
+# diagnostic= (BACK-2775): an element read of a file whose structure failed prints the file route's own line; the cause
+# is what the document, the Python API and MCP say.
+_FAILED = 'Error (bad.xml): XML parse error: mismatched tag: line 1, column 8\n'
+_CAUSE = 'XML parse error: mismatched tag: line 1, column 8'
+
+
+def test_a_diagnostic_is_the_documents_message_and_the_callers_text(capsys):
+    answer = path_read_refusal('bad.xml', _FAILED, _args('bad.xml', 'b', '--format', 'json'), exit_code=3,
+                               cause=FailureCause.ANALYSIS, diagnostic=_CAUSE)
+    assert answer.public_diagnostic == _CAUSE and answer.exception is None and answer.request_error is None
+    with pytest.raises(SystemExit) as exited:
+        answer.emit()
+    out, err = capsys.readouterr()
+    assert exited.value.code == 3 and err == _FAILED
+    document = json.loads(out)
+    assert document['type'] == 'code_element' and document['error'] == _CAUSE
+    assert document['meta']['errors'] == [{'code': 'analysis', 'message': _CAUSE}]
+
+
+def test_an_invalid_request_with_a_diagnostic_carries_it_as_the_request_error():
+    cause = 'Invalid ZIP archive: File is not a zip file'
+    answer = path_read_refusal('bad.docx', f'Error (bad.docx): {cause}\n', _args('bad.docx', 'x'), diagnostic=cause)
+    assert execution_exit_code(answer.execution_facts) == 2
+    assert type(answer.request_error).__name__ == 'RequestValidationError' and str(answer.request_error) == cause
+    assert answer.public_diagnostic == cause

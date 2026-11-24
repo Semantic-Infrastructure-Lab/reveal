@@ -290,22 +290,23 @@ class PathReadRefused(Exception):
 
 
 def path_read_refusal(target: str, text: str, args, *, exit_code: int = 2, error: Optional[Exception] = None,
-                      cause: Any = None):
+                      cause: Any = None, diagnostic: Optional[str] = None):
     """The Answer of a path read that a site of the file route refuses (BACK-2325, ruling S4). *text* is exactly what
     the site prints on stderr, its error line then any hints; the document is the path read's invalid-request document
     (``invalid_path_read``'s facet and shape), its message the error line without its ``Error:`` label; the exit is
     *exit_code*, 2 for an invalid request (a site with a legacy code keeps it). *error*: what the Python API raises,
     the request's own ``RequestValidationError`` (by default one with the document's message), or with *cause*
     ``FailureCause.ANALYSIS`` the ``OSError`` of a file that could not be read (exit 3). MCP reads the facts and *text*
-    (``public_diagnostic``), as the exit and stderr it read before."""
+    (``public_diagnostic``), as the exit and stderr it read before. *diagnostic*: the refusal's own message when it is
+    not *text*'s error line (an element read of a file whose structure failed says the file route's ``Error (PATH):``
+    line, BACK-2775): the document's message, the API's and MCP's text (as the file structure's Answer says its cause)."""
     from ...errors import RequestValidationError
     from ...reveal_types import CONTRACT_VERSION
     from ...utils.json_utils import print_json_result
     from ...utils.results import FailureCause, ResultBuilder, failure_execution_facts
     from .uri import Answer
     cause = FailureCause.INVALID_REQUEST if cause is None else cause
-    first = text.partition('\n')[0]
-    message = first.removeprefix('❌ ').removeprefix('Error: ')
+    message = diagnostic if diagnostic is not None else text.partition('\n')[0].removeprefix('❌ ').removeprefix('Error: ')
     if error is None and cause is FailureCause.INVALID_REQUEST:
         error = RequestValidationError(message)
     result = ResultBuilder.create(_path_read_answer(target, args), target, contract_version=CONTRACT_VERSION,
@@ -318,7 +319,8 @@ def path_read_refusal(target: str, text: str, args, *, exit_code: int = 2, error
             print_json_result(result)
         sys.exit(exit_code)
     return Answer(result, 'router', emit, execution_facts=failure_execution_facts(cause),
-                  exception=error if cause is FailureCause.ANALYSIS else None, public_diagnostic=text.strip(),
+                  exception=error if cause is FailureCause.ANALYSIS else None,
+                  public_diagnostic=text.strip() if diagnostic is None else diagnostic,
                   request_error=error if isinstance(error, RequestValidationError) else None)
 
 
