@@ -137,7 +137,7 @@ def rule_text_lines(
             locations.append(f'{key}.warnings')
     pointer = f"Rules: --format json ({', '.join(locations)})"
     if detail_supported:
-        pointer += '; --detail for full text'
+        pointer += '; --detail full for full text'
     lines = [pointer]
     if detail:
         lines.extend(chain.from_iterable(rules.values()))

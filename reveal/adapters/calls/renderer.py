@@ -80,7 +80,7 @@ def render_calls_structure(data: Dict[str, Any], output_format: str, *, detail: 
 
 
 def _render_callee_walk(data: Dict[str, Any], output_format: str) -> None:
-    """?callees=X&depth=N (or &detail): the tree prints every warning under its rule; dot puts them
+    """?callees=X&depth=N (or &detail=full): the tree prints every warning under its rule; dot puts them
     on stderr, as every dot view does."""
     if output_format != 'dot':
         _render_callee_walk_text(data)
@@ -249,7 +249,7 @@ def _render_callees_text(data: Dict[str, Any]) -> None:
 
 
 def _render_callee_walk_text(data: Dict[str, Any]) -> None:
-    """?callees=X&depth=N (or &detail): a depth-indented tree from each definition of X, its rule, and
+    """?callees=X&depth=N (or &detail=full): a depth-indented tree from each definition of X, its rule, and
     every warning the answer carries."""
     target = data.get('target', '?')
     definitions = data.get('definitions', [])

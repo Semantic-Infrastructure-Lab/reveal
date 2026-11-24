@@ -18,7 +18,7 @@ def test_a_list_of_sentences_is_a_rule_location():
 def test_a_detailed_view_prints_each_sentence_after_the_pointer():
     lines = rule_text_lines(RESULT, fields=('walk_rule.text', '_meta.known_limits'), standing_types=frozenset(),
                             detail=True, detail_supported=True)
-    assert lines == ['Rules: --format json (walk_rule.text, _meta.known_limits); --detail for full text', 'one rule',
+    assert lines == ['Rules: --format json (walk_rule.text, _meta.known_limits); --detail full for full text', 'one rule',
                      'commit-share, not line-ownership', 'merges excluded by default']
 
 

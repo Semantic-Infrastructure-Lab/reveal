@@ -9,7 +9,7 @@ file overwrite or deeper membership change. Known incomplete collections are not
 retained. Host requests validate retained roots through the shared request-cache
 owner; direct helper reuse remains governed by the cheap key.
 
-The forward queries (?callees=, depth, --detail, ?root=) read one CalleeSource per root,
+The forward queries (?callees=, depth, --detail full, ?root=) read one CalleeSource per root,
 kept only inside host requests and validated by the tree stamp alone (BACK-2109).
 """
 
@@ -939,7 +939,7 @@ class CallSource(NamedTuple):
 class CalleeSource:
     """What every forward query reads from one structure collection: ``find_callees``
     (depth 1, ``FILE:NAME``), ``walk_callees`` (depth >= 2, ``?root=``, trace) and the
-    ``--detail`` params/effects. Definitions keep collection order and the file spelling of
+    ``--detail full`` params/effects. Definitions keep collection order and the file spelling of
     the collection; builtins, names, depth and detail apply at query time, never here.
     ``skipped``/``traversal_failures`` are the collection's loss evidence and ``recovered`` its files read
     only through error recovery (BACK-2658); ``scope`` is the walk scope a cached one was collected under

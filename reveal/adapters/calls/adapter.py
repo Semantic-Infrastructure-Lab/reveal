@@ -32,7 +32,7 @@ from .index import (find_callers, find_callees, find_uncalled, rank_by_callers, 
 from ..ast.analysis import collect_structures
 from ...core.definition_names import name_matches
 from .renderer import render_calls_structure
-from ...utils.query_binding import bound_constructor_params, boolean_value
+from ...utils.query_binding import bound_constructor_params, boolean_value, detail_level
 from ...utils.query_parser import (CliBinding, LegacySpelling, ParamSpec, ParamValueError, ResourceSpec,
                                    clamped_whole, exclude_param, nonempty_scalar, nonnegative_display_limit,
                                    param_schema, peek_query_items, legacy_slices)
@@ -74,14 +74,6 @@ def _calls_sort(value: Any) -> str:
     if value != '-callers':
         raise ParamValueError('sort supports -callers only; use --sort=-callers (legacy rank=callers)')
     return '-callers'
-
-
-def _calls_detail(value: Any) -> bool:
-    if value == 'normal':
-        return False
-    if value == 'full':
-        return True
-    return boolean_value(value)
 
 
 # The answer each mode selects (_MODE_TYPES); a control declares the ones that read it (COMMAND_MODEL "Applicability",
@@ -145,10 +137,15 @@ _EXTERNAL = _flag_spec('external', 'With modules: also count importers from the 
 _BUILTINS = _flag_spec('builtins', 'Include language builtins (len, str, ValueError, ...) in callees (every '
                        'depth), root and rank output; in rank, also names the scan does not define '
                        '(library methods such as dict.get) (default: false)', answers=(_C, _R, _K))
-_DETAIL = ParamSpec('detail', 'boolean', 'Callees only: normal or full; full adds params/effects '
-                   '(not measured, W-CALLS-9). Bare --detail and true/false remain supported.',
-                   False, _calls_detail, examples=('--detail',),
-                   role='analysis', cli=CliBinding(('--detail',), nargs='?', const=True, metavar='LEVEL'), answers=(_C,))
+# detail is a level of the one scale (COMMAND_MODEL "How much of it"; BACK-2774 ruling S1). Its older two-level spelling
+# answers until the cut: the valueless --detail/?detail and the keyword detail=True through the shared codec, true/false
+# as value entries; each is noted under value:calls.detail=true|false (a bare flag carries its const, true).
+_DETAIL = ParamSpec('detail', 'string', 'Callees only: normal (default) or full; full adds params/effects to every '
+                    'definition the walk reaches (not measured, W-CALLS-9)',
+                    'normal', detail_level, examples=('--detail full',), choices=('normal', 'full'), role='analysis',
+                    legacy=(LegacySpelling('detail', value='true', codec=lambda _: 'full'),
+                            LegacySpelling('detail', value='false', codec=lambda _: 'normal')),
+                    cli=CliBinding(('--detail',), nargs='?', const=True, metavar='LEVEL'), answers=(_C,))
 _TEST_FRAMEWORK = _flag_spec('test-framework', 'Include test-framework entrypoints: as callers in rank, and as '
                              'dead-code candidates in uncalled (default: false)', dest='test_framework', answers=(_K, _U))
 _FORMAT = ParamSpec('format', 'string', 'Output format: text, json or dot (Graphviz, --format dot; it draws '
@@ -173,7 +170,7 @@ _MODE_TYPES = {'modules': 'calls_module_graph', 'rank': 'calls_ranking', 'uncall
                'root': 'calls_callees_recursive', 'callees': 'calls_callees', 'callers': 'calls_query'}
 _MISSING_MODE = ('Missing required parameter: callers=<name> (or target=<name>), callees=<name>, root=<name>, '
                  'rank=callers, uncalled or modules')
-_PRESENCE_FLAGS = ('uncalled', 'modules', 'detail')
+_PRESENCE_FLAGS = ('uncalled', 'modules')
 
 
 def _selects(name: str, value: Any) -> bool:
@@ -194,14 +191,14 @@ def _selected_modes(params: Any) -> List[str]:
 
 # The views format=dot draws a graph for. Callees at depth 1 (a per-definition call list without edge
 # resolution), rank and uncalled (tables) have no dot renderer and printed text under format=dot (BACK-2108).
-_DOT_REJECTION = ('format=dot draws a graph for callers, a callees walk (depth=2-5 or detail), root and modules; '
+_DOT_REJECTION = ('format=dot draws a graph for callers, a callees walk (depth=2-5 or detail=full), root and modules; '
                   '{view} has none: use format=text or format=json')
 
 
 def _dot_rejection(mode: str, supplied: Dict[str, Any]) -> Optional[str]:
     """Why format=dot cannot answer *mode* as supplied, or None when the view draws a graph."""
     if mode == 'callees':
-        walked = ('detail' in supplied and _selects('detail', supplied['detail'])
+        walked = ('detail' in supplied and _DETAIL.validate(_DETAIL.canonical_value('detail', supplied['detail'])) == 'full'
                   or 'depth' in supplied and _calls_depth(supplied['depth']) > 1)
         return None if walked else _DOT_REJECTION.format(view='callees at depth 1')
     if mode == 'uncalled':  # the ranking does not read format at all (its declaration refuses it)
@@ -213,12 +210,12 @@ _HELP: Dict[str, Any] = {
     'name': 'calls',
     'description': 'Cross-file call graph queries — find callers or callees of any function.',
     'syntax': 'reveal calls <path> --callers NAME [--depth N] [--format dot]\n'
-              '         reveal calls <path> --callees NAME|FILE:NAME [--depth N] [--detail] [--format dot]\n'
+              '         reveal calls <path> --callees NAME|FILE:NAME [--depth N] [--detail normal|full] [--format dot]\n'
               '         reveal calls <path> --sort=-callers [--limit N]\n'
               '         reveal calls <path>:<function>           # shorthand for --callers <function>',
     'parameters': {spec.name: spec.description for spec in _PARAM_SPECS},
     'epilog': 'One mode per request: --callers, --callees or --sort. Two modes exit 2. A callee walk beyond '
-              'depth 1 and --detail are not measured (W-CALLS-9). (legacy --target, --root, --uncalled and '
+              'depth 1 and --detail full are not measured (W-CALLS-9). (legacy --target, --root, --uncalled and '
               '--modules still answer, with a note naming the replacement)',
     'examples': [
         {'uri': 'reveal calls src/ --callers validate_item',
@@ -229,7 +226,7 @@ _HELP: Dict[str, Any] = {
          'description': 'Callers-of-callers too (transitive, 2 levels)'},
         {'uri': 'reveal calls src/ --callees validate_item',
          'description': 'What does validate_item call? (forward lookup, builtins hidden)'},
-        {'uri': 'reveal calls src/ --callees validate_item --depth 2 --detail',
+        {'uri': 'reveal calls src/ --callees validate_item --depth 2 --detail full',
          'description': 'What those call too, level by level, with params and effects (not measured: W-CALLS-9)'},
         {'uri': 'reveal calls src/ --callees validate_item --builtins',
          'description': 'Include builtins (len, str, sorted, exceptions, etc.)'},
@@ -249,7 +246,7 @@ _HELP: Dict[str, Any] = {
         'depth=N expands callers transitively up to N levels (capped at 5).',
         '?callees=X finds every definition of X and shows what it calls — useful for multi-file functions. '
         'depth=2-5 walks level by level under the same calls_callees type (levels, definitions, edge totals, '
-        'walk_rule and a Rules: pointer); &detail adds params and effects. Neither is measured in any language '
+        'walk_rule and a Rules: pointer); &detail=full adds params and effects. Neither is measured in any language '
         '(W-CALLS-9).',
         'A scanned language that yields call sources and has no recall snapshot (Elixir, Objective-C) withholds '
         'meta.confidence and is named (W-CALLS-10); shell, SQL and other files with no call edges do not. '
@@ -262,8 +259,8 @@ _HELP: Dict[str, Any] = {
         'adapters.calls.entry_points.decorators: [route, get, post, command].',
         'One mode per request: callers (or target, its older name), callees, root, rank, uncalled or modules; '
         'two exit 2 and name both, and so does the path:name shorthand with an explicit mode. '
-        'A malformed value (depth=abc, top=-1, rank=other), callers=FILE:NAME or detail outside callees exits 2 '
-        'naming the parameter; names are never coerced (callers=123 is the name 123).',
+        'A malformed value (depth=abc, top=-1, rank=other, detail=yes: detail is normal or full), callers=FILE:NAME '
+        'or detail outside callees exits 2 naming the parameter; names are never coerced (callers=123 is the name 123).',
         '?modules is retired (BACK-1054): it answers from reveal imports <path> --importers --scope path, one edge per '
         'import that resolves under the path (an import used without a call counts too; no call_count), and '
         '&external counts importers from the whole project root (scope=root). A file tree-sitter read only '
@@ -285,7 +282,7 @@ _SCHEMA: Dict[str, Any] = {
     'adapter': 'calls',
     'description': 'Cross-file call graph — who calls X (?callers) or what does X call (?callees)?',
     'uri_syntax': 'reveal calls <path> --callers NAME [--depth N] [--format text|dot|json]\n'
-                  '             reveal calls <path> --callees NAME|FILE:NAME [--depth N] [--detail]\n'
+                  '             reveal calls <path> --callees NAME|FILE:NAME [--depth N] [--detail normal|full]\n'
                   '             reveal calls <path> --sort=-callers [--limit N]\n'
                   '             reveal calls <path>:<name>  # shorthand for --callers <name>',
     'resource': _RESOURCE.schema(),
@@ -332,7 +329,7 @@ _SCHEMA: Dict[str, Any] = {
         {
             'type': 'calls_callees',
             'description': 'Callees result — functions/methods called by the target. depth 1: matches only; '
-                           'depth 2-5 or detail add the callee walk (depth, levels, definitions, edge totals, '
+                           'depth 2-5 or detail=full add the callee walk (depth, levels, definitions, edge totals, '
                            'walk_rule), each definition expanded once at its shallowest level',
             'schema': {
                 'type': 'object',
@@ -480,7 +477,7 @@ _SCHEMA: Dict[str, Any] = {
         'edge with call_expr; expanded is false when its '
         'target was already reached at a shallower or earlier level. total_edges = total_resolved + total_unresolved; '
         'total_ambiguous counts the resolved edges with several candidate definitions.',
-        '?callees depth=2-5 and detail: the callee walk under calls_callees, every call site of an expanded '
+        '?callees depth=2-5 and detail=full: the callee walk under calls_callees, every call site of an expanded '
         'definition an edge; not measured in any language (W-CALLS-9 in meta.warnings, walk_rule.measured).',
         'A call-source language with no recall snapshot in scope: no meta.confidence, W-CALLS-10 names it (languages). '
         'No source file counted in scope: no meta.confidence, W-CALLS-12. '
@@ -560,7 +557,7 @@ def _calls_depth_or_error(result: Dict[str, Any]) -> Optional[str]:
 
 def _answer_fields(result: Dict[str, Any]) -> Optional[Tuple[Tuple[str, ...], Tuple[str, ...], Tuple[str, ...]]]:
     """The names, lists and counts this answer type must carry; the callee walk (depth 2-5,
-    detail) adds its levels, definitions and edge totals to calls_callees."""
+    detail=full) adds its levels, definitions and edge totals to calls_callees."""
     fields = _ANSWER_FIELDS.get(str(result.get('type')))
     if fields is None or result.get('type') != 'calls_callees' or 'levels' not in result:
         return fields
@@ -617,10 +614,10 @@ class CallsRenderer:
 
     ACCEPTS_DETAIL = True
 
-    def render_structure(result: Dict[str, Any], format: str = 'text', *, detail: bool = False) -> None:  # noqa: N805
+    def render_structure(result: Dict[str, Any], format: str = 'text', *, detail: str = 'normal') -> None:  # noqa: N805
         # Query-string format= (e.g. format=dot) takes precedence over CLI --format
         effective_format = result.get('_query_format') or format
-        render_calls_structure(result, effective_format, detail=detail)
+        render_calls_structure(result, effective_format, detail=detail == 'full')
 
 
 @register_adapter('calls')
@@ -631,7 +628,7 @@ class CallsAdapter(ResourceAdapter):
     Examples:
         calls://src/?callers=validate_item
         calls://src/?callers=process_batch&depth=2
-        calls://src/?callees=main&depth=2&detail
+        calls://src/?callees=main&depth=2&detail=full
     """
 
     # Names a path and selects an analysis (COMMAND_MODEL rule 2): its request is `reveal NOUN TARGET --flags`; the
@@ -771,7 +768,7 @@ class CallsAdapter(ResourceAdapter):
         # Every mode key is read here, whichever mode answers: the flag ledger counts each as applied.
         callers, callees_target, root, rank = (spec.read(params) or ''
                                                for spec in (_CALLERS, _CALLEES, _ROOT, _RANK))
-        uncalled, modules, detail = _UNCALLED.read(params), _MODULES.read(params), _DETAIL.read(params)
+        uncalled, modules, detail = _UNCALLED.read(params), _MODULES.read(params), _DETAIL.read(params) == 'full'
         if self._shorthand_conflict:
             return self._usage(f'calls://{self._shorthand_conflict} is shorthand for callers=NAME, so with '
                                f'{_selected_modes(params)[0]}= it names two modes: calls takes one mode per request')
@@ -926,7 +923,7 @@ class CallsAdapter(ResourceAdapter):
         return source_directory(self.path)
 
     def _callees(self, name: str, query_format: str, detail: bool) -> RevealResult:
-        """Depth 1 is find_callees' per-definition answer, as before; depth 2-5 and detail add the
+        """Depth 1 is find_callees' per-definition answer, as before; depth 2-5 and detail=full add the
         callee walk (walk_callees) to the same answer type, read from one callee_source."""
         params = self.query_params
         depth = _DEPTH.read(params) or 1

@@ -681,9 +681,9 @@ DOC_SOURCE_COHORT = {
 # Named fixtures execute these examples; dedicated answer controls qualify the README Calls cohort.
 DOC_NAMED_SOURCE_COHORT = {
     ('adapters/CALLS_ADAPTER_GUIDE.md',
-     'reveal calls src/ --callees validate_item --depth 2 --detail'),
+     'reveal calls src/ --callees validate_item --depth 2 --detail full'),
     ('../../README.md', 'reveal calls src/ --callers main'),
-    ('../../README.md', 'reveal calls src/ --callees main --depth 2 --detail'),
+    ('../../README.md', 'reveal calls src/ --callees main --depth 2 --detail full'),
 }
 
 

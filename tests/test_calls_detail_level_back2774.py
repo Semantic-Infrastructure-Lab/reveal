@@ -147,14 +147,18 @@ def test_a_retired_uri_spelling_answers_as_its_level_and_its_request_note_names_
     result, answer = cli_json(uri(controls))
     assert result.returncode == 0, result.stderr
     assert without_retired(answer) == expected
-    for actual in (answer, query(uri(controls)), mcp_json(uri(controls))):
+    # Each transport's request note renders the request in its own form (BACK-2716): the CLI names the flag, api.query
+    # the Python call, MCP the reveal_run words.
+    for actual, full in ((answer, '--detail full'), (query(uri(controls)), "detail='full'"),
+                         (mcp_json(uri(controls)), '"--detail", "full"')):
         assert without_retired(actual) == expected
         notes = [w['message'] for w in retired(actual) if is_request_note(w)]
         assert len(notes) == 1, retired(actual)
         assert '--detail true' not in notes[0] and '--detail false' not in notes[0]
-        assert not notes[0].rstrip('.').endswith('--detail'), notes[0]
+        assert 'detail=True' not in notes[0] and "detail='true'" not in notes[0]
+        assert not notes[0].rstrip('.').endswith('--detail') and '"--detail"])' not in notes[0], notes[0]
         if level == 'full':
-            assert '--detail full' in notes[0], notes[0]
+            assert full in notes[0], notes[0]
 
 
 @pytest.mark.parametrize('typed,level', [(True, 'full'), (False, 'normal'), ('true', 'full'), ('false', 'normal')])

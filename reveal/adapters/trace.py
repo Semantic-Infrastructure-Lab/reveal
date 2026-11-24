@@ -620,7 +620,7 @@ class TraceAdapter(ResourceAdapter):
                 'A same-named definition in an unrelated language is not conflated with the real target (BACK-405).',
             ],
             'see_also': [
-                'calls://<path>?callees=<FUNC>&depth=N&detail - the replacement (reveal calls <path> --callees <FUNC> --depth 2 --detail)',
+                'calls://<path>?callees=<FUNC>&depth=N&detail=full - the replacement (reveal calls <path> --callees <FUNC> --depth 2 --detail full)',
                 "reveal_trace MCP tool - same narrative, MCP-native",
             ],
             'output_formats': ['text', 'json'],
@@ -630,7 +630,7 @@ class TraceAdapter(ResourceAdapter):
     def get_schema() -> Dict[str, Any]:
         return {
             'adapter': 'trace',
-            'description': 'Retired (use calls://<path>?callees=<FUNC>&depth=N&detail). Execution narrative: call-graph walk from a named entry point, each definition expanded at the shallowest depth it is reached',
+            'description': 'Retired (use calls://<path>?callees=<FUNC>&depth=N&detail=full). Execution narrative: call-graph walk from a named entry point, each definition expanded at the shallowest depth it is reached',
             'uri_syntax': 'trace://<path>?from=<FUNC>&depth=2',
             'resource': TraceAdapter.RESOURCE_SPEC.schema(),
             'execution_policy': {'default_fail_on': 'none', 'fail_on': ['none']},

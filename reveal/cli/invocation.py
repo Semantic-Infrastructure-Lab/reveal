@@ -86,7 +86,7 @@ COMMANDS: Dict[str, CommandSpec] = {
                      'Retired: use reveal overview [path] [--against REF]'),
     'calls':        _declared('calls',
                      'reveal calls --callers FUNC',
-                     'Call graph: callers, callees (--depth N, --detail), --sort=-callers'),
+                     'Call graph: callers, callees (--depth N, --detail full), --sort=-callers'),
     'check':        _spec('check',
                      'reveal check <path>',
                      'Run quality rules on a file or directory',
@@ -168,7 +168,7 @@ COMMANDS: Dict[str, CommandSpec] = {
                      help_guide='guides/TESTABILITY_GUIDE.md'),
     'trace':        _declared('trace',
                      'reveal trace --from FUNC',
-                     'Retired: use reveal calls --callees FUNC --depth N --detail (the same walk); '
+                     'Retired: use reveal calls --callees FUNC --depth N --detail full (the same walk); '
                      'depth-indented narrative with side effects'),
 }
 
@@ -427,8 +427,8 @@ RETIREMENTS: Dict[str, Retirement] = {
     'target:diff.element': Retirement('diff://LEFT:RIGHT ELEMENT', 'diff://LEFT:RIGHT/ELEMENT'),
     # trace merged into calls (BACK-2066): both spellings keep trace's frames shape until the cut
     # (decision c); the MCP tool reveal_trace keeps its name until Phase 7 (decision g).
-    'subcommand:trace': Retirement('reveal trace', 'reveal calls <path> --callees FUNC --depth N --detail'),
-    'scheme:trace': Retirement('trace://', 'reveal calls <path> --callees FUNC --depth N --detail'),
+    'subcommand:trace': Retirement('reveal trace', 'reveal calls <path> --callees FUNC --depth N --detail full'),
+    'scheme:trace': Retirement('trace://', 'reveal calls <path> --callees FUNC --depth N --detail full'),
     'param:calls.root': Retirement('calls ?root= (--root)',
                                    '--callees FUNC --depth N, the same walk', standalone=True),
     # Decision (a): an alias that answers identically until the cut.
@@ -436,6 +436,10 @@ RETIREMENTS: Dict[str, Retirement] = {
     'param:calls.rank': Retirement('calls ?rank=callers (--rank callers)', '--sort=-callers'),
     'param:calls.top': Retirement('calls ?top=N (--top N)', '--limit N; 0 is uncapped'),
     'param:calls.type': Retirement('calls ?type=KIND (--type KIND)', '--kind KIND; legacy method keeps its existing population'),
+    # detail was a boolean (BACK-2774 ruling S1): its two-level spelling is the one scale's full and normal. The
+    # valueless --detail and ?detail stand for true (a bare flag carries its const, a bare key binds true).
+    'value:calls.detail=true': Retirement('calls valueless --detail (?detail, --detail true)', '--detail full, the same answer'),
+    'value:calls.detail=false': Retirement('calls --detail false (?detail=false)', '--detail normal, the same answer'),
     # Imports vocabulary (BACK-2620): aliases that answer identically until the cut.
     'param:imports.rank': Retirement('imports ?rank=fan-in (--rank fan-in)', '--sort=-fan-in'),
     'param:imports.top': Retirement('imports ?top=N (--top N)', '--limit N; 0 is uncapped'),

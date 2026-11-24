@@ -16,7 +16,7 @@ CALLERS = 'reveal calls src/ --callers main'
 LEGACY_CALLERS = "reveal 'calls://src/?callers=validate_token'"
 IMPACT = "reveal 'calls://src/?callers=fn&depth=3'"
 RANK = "reveal 'calls://src/?rank=callers&top=20'"
-CALLEES = 'reveal calls src/ --callees main --depth 2 --detail'
+CALLEES = 'reveal calls src/ --callees main --depth 2 --detail full'
 COMMANDS = (CALLERS, CALLEES)
 LEGACY_COMMANDS = (LEGACY_CALLERS, IMPACT, RANK)
 

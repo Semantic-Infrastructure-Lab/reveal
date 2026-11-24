@@ -38,7 +38,7 @@ use the same execution path. Quote URI arguments containing shell operators.
 |---|---|
 | `overview` | Compact project map: `reveal overview .`; compare with `--against REF` |
 | `ast` | Code elements: `reveal ast src/ --where 'complexity>10' --sort=-complexity --limit 10` |
-| `calls` | Callers/callees: `reveal calls src/ --callees main --depth 2 --detail` |
+| `calls` | Callers/callees: `reveal calls src/ --callees main --depth 2 --detail full` |
 | `imports` | Import relationships: `reveal imports src/ --importers app.py` |
 | `git://` | History: `reveal git . --view history --where 'message~=fix'` |
 | `claude` | Session recovery: `reveal claude session/NAME --view messages --sort=-message_index --limit 3` |

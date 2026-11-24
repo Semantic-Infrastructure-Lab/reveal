@@ -74,6 +74,18 @@ def test_a_noun_flag_row_is_found_on_the_subcommand_and_after_a_quoted_uri():
     assert [hit[1] for hit in scan('reveal git://. --check')] == ['flag:git.--check']
 
 
+@pytest.mark.parametrize('line', ['reveal calls src --callees main --depth 2 --detail',
+                                  'reveal calls src --callees main --detail  # with params',
+                                  'reveal calls src --callees main --detail --format json',
+                                  'reveal calls src --callees main --detail true',
+                                  "reveal 'calls://src/?callees=main&detail'",
+                                  "reveal 'calls://src/?callees=main&detail=true'"])
+def test_a_true_value_row_finds_the_bare_key_and_the_bare_flag(line):
+    """value:calls.detail=true (BACK-2774 ruling S1): a bare ``?detail`` binds true and the bare ``--detail`` carries it, so
+    the valueless forms a doc would teach are the same retired spelling as ``detail=true``."""
+    assert [hit[1] for hit in scan(line)] == ['value:calls.detail=true']
+
+
 def test_a_list_item_is_judged_without_its_neighbours():
     text = '- `review` 0 pass, 1 findings\n- `deps` is retired, use imports'
     assert [hit[1] for hit in scan(text)] == ['subcommand:review']
@@ -87,7 +99,8 @@ def test_a_list_item_is_judged_without_its_neighbours():
     'reveal health nginx.conf',
     'reveal check src/ --changed main..HEAD',
     "reveal 'calls://src/?callers=fn&depth=3'",
-    'reveal calls src --callees main --depth 2 --detail',
+    'reveal calls src --callees main --depth 2 --detail full',
+    "reveal 'calls://src/?callees=main&detail=full'",
     "reveal 'imports://src/?importers'",
     "reveal 'metrics://src/?view=hotspots'",  # hotspots=true is retired (BACK-2621)
     "reveal 'patches://tests/?view=pressure'",

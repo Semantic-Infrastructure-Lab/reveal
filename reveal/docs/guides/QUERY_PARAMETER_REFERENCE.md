@@ -447,10 +447,11 @@ reveal 'metrics://.?view=hotspots&code-only=true'
   reveal 'calls://src?callees=main&depth=3'                 # what that calls, 3 levels
   ```
 
-- **`detail`** - With `callees` only: adds `params` and `effects` to every definition reached (not
-  measured, W-CALLS-9); with another mode it exits 2
+- **`detail`** - With `callees` only: `normal` (default) or `full`, which adds `params` and `effects` to every
+  definition reached (not measured, W-CALLS-9); with another mode it exits 2. The valueless `?detail` and
+  `true`/`false` are deprecated: a note names `detail=full` (`normal`)
   ```bash
-  reveal 'calls://src?callees=main&detail'
+  reveal 'calls://src?callees=main&detail=full'
   ```
 
 - **`rank=callers`** - Rank the functions and classes defined under the path by number of unique callers (coupling metrics); `builtins=true` also ranks library methods and builtins
@@ -477,7 +478,7 @@ reveal 'metrics://.?view=hotspots&code-only=true'
   ```
 
 - **`root=<func>&depth=N`** - Retired: `?callees=<func>&depth=N` is the same walk (`?root` defaulted
-  to depth 2) and `&detail` adds params and side effects. `?root` still answers, with a replaced-by note
+  to depth 2) and `&detail=full` adds params and side effects. `?root` still answers, with a replaced-by note
   ```bash
   reveal 'calls://src?callees=main&depth=2'           # was ?root=main
   reveal 'calls://src?callees=handle_request&depth=2&format=dot' | dot -Tsvg > graph.svg

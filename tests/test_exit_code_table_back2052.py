@@ -66,6 +66,7 @@ def test_retirement_inventory_matches_the_shipped_migrations():
                                    'param:testability.tests', 'param:testability.verbose', 'scheme:architecture', 'scheme:classify', 'scheme:depends', 'scheme:deps', 'scheme:hotspots', 'scheme:python', 'scheme:stats', 'scheme:testability', 'scheme:trace', 'subcommand:architecture', 'subcommand:deps', 'subcommand:hotspots', 'subcommand:review', 'subcommand:scaffold', 'subcommand:testability',
                                    'subcommand:trace', 'target:diff.element', 'target:health.code', 'target:help.element', 'target:help.search-term', 'target:nav.outline',
                                    'target:reveal.element', 'value:ast.show=calls', 'value:ast.view=calls',
+                                   'value:calls.detail=false', 'value:calls.detail=true',
                                     'value:git.detail=summary', 'value:git.view=log',
                                    'param:hotspots.top', 'param:testability.top'])
 

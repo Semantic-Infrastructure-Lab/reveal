@@ -23,7 +23,7 @@ def test_a_parent_object_of_sentences_is_one_rule_location():
 def test_a_detailed_view_prints_every_sentence_under_the_parent_in_order():
     lines = rule_text_lines(RESULT, fields=('map.rules',), standing_types=frozenset(), detail=True,
                             detail_supported=True)
-    assert lines == ['Rules: --format json (map.rules); --detail for full text', 'edge rule', 'cycle rule', 'order rule']
+    assert lines == ['Rules: --format json (map.rules); --detail full for full text', 'edge rule', 'cycle rule', 'order rule']
 
 
 def test_an_object_without_sentences_is_no_location():

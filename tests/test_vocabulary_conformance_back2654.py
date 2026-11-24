@@ -951,7 +951,8 @@ def _rows(noun):
 
 def _uri_of(argv):
     """The one-string spelling of a retirement case: its URI, or the subcommand argv's flags as query keys
-    through the noun's declared parser (a flag that takes no value is ``key=true``). None for a subcommand row."""
+    through the noun's declared parser (a flag that takes no value, or an optional-value flag given bare, is
+    ``key=true``: Calls' valueless ``--detail``, BACK-2774). None for a subcommand row."""
     if '://' in argv[0]:
         return argv[0]
     noun, path, *flags = argv
@@ -963,7 +964,8 @@ def _uri_of(argv):
         entry = spec.legacy_entry(option) if hasattr(spec, 'legacy_entry') else None
         key = entry.name if entry is not None else next(
             (n for n in (spec.name, *spec.aliases) if option[2:] in (n, n.replace('_', '-'))), spec.name)
-        if actions[option].nargs == 0:
+        bare = actions[option].nargs == '?' and (index + 1 == len(flags) or flags[index + 1].startswith('-'))
+        if actions[option].nargs == 0 or bare:
             pairs.append(f'{key}=true')
             index += 1
         else:

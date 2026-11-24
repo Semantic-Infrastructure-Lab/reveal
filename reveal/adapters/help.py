@@ -185,7 +185,7 @@ _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
             {'goal': 'Find error handlers', 'query': "reveal ast src --where 'name~=error' --kind function", 'description': 'Locate error handling code', 'output_type': 'ast_query'},
             {'goal': 'Check recent changes', 'query': 'reveal git . --view history', 'description': 'Review recent commit history', 'output_type': 'git_ref'},
             {'goal': 'Find large functions', 'query': "reveal ast src --where 'lines>100' --kind function", 'description': 'Locate potentially problematic large functions', 'output_type': 'ast_query'},
-            {'goal': 'Walk the call chain from an entry point', 'query': 'reveal calls src --callees main --depth 2 --detail', 'description': 'Level-by-level callee walk with params and side effects — see the actual path a bug report walks', 'output_type': 'calls_callees'},
+            {'goal': 'Walk the call chain from an entry point', 'query': 'reveal calls src --callees main --depth 2 --detail full', 'description': 'Level-by-level callee walk with params and side effects — see the actual path a bug report walks', 'output_type': 'calls_callees'},
         ]
     },
     'quality': {

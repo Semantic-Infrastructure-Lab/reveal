@@ -6,16 +6,16 @@ category: guide
 # trace:// Adapter Guide (retired)
 
 `trace://` and `reveal trace` are retired: trace merged into `calls://`, whose callee walk they
-already answered from. The walk, its resolution rule, `--detail` params and side effects, and
+already answered from. The walk, its resolution rule, `--detail full` params and side effects, and
 its limits are documented once, in [CALLS_ADAPTER_GUIDE.md](CALLS_ADAPTER_GUIDE.md#callees).
 
 | Retired | Use instead |
 |---------|-------------|
-| `reveal 'trace://src?from=main&depth=2'` | `reveal 'calls://src?callees=main&depth=2&detail'` |
-| `reveal trace src/ --from main --depth 2` | `reveal calls src/ --callees main --depth 2 --detail` |
+| `reveal 'trace://src?from=main&depth=2'` | `reveal 'calls://src?callees=main&depth=2&detail=full'` |
+| `reveal trace src/ --from main --depth 2` | `reveal calls src/ --callees main --depth 2 --detail full` |
 | `from=src/app.py:run` / `--from src/app.py:run` | `callees=src/app.py:run` / `--callees src/app.py:run` |
 | `trace://src?from=script.py:<module>` | `calls://src?callees=script.py:<module>` |
-| MCP `reveal_trace(dir, entry_point)` | `reveal_query('calls://<dir>?callees=FUNC&depth=2&detail')`; the tool keeps its name for now |
+| MCP `reveal_trace(dir, entry_point)` | `reveal_query('calls://<dir>?callees=FUNC&depth=2&detail=full')`; the tool keeps its name for now |
 
 Trace's default depth was 2; `callees` defaults to 1.
 
@@ -63,7 +63,7 @@ above remain in effect.
 ## See Also
 
 - `reveal help://schemas/trace` - the retired result type's JSON schema
-- [CALLS_ADAPTER_GUIDE.md](CALLS_ADAPTER_GUIDE.md) - `?callees=&depth=&detail`, the replacement
+- [CALLS_ADAPTER_GUIDE.md](CALLS_ADAPTER_GUIDE.md) - `?callees=&depth=&detail=full`, the replacement
 
 Parameter names use the same syntax facts as Calls detail. An unqualified language or binding
 shape reports `params: null` (text: `unavailable`); an empty list means a known empty

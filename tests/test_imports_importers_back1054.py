@@ -338,7 +338,7 @@ def test_importers_text_lists_each_importer_with_stage_and_scope(fx, capsys):
     assert 'Importers of core.py: 5' in text
     assert 'b.py:2  pkg.core  [direct, local]' in text
     # The rule is a pointer in text and in full in the JSON (BACK-2685).
-    assert 'Rules: --format json (edge_rule.text); --detail for full text' in text
+    assert 'Rules: --format json (edge_rule.text); --detail full for full text' in text
     assert 'Resolved at the scan root ..' in structure['edge_rule']['text']
     ImportsRenderer.render_structure(_structure(fx / 'pkg', 'importers'))
     text = capsys.readouterr().out

@@ -402,7 +402,7 @@ with a note naming `--callers` and `--callees NAME --depth N` ([retired spelling
 
 ```
 reveal calls [PATH] --callers NAME [--depth N]
-reveal calls [PATH] --callees NAME|FILE:NAME [--depth N] [--detail] [--builtins]
+reveal calls [PATH] --callees NAME|FILE:NAME [--depth N] [--detail normal|full] [--builtins]
 reveal calls [PATH] --sort=-callers [--limit N] [--builtins] [--test-framework]
 ```
 
@@ -413,7 +413,7 @@ reveal calls [PATH] --sort=-callers [--limit N] [--builtins] [--test-framework]
 | `--callers NAME` | `callers` | Who calls NAME (reverse lookup); a bare NAME (`FILE:NAME` exits 2). `PATH:NAME` as the path is shorthand when no other mode is given |
 | `--target NAME` | `target` | Retired name of `--callers`: the same mode and answer, with a note |
 | `--callees NAME` | `callees` | What every definition of NAME (or `FILE:NAME`, one file's) calls (builtins hidden); with `--depth 2-5` a level-by-level walk, each definition expanded once at its shallowest level |
-| `--detail` | `detail` | With `--callees`: params and effects of every definition reached; any other mode exits 2 |
+| `--detail LEVEL` | `detail` | With `--callees`: `normal` (default) or `full`, which adds the params and effects of every definition reached; any other mode exits 2. The valueless `--detail` and `true`/`false` are deprecated (a note names `--detail full`/`normal`) |
 | `--root NAME` | `root` | Retired: `--callees NAME --depth N` is the same walk (`--root` defaulted to depth 2); prints a note |
 | `--depth N` | `depth` | Signed whole integer, clamped 1–5: callers levels (default 1), callee walk levels for `--callees` (default 1) and the retired `--root` (default 2); other modes ignore it with a warning |
 | `--rank callers` | `rank=callers` | Rank the functions and classes the path defines by caller count |
@@ -432,13 +432,13 @@ Exactly one mode per request: two modes (for example `--callers a --callees b`, 
 --target a`) exit 2 and name both, where the URI used to answer one of them silently; so does the
 `PATH:NAME` shorthand with an explicit mode. A name is never coerced (`--callers 123` looks for the
 name `123`), and a malformed value exits 2 naming the parameter (`--depth abc`, `--top -1`,
-`--rank often`, `--callers a.py:f`, `--detail` without `--callees`). Exits follow the declared-noun
+`--rank often`, `--callers a.py:f`, `--detail full` without `--callees`). Exits follow the declared-noun
 policy: 0 complete; 2 rejected before analysis (bad request, no mode, missing path), or a name that
 names nothing in PATH (`--callees`: no definition; `--callers`: no definition and no call site; the
 empty answer is still printed); 3 required analysis or output incomplete (a file or directory could
 not be read: the answer is still printed with the warning). `--fail-on` accepts `none` only.
 
-A callee walk beyond depth 1 and `--detail` are not measured in any language: the answer carries
+A callee walk beyond depth 1 and `--detail full` are not measured in any language: the answer carries
 W-CALLS-9 and its `walk_rule` (a `Rule:` line in text) says `beyond_depth_1: false, detail: false`.
 A language in PATH that yields call sources and has no recall snapshot (Elixir, Objective-C)
 withholds the confidence and is named (W-CALLS-10); shell, SQL and other files with no call edges do not.
@@ -454,14 +454,14 @@ prints `note: ./calls/ exists — use ./calls or calls/ to target it`; `reveal c
 reveal calls src --callers validate_item           # who calls validate_item?
 reveal calls src --callers process --depth 2       # callers of callers
 reveal calls src --callees validate_item           # what it calls
-reveal calls src --callees main --depth 3 --detail # what that calls, 3 levels, params/effects
+reveal calls src --callees main --depth 3 --detail full # what that calls, 3 levels, params/effects
 reveal calls src --sort=-callers --limit 20           # most-called functions
 reveal imports src --importers --scope path        # was: reveal calls src --modules (module graph)
 ```
 
 ### Side-effect tags
 
-With `--detail` each reached definition lists its classified side effects:
+With `--detail full` each reached definition lists its classified side effects:
 
 | Tag | Meaning |
 |-----|---------|
@@ -491,11 +491,11 @@ name for now.
 
 | Retired | Use instead |
 |---------|-------------|
-| `reveal trace PATH --from FUNC [--depth N]` | `reveal calls PATH --callees FUNC --depth N --detail` (trace's default depth was 2) |
-| `reveal 'trace://PATH?from=FUNC&depth=N'` | `reveal 'calls://PATH?callees=FUNC&depth=N&detail'` |
+| `reveal trace PATH --from FUNC [--depth N]` | `reveal calls PATH --callees FUNC --depth N --detail full` (trace's default depth was 2) |
+| `reveal 'trace://PATH?from=FUNC&depth=N'` | `reveal 'calls://PATH?callees=FUNC&depth=N&detail=full'` |
 | `--from FILE:FUNC` | `--callees FILE:FUNC` |
 
-`--detail` adds each reached definition's `params:` and `effects:`; the effect tags are listed in
+`--detail full` adds each reached definition's `params:` and `effects:`; the effect tags are listed in
 [the calls section](#side-effect-tags).
 
 ---

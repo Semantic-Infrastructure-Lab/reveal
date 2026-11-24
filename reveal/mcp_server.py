@@ -126,7 +126,7 @@ mcp = MCPServer(
         "   varflow     — trace one variable's reads and writes\n"
         "5. reveal_grep(path, pattern) — \"where is X used?\" cross-file "
         "search grouped by enclosing function (use instead of shell grep).\n"
-        "6. reveal_run(['calls', '<dir>', '--callees', 'FN', '--depth', '2', '--detail']) — \"what "
+        "6. reveal_run(['calls', '<dir>', '--callees', 'FN', '--depth', '2', '--detail', 'full']) — \"what "
         "happens when X runs?\" level-by-level callee walk with params and side "
         "effects (reveal_trace(dir, entry_point) renders the same walk as a "
         "depth-indented narrative).\n"
@@ -1128,7 +1128,7 @@ def reveal_trace(path: str, entry_point: str, depth: int = 2) -> str:
     """Walk the call graph from a named entry point as a depth-indented execution narrative.
 
     The narrative view of the calls callee walk: the same walk as
-    reveal_run(['calls', '<path>', '--callees', 'FUNC', '--depth', 'N', '--detail']), which replaces it (the CLI's
+    reveal_run(['calls', '<path>', '--callees', 'FUNC', '--depth', 'N', '--detail', 'full']), which replaces it (the CLI's
     `reveal trace` and `trace://` already print a replaced-by note; this tool keeps its name for
     now). Each frame shows the function's location, parameters, classified side effects
     (db/http/log/file/...), and what it calls next — useful for "walk me through what happens

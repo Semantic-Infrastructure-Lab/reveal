@@ -275,8 +275,8 @@ Reveal has both a **path-based interface** (`reveal <path>` + flags) and a set o
 | `reveal surface [path]` | External surfaces: CLI commands, HTTP routes, env vars, network calls, FS writes, subprocess calls *(11 languages: Python, TypeScript, Java, C#, PHP, Swift, Kotlin, Ruby, Go, Rust, C++)* | `reveal surface --help` |
 | `reveal patches [path]` | Mock/patch pressure in tests, grouped by target; --view pressure joins it with production boundary fan-out *(Python and TS/JS test suites)* | `reveal patches --help` |
 | `reveal testability [path]` | Retired: use reveal patches <path> --view pressure (the same answer); test patch pressure joined with production boundary fan-out | `reveal testability --help` |
-| `reveal calls --callers FUNC` | Call graph: callers, callees (--depth N, --detail), --sort=-callers | `reveal calls --help` |
-| `reveal trace --from FUNC` | Retired: use reveal calls --callees FUNC --depth N --detail (the same walk); depth-indented narrative with side effects | `reveal trace --help` |
+| `reveal calls --callers FUNC` | Call graph: callers, callees (--depth N, --detail full), --sort=-callers | `reveal calls --help` |
+| `reveal trace --from FUNC` | Retired: use reveal calls --callees FUNC --depth N --detail full (the same walk); depth-indented narrative with side effects | `reveal trace --help` |
 | `reveal diff LEFT RIGHT[/ELEMENT]` | Compare the structure of two files, directories or git versions, or one element across them | `reveal diff --help` |
 | `reveal check <path>` | Run quality rules on a file or directory | `reveal check --help` |
 | `reveal review <path>` | Retired: use reveal check --changed RANGE and reveal diff (structure: reveal diff git://A/. git://B/.); still answers and prints a replaced-by note | `reveal review --help` |
@@ -291,7 +291,7 @@ Reveal has both a **path-based interface** (`reveal <path>` + flags) and a set o
 - Exploring an unfamiliar codebase → `reveal overview` first, then its targeted imports, metrics or check drill-downs.
 - Pre-merge review → `reveal check --changed main..HEAD` (rules on the changed files), plus the `diff://` adapter for structure.
 - Building LLM context with a token budget → `reveal pack`.
-- Tracing what a function actually does (calls + side-effects) → `reveal calls <path> --callees <func> --depth 2 --detail`.
+- Tracing what a function actually does (calls + side-effects) → `reveal calls <path> --callees <func> --depth 2 --detail full`.
 - Mapping the system's external boundaries → `reveal surface`.
 - Finding testability pressure → `reveal patches src --view pressure --test-paths tests`.
 - Building your own adapter, analyzer, or rule → `reveal dev new-adapter|new-analyzer|new-rule`.
@@ -1310,7 +1310,7 @@ reveal calls src/ --callers validate_item
 reveal calls src/ --callees validate_item
 
 # ... and what those call, level by level, with params and effects (not measured: W-CALLS-9)
-reveal calls src/ --callees validate_item --depth 2 --detail
+reveal calls src/ --callees validate_item --depth 2 --detail full
 
 # Include Python builtins — useful to audit for eval/open/exec
 reveal calls src/ --callees validate_item --builtins
@@ -1332,7 +1332,7 @@ reveal calls src/ --sort=-callers --limit 20
 ```
 
 One mode per request (`--callers`, `--callees`, `--sort`, or the retired `--modules` and `--uncalled`): two exit 2 and name
-both, and a malformed value (`--depth abc`, `--limit -1`, `--callers a.py:f`, `--detail` without `--callees`)
+both, and a malformed value (`--depth abc`, `--limit -1`, `--callers a.py:f`, `--detail full` without `--callees`)
 exits 2 naming the parameter. The retired `--target` and `--root` still answer, with a note naming
 `--callers` and `--callees NAME --depth N`. A name that names nothing (callees: no definition;
 callers: no definition and no call site) exits 2 with the empty answer. Exit 3 means a file or
@@ -1367,23 +1367,23 @@ Fields:
 
 **See also:** `CALLS_ADAPTER_GUIDE.md` for full `reveal calls` documentation.
 
-**Execution narrative — the callee walk with `--detail`:**
+**Execution narrative — the callee walk with `--detail full`:**
 
 ```bash
 # Level-by-level: what main calls, what those call, with params and classified side effects
-reveal calls src/ --callees main --depth 2 --detail
+reveal calls src/ --callees main --depth 2 --detail full
 reveal calls src/ --callees src/app.py:main --depth 2      # FILE:NAME picks one file's definitions
 ```
 
 Each node shows its `file:line` (or an `[external]` / `[ambiguous: …]` marker), and with
-`--detail` its `params:` and `effects:` (hard_stop, db, http, cache, file, env, log, sleep). Each
+`--detail full` its `params:` and `effects:` (hard_stop, db, http, cache, file, env, log, sleep). Each
 definition is expanded once, at the shallowest level it is reached; a later edge to it says
 `(expanded above/below)`. A callee name with several definitions resolves to the one in the
 caller's file, then the one the caller imports; otherwise it is ambiguous and not expanded. Walks
-beyond depth 1 and `--detail` are not measured (W-CALLS-9).
+beyond depth 1 and `--detail full` are not measured (W-CALLS-9).
 
 `reveal trace --from FUNC` and `trace://<path>?from=FUNC` are retired: they still print trace's
-frames (the same walk), with a note naming `reveal calls --callees FUNC --depth N --detail`.
+frames (the same walk), with a note naming `reveal calls --callees FUNC --depth N --detail full`.
 
 
 ---

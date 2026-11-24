@@ -132,7 +132,7 @@ def test_the_check_bites_on_the_lines_it_replaced(line):
     'reveal NOUN TARGET --option value; a resource URI takes the same flags (git://FILE --view history --limit 5)',
     'reveal sqlite path/to/app.db',
     'reveal_health(target)  — fast go/no-go verdict; also probes ssl:///mysql:///domain:// targets, not just code',
-    "reveal_run(['calls', 'src', '--callees', 'main', '--depth', '2', '--detail'])",
+    "reveal_run(['calls', 'src', '--callees', 'main', '--depth', '2', '--detail', 'full'])",
     'What do you want to do?',
 ])
 def test_the_check_passes_the_spellings_that_stay(line):

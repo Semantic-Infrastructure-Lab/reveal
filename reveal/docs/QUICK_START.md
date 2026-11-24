@@ -216,7 +216,7 @@ reveal overview .                 # Compact project map: scope, components, impo
 reveal overview src/ --against HEAD  # Tracked base versus live working tree
 
 # Execution and boundary analysis
-reveal calls src/ --callees main --depth 2 --detail  # What main calls, level by level, with side effects
+reveal calls src/ --callees main --depth 2 --detail full  # What main calls, level by level, with side effects
 reveal contracts src/             # ABC/Protocol/TypedDict/Pydantic contract inventory
 reveal surface src/               # External boundary map: CLI args, routes, env vars, I/O
 

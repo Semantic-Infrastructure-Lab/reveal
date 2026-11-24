@@ -134,7 +134,7 @@ above lands.
 | Question | Use | Replaces |
 |---|---|---|
 | Where do I start? | `reveal overview DIR` | retired `architecture` alias |
-| Who calls this, what does it call? | `reveal calls DIR --callers F` / `--callees F --depth N [--detail]` | `trace`, `trace://`, `?root=`, `?target=` |
+| Who calls this, what does it call? | `reveal calls DIR --callers F` / `--callees F --depth N [--detail full]` | `trace`, `trace://`, `?root=`, `?target=` |
 | Who imports this, what does it import? | `reveal imports DIR --importers [FILE]`, `--external`, `--circular`, `--unused` | `depends://`, `deps`, `calls ?modules` |
 | Per-file size, complexity, churn, provenance | `reveal metrics DIR`, `?view=provenance` | `stats://`, `classify://`, file `hotspots` (being absorbed) |
 | Rule findings, including only what a diff changed | `reveal check PATH`, `--changed RANGE` | `--check`, `review`, `health` on code |

@@ -307,6 +307,9 @@ PRODUCTION_CASES = {
     'param:calls.rank': lambda f: [f'calls://{Path(f).parent}?rank=callers&limit=1'],
     'param:calls.top': lambda f: [f'calls://{Path(f).parent}?sort=-callers&top=1'],
     'param:calls.type': lambda f: [f'calls://{Path(f).parent}?uncalled&type=function'],
+    # Calls detail's two-level spelling (BACK-2774 ruling S1): the valueless flag stands for true.
+    'value:calls.detail=true': lambda f: ['calls', str(Path(f).parent), '--callees', 'auth_gate', '--detail'],
+    'value:calls.detail=false': lambda f: ['calls', str(Path(f).parent), '--callees', 'auth_gate', '--detail', 'false'],
     # Imports vocabulary (BACK-2620): each legacy spelling beside its canonical companions.
     'param:imports.rank': lambda f: [f'imports://{Path(f).parent}?rank=fan-in&limit=1'],
     'param:imports.top': lambda f: [f'imports://{Path(f).parent}?sort=-fan-in&top=1'],

@@ -131,7 +131,13 @@ def _patterns(key):
     if kind == 'value':
         scheme, _, pair = rest.partition('.')
         param, _, value = pair.partition('=')
-        return [re.compile(rf"{re.escape(scheme)}://[^\s'\"`]*[?&]{re.escape(param)}={re.escape(value)}\b")]
+        patterns = [re.compile(rf"{re.escape(scheme)}://[^\s'\"`]*[?&]{re.escape(param)}={re.escape(value)}\b"),
+                    re.compile(rf"reveal\s+{re.escape(scheme)}\b[^\n`|]*\s--{re.escape(param)}(?:=|[ \t]+){re.escape(value)}(?![\w-])")]
+        if value == 'true':  # a bare key binds true, a bare optional-value flag carries it (Calls ?detail, --detail; BACK-2774)
+            patterns += [re.compile(rf"{re.escape(scheme)}://[^\s'\"`]*[?&]{re.escape(param)}(?![\w=-])"),
+                         re.compile(rf"reveal\s+{re.escape(scheme)}\b[^\n`|]*\s--{re.escape(param)}(?![\w=-])"
+                                    rf"(?![ \t]+[^\s`|'\")\]#-])")]
+        return patterns
     if kind == 'flag' and not rest.startswith('--'):  # flag:<noun>.<--flag>, after the noun's URI or its subcommand
         noun, _, flag = rest.partition('.')
         return [re.compile(rf"(?<![\w-]){re.escape(noun)}://[^\n`|]*\s{re.escape(flag)}(?![\w-])"),

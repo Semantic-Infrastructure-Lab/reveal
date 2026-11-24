@@ -119,7 +119,7 @@ def test_new_source_exclusions_are_explicit_and_legacy_sources_still_run():
     assert [(source, reason) for (source, _, _, _), reason in zip(rows, reasons) if reason] == []
     # The current README uses ordinary tables; embedded Markdown remains covered
     # by the collector's synthetic fixture rather than an obsolete README copy.
-    assert ('../../README.md', 'reveal calls src/ --callees main --depth 2 --detail') in _documented_command_identities()
+    assert ('../../README.md', 'reveal calls src/ --callees main --depth 2 --detail full') in _documented_command_identities()
     sources ={name for name, _ in _documented_sources(Path(__file__).parents[1] / 'reveal' / 'docs')}
     assert {'../../README.md', 'QUICK_START.md', 'WHY_REVEAL.md', 'INDEX.md',
             'adapters/IMPORTS_ADAPTER_GUIDE.md', 'adapters/OVERVIEW_ADAPTER_GUIDE.md',

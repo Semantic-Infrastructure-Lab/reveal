@@ -241,7 +241,7 @@ reveal_grep("src/auth.py", "validate_.*token", ignore_case=True)
 
 Depth-indented call-graph narrative from one entry point — each frame shows
 location, parameters, classified side effects, and what it calls next. It is
-the same callee walk as `reveal_run(["calls", "src/", "--callees", "process_order", "--depth", "2", "--detail"])`,
+the same callee walk as `reveal_run(["calls", "src/", "--callees", "process_order", "--depth", "2", "--detail", "full"])`,
 which replaces it: the CLI's `reveal trace` and `trace://` are retired and print a
 replaced-by note; this tool keeps its name for now and prints none.
 Both trace spellings retain a normal MCP response when canonical evidence proves the

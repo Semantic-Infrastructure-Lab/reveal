@@ -70,7 +70,7 @@ They live in the `adapters/` directory.
 **Pointer stubs** (kept because rule V024 requires a guide file for every registered adapter):
 [ARCHITECTURE](adapters/ARCHITECTURE_ADAPTER_GUIDE.md) is retired into `overview://`;
 [CLASSIFY](adapters/CLASSIFY_ADAPTER_GUIDE.md) and [STATS](adapters/STATS_ADAPTER_GUIDE.md) are retired into `metrics://`;
-[TRACE](adapters/TRACE_ADAPTER_GUIDE.md) into `calls://?callees=&depth=&detail`;
+[TRACE](adapters/TRACE_ADAPTER_GUIDE.md) into `calls://?callees=&depth=&detail=full`;
 [DEPS](adapters/DEPS_ADAPTER_GUIDE.md) and [DEPENDS](adapters/DEPENDS_ADAPTER_GUIDE.md) into `imports://` (`?external`, `?circular`, `?unused`, `?importers`);
 [TESTABILITY](adapters/TESTABILITY_ADAPTER_GUIDE.md) into `patches://`;
 [PACK](adapters/PACK_ADAPTER_GUIDE.md) points at the `pack` section of the Subcommands guide.

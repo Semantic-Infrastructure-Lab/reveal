@@ -42,7 +42,7 @@ reveal calls src/ --callers validate_item
 reveal calls src/ --callees validate_item
 
 # ... and what those call, level by level (not measured beyond depth 1: W-CALLS-9)
-reveal calls src/ --callees validate_item --depth 2 --detail
+reveal calls src/ --callees validate_item --depth 2 --detail full
 
 # Include callers-of-callers (2 levels deep)
 reveal calls src/ --callers validate_item --depth 2
@@ -76,7 +76,7 @@ reveal calls <path> --callers <name> [--depth N] [--format <fmt>]
 reveal calls <path>:<name>
 
 # Forward lookup: what does function X call? FILE:X picks one file's definitions
-reveal calls <path> --callees <name>|<file>:<name> [--depth N] [--detail] [--format <fmt>]
+reveal calls <path> --callees <name>|<file>:<name> [--depth N] [--detail normal|full] [--format <fmt>]
 
 # Ranking: most-called functions in the project
 reveal calls <path> --sort=-callers [--limit N]
@@ -90,7 +90,7 @@ reveal calls <path> --sort=-callers [--limit N]
 | `rank` | Set to `callers` to rank the functions and classes the path defines by in-degree (coupling metrics) |
 | `top` | Max results for `?sort=-callers` (default: 10; `0` = all) |
 | `depth` | Levels for `?callers` and `?callees` (default: 1, max: 5) |
-| `detail` | `?callees` only: add each reached definition's params and effects |
+| `detail` | `?callees` only: `full` adds each reached definition's params and effects |
 | `format` | Output format: `text` (default), `json`, or `dot` (Graphviz) |
 
 ### Colon Shorthand
@@ -188,7 +188,7 @@ callee → [(file, caller_func, caller_def_line, call_lines), ...]
 |-----------|------|---------|-------------|
 | `callers` | string | — | Function name to find **callers of** (reverse lookup). A bare name: `callers=FILE:NAME` exits 2, because the callers index has no file filter |
 | `callees` | string | — | Function name, or `FILE:NAME` for the definitions in one file, to find **callees of** (forward lookup). Depth 1 lists each definition's calls (`matches`); depth 2-5 walks level by level (see [`callees`](#callees)) |
-| `detail` | normal/full or legacy boolean | normal | `?callees` only: full adds `params` and `effects` to every definition the walk reaches (`definitions[]`); with any other mode it exits 2. Not measured (W-CALLS-9) |
+| `detail` | normal or full | normal | `?callees` only: full adds `params` and `effects` to every definition the walk reaches (`definitions[]`); with any other mode it exits 2. Not measured (W-CALLS-9) |
 | `sort` | string | — | `-callers` selects the existing in-degree ranking operation |
 | `uncalled` | flag | — | Retired (D8): lists functions/methods with no static callers, with no confidence; use `?callers=NAME` for one function (see [Retired spellings](#retired-spellings)) |
 | `limit` | integer | 10 for ranking, all for `?uncalled` | Max results for `?sort=-callers` or `?uncalled`; `0` = all; a negative or non-whole value exits 2. Zero is truly uncapped; walk modes retain their existing warning instead of cutting graph rows |
@@ -217,7 +217,7 @@ values exit 2. `target` is `callers` spelled the old way: the same name twice is
 `kind=function` retains the module-function selection for `uncalled`.
 `kind=method` retains the current unfiltered function-and-method population;
 it does not promise method-only results. No population changed (BACK-2645).
-`detail=normal|full` also accepts bare `--detail` and legacy true/false.
+`detail=normal|full`; the older valueless `--detail` (`?detail`) and `true`/`false` are deprecated and work until 1.0 with a note naming `--detail full` (`--detail normal`).
 `--max-items` remains a separate output budget: zero means an empty page,
 whereas `limit=0` is uncapped. `where`, `match`, `offset`, `since` and `until`
 are unsupported on Calls and reject with per-symbol lookup guidance.
@@ -240,7 +240,7 @@ keywords.
 
 ### Subcommand and exit codes
 
-`reveal calls <path>` takes the same parameters as flags (`--callers NAME`, `--callees NAME`, `--depth N`, `--detail`, `--sort=-callers`, `--limit N`, `--uncalled`, `--type KIND`, `--modules`,
+`reveal calls <path>` takes the same parameters as flags (`--callers NAME`, `--callees NAME`, `--depth N`, `--detail full`, `--sort=-callers`, `--limit N`, `--uncalled`, `--type KIND`, `--modules`,
 `--external`, `--builtins`, `--test-framework`, and the retired `--target`/`--root`, which print the
 same note as `?target=`/`?root=`); both spellings give equal JSON through one execution path. `?format=dot` is `--format dot`. Details: [SUBCOMMANDS_GUIDE](../guides/SUBCOMMANDS_GUIDE.md#reveal-calls--cross-file-call-graph).
 
@@ -320,7 +320,7 @@ name (`#include`, Ruby `require`, C# `using`) binds nothing here. The answer kee
 `candidates`, `expanded`), `definitions[]` (every definition reached: `name`, `file`, `line`,
 `level`, 0 for the roots, and `expanded`), the edge totals (`total_edges` = `total_resolved` +
 `total_unresolved`; `total_ambiguous` counts resolved edges with several candidates) and a
-`walk_rule` stating all of this (text: a `Rules:` pointer to JSON). `&detail` adds `params` and `effects` to each
+`walk_rule` stating all of this (text: a `Rules:` pointer to JSON). `&detail=full` adds `params` and `effects` to each
 definition, also at depth 1. Text is a depth-indented tree: `[external]`, `[ambiguous: N ...]`,
 and `(expanded above)` / `(expanded below)` for a definition whose calls are listed elsewhere.
 
@@ -332,14 +332,14 @@ legacy structures without these facts, and unsupported forms explicitly decline 
 names. Trace uses the same facts. This is syntax conformance coverage, not a parameter
 accuracy measurement.
 
-No oracle scores a callee walk beyond depth 1 or `detail`'s params and effects in any language:
+No oracle scores a callee walk beyond depth 1 or `detail=full`'s params and effects in any language:
 those answers carry W-CALLS-9 ("... not measured in any language"), and `walk_rule.measured` is
 `{depth_1: true, beyond_depth_1: false, detail: false}`. The callees snapshot measures depth-1 call
 lists only.
 
 ```bash
 reveal calls src/ --callees handle_request --depth 3
-reveal calls src/ --callees handle_request --detail --format=json   # each definition's effects: .definitions[].effects
+reveal calls src/ --callees handle_request --detail full --format=json   # each definition's effects: .definitions[].effects
 ```
 
 > `?builtins` applies to both `?callees` (forward lookup) and `?sort=-callers`. The `?callers` (reverse lookup) is unaffected — callers of builtins are always shown.
@@ -419,7 +419,7 @@ callers are matched by name; a single definition, or a library name with none, a
 Every callers and callees answer points to its full JSON `walk_rule.text` and standing caveats in
 `meta.warnings`. The other `walk_rule` fields (`direction`, `depth`, `measured`,
 `unmeasured_languages`, plus direction-specific fields) are unchanged. Default text prints one
-`Rules:` pointer; callees `--detail` also prints the full rule and standing caveats.
+`Rules:` pointer; callees `--detail full` also prints the full rule and standing caveats.
 Request-specific failures, incomplete scans, ambiguity, unmeasured languages and cuts remain visible.
 
 With `depth=2`:
@@ -462,7 +462,7 @@ with `count`, `hidden` (per cause) and `suggestion`.
 **Callees text output** (`?callees=`):
 
 ```
-Rules: --format json (walk_rule.text, meta.warnings); --detail for full text
+Rules: --format json (walk_rule.text, meta.warnings); --detail full for full text
 Callees of: validate_item
 Project:    src/
 Total:      4 call(s) across 1 definition(s)
@@ -475,12 +475,12 @@ Total:      4 call(s) across 1 definition(s)
     → raise_error
 ```
 
-The pointer prints first, before `Callees of:`; callees `--detail` also prints the full rule and standing caveats. With `?builtins=true` the `(N builtin(s) hidden ...)` line under `Total:` disappears and the full raw list (including `len`, `str`, `isinstance`, etc.) is shown. That line only appears when at least one builtin was filtered.
+The pointer prints first, before `Callees of:`; callees `--detail full` also prints the full rule and standing caveats. With `?builtins=true` the `(N builtin(s) hidden ...)` line under `Total:` disappears and the full raw list (including `len`, `str`, `isinstance`, etc.) is shown. That line only appears when at least one builtin was filtered.
 
 When the function is not found (exit 2; stderr has `Error (calls://): Function 'unknown_fn' not found in src/`):
 
 ```
-Rules: --format json (walk_rule.text, meta.warnings); --detail for full text
+Rules: --format json (walk_rule.text, meta.warnings); --detail full for full text
 Callees of: unknown_fn
 Project:    src/
 Total:      0 call(s) across 0 definition(s)
@@ -580,7 +580,7 @@ reveal calls src/ --callers validate_item --format=json
 
 ### Dot (Graphviz)
 
-Directed graph format for visualisation. It draws callers, a callees walk (`depth=2-5` or `detail`), the
+Directed graph format for visualisation. It draws callers, a callees walk (`depth=2-5` or `detail=full`), the
 retired `?root` and `?modules`; `?callees=NAME` at depth 1, `?sort=-callers` and `?uncalled` have no graph,
 and `format=dot` on them exits 2 naming the views that have one.
 
@@ -925,7 +925,7 @@ result). At the cut the same text becomes an exit-2 error.
 |---------|-------------|
 | `calls://<path>?target=NAME`, `reveal calls --target NAME` | `?callers=NAME`, `--callers NAME` (the same answer) |
 | `calls://<path>?root=NAME[&depth=N]`, `reveal calls --root NAME` | `?callees=NAME&depth=N`, `--callees NAME --depth N` (the same walk; `?root` defaulted to depth 2) |
-| `reveal trace PATH --from FUNC`, `trace://PATH?from=FUNC` | `reveal calls PATH --callees FUNC --depth N --detail`, `calls://PATH?callees=FUNC&depth=N&detail` (the same walk; trace keeps its frames output until the cut; see [TRACE_ADAPTER_GUIDE.md](TRACE_ADAPTER_GUIDE.md)) |
+| `reveal trace PATH --from FUNC`, `trace://PATH?from=FUNC` | `reveal calls PATH --callees FUNC --depth N --detail full`, `calls://PATH?callees=FUNC&depth=N&detail=full` (the same walk; trace keeps its frames output until the cut; see [TRACE_ADAPTER_GUIDE.md](TRACE_ADAPTER_GUIDE.md)) |
 | `ast://<path>?calls=NAME` | `calls://<path>?callers=NAME`; a pattern (`calls=*send*`) is a `reveal <path> --grep 'send'` text search |
 | `ast://<path>?callee_of=NAME` | `calls://<path>?callees=NAME` |
 | `ast://<path>?show=calls` | `calls://<path>?callers=NAME` or `?callees=NAME` |
