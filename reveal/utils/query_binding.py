@@ -1078,10 +1078,15 @@ def withhold_flag_only(declarations: Iterable[ParamSpec], params: Dict[str, Any]
     must not meet a key no URI can spell."""
     for spec in declarations:
         if spec.flag_only:
-            dict.pop(params, spec.name, None)
-            given: set = getattr(params, '_given', set())
-            given.discard(spec.name)
-            getattr(params, '_normalized', {}).pop(spec.name, None)
+            _omit(params, spec.name)
+
+
+def _omit(params: Dict[str, Any], name: str) -> None:
+    """Take control *name* out of bound *params* without reading it: no key, not given, no conversion record."""
+    dict.pop(params, name, None)
+    given: set = getattr(params, '_given', set())
+    given.discard(name)
+    getattr(params, '_normalized', {}).pop(name, None)
 
 
 def reject_unsupported_overrides(declarations: Iterable[ParamSpec], overrides: Mapping[str, Any]) -> None:
