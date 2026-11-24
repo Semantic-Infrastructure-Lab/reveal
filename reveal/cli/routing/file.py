@@ -756,7 +756,8 @@ def _handle_file_or_directory(path_str: str, args: 'Namespace', answer_consumer=
     _validate_path_exists(path, path_str, getattr(args, 'element', None), args=args)
 
     if not path.is_dir() and not path.is_file():
-        _refuse(path_str, args, [f"Error: {path_str} is neither file nor directory"], exit_code=1)
+        # D6: a path that is neither (a named pipe, a socket) is an invalid resource, 2, not the findings code 1.
+        _refuse(path_str, args, [f"Error: {path_str} is neither file nor directory"])
     _reject_unread_element(path, path_str, element_from_path or getattr(args, 'element', None), args)
 
     # BACK-1634: a flag the file or directory view never reads gets one note, as on the URI
