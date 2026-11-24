@@ -8,16 +8,18 @@ below inject test-only rows (one per kind) so the seam is proven independently o
 holds today.
 """
 import json
+import re
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from conftest import _run_reveal_direct, is_request_note, without_mcp_request_note, without_request_note_lines
+from reveal import api
 from reveal.adapters.base import get_adapter_class
 from reveal.cli import invocation
-from reveal.cli.invocation import (LEGACY_CLI_MODIFIERS, RETIREMENT_KEY, RETIREMENTS, STAGES, Retirement,
-                                   uri_retirement_keys)
+from reveal.cli.invocation import (LEGACY_CLI_MODIFIERS, RETIREMENT_KEY, RETIREMENTS, STAGES, RetiredSpellingError,
+                                   Retirement, uri_retirement_keys)
 
 SOURCE = 'def auth_gate(value):\n    return value\n'
 
@@ -465,6 +467,12 @@ PRODUCTION_CASES = {
         _FLAG_REQUESTS.get((noun, flag), _MODIFIER_REQUESTS[noun]), _MODIFIER_ARGV[flag])
        for noun, flags in LEGACY_CLI_MODIFIERS.items() for flag in flags},
 }
+# The Python API's rows (python:<function>.<keyword>, the Python transport's counterpart of mcp:<tool>; ruling S2 of
+# BACK-2325): a keyword only reveal.api spells has no command line, so each row has one call that spells it, given the
+# sample file. A row without a case fails the test below, as a CLI row without its command line does.
+PYTHON_CASES = {
+    'python:element.element_type': lambda f: api.element(f, 'auth_gate', element_type='function'),
+}
 # The row a case notes beside its own: a parameter of a noun that is itself retired.
 ALSO_NOTED = {'param:hotspots.functions_only': 'scheme:hotspots', 'param:hotspots.files_only': 'subcommand:hotspots',
               'param:architecture.verbose': 'scheme:architecture', 'param:hotspots.verbose': 'scheme:hotspots',
@@ -488,7 +496,7 @@ def test_every_production_row_is_well_formed():
 
 def test_every_production_row_is_exercised_and_prints_once(source):
     # Tooling prints help rather than a data envelope; exercised separately below.
-    assert set(RETIREMENTS) == set(PRODUCTION_CASES) | {'subcommand:scaffold'}
+    assert set(RETIREMENTS) == set(PRODUCTION_CASES) | set(PYTHON_CASES) | {'subcommand:scaffold'}
     for key, argv in PRODUCTION_CASES.items():
         if RETIREMENTS[key].stage == 'error':
             continue  # no answer to note on: the error-stage test below runs it
@@ -502,6 +510,20 @@ def test_every_production_row_is_exercised_and_prints_once(source):
         request = _request_field(argv(str(source)))
         own = [field for field in expected if not (request and invocation.request_note_covers(field))]  # the request note replaces a covered row
         assert sorted(w['field'] for w in _all_retired(json.loads(result.stdout))) == sorted(own + request), key
+
+
+@pytest.mark.parametrize('key', sorted(PYTHON_CASES))
+def test_a_python_row_notes_once_in_the_answer_and_not_on_stderr(source, capsys, key):
+    document = PYTHON_CASES[key](str(source))
+    assert [(w['field'], w['message']) for w in _all_retired(document)] == [(key, RETIREMENTS[key].text)]
+    assert capsys.readouterr().err == ''
+
+
+@pytest.mark.parametrize('key', sorted(PYTHON_CASES))
+def test_a_python_row_at_the_error_stage_raises_its_text(monkeypatch, source, key):
+    monkeypatch.setitem(RETIREMENTS, key, replace(RETIREMENTS[key], stage='error'))
+    with pytest.raises(RetiredSpellingError, match=re.escape(RETIREMENTS[key].text)):
+        PYTHON_CASES[key](str(source))
 
 
 def test_a_removed_row_says_removed_and_is_an_error_from_the_start():
@@ -527,13 +549,14 @@ def test_the_moved_notes_keep_their_wording():
 
 
 @pytest.mark.parametrize('key', ['subcommand:trace', 'scheme:trace', 'param:calls.root',
-                                 'value:ast.show=calls', 'flag:--search', 'mcp:reveal_trace'])
+                                 'value:ast.show=calls', 'flag:--search', 'mcp:reveal_trace',
+                                 'python:element.element_type'])
 def test_the_key_scheme_accepts_each_kind(key):
     assert RETIREMENT_KEY.match(key)
 
 
 @pytest.mark.parametrize('key', ['trace', 'param:root', 'flag:search', 'Scheme:x', 'mcp:Reveal',
-                                 'subcommand:'])
+                                 'subcommand:', 'python:element', 'python:Element.type'])
 def test_the_key_scheme_rejects_an_unnamespaced_or_malformed_key(key):
     assert not RETIREMENT_KEY.match(key)
 
