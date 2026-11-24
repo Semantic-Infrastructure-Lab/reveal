@@ -115,6 +115,12 @@ control whatever its value type; 1b, 1d and 6 read every spelling (aliases and n
       something else unnoticed: help's ``search``/``top`` had none, and ``reveal help://search --search TERM`` landed on
       the file route's ``--name`` and answered "No search term" (vocab V1 2(c)). Rule 23 then holds ``URI --flag v`` to
       the subcommand's answer, and rule 20 the control to the answer that reads it.
+  31  walk depth range (Scott 2026-11-24, BACK-2793): ``depth`` is graph hops 1..5 wherever it is declared (calls
+      callers/callees and the retired root, trace, the element views' ``--transitive`` with their legacy spellings),
+      declared once: a value outside the range (``0``, ``6``, ``-1``) exits 2 with ``depth must be 1..5, got N`` on the
+      subcommand, the URI, a flag after the URI, ``api.query`` (RequestValidationError) and MCP, never clamped; ``5``
+      answers. Other depths (nesting, surface's directory depth, tree depth) are different quantities. A noun that
+      declares no depth is exempt.
 
 A cell is ``conforms`` (asserted), ``not_yet`` (recorded below with the behaviour observed; the count may only
 fall and must reach zero before the cut) or ``exempt`` (a written reason; the probe must find nothing to run).
@@ -153,7 +159,7 @@ def _declared_nouns():
 NOUNS = _declared_nouns()
 ELEMENT = 'element'  # the element views' pseudo-noun: its own cells at the end of this file (BACK-2627 S3b-5)
 RULES = ('1a', '1b', '1c', '1d', '2', '3', '3b', '4', '5', '6', '8a', '8b', '10', '12', '16', '17', '18', '20',
-         '14', '21j', '22', '23', '24', '28', '25', '27', '26', '29', '30')
+         '14', '21j', '22', '23', '24', '28', '25', '27', '26', '29', '30', '31')
 
 # The request each noun answers by default: the parity gate's table (CLI argv after the noun, URI suffix), plus
 # the declared nouns it has no row for. None: no subcommand (stats is metrics' retired scheme; reveal:// is a resource
@@ -319,6 +325,9 @@ EXEMPT = {
        for noun in ('deps', 'env', 'reveal')},
     ('sqlite', '29'): 'declares only a noun-valued shared control (view, its own answers): nothing to judge',
     **{(noun, '30'): 'declares no control: nothing a flag must spell' for noun in ('env', 'reveal')},
+    **{(noun, '31'): 'declares no depth: no walk to bound' for noun in (
+        'architecture', 'ast', 'claude', 'codex', 'contracts', 'deps', 'diff', 'env', 'git', 'help', 'hotspots', 'imports',
+        'json', 'markdown', 'metrics', 'overview', 'pack', 'patches', 'reveal', 'sqlite', 'surface', 'testability', 'xlsx')},
 }
 
 # Rules 1, 2, 5, 6, 10 and 12 are the shared seams' defaults (Scott 2026-11-16; BACK-2654 Step 3): their cells must
@@ -379,7 +388,8 @@ NOT_YET: dict = {
 
 NOT_YET_BASELINE = {'1a': 0, '1b': 0, '1c': 0, '1d': 0, '2': 0, '3': 0, '3b': 0, '4': 0, '5': 0, '6': 0,
                     '8a': 0, '8b': 0, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 0, '14': 0, '21j': 0, '22': 0,
-                    '23': 0, '24': 0, '28': 0, '25': 0, '27': 0, '26': 0, '29': 1, '30': 0}
+                    '23': 0, '24': 0, '28': 0, '25': 0, '27': 0, '26': 0, '29': 1, '30': 0,
+                    '31': 0}
 
 
 # --- the fixture -------------------------------------------------------------------------------------------
@@ -2296,6 +2306,67 @@ def probe_time_window(noun):
     return cases
 
 
+# --- rule 31: walk depth range (Scott 2026-11-24, BACK-2793) ------------------------------------------------------------
+
+WALK_DEPTH_OUTSIDE = ('0', '6', '-1')
+
+
+def _names_the_range(text, value):
+    """The one refusal, generated from the declared range: ``depth must be 1..5, got N``."""
+    return f'depth must be 1..5, got {int(value)}' in text
+
+
+def _mcp_shown(request):
+    from reveal.mcp_server import reveal_run
+    try:
+        return reveal_run(request)
+    except Exception as exc:  # a tool error is the refusal on MCP
+        return f'error: {exc}'
+
+
+def _walk_depth_refusals(noun, value):
+    """An out-of-range depth on the subcommand, the URI, a flag after the URI, api.query and MCP (the real reveal_run)."""
+    from reveal import api
+    from reveal.errors import RequestValidationError
+    wants = f'exit 2 with depth must be 1..5, got {value}'
+    sub = _sub(noun, '--depth', value, control='depth')
+    requests = {'URI': [_uri(noun, f'depth={value}', control='depth')],
+                'flag after URI': [_uri(noun, control='depth'), '--depth', value]}
+    if sub is not None:
+        requests['subcommand'] = sub
+    cases = []
+    for form, request in requests.items():
+        run = _run(*request, '--format', 'json')
+        cases.append(Case(f'depth={value} {form}', run.rc == 2 and _names_the_range(_error_message(run), value),
+                          f'{run.brief()} (wants {wants})'))
+    try:
+        answer = api.query(_uri(noun, control='depth'), depth=int(value))
+        typed, outcome = False, f"answered depth {answer.get('depth')!r}"
+    except Exception as exc:  # the raised class and its message are the measured outcome
+        typed = isinstance(exc, RequestValidationError) and _names_the_range(str(exc), value)
+        outcome = f'raised {type(exc).__name__}: {str(exc)[:160]}'
+    cases.append(Case(f'depth={value} api.query', typed, f'api.query(depth={value}) {outcome} (wants '
+                                                         'RequestValidationError naming the range)'))
+    request = [*(sub or requests['URI']), '--format', 'json']
+    shown = _mcp_shown(request)
+    cases.append(Case(f'depth={value} MCP', 'rror' in shown and _names_the_range(shown, value),
+                      f'reveal_run({request}) -> {shown[:160]!r} (wants a refusal naming the range)'))
+    return cases
+
+
+def probe_walk_depth_range(noun):
+    """Rule 31: none for a noun that declares no depth."""
+    if not any(spec.name == 'depth' for spec in _specs(noun)):
+        return []
+    cases = []
+    for value in WALK_DEPTH_OUTSIDE:
+        cases += _walk_depth_refusals(noun, value)
+    request = _sub(noun, '--depth', '5', control='depth') or [_uri(noun, 'depth=5', control='depth')]
+    run = _run(*request, '--format', 'json')
+    cases.append(Case('--depth 5 answers', run.rc == 0, f'{run.brief()} (wants exit 0)'))
+    return cases
+
+
 # --- rule 27: an empty match term (Scott 2026-11-22, BACK-2736) ---------------------------------------------------------
 
 # An empty and a whitespace-only term: xlsx refused both before the shared rule, so whitespace is no term either.
@@ -2591,9 +2662,8 @@ SHARED_DOMAINS = {
     'match': Domain('array', repeatable=True),  # text terms (an empty term is rule 27's)
     'detail': Domain('string', values=('summary', 'normal', 'full', 'raw')),
     'kind': Domain('string', noun_valued=True),  # the noun's kinds
-    # hops, 1-5; a value outside the range is clamped on calls and trace and refused on the element views: not judged
-    # here until that is ruled (the vocab V3 report's STOP point)
-    'depth': Domain('integer', accepts=(('1', 1), ('3', 3), ('5', 5)), refuses=('x',)),
+    # graph hops 1..5 (rule 31, Scott 2026-11-24, BACK-2793): a value outside the range is refused, never clamped
+    'depth': Domain('integer', accepts=(('1', 1), ('3', 3), ('5', 5)), refuses=('0', '6', '-1', 'x')),
     'tests': Domain('string', values=('include', 'exclude')),  # the shared test/support policy
     'since': Domain('string', accepts=_TIME_FORMS, refuses=_NOT_A_TIME),  # utils/time_window.py, rule 25
     'until': Domain('string', accepts=_TIME_FORMS, refuses=_NOT_A_TIME),
@@ -2708,9 +2778,10 @@ PROBES = {'1a': probe_uri_and_flag, '1b': probe_alias_and_name, '1c': probe_repe
           '20': probe_applicability, '14': probe_defaults, '21j': probe_invalid_requests_answer_json,
           '22': probe_config_failures, '23': probe_flags_after_uri, '24': probe_request_note,
           '28': probe_help_one_spelling, '25': probe_time_window, '27': probe_empty_match_term,
-          '26': probe_walk_exclusion, '29': probe_one_value_domain, '30': probe_every_control_has_a_flag}
+          '26': probe_walk_exclusion, '29': probe_one_value_domain, '30': probe_every_control_has_a_flag,
+          '31': probe_walk_depth_range}
 # These call the MCP tools (the optional mcp extra) besides the CLI.
-MCP_PROBES = ('2', '5', '6', '24', '25', '27', '26')
+MCP_PROBES = ('2', '5', '6', '24', '25', '27', '26', '31')
 # These also run the retirement cases' sample file.
 SAMPLE_PROBES = {'2': probe_retirement_notes, '5': probe_legacy_declarations, '6': probe_alias_notes}
 
@@ -3016,7 +3087,8 @@ POSITIVE_CONTROLS = [('metrics', '1a', '--hotspots vs ?hotspots= conflict'),
                      ('calls', '24', 'proj default CLI round trip'), ('calls', '24', 'proj default MCP round trip'),
                      ('calls', '24', 'proj default api.query round trip'), ('calls', '24', 'proj default CLI error stage'),
                      ('calls', '24', 'proj default MCP error stage'), ('calls', '24', 'proj default api.query error stage'),
-                     ('imports', '29', 'tests=bogus refused'), ('patches', '29', "limit='-1' refused")]
+                     ('imports', '29', 'tests=bogus refused'), ('patches', '29', "limit='-1' refused"),
+                     ('calls', '31', '--depth 5 answers'), ('trace', '31', '--depth 5 answers')]
 
 
 @pytest.mark.parametrize('noun,rule,label', POSITIVE_CONTROLS)
@@ -3916,13 +3988,42 @@ def element_config_failures():
     return cases
 
 
+# The element views' walk depth (rule 31): the canonical --view spellings and every legacy view flag with --transitive.
+ELEMENT_WALK_DEPTH_FORMS = {'--view boundary': ['--view', 'boundary', '--transitive'],
+                            '--view effects': ['--view', 'effects', '--transitive'],
+                            'legacy --boundary': ['--boundary', '--transitive'],
+                            'legacy --sideeffects': ['--sideeffects', '--transitive'],
+                            'legacy --effects': ['--effects', '--transitive']}
+
+
+def element_walk_depth_range():
+    """31: ``--depth`` outside 1..5 with ``--transitive`` exits 2 naming the range on every spelling (the legacy flags'
+    clamp is gone, X10 reversed) and on MCP; ``--depth 5`` answers."""
+    cases = []
+    for label, flags in ELEMENT_WALK_DEPTH_FORMS.items():
+        for value in WALK_DEPTH_OUTSIDE:
+            run = _ej(*_sub(ELEMENT, *flags, '--depth', value, base=False))
+            cases.append(Case(f'{label} --depth {value}', run.rc == 2 and _names_the_range(_error_message(run), value),
+                              f'{run.brief()} (wants exit 2 with depth must be 1..5, got {value})'))
+        run = _ej(*_sub(ELEMENT, *flags, '--depth', '5', base=False))
+        cases.append(Case(f'{label} --depth 5 answers', run.rc == 0, f'{run.brief()} (wants exit 0)'))
+    for value in WALK_DEPTH_OUTSIDE:
+        request = [*_sub(ELEMENT, *ELEMENT_WALK_DEPTH_FORMS['--view boundary'], '--depth', value, base=False),
+                   '--format', 'json']
+        shown = _mcp_shown(request)
+        cases.append(Case(f'MCP --depth {value}', 'rror' in shown and _names_the_range(shown, value),
+                          f'reveal_run({request}) -> {shown[:160]!r} (wants a refusal naming the range)'))
+    return cases
+
+
 ELEMENT_PROBES = {'1b': element_alias_and_name, '1c': element_repeated_spelling, '1d': element_repeatable_aliases,
                   '2': element_retirement_notes, '3': element_unsupported_controls, '4': element_verbose_is_detail,
                   '5': element_legacy_declarations, '6': element_alias_notes, '10': element_spellings_declared,
                   '12': element_repeatability_declared, '14': element_defaults, '16': element_legacy_operations,
                   '17': element_one_answer, '18': element_repeated_global_flags, '20': element_applicability,
                   '21j': element_invalid_requests_answer_json, '22': element_config_failures,
-                  '29': partial(probe_one_value_domain, ELEMENT), '30': partial(probe_every_control_has_a_flag, ELEMENT)}
+                  '29': partial(probe_one_value_domain, ELEMENT), '30': partial(probe_every_control_has_a_flag, ELEMENT),
+                  '31': element_walk_depth_range}
 
 
 def test_the_element_cells_cover_every_rule():
@@ -3933,7 +4034,7 @@ def test_the_element_cells_cover_every_rule():
 
 @pytest.mark.parametrize('rule', sorted(ELEMENT_PROBES))
 def test_element_cell(element_workspace, rule):
-    if rule == '2':
+    if rule in ('2', '31'):
         pytest.importorskip('mcp')
     cases = ELEMENT_PROBES[rule]()
     state = 'exempt' if not cases else 'conforms' if all(case.ok for case in cases) else 'not_yet'
