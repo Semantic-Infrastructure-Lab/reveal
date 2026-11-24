@@ -100,10 +100,15 @@ Token cost: ~150-750 tokens for a file (~1,300 for a 1,000-line module), ~100-3,
 ### `reveal_element(path, element)`
 
 Extract the full implementation of a specific function or class. Use after
-`reveal_structure` to drill into exactly the code you need.
+`reveal_structure` to drill into exactly the code you need. It answers as
+`reveal PATH ELEMENT` does: every element spelling the CLI takes (`Class.method`,
+`:LINE`, `:START-END`, `function:2`, `@2`), the CLI's text, and the CLI's outcome. A name
+that matches nothing is a tool error with the CLI's message and hint; a file that could not
+be parsed is a tool error naming the parse error, not "not found".
 
 ```
 reveal_element("src/auth.py", "validate_token")
+reveal_element("src/auth.py", "TokenStore.refresh")
 ```
 
 ### `reveal_run(args)`

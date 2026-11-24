@@ -148,8 +148,8 @@ class FileAnalyzer(ABC):
                       range_: Optional[tuple] = None) -> List[str]:
         """Cut this analyzer's ``get_structure()`` result for --head/--tail/--range, in place.
 
-        The one step the CLI (display.structure.show_structure) and reveal.api.analyze
-        share. Returns the fields the flags applied to (see slice_structure).
+        The one step of the path read (display.structure.show_structure), which reveal.api.analyze runs
+        too (BACK-2325). Returns the fields the flags applied to (see slice_structure).
         """
         return slice_structure(structure, head, tail, range_, fields=self.SLICE_FIELDS,
                                default_head=self.DEFAULT_HEAD)

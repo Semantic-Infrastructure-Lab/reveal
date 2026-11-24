@@ -25,6 +25,20 @@ when empty. `source` identifies the file. Extracted code or section text is
 from element JSON or Python `element()` must use `content` instead of `source`
 (BACK-2601). Internal analyzer extraction records are unchanged.
 
+The Python API answers these documents through the CLI's own path-read route (D21,
+BACK-2325): `reveal.api.analyze(PATH, **flags)` returns the document
+`reveal PATH --format json` prints (a file's envelope with its outline under
+`structure`, or a directory's `directory_tree`), its keywords the flags of `reveal PATH`
+with `-` as `_` (`head=2`, `range='2-4'`); `reveal.api.element(PATH, NAME)` returns the
+document `reveal PATH NAME --format json` prints, for every element spelling the CLI takes.
+Both raise as the noun form of `reveal.api.query` does ("Invalid requests"): a request the
+CLI exits 2 on raises `RequestValidationError` with the CLI's message (a missing path
+`PathNotFoundError`, also a `FileNotFoundError`; an element that matches nothing
+`ElementNotFoundError`), a file whose parse failed raises `AnalysisFailedError` with the
+CLI's document as its `result` (exit 3), an unreadable file its `OSError`. An element read
+of a file whose parse failed answers that failure on every transport, exit 3 naming it,
+never "not found" (BACK-2775).
+
 File outlines retain their file-format `type` variant and all structure fields.
 Navigation keeps its selection in `meta` and its existing `findings` payload.
 Check JSON uses `files` and `summary` for both file and directory targets; the
@@ -442,8 +456,13 @@ document, on the subcommand and the URI form alike and for the argument parser's
  "error": "<message>"}
 ```
 
-A malformed `--output` spec writes no file. A file path or a scheme without declared parameters keeps
-the parser's text usage error. `reveal.api.query` raises the same message as `UnsupportedOverrideError`
+A malformed `--output` spec writes no file. A scheme without declared parameters keeps the parser's
+text usage error. A path read answers the same document with its read's `type` (`file_structure`,
+`code_element`, `element_view` or `directory_tree`) for every request it refuses: a usage error, a
+missing path, a file no analyzer reads, a directory's element, an element that matches nothing, an
+invalid `--range`/`--head`/`--tail`; stderr keeps its text lines (BACK-2756, BACK-2325).
+`reveal.api.analyze` and `reveal.api.element` raise as the noun form below does ("Path reads and
+element content"). `reveal.api.query` raises the same message as `UnsupportedOverrideError`
 for an unknown typed keyword ("Declared parameter bindings") and as `UnreadControlError` for an unread one.
 Its noun form, `reveal.api.query('calls', 'src', callers='main')`, runs the subcommand's own dispatch: every
 request the subcommand exits 2 on raises `RequestValidationError` with the message above (an unknown keyword
