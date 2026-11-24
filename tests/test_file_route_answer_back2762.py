@@ -57,11 +57,13 @@ def test_an_answered_structure_is_logged_with_no_diagnostic(root, capsys, name):
     capsys.readouterr()
 
 
-def test_an_element_read_logs_no_structure_answer(root, capsys):
-    """Control: the element branch prints the element, not the structure, and logs nothing."""
+def test_an_element_read_logs_its_element_answer_not_the_structure(root, capsys):
+    """Control: the element branch prints the element, not the structure, and logs the element's own Answer (BACK-2325:
+    an element read is an Answer too, so MCP maps its outcome from its facts)."""
     exit_code, answer = _logged(root / 'ok.py', element='ok')
     assert exit_code == 0
-    assert answer is None
+    assert answer is not None and answer.kind == 'element'
+    assert answer.execution_facts.completeness is AnalysisCompleteness.COMPLETE
     assert 'return 1' in capsys.readouterr().out
 
 

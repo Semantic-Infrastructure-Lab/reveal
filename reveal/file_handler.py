@@ -554,10 +554,15 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
     try:
         _handle_file(path, element, show_meta, output_format, args, element_request, answer_consumer)
     except PathReadRefused as refused:
-        if answer_consumer is None:
-            refused.answer.emit()  # the site's text, its document in JSON, its exit
-        else:
-            answer_consumer(refused.answer)
+        _answered(refused.answer, answer_consumer)  # the site's text, its document in JSON, its exit
+
+
+def _answered(answer, answer_consumer) -> None:
+    """The path read's *answer* to *answer_consumer*, or emitted (printed, then the exit its outcome says)."""
+    if answer_consumer is None:
+        answer.emit()
+    else:
+        answer_consumer(answer)
 
 
 def _handle_file(path: str, element: Optional[str], show_meta: bool, output_format: str,
@@ -592,7 +597,7 @@ def _handle_file(path: str, element: Optional[str], show_meta: bool, output_form
         element = _whole_file_element(analyzer, request)
 
     if element:
-        _handle_element(analyzer, element, output_format, args, config, request)
+        _handle_element(analyzer, path, element, output_format, args, config, request, answer_consumer)
         return
 
     # Capture producer facts before display cuts and use the existing D6 output boundary.
@@ -600,19 +605,52 @@ def _handle_file(path: str, element: Optional[str], show_meta: bool, output_form
                    emit=_structure_emitter(analyzer, path, output_format, args, config, answer_consumer))
 
 
-def _handle_element(analyzer, element: str, output_format: str, args, config, request) -> None:
-    """An element read: the bound element request's view, else the element's extraction."""
+def _handle_element(analyzer, path: str, element: str, output_format: str, args, config, request,
+                    answer_consumer) -> None:
+    """An element read: the bound element request's view, else the element's extraction, answered as an Answer."""
     from .display import extract_element  # noqa: I006 — circular avoidance
     if request is not None:
         _dispatch_nav(analyzer, element, output_format, args, request)
         return
+    emit = _element_emitter(analyzer, path, element, output_format, args, answer_consumer)
     # A Markdown section has no control flow; its outline is its headings.
     from .display.element import _is_markdown  # noqa: I006
     if args is not None and getattr(args, 'outline', False) and _is_markdown(analyzer):
-        extract_element(analyzer, element, output_format, section_outline=True, depth=getattr(args, 'depth', None))
+        extract_element(analyzer, element, output_format, section_outline=True, depth=getattr(args, 'depth', None),
+                        emit=emit)
         return
     cut = tuple(getattr(args, flag, None) if args else None for flag in ('head', 'tail', 'range'))
-    extract_element(analyzer, element, output_format, config=config, cut=cut)
+    extract_element(analyzer, element, output_format, config=config, cut=cut, emit=emit)
+
+
+def _element_emitter(analyzer, path: str, element: str, output_format: str, args, answer_consumer):
+    """``extract_element``'s emit: the element read as an Answer, emitted or handed to *answer_consumer*, as the file
+    structure's is (BACK-2325): the element, its document the one the JSON printer prints; or the miss (``_element_miss``)."""
+    from .cli.routing.uri import Answer  # noqa: I006 — circular avoidance
+    from .display.element import element_document
+    from .utils.results import AnalysisCompleteness, ExecutionFacts
+
+    def emit(result, shown):
+        if result is None:
+            answer = _element_miss(analyzer, path, element, shown, output_format, args)
+        else:
+            def printer(_answer, **_options):
+                shown()
+            answer = Answer(result, 'element', printer, execution_facts=ExecutionFacts(AnalysisCompleteness.COMPLETE),
+                            document=lambda: element_document(analyzer, result))
+        _answered(answer, answer_consumer)
+    return emit
+
+
+def _element_miss(analyzer, path: str, element: str, text: str, output_format: str, args):
+    """The Answer of an element read that matched nothing: it says *text* (``extraction_error_text``), exit 2, its
+    document in JSON, an ``ElementNotFoundError`` to the Python API."""
+    from .cli.routing.declared import path_read_refusal  # noqa: I006 — circular avoidance
+    from .errors import ElementNotFoundError
+    from argparse import Namespace
+    refusal_args = args if args is not None else Namespace(format=output_format, element=element)
+    message = text.partition('\n')[0].removeprefix('Error: ')
+    return path_read_refusal(path, text, refusal_args, error=ElementNotFoundError(element, message))
 
 
 def _structure_emitter(analyzer, path: str, output_format: str, args, config, answer_consumer):
@@ -638,10 +676,7 @@ def _structure_emitter(analyzer, path: str, output_format: str, args, config, an
         # API) reads its document, the one the renderer prints (BACK-2325).
         answer = Answer(structure, 'structure', printer, execution_facts=facts,
                         public_diagnostic=_structure_failure_diagnostic(structure, facts), document=document)
-        if answer_consumer is None:
-            answer.emit()
-        else:
-            answer_consumer(answer)
+        _answered(answer, answer_consumer)
     return emit
 
 

@@ -66,3 +66,39 @@ def test_sibling_without_a_consumer_the_text_cli_is_unchanged(fx, argv, code):
         assert run.stdout == '' and run.stderr.startswith("Error: No analyzer found for file 'README.rst'")
     if code == 3:
         assert run.stderr.startswith('Error (bad.xml): XML parse error')
+
+
+# --- the element read (BACK-2325, BACK-2775): an Answer too ----------------------------------------------------------------
+
+def _consume_element(path, element):
+    args = create_argument_parser('test').parse_args([path, element, '--format', 'json'])
+    answers = []
+    handle_file(path, element, False, 'json', args, answer_consumer=answers.append)
+    return answers
+
+
+def test_an_element_answer_goes_to_the_consumer_with_the_printed_document(fx, capsys):
+    [answer] = _consume_element('ok.py', 'foo')
+    assert capsys.readouterr() == ('', '')
+    assert answer.kind == 'element' and execution_exit_code(answer.execution_facts) == 0
+    assert answer.document() == json.loads(_run_reveal_direct('ok.py', 'foo', '--format', 'json').stdout)
+
+
+def test_a_miss_hands_its_element_not_found_refusal_to_the_consumer(fx, capsys):
+    from reveal.errors import ElementNotFoundError
+    [answer] = _consume_element('ok.py', 'nosuch')
+    assert capsys.readouterr() == ('', '')
+    assert execution_exit_code(answer.execution_facts) == 2
+    assert type(answer.request_error) is ElementNotFoundError and answer.request_error.element == 'nosuch'
+    assert str(answer.request_error) == "Element 'nosuch' not found in ok.py"
+    assert answer.public_diagnostic.startswith("Error: Element 'nosuch' not found in ok.py\nHint:")
+
+
+@pytest.mark.parametrize('argv, code', [(['ok.py', 'foo'], 0), (['ok.py', 'nosuch'], 2), (['bad.xml', ':1'], 0)])
+def test_sibling_without_a_consumer_the_element_text_is_unchanged(fx, argv, code):
+    run = _run_reveal_direct(*argv)
+    assert run.returncode == code
+    if code == 0:
+        assert run.stdout.startswith(f'{argv[0]}:')
+    else:
+        assert run.stdout == '' and run.stderr.startswith("Error: Element 'nosuch' not found in ok.py")
