@@ -239,6 +239,31 @@ def _print_typed_header(typed, category_filter=None, match_count=None):
         print()
 
 
+def typed_structure_document(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[str, Any]]]) -> Dict[str, Any]:
+    """The JSON document ``reveal FILE --typed --format json`` prints (the full typed structure with its containment
+    tree), before the invocation's warnings are attached."""
+    from reveal.structure import TypedStructure
+    from reveal.capabilities import python_only_file_warning
+    from ..utils.results import ResultBuilder
+    from ..reveal_types import CONTRACT_VERSION
+
+    file_path = str(analyzer.path)
+    typed = TypedStructure.from_analyzer_output(structure, file_path)  # auto-detects type from extension
+    warning = python_only_file_warning("typed-elements", Path(file_path))  # BACK-1283
+    result = {
+        "file": file_path,
+        "type": typed.reveal_type.name if typed.reveal_type else None,
+        "stats": typed.stats,
+        "tree": typed.to_tree().get("roots", []),
+    }
+    if warning:
+        result["warnings"] = [warning]
+    return dict(ResultBuilder.create(
+        result.pop('type') or 'typed_structure', analyzer.path, data=result,
+        source_type='file', contract_version=CONTRACT_VERSION,
+        meta={'warnings': [warning] if warning else [], 'errors': []}))
+
+
 def _render_typed_structure_output(
     analyzer: FileAnalyzer,
     structure: Dict[str, List[Dict[str, Any]]],
@@ -259,6 +284,10 @@ def _render_typed_structure_output(
         output_format: 'text' for human-readable, 'json' for TypedStructure JSON
         category_filter: Optional filter by display_category (property, staticmethod, etc.)
     """
+    if output_format == "json":
+        print(safe_json_dumps(attach_invocation_warnings(typed_structure_document(analyzer, structure))))
+        return
+
     from reveal.structure import TypedStructure
 
     file_path = str(analyzer.path)
@@ -268,24 +297,6 @@ def _render_typed_structure_output(
 
     from reveal.capabilities import python_only_file_warning
     warning = python_only_file_warning("typed-elements", Path(file_path))  # BACK-1283
-
-    if output_format == "json":
-        # Output full typed structure with tree
-        result = {
-            "file": file_path,
-            "type": typed.reveal_type.name if typed.reveal_type else None,
-            "stats": typed.stats,
-            "tree": typed.to_tree().get("roots", []),
-        }
-        if warning:
-            result["warnings"] = [warning]
-        from ..utils.results import ResultBuilder
-        from ..reveal_types import CONTRACT_VERSION
-        print(safe_json_dumps(attach_invocation_warnings(ResultBuilder.create(
-            result.pop('type') or 'typed_structure', analyzer.path, data=result,
-            source_type='file', contract_version=CONTRACT_VERSION,
-            meta={'warnings': [warning] if warning else [], 'errors': []}))))
-        return
 
     # Text output: show hierarchical structure with containment
     is_fallback = getattr(analyzer, "is_fallback", False)
@@ -959,14 +970,34 @@ def show_structure(analyzer: FileAnalyzer, output_format: str, args=None, config
     return structure
 
 
+def _prints_related_flat(structure, args) -> bool:
+    return bool(args and getattr(args, 'related_flat', False) and 'related' in structure)
+
+
+def file_structure_document(analyzer: FileAnalyzer, structure, args=None) -> Optional[Dict[str, Any]]:
+    """The JSON document ``reveal FILE --format json`` prints for *structure* with *args*' view, before the
+    invocation's warnings are attached: the typed structure for ``--typed``, else the standard envelope (an outline has
+    no JSON shape of its own, BACK-1322); None for ``--related-flat``, which prints paths, not a document. The renderer
+    prints it and the Python API returns it (BACK-2325)."""
+    if _prints_related_flat(structure, args):
+        return None
+    if args and getattr(args, 'typed', False):
+        return typed_structure_document(analyzer, structure)
+    return structure_document(analyzer, structure)
+
+
 def _render_file_structure(analyzer: FileAnalyzer, structure, output_format, args=None, config=None) -> None:
     """Render the existing file shapes, also used inside the shared execution finalizer."""
     # Handle --related-flat: output just paths, no decoration
-    if args and getattr(args, 'related_flat', False) and 'related' in structure:
+    if _prints_related_flat(structure, args):
         from .formatting import _format_related_flat
         paths = _format_related_flat(structure['related'])
         for p in paths:
             print(p)
+        return
+    if output_format == 'json':
+        document = file_structure_document(analyzer, structure, args)
+        print(safe_json_dumps(attach_invocation_warnings(document)))
         return
 
     _render_structure_view(analyzer, structure, output_format, args, config)
