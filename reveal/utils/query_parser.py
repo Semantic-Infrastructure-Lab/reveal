@@ -315,16 +315,6 @@ def one_value(value: Any) -> str:
     return nonempty_scalar(value)
 
 
-def clamped_whole(value: Any, low: int, high: int) -> int:
-    """A signed whole integer (``4``, ``'+3'``, ``'-2'``) clamped to ``low..high``.
-    Booleans, fractions (``'1.5'``, ``'2.0'``), exponents and other text raise ValueError."""
-    if type(value) is int:
-        return max(low, min(value, high))
-    if isinstance(value, str) and _re.fullmatch(r'[+-]?[0-9]+', value.strip()):
-        return max(low, min(int(value), high))
-    raise ValueError('expected a signed whole integer')
-
-
 def cli_display_limit(value: str) -> int:
     """argparse ``type=`` for ``--top``: the shared parser, with the flag's own name in the message."""
     import argparse

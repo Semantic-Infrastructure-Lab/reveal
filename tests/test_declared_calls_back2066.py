@@ -325,19 +325,6 @@ def test_an_absent_optional_choice_is_its_default_and_a_wrong_one_rejects():
         spec.validate('often')
 
 
-@pytest.mark.parametrize('value,expected', [(4, 4), ('+3', 3), ('-2', 1), (' 9 ', 5), (0, 1)])
-def test_clamped_whole_accepts_signed_whole_values(value, expected):
-    from reveal.utils.query_parser import clamped_whole
-    assert clamped_whole(value, 1, 5) == expected
-
-
-@pytest.mark.parametrize('value', [True, False, 1.0, '1.5', '2.0', '1e2', 'abc', '', None])
-def test_clamped_whole_rejects_everything_else(value):
-    from reveal.utils.query_parser import clamped_whole
-    with pytest.raises(ValueError):
-        clamped_whole(value, 1, 5)
-
-
 @pytest.mark.parametrize('value', ['', '   ', 'a\x00b', True, 123, None])
 def test_nonempty_scalar_rejects_non_names(value):
     from reveal.utils.query_parser import nonempty_scalar
