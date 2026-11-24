@@ -48,9 +48,9 @@ def _threshold(value: Any) -> int:
 
 def _test_roots(value: Any) -> tuple:
     if not isinstance(value, (list, tuple)) or not value:
-        raise ValueError('tests must contain at least one path')
+        raise ValueError('test-paths must contain at least one path')
     if any(not isinstance(path, str) or not path or '\x00' in path for path in value):
-        raise ValueError('tests must contain nonempty paths')
+        raise ValueError('test-paths must contain nonempty paths')
     return tuple(value)
 
 
@@ -116,7 +116,7 @@ def _report_error(result: Dict[str, Any], *, initial: bool = False) -> Optional[
 
 def _resolve_test_paths(src_path: Path, tests: Optional[List[str]],
                         test_layout: Optional[TestLayout] = None) -> List[Path]:
-    """The roots the patch scan walks: the given ``tests=`` (trusted as the suite), else the target
+    """The roots the patch scan walks: the given ``--test-paths`` (trusted as the suite), else the target
     itself (its parent for a file), where the selected policy picks the test files, plus the test
     directories beside the target (``pkg/`` with a sibling ``tests/`` or ``t/``, the usual layout;
     BACK-1888). Declared project paths add literal file or directory roots without resolving aliases."""
@@ -130,10 +130,15 @@ def _resolve_test_paths(src_path: Path, tests: Optional[List[str]],
 
 
 # The pressure report's controls, declared once for testability:// and patches ?view=pressure (BACK-2160).
+# test-paths names the roots trusted as the suite; --tests is the shared include|exclude test policy on every other noun
+# (one value domain per shared control, D21), so the roots' old spelling --tests PATHS / ?tests= is its legacy word,
+# noted until the cut (param:patches.tests, param:testability.tests; BACK-2774).
 PRESSURE_SPECS = (
-    ParamSpec('tests', 'array', 'Test paths, trusted as the suite (omitted: default project test/support policy and candidate suite roots)', None,
-              _test_roots, uri_codec='comma-percent', role='analysis',
-              cli=CliBinding(('--tests',), nargs='+')),
+    ParamSpec('test-paths', 'array', 'Test paths, trusted as the suite (omitted: default project test/support policy and '
+              'candidate suite roots)', None, _test_roots, ('--test-paths tests',), uri_codec='comma-percent',
+              role='analysis',
+              aliases=('test_paths',), legacy=(LegacySpelling('tests', flag='--tests'),),
+              cli=CliBinding(('--test-paths',), dest='test_paths', nargs='+', metavar='PATH')),
     ParamSpec('top', 'integer', 'Maximum groups per hotspot list; 0 is all', 20,
               _whole_control, minimum=0, zero_policy='all', role='presentation', cli=CliBinding(('--top',))),
     ParamSpec('min_patches', 'integer', 'Minimum patches for a target group', 3,
@@ -182,7 +187,7 @@ class TestabilityAdapter(ResourceAdapter):
 
     @staticmethod
     def validate_request(params, args):
-        tests = dict(peek_query_items(params)).get('tests')
+        tests = dict(peek_query_items(params)).get('test-paths')
         for root in tests or ():
             try:
                 Path(root).expanduser().stat()
@@ -209,10 +214,10 @@ class TestabilityAdapter(ResourceAdapter):
         return {
             'name': 'testability',
             'description': 'Find testability pressure by joining test patch usage with production boundary fan-out.',
-            'syntax': 'testability://<path>[?tests=tests,integration_tests&limit=20&min_patches=3&min_categories=3&include_unresolved=true]',
+            'syntax': 'testability://<path>[?test-paths=tests,integration_tests&limit=20&min_patches=3&min_categories=3&include_unresolved=true]',
             'examples': [
                 {'uri': 'testability://src', 'description': 'Pressure report for src/ using the selected project test/support policy'},
-                {'uri': 'testability://src?tests=tests,integration_tests', 'description': 'Scan specific test directories'},
+                {'uri': 'testability://src?test-paths=tests,integration_tests', 'description': 'Scan specific test directories'},
                 {'uri': 'testability://src?limit=10', 'description': 'Top 10 patch/boundary groups'},
             ],
             'features': [
@@ -223,9 +228,9 @@ class TestabilityAdapter(ResourceAdapter):
                 'Patch pressure scans Python unittest.mock/monkeypatch and JS/TS jest/vitest tests',
             ],
             'notes': [
-                'When `tests` is omitted, one selected project policy chooses test/support files under the source root or parent, conventional sibling candidates and declared additional paths; `test_scope` names the basis, anchor, candidate roots and file count.',
+                'When `test-paths` is omitted, one selected project policy chooses test/support files under the source root or parent, conventional sibling candidates and declared additional paths; `test_scope` names the basis, anchor, candidate roots and file count.',
                 'Default candidate roots can include absent optional declarations; outside-anchor sibling suites use conventional names without their configuration. Source boundary profiles retain their separate target scope.',
-                'Explicit `tests=` bypasses default policy selection: all Python files are trusted, while JS/TS retains recognized test filenames. Existing empty explicit suites remain valid.',
+                'Explicit `test-paths` bypasses default policy selection: all Python files are trusted, while JS/TS retains recognized test filenames. Existing empty explicit suites remain valid.',
             ],
             'see_also': [
                 'reveal patches <path> --view pressure - the current spelling (reveal testability is retired)',
@@ -239,7 +244,7 @@ class TestabilityAdapter(ResourceAdapter):
         return {
             'adapter': 'testability',
             'description': 'Test patch/mock pressure joined with production boundary fan-out',
-            'uri_syntax': 'testability://<path>?tests=tests,integration_tests&limit=20&min_patches=3&min_categories=3',
+            'uri_syntax': 'testability://<path>?test-paths=tests,integration_tests&limit=20&min_patches=3&min_categories=3',
             'resource': TestabilityAdapter.RESOURCE_SPEC.schema(),
             'query_params': param_schema(TestabilityAdapter.PARAM_SPECS),
             'elements': {},
@@ -297,7 +302,7 @@ def testability_report(resource: str, query_params: Any, cap: ParamSpec = _PRESS
         layout = RevealConfig.get(layout.anchor).apply_test_layout(layout)
     test_paths = _resolve_test_paths(path, tests, layout)
     if tests and not test_paths:
-        raise NotApplicableError(f"none of the tests= paths exist for {path}: {', '.join(tests)}")
+        raise NotApplicableError(f"none of the --test-paths roots exist for {path}: {', '.join(tests)}")
     report = build_testability_report(
         str(path),
         [str(p) for p in test_paths],

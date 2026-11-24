@@ -64,16 +64,16 @@ def observed(monkeypatch):
 
 def _args(src, roots, spelling, query=''):
     if spelling == 'native':
-        return ['testability', str(src), '--tests', *map(str, roots)]
+        return ['testability', str(src), '--test-paths', *map(str, roots)]
     encoded = ','.join(quote(str(root), safe='') for root in roots)
-    return [f'testability://{src.as_posix()}?tests={encoded}'+('&'+query if query else '')]
+    return [f'testability://{src.as_posix()}?test-paths={encoded}'+('&'+query if query else '')]
 
 
 @pytest.mark.parametrize('spelling', ['native', 'uri'])
 def test_existing_success_uses_report_owner_identity(project, spelling):
     src, tests = project
     # Plain existing paths avoid folding codec failure into identity proof.
-    args = ['testability', str(src), '--tests', str(tests)] if spelling == 'native' else [f'testability://{src}?tests={tests}']
+    args = ['testability', str(src), '--test-paths', str(tests)] if spelling == 'native' else [f'testability://{src}?test-paths={tests}']
     response = run(*args, '--format', 'json')
     assert response.returncode == 0
     assert json.loads(response.stdout)['type'] == 'testability_report'
@@ -86,7 +86,7 @@ def test_explicit_bad_roots_reject_before_either_collector(project, observed, sp
     missing = src.parent / 'missing'
     roots = [tests, missing] if kind == 'mixed' else ([missing] if kind == 'missing' else [''])
     # These paths contain no encoded characters: isolate preflight from codec behavior.
-    args = ['testability', str(src), '--tests', *map(str, roots)] if spelling == 'native' else [f'testability://{src}?tests='+','.join(map(str, roots))]
+    args = ['testability', str(src), '--test-paths', *map(str, roots)] if spelling == 'native' else [f'testability://{src}?test-paths='+','.join(map(str, roots))]
     response = run(*args, '--format', 'json')
     assert response.returncode == 2, (response.stdout, response.stderr, observed)
     assert observed['calls'] == [] and observed['builds'] == []
@@ -101,7 +101,7 @@ def test_explicit_root_operational_error_is_analysis_failure_before_collectors(p
             raise PermissionError(13, 'actual explicit test-root permission failure', str(path))
         return real_stat(path, *args, **kwargs)
     monkeypatch.setattr(Path, 'stat', stat)
-    args = ['testability', str(src), '--tests', str(tests)] if spelling == 'native' else [f'testability://{src}?tests={tests}']
+    args = ['testability', str(src), '--test-paths', str(tests)] if spelling == 'native' else [f'testability://{src}?test-paths={tests}']
     response = run(*args, '--format', 'json')
     assert response.returncode == 3, (response.stdout, response.stderr)
     assert observed['calls'] == [] and observed['builds'] == []
@@ -127,7 +127,7 @@ def test_native_typed_relative_numeric_like_test_paths_are_strings(project, monk
     src, _ = project
     _write(src.parent / name / 'test_special.py', PATCH * 3)
     monkeypatch.chdir(src.parent)
-    response = run('testability', 'src', '--tests', name, '--format', 'json')
+    response = run('testability', 'src', '--test-paths', name, '--format', 'json')
     assert response.returncode == 0, (response.stdout, response.stderr)
     result = json.loads(response.stdout)
     assert result['summary']['total_patch_uses'] == 3 and result['tests'] == [name]
@@ -143,7 +143,7 @@ def test_actual_required_loss_never_looks_complete_from_empty_ranked_arrays(tmp_
     else:
         _write(src / 'bridge.py', 'VALUE=1\n' if population == 'constant-allfailed' else SOURCE)
         _write(tests / 'test_bridge.py', 'def broken(:\n')
-    args = ['testability', str(src), '--tests', str(tests)] if spelling == 'native' else [f'testability://{src}?tests={tests}']
+    args = ['testability', str(src), '--test-paths', str(tests)] if spelling == 'native' else [f'testability://{src}?test-paths={tests}']
     response = run(*args, '--format', 'json')
     assert response.returncode == 3, (response.stdout, response.stderr, observed)
     result = json.loads(response.stdout)
@@ -158,7 +158,7 @@ def test_actual_required_loss_never_looks_complete_from_empty_ranked_arrays(tmp_
 def test_actual_directory_loss_is_incomplete_even_with_surviving_hidden_domain_observation(project, observed, stage):
     src, tests = project
     observed['denied'] = {tests if stage == 'patches' else src}
-    response = run(f'testability://{src}?tests={tests}&min_patches=99&min_categories=99', '--format', 'json')
+    response = run(f'testability://{src}?test-paths={tests}&min_patches=99&min_categories=99', '--format', 'json')
     assert observed['events'] == [(stage, tests if stage == 'patches' else src)]
     assert response.returncode == 3, (response.stdout, response.stderr)
     result = json.loads(response.stdout)
@@ -172,7 +172,7 @@ def test_existing_empty_test_directory_is_valid_zero_not_explicit_empty_input(tm
     _write(source, 'VALUE=1\n')
     tests = tmp_path / 'empty_tests'
     tests.mkdir()
-    args = ['testability', str(source), '--tests', str(tests)] if spelling == 'native' else [f'testability://{source}?tests={tests}']
+    args = ['testability', str(source), '--test-paths', str(tests)] if spelling == 'native' else [f'testability://{source}?test-paths={tests}']
     response = run(*args, '--format', 'json')
     assert response.returncode == 0
     result = json.loads(response.stdout)
@@ -193,7 +193,7 @@ def test_omitted_no_tests_is_legitimate_nonapplicability_zero(tmp_path, spelling
 @pytest.mark.parametrize('value', ['1.9', 'true', 'NaN', 'inf', '3e0', '9007199254740993.1', '-2.0', '-1'])
 def test_numeric_validation_uses_exact_whole_values_and_usage_error(project, observed, value):
     src, tests = project
-    response = run(f'testability://{src}?tests={tests}&top={value}', '--format', 'json')
+    response = run(f'testability://{src}?test-paths={tests}&top={value}', '--format', 'json')
     assert response.returncode == 2, (response.stdout, response.stderr)
     assert observed['calls'] == [] and observed['builds'] == []
 
@@ -201,7 +201,7 @@ def test_numeric_validation_uses_exact_whole_values_and_usage_error(project, obs
 @pytest.mark.parametrize('value,expected', [('9007199254740993.0', 9007199254740993), ('0.0', 0)])
 def test_accepted_uri_whole_decimal_normalization_is_exact(project, observed, value, expected):
     src, tests = project
-    response = run(f'testability://{src}?tests={tests}&top={value}', '--format', 'json')
+    response = run(f'testability://{src}?test-paths={tests}&top={value}', '--format', 'json')
     assert response.returncode == 0
     assert observed['builds'][0]['top'] == expected
 
@@ -210,7 +210,7 @@ def test_accepted_uri_whole_decimal_normalization_is_exact(project, observed, va
 def test_binding_feature_whole_decimal_native_spelling_harmonization(project, observed, value):
     """Feature adoption: old argparse rejects these URI-compatible whole values."""
     src, tests = project
-    response = run('testability', str(src), '--tests', str(tests), '--top', value, '--format', 'json')
+    response = run('testability', str(src), '--test-paths', str(tests), '--top', value, '--format', 'json')
     assert response.returncode == 0
     assert observed['builds'][0]['top'] == (3 if value == '+3.0' else 0)
 
@@ -266,7 +266,7 @@ def test_typed_numeric_controls_reject_boolean_fraction_and_nonfinite(project, v
     from reveal.adapters.testability import TestabilityAdapter
     src, tests = project
     with pytest.raises(ValueError):
-        TestabilityAdapter(str(src), params={'tests': [str(tests)], 'top': value})
+        TestabilityAdapter(str(src), params={'test-paths': [str(tests)], 'top': value})
 
 
 @pytest.mark.parametrize('output_format', ['text', 'json'])
@@ -274,9 +274,9 @@ def test_verbose_is_top_zero_and_conflicts_with_an_explicit_top(project, observe
     # BACK-2654 note #17: --verbose is the legacy word of top=0 (every group). It used to override an explicit
     # --top, which was then reported unused; now the two settings conflict (rule 1) and the analysis never runs.
     src, tests = project
-    response = run('testability', str(src), '--tests', str(tests), '--verbose', '--format', output_format)
+    response = run('testability', str(src), '--test-paths', str(tests), '--verbose', '--format', output_format)
     assert response.returncode == 0, (response.stdout, response.stderr)
     assert observed['builds'][0]['top'] == 0
-    conflict = run('testability', str(src), '--tests', str(tests), '--top', '1', '--verbose', '--format', output_format)
+    conflict = run('testability', str(src), '--test-paths', str(tests), '--top', '1', '--verbose', '--format', output_format)
     assert conflict.returncode == 2 and 'top' in conflict.stderr and 'verbose' in conflict.stderr
     assert len(observed['builds']) == 1

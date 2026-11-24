@@ -61,10 +61,10 @@ def _answer(doc):
     return doc
 
 
-QUERY = ['', '&tests={repo}/t', '&top=1', '&min_patches=1', '&include_unresolved=true']
+QUERY = ['', '&test-paths={repo}/t', '&top=1', '&min_patches=1', '&include_unresolved=true']
 
 
-@pytest.mark.parametrize('extra', QUERY, ids=['default', 'tests', 'top', 'min_patches', 'include_unresolved'])
+@pytest.mark.parametrize('extra', QUERY, ids=['default', 'test-paths', 'top', 'min_patches', 'include_unresolved'])
 def test_the_pressure_view_is_the_testability_report(repo, extra):
     extra = extra.format(repo=repo)
     old = run(f'testability://{repo}' + ('?' + extra.lstrip('&') if extra else ''), '--format', 'json')
@@ -74,9 +74,9 @@ def test_the_pressure_view_is_the_testability_report(repo, extra):
     assert new_doc['type'] == old_doc['type'] == 'testability_report'
     assert new_doc['summary']['total_patch_uses'] == 3  # the fixture really has patch pressure
     assert _answer(old_doc) == _answer(new_doc)
-    if extra.startswith('&tests='):
+    if extra.startswith('&test-paths='):
         assert not [w for w in new_doc.get('meta', {}).get('warnings', [])
-                    if w['type'] == 'unused_query_param' and 'tests' in w['fields']]
+                    if w['type'] == 'unused_query_param' and 'test-paths' in w['fields']]
 
 
 def test_testability_prints_its_replacement_once_and_the_new_spelling_prints_none(repo):
@@ -98,12 +98,12 @@ def test_the_default_view_still_scans_a_test_root(repo):
 
 @pytest.mark.parametrize('output_format', ['text', 'json'])
 def test_pressure_only_parameters_are_refused_by_the_default_view(repo, output_format):
-    """tests= means nothing to the patches scan (its path is the root): an invalid request naming where it is read
+    """test-paths means nothing to the patches scan (its path is the root): an invalid request naming where it is read
     (COMMAND_MODEL "Applicability", BACK-2656; it was an unused-input note, exit 0)."""
-    done = run(f'patches://{repo}/t?tests={repo}/t', '--format', output_format)
+    done = run(f'patches://{repo}/t?test-paths={repo}/t', '--format', output_format)
     assert done.returncode == 2, done.stderr
-    assert "control 'tests' is not read by this answer (patches_scan, default)" in done.stderr
-    assert 'tests is read by: testability_report' in done.stderr
+    assert "control 'test-paths' is not read by this answer (patches_scan, default)" in done.stderr
+    assert 'test-paths is read by: testability_report' in done.stderr
 
 
 def test_an_unknown_view_is_rejected(repo):

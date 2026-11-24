@@ -967,7 +967,7 @@ source that cannot be loaded is an operational failure (exit 3).
 | Overview map and Git architecture comparisons | Supported; one request policy governs both comparison sides, including identical-tree proofs. |
 | Metrics hotspot ranking with `tests=include` or `tests=exclude` | Supported; exclusion narrows the ranking only, preserving analyzed files and totals. |
 | Surface `source_only=true` and HTTP test-origin labels | Supported; directory pruning, individual files and labels share the selected policy. The census retains its broader population. |
-| Patches/default pressure selection | Supported. Raw scans select files only within their target. Pressure reports also consider literal declared suite roots; explicit trusted `tests=` overrides default policy selection. |
+| Patches/default pressure selection | Supported. Raw scans select files only within their target. Pressure reports also consider literal declared suite roots; explicit trusted `--test-paths` roots override default policy selection. |
 | M102 unimported-module exemption | Supported for checked target files; all Python importers, including selected support files, remain evidence. |
 | Other role labels, Calls test symbols and Hotspots filename hints | Existing conventional or language-specific basis; no configured-policy adoption is implied. |
 
@@ -1003,7 +1003,7 @@ it does not claim those roots exist or contain scannable tests. Existing convent
 sibling suites outside the selected anchor remain convention-based and are disclosed
 in `outside_anchor_roots`, without loading those siblings' configuration.
 
-Explicit pressure `tests=` paths retain their established meaning: Python files are
+Explicit pressure `--test-paths` roots retain their established meaning: Python files are
 trusted as the suite, while JS/TS still requires recognized test filenames. This
 override bypasses default test-layout selection, including invalid configured
 additions; source-analysis requirements and diagnostics still apply.

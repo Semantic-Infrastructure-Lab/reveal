@@ -160,7 +160,7 @@ def iter_test_files(
     *by_test_path* is the discovered scope: files are selected by the supplied immutable
     project policy, or the conventional scan-root rule when no context was supplied.
     Without it the paths are trusted as the test suite
-    (an explicit ``tests=``), and every Python file under them is scanned.
+    (an explicit ``--test-paths``), and every Python file under them is scanned.
 
     *unscanned*, filled only in the discovered scope, is the other half of the question: the test files in a
     code language the scan does not read (Go, Java, Rust, ...), counted by display name. A zero from the scan
@@ -234,7 +234,7 @@ def no_scannable_tests_reason(subject: str, unscanned: Dict[str, int]) -> str:
         return (f"patch pressure is not scanned for {subject}: its test files are {_languages_phrase(unscanned)}, and the "
                 'patch scan reads Python and JavaScript/TypeScript tests only, so no count would mean nothing')
     return (f"no test files found under {subject} (the shared is_test_path rule: test directories such as tests/, test/, "
-            "spec/, t/, and test_*, *_test, *.spec.* names) — pass --tests <path> (URI: tests=<path>)")
+            "spec/, t/, and test_*, *_test, *.spec.* names) — name the suite's roots with --view pressure --test-paths <path>")
 
 
 def language_not_scanned_warning(unscanned: Dict[str, int]) -> Optional[Dict[str, Any]]:

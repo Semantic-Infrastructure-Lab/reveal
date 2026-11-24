@@ -71,7 +71,7 @@ def _cut(answer, field):
 
 
 def _pressure(proj, top=None):
-    query = (f'view=pressure&tests={(proj / "tests").as_posix()}&min_patches=1&min_categories=1'
+    query = (f'view=pressure&test-paths={(proj / "tests").as_posix()}&min_patches=1&min_categories=1'
              f'&include_unresolved=true' + (f'&top={top}' if top is not None else ''))
     return f'patches://{(proj / "pkg").as_posix()}?{query}'
 

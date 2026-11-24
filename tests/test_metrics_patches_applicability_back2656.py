@@ -169,7 +169,7 @@ _SCAN, _PRESSURE = 'patches_scan, default', 'testability_report, view, view=pres
     (('patches://tests?min_categories=2',), "'where'", _SCAN),
     (('patches://tests?where=patches>=2',), "'where'", _SCAN),
     (('patches://tests?include_unresolved',), "'include_unresolved'", _SCAN),
-    (('patches://tests?tests=tests',), "'tests'", _SCAN),
+    (('patches://tests?test-paths=tests',), "'test-paths'", _SCAN),
     (('patches://.?view=pressure&min=2',), "'min'", _PRESSURE),
     (('patches://.?view=pressure&target=app',), "'target'", _PRESSURE),
     (('patches://.?view=pressure&private',), "'private'", _PRESSURE),
@@ -199,7 +199,7 @@ def test_patches_api_keyword_reaches_the_same_check(proj):
 
 @pytest.mark.parametrize('uri', [
     'patches://tests?view=file&limit=1&min=1&target=app&private&suppress=off',
-    'patches://.?view=pressure&tests=tests&limit=1&where=patches>=1&where=categories>=1&include_unresolved',
+    'patches://.?view=pressure&test-paths=tests&limit=1&where=patches>=1&where=categories>=1&include_unresolved',
 ])
 def test_patches_answers_where_its_controls_are_read(proj, uri):
     run, doc = _run(uri)

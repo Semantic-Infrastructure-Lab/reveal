@@ -57,7 +57,7 @@
       "detail_supported": false
     },
     "pressure-tests": {
-      "uri": "patches://proj?view=pressure&tests=proj/tests",
+      "uri": "patches://proj?view=pressure&test-paths=proj/tests",
       "exit": 0,
       "fields": {},
       "standing": [

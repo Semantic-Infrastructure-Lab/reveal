@@ -105,9 +105,9 @@ def evidence(monkeypatch):
 def _argv(src, suite, spelling='uri'):
     # Thresholds intentionally hide every ranked row; raw observations remain authoritative.
     if spelling == 'command':
-        return ['testability', str(src), '--tests', str(suite), '--min-patches', '99',
+        return ['testability', str(src), '--test-paths', str(suite), '--min-patches', '99',
                 '--min-categories', '99', '--top', '1']
-    return [f'testability://{src.as_posix()}?tests={suite.as_posix()}&min_patches=99&min_categories=99&top=1']
+    return [f'testability://{src.as_posix()}?test-paths={suite.as_posix()}&min_patches=99&min_categories=99&top=1']
 
 
 def _raw(evidence, component):

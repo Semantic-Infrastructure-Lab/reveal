@@ -135,11 +135,11 @@ def test_trusted_external_roots_override_policy_with_existing_python_and_ts_mean
     _write(external / 'helper.ts', 'vi.mock("ignored");\n')
     _write(external / 'named.test.ts', 'vi.mock("external.ts");\n')
     _policy(project, ['../invalid'])
-    uri = _pressure(project / 'src', scheme, 'tests=' + quote(external.as_posix(), safe=''))
+    uri = _pressure(project / 'src', scheme, 'test-paths=' + quote(external.as_posix(), safe=''))
     answer = query(uri)
     assert answer['summary']['total_patch_uses'] == answer['test_scope']['files_scanned'] == 2
     assert answer['summary']['total_boundary_profiles'] == 1
-    assert answer['test_scope']['rule'] == 'tests='
+    assert answer['test_scope']['rule'] == 'test-paths'
     assert {row['key'] for row in answer['patch_hotspots']} == {'external.target', 'external.ts'}
     cli = run(uri, '--format', 'json')
     assert cli.returncode == 0, cli.stderr
@@ -147,7 +147,7 @@ def test_trusted_external_roots_override_policy_with_existing_python_and_ts_mean
     text = run(uri)
     assert text.returncode == 0, text.stderr
     scope_line = next(line for line in text.stdout.split('\n') if line.startswith('Test scope:'))
-    assert scope_line == 'Test scope: tests= (2 test files scanned)'
+    assert scope_line == 'Test scope: test-paths (2 test files scanned)'
 
 
 def test_child_root_order_and_new_requests_see_policy_edits_without_mutating_old_answers(project):
@@ -174,7 +174,7 @@ def test_an_explicit_suite_does_not_excuse_a_missing_selected_config(project, tm
     from test_mcp_expected_errors_back1992 import _run, _text
     monkeypatch.setenv('COLUMNS', columns)
     monkeypatch.setenv('REVEAL_CONFIG', str(tmp_path / 'missing-policy.yaml'))
-    explicit = 'tests=' + quote((project / 'suite').as_posix(), safe='')
+    explicit = 'test-paths=' + quote((project / 'suite').as_posix(), safe='')
     for scheme in ('patches', 'testability'):
         uri = _pressure(project / 'src', scheme, explicit)
         with pytest.raises(ConfigValidationError, match='missing-policy.yaml'):
@@ -215,7 +215,7 @@ def test_lost_default_suite_is_incomplete_and_healthy_empty_remains_distinct(pro
     assert query(uri)['summary']['total_patch_uses'] == 1
     empty = tmp_path / 'empty-suite'
     empty.mkdir()
-    explicit = query(_pressure(project / 'src', scheme, 'tests=' + quote(empty.as_posix(), safe='')))
+    explicit = query(_pressure(project / 'src', scheme, 'test-paths=' + quote(empty.as_posix(), safe='')))
     assert explicit['summary']['total_patch_uses'] == 0
     assert explicit['summary']['total_boundary_profiles'] == 1
     bare = tmp_path / 'empty-project'

@@ -35,8 +35,8 @@ def test_unavailable_or_unsafe_examples_remain_skipped(command):
     ('calls', ('src', '--callers', 'validate_item'),
      'calls://src?callers=validate_item', 'calls_query'),
     ('metrics', ('src',), 'metrics://src', 'stats_summary'),
-    ('patches', ('src', '--view', 'pressure', '--tests', 'tests'),
-     'patches://src?view=pressure&tests=tests', 'testability_report'),
+    ('patches', ('src', '--view', 'pressure', '--test-paths', 'tests'),
+     'patches://src?view=pressure&test-paths=tests', 'testability_report'),
 ])
 def test_current_noun_executes_like_uri(named_harness, noun, args, uri, expected_type):
     code, out, err, _ = named_harness.run_subcommand(noun, *args, '--format', 'json')

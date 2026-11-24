@@ -40,7 +40,7 @@ def _json(*args):
 
 
 def _testability(proj, min_patches=1):
-    return (f'testability://{(proj / "pkg").as_posix()}?tests={(proj / "tests").as_posix()}'
+    return (f'testability://{(proj / "pkg").as_posix()}?test-paths={(proj / "tests").as_posix()}'
             f'&min_patches={min_patches}&min_categories=1&include_unresolved=true')
 
 

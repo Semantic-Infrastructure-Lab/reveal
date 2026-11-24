@@ -79,9 +79,9 @@ def test_explicit_tests_bypass_invalid_policy_and_keep_js_filename_semantics(pro
     write(project / 'src/app.py', 'def app():\n    return 1\n')
     write(project / 'chosen/helper.py', PATCH)
     write(project / 'chosen/helper.ts', 'vi.mock("pkg.service");\n')
-    result = PressureAdapter(str(project / 'src'), f'tests={project / "chosen"}').get_structure()
+    result = PressureAdapter(str(project / 'src'), f'test-paths={project / "chosen"}').get_structure()
     assert result['summary']['total_patch_uses'] == 1
-    assert result['test_scope'] == {'rule': 'tests=', 'files_scanned': 1}
+    assert result['test_scope'] == {'rule': 'test-paths', 'files_scanned': 1}
 
 
 def test_context_is_selected_once_and_reused_adapters_do_not_retain_policy(project):
@@ -146,9 +146,9 @@ def test_explicit_empty_and_unsupported_suites_remain_valid(project, unsupported
     suite.mkdir()
     if unsupported:
         write(suite / 'helper.go', 'package chosen\n')
-    result = PressureAdapter(str(project), f'tests={suite}').get_structure()
+    result = PressureAdapter(str(project), f'test-paths={suite}').get_structure()
     assert result['summary']['total_patch_uses'] == 0
-    assert result['test_scope'] == {'rule': 'tests=', 'files_scanned': 0}
+    assert result['test_scope'] == {'rule': 'test-paths', 'files_scanned': 0}
 
 
 @pytest.mark.parametrize('declared', [False, True])

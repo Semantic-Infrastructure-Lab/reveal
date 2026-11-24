@@ -459,6 +459,9 @@ RETIREMENTS: Dict[str, Retirement] = {
     'param:overview.no_imports': Retirement('overview ?no_imports (--no-imports)', '--imports off'),
     'param:patches.group': Retirement('patches ?group=MODE (--group MODE)', '--view MODE'),
     'param:patches.top': Retirement('the pressure report ?top=N (--top N)', '--limit N; 0 is uncapped'),
+    # The pressure report's test roots are --test-paths: --tests is the shared include|exclude test policy on every noun
+    # that declares it (one value domain per shared control, D21, BACK-2774).
+    'param:patches.tests': Retirement('the pressure report ?tests=PATHS (--tests PATHS)', '--test-paths PATHS'),
     'param:patches.no_suppress': Retirement('patches --no-suppress', '--suppress off'),
     'param:patches.min_patches': Retirement('the pressure report ?min_patches=N (--min-patches N)',
                                             "--where 'patches>=N'"),
@@ -503,6 +506,7 @@ RETIREMENTS: Dict[str, Retirement] = {
     # limit is Hotspots' and Testability's cap (COMMAND_MODEL "Caps", BACK-2673): top is the same value's old word.
     **{f'param:{noun}.top': Retirement(f'{noun} ?top=N (--top N)', '--limit N, which caps each list; 0 is uncapped')
        for noun in ('hotspots', 'testability')},
+    'param:testability.tests': Retirement('testability ?tests=PATHS (--tests PATHS)', '--test-paths PATHS'),
     'param:testability.verbose': Retirement('testability ?verbose (--verbose)',
                                             'reveal patches <path> --view pressure --limit 0, every group'),
     'param:deps.verbose': Retirement('deps ?verbose (--verbose)', '--top 0, every text section uncapped'),

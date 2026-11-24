@@ -132,16 +132,16 @@ def test_contracts_non_crash_and_json(lang_dir):
 
 
 def test_testability_requires_explicit_tests_path(lang_dir):
-    """No --tests: must fail with a clear message, not a crash or a silent
+    """No --test-paths: must fail with a clear message, not a crash or a silent
     empty report claiming coverage that was never measured."""
     result = _run("testability", str(lang_dir))
-    _assert_sane(result, f"{lang_dir.name} testability (no --tests)")
-    assert "--tests" in (result.stdout + result.stderr)
+    _assert_sane(result, f"{lang_dir.name} testability (no --test-paths)")
+    assert "--test-paths" in (result.stdout + result.stderr)
 
 
 def test_testability_with_explicit_tests_path(lang_dir):
     d = _json(
-        "testability", str(lang_dir), "--tests", str(lang_dir),
+        "testability", str(lang_dir), "--test-paths", str(lang_dir),
         desc=f"{lang_dir.name} testability",
     )
     assert d["source_type"] == "directory"

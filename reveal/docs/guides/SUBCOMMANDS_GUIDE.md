@@ -923,14 +923,14 @@ See the full guide for uncapped observation counts, path encoding and artifacts.
 ### Usage
 
 ```
-reveal patches [PATH] --view pressure [--tests PATHS...] [--limit N] [--where 'patches>=N'] [--where 'categories>=N']
+reveal patches [PATH] --view pressure [--test-paths PATHS...] [--limit N] [--where 'patches>=N'] [--where 'categories>=N']
 ```
 
 ### CLI Flags
 
 | Flag | Description |
 |------|-------------|
-| `--tests PATHS...` | Test paths to scan (default: `tests/`, `test/`, or `spec/` under the source root) |
+| `--test-paths PATHS...` | Test roots trusted as the suite (default: the project test/support policy over the source root and its sibling suites; `--tests PATHS` is its old spelling, noted until 1.0) |
 | `--limit N` | Maximum patch and boundary groups to show (default: 20; 0 is all) |
 | `--where 'patches>=N'` | Minimum patches for a target group to be reported (default: 3) |
 | `--where 'categories>=N'` | Minimum boundary categories for unpatched functions to be reported (default: 3) |
@@ -940,9 +940,9 @@ reveal patches [PATH] --view pressure [--tests PATHS...] [--limit N] [--where 'p
 ### Examples
 
 ```bash
-reveal patches src --view pressure --tests tests
-reveal patches . --view pressure --tests tests integration_tests --limit 20
-reveal patches src --view pressure --tests tests --format json
+reveal patches src --view pressure --test-paths tests
+reveal patches . --view pressure --test-paths tests integration_tests --limit 20
+reveal patches src --view pressure --test-paths tests --format json
 ```
 
 ### See Also

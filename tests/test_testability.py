@@ -305,7 +305,7 @@ def test_one():
 ''')
     args = Namespace(
         path=str(tmp_path / 'src'),
-        tests=[str(tmp_path / 'tests')],
+        test_paths=[str(tmp_path / 'tests')],
         top=10,
         min_patches=1,
         min_categories=1,
@@ -330,7 +330,7 @@ def test_run_testability_ts_clean_zero_needs_no_unsupported_note(tmp_path):
            "import { jest } from '@jest/globals';\nit('x', () => {});\n")
     args = Namespace(
         path=str(tmp_path / 'src'),
-        tests=[str(tmp_path / 'tests')],
+        test_paths=[str(tmp_path / 'tests')],
         top=10, min_patches=1, min_categories=1,
         include_unresolved=True, format='json',
     )
@@ -350,7 +350,7 @@ def test_run_testability_note_unsupported_lang_has_no_patches_pointer(tmp_path):
            'package main\nimport "testing"\nfunc TestF(t *testing.T) {}\n')
     args = Namespace(
         path=str(tmp_path / 'src'),
-        tests=[str(tmp_path / 'tests')],
+        test_paths=[str(tmp_path / 'tests')],
         top=10, min_patches=1, min_categories=1,
         include_unresolved=True, format='json',
     )

@@ -268,7 +268,7 @@ _MODIFIER_REQUESTS = {
     'json': lambda f: [f'json://{Path(f).parent / "rows.json"}'],
     'xlsx': lambda f: [f'xlsx://{(Path(f).parent / "book.xlsx").as_posix()}'],
     'env': lambda f: ['env://PATH'],  # a variable every host sets and V042 allows (BACK-2626)
-    'testability': lambda f: [f'testability://{Path(f).parent}?tests={Path(f).parent}'],
+    'testability': lambda f: [f'testability://{Path(f).parent}?test-paths={Path(f).parent}'],
 }
 _MODIFIER_ARGV = {'--head': ['--head', '1'], '--tail': ['--tail', '1'], '--range': ['--range', '1-1'],
                   '--type': ['--type', 'Read'], '--name': ['--name', 'x'], '--search': ['--search', 'x'],
@@ -334,6 +334,8 @@ PRODUCTION_CASES = {
     'param:overview.no_imports': lambda f: ['overview', str(Path(f).parent), '--no-imports'],
     'param:patches.group': lambda f: ['patches', str(Path(f).parent), '--group', 'file'],
     'param:patches.top': lambda f: ['patches', str(Path(f).parent), '--view', 'pressure', '--top', '2'],
+    'param:patches.tests': lambda f: ['patches', str(Path(f).parent), '--view', 'pressure', '--tests',
+                                      str(Path(f).parent)],
     'param:patches.no_suppress': lambda f: ['patches', str(Path(f).parent), '--no-suppress'],
     'param:patches.min_patches': lambda f: ['patches', str(Path(f).parent), '--view', 'pressure', '--min-patches', '2'],
     'param:patches.min_categories': lambda f: ['patches', str(Path(f).parent), '--view', 'pressure',
@@ -358,13 +360,14 @@ PRODUCTION_CASES = {
     'param:surface.top': lambda f: ['surface', str(Path(f).parent), '--top', '1'],
     'param:architecture.verbose': lambda f: [f'architecture://{Path(f).parent}?verbose'],
     'param:hotspots.verbose': lambda f: [f'hotspots://{Path(f).parent}?verbose'],
-    'param:testability.verbose': lambda f: [f'testability://{Path(f).parent}?tests={Path(f).parent}&verbose'],
+    'param:testability.verbose': lambda f: [f'testability://{Path(f).parent}?test-paths={Path(f).parent}&verbose'],
     'param:deps.verbose': lambda f: [f'deps://{Path(f).parent}?verbose'],
     # Metrics vocabulary (BACK-2621): each legacy spelling alone, on the one source file.
     'param:metrics.hotspots': lambda f: [f'metrics://{f}?hotspots=true'],
     'param:metrics.top': lambda f: [f'metrics://{f}?view=hotspots&top=1'],
     'param:hotspots.top': lambda f: [f'hotspots://{Path(f).parent}?top=1'],
-    'param:testability.top': lambda f: [f'testability://{Path(f).parent}?tests={Path(f).parent}&top=1'],
+    'param:testability.top': lambda f: [f'testability://{Path(f).parent}?test-paths={Path(f).parent}&top=1'],
+    'param:testability.tests': lambda f: [f'testability://{Path(f).parent}?tests={Path(f).parent}'],
     'param:metrics.min_lines': lambda f: [f'metrics://{f}?min_lines=1'],
     'param:metrics.max_lines': lambda f: [f'metrics://{f}?max_lines=1000'],
     'param:metrics.min_functions': lambda f: [f'metrics://{f}?min_functions=0'],
@@ -427,8 +430,8 @@ PRODUCTION_CASES = {
     'scheme:classify': lambda f: [f'classify://{Path(f).parent}'],
     # Phase 4 lane P4-B (BACK-2160): testability became patches ?view=pressure; tests/test_patches_pressure_back2160.py
     # proves the old spellings answer like the new one.
-    'subcommand:testability': lambda f: ['testability', str(Path(f).parent), '--tests', str(Path(f).parent)],
-    'scheme:testability': lambda f: [f'testability://{Path(f).parent}?tests={Path(f).parent}'],
+    'subcommand:testability': lambda f: ['testability', str(Path(f).parent), '--test-paths', str(Path(f).parent)],
+    'scheme:testability': lambda f: [f'testability://{Path(f).parent}?test-paths={Path(f).parent}'],
     # Phase 2 slice S6 (BACK-1054): depends answers from the imports:// engine's build; tests/test_depends_shim_back1054.py
     # and tests/test_dd_call_exit_contract_back2181.py prove the old shapes and exit code are kept.
     'scheme:depends': lambda f: [f'depends://{f}'],
@@ -460,6 +463,7 @@ ALSO_NOTED = {'param:hotspots.functions_only': 'scheme:hotspots', 'param:hotspot
               'param:architecture.verbose': 'scheme:architecture', 'param:hotspots.verbose': 'scheme:hotspots',
               'param:testability.verbose': 'scheme:testability', 'param:deps.verbose': 'scheme:deps',
               'param:hotspots.top': 'scheme:hotspots', 'param:testability.top': 'scheme:testability',
+              'param:testability.tests': 'scheme:testability',
               **{f'flag:{noun}.{flag}': f'scheme:{noun}' for noun in ('hotspots', 'testability')
                  for flag in LEGACY_CLI_MODIFIERS[noun]},
               'param:calls.type': 'param:calls.uncalled', 'param:calls.external': 'param:calls.modules',

@@ -150,7 +150,7 @@ def build_testability_report(
         'tests': [str(Path(p)) for p in test_paths],
         # The rule that chose the test files, and how many it found: two answers about one suite
         # 1000x apart were once indistinguishable (BACK-1888).
-        'test_scope': patches.test_scope('is_test_path' if by_test_path else 'tests=',
+        'test_scope': patches.test_scope('is_test_path' if by_test_path else 'test-paths',
                                         test_layout=test_layout,
                                         base=Path(src_path),
                                         roots=test_paths),

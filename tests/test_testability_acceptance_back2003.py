@@ -23,7 +23,7 @@ def project(tmp_path):
 
 
 def uri(src, tests):
-    return f'testability://{src}?tests={quote(str(tests), safe="")}&min_patches=1&include_unresolved=true'
+    return f'testability://{src}?test-paths={quote(str(tests), safe="")}&min_patches=1&include_unresolved=true'
 
 
 @pytest.mark.parametrize('mutation', ['plain_list', 'bad_skipped', 'bad_recovered', 'bad_traversal'])
@@ -83,7 +83,7 @@ def test_typed_empty_or_nonpath_roots_are_usage_errors_before_collection(project
     calls = []
     monkeypatch.setattr(report, 'scan_patches', lambda *a, **k: calls.append('patches'))
     with pytest.raises((ValueError, TypeError)):
-        Adapter(str(src), params={'tests': tests})
+        Adapter(str(src), params={'test-paths': tests})
     assert calls == []
 
 

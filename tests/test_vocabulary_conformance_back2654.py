@@ -102,10 +102,11 @@ control whatever its value type; 1b, 1d and 6 read every spelling (aliases and n
       enumerated control (``tests`` include|exclude, ``detail``) the one value set, of which each noun's choices are a
       non-empty subset that binds as written while a value outside it is refused; for a typed control (``limit``,
       ``offset``, ``depth``, ``since``, ``until``) the grammar, measured through each declaration's own validation (a
-      ``limit`` zero also uncaps). Noun-valued controls (``kind``, ``view``, ``sort`` fields) and grammars whose words
-      are the noun's data (``where``/``match`` terms, ``exclude`` patterns, an ``against`` ref) are judged on type and
-      repeatability only. A legacy word spelled like a shared control (patches ``tests``, AST ``depth``) is rule 8's;
-      a control declared under a shared name only to refuse it is exempt in writing (``DOMAIN_EXEMPT``).
+      ``limit`` zero also uncaps). Grammars whose words are the noun's data (``where``/``match`` terms, ``exclude``
+      patterns, an ``against`` ref) are judged on type and repeatability only; noun-valued controls (``kind``, ``view``,
+      ``sort`` fields) are declared as such and not judged. A legacy word spelled like a shared control (patches
+      ``tests``, AST ``depth``) is rule 8's; a control declared under a shared name only to refuse it is exempt in
+      writing (``DOMAIN_EXEMPT``). The element views' cell measures their declarations the same way.
 
 A cell is ``conforms`` (asserted), ``not_yet`` (recorded below with the behaviour observed; the count may only
 fall and must reach zero before the cut) or ``exempt`` (a written reason; the probe must find nothing to run).
@@ -175,6 +176,7 @@ CONTROL_BASES = {('calls', 'kind'): (['--uncalled'], '?uncalled'), ('calls', 'ex
                  # a legacy word read by another answer than its control's base (Git raw is detail=raw: a file's text)
                  ('git', 'raw'): ([], ''),
                  ('patches', 'where'): (['--view', 'pressure'], '?view=pressure'),
+                 ('patches', 'test-paths'): (['--view', 'pressure'], '?view=pressure'),  # the pressure report's roots
                  ('surface', 'dir-depth'): (['--view', 'dir'], '?view=dir'),  # only the rollup reads its depth
                  ('codex', 'matches'): (['--match', 'auth'], '?match=auth'),
                  # xlsx: the sheet view reads the cells, formulas and limit (BACK-2626)
@@ -300,6 +302,7 @@ EXEMPT = {
        for noun in ('architecture', 'deps', 'hotspots', 'testability', 'trace')},
     **{(noun, '29'): 'declares no shared control (SHARED_CONTROL_NAMES): no value domain to compare'
        for noun in ('deps', 'env', 'help', 'reveal')},
+    ('sqlite', '29'): 'declares only a noun-valued shared control (view, its own answers): nothing to judge',
 }
 
 # Rules 1, 2, 5, 6, 10 and 12 are the shared seams' defaults (Scott 2026-11-16; BACK-2654 Step 3): their cells must
@@ -690,8 +693,15 @@ def probe_uri_and_flag(noun):
 
 # --- rule 1b: an alias and its name -----------------------------------------------------------------------
 
+# A control whose values name existing paths: two of the fixture's directories (no separator to spell per OS), so its
+# spellings answer rather than both failing on a missing path (the pressure report's test roots, BACK-2774).
+_PATH_VALUES = {'test-paths': ('sample', 'proj')}
+
+
 def _candidate_values(spec):
     """Values of *spec* to try, the declaration's own first."""
+    if spec.name in _PATH_VALUES:
+        return list(_PATH_VALUES[spec.name])
     if spec.type in ('boolean', 'flag'):
         return ['true', 'false']
     choices = [str(choice) for choice in spec.choices if choice]
@@ -1032,9 +1042,11 @@ def _teaches(run, noun, control):
 
 
 def probe_unsupported_controls(noun):
-    # a shared control name a noun declares as a legacy word (AST depth) is supported until the cut (rule 8)
+    # a shared control name a noun declares as a legacy word (AST depth) is supported until the cut (rule 8), as a URI
+    # key and as its old flag (patches --tests PATHS, surface --depth N: the legacy words of test-paths and dir-depth)
     keys = {name for spec in _specs(noun) for name in (spec.name, *spec.aliases, *spec.legacy_words)}
     flags = {flag for spec in _specs(noun) for flag in (spec.cli.flags if spec.cli else ())}
+    flags |= {entry.flag for spec in _specs(noun) for entry in spec.legacy if entry.flag}
     flags |= {f'--{flag}' for spec in _specs(noun) for flag, _value in spec.cli_flags}
     global_flags = {flag.option[2:]: flag for flag in FLAG_SPECS}
     wants = 'wants exit 2 naming the control and the supported controls'
@@ -2536,14 +2548,16 @@ class Domain:
     ``values``: an enumerated control's one value set: each noun's choices are a non-empty subset that binds as written,
     and a value outside the set is refused. ``accepts`` ((raw, bound value) pairs) and ``refuses`` (raws): a typed
     control's grammar, measured through each declaration's own validation (the binder's). ``uncaps``: a zero lifts the
-    cap (UNCAPPING_ZEROS). None of them: a noun-valued control or a grammar whose words are the noun's data, judged on
-    type and repeatability only."""
+    cap (UNCAPPING_ZEROS). None of them: a grammar whose words are the noun's data, judged on type and repeatability
+    only. ``noun_valued``: the values are the noun's own (its kinds, views, sort fields), declared as such and not
+    judged (the manager's ruling on the V1 inventory)."""
     type: str
     repeatable: bool = False
     values: tuple = ()
     accepts: tuple = ()
     refuses: tuple = ()
     uncaps: bool = False
+    noun_valued: bool = False
 
 
 _WHOLE = (('0', 0), ('1', 1), ('25', 25), (3, 3))
@@ -2555,17 +2569,19 @@ _NOT_A_TIME = ('bogus', '2026-13-45')
 SHARED_DOMAINS = {
     'limit': Domain('integer', accepts=_WHOLE, refuses=_NOT_WHOLE, uncaps=True),
     'offset': Domain('integer', accepts=_WHOLE, refuses=_NOT_WHOLE),
-    'sort': Domain('string'),  # [-]FIELD: the fields are the noun's rows
+    'sort': Domain('string', noun_valued=True),  # [-]FIELD: the fields are the noun's rows
     'where': Domain('array', repeatable=True),  # FIELD OP VALUE terms over the noun's fields
     'match': Domain('array', repeatable=True),  # text terms (an empty term is rule 27's)
     'detail': Domain('string', values=('summary', 'normal', 'full', 'raw')),
-    'kind': Domain('string'),  # the noun's kinds
-    'depth': Domain('integer', accepts=(('1', 1), ('5', 5), ('0', 1), ('6', 5)), refuses=('x',)),  # hops, held to 1-5
+    'kind': Domain('string', noun_valued=True),  # the noun's kinds
+    # hops, 1-5; a value outside the range is clamped on calls and trace and refused on the element views: not judged
+    # here until that is ruled (the vocab V3 report's STOP point)
+    'depth': Domain('integer', accepts=(('1', 1), ('3', 3), ('5', 5)), refuses=('x',)),
     'tests': Domain('string', values=('include', 'exclude')),  # the shared test/support policy
     'since': Domain('string', accepts=_TIME_FORMS, refuses=_NOT_A_TIME),  # utils/time_window.py, rule 25
     'until': Domain('string', accepts=_TIME_FORMS, refuses=_NOT_A_TIME),
     'against': Domain('string'),  # a git ref
-    'view': Domain('string'),  # the noun's answers
+    'view': Domain('string', noun_valued=True),  # the noun's answers
     'exclude': Domain('string', repeatable=True),  # .gitignore patterns (exclude_param())
 }
 # A control declared under a shared name only to refuse every value with a teaching message: not a domain, so not
@@ -2584,6 +2600,8 @@ def _validated(spec, raw):
 
 
 def _domain_cases(noun, spec, domain):
+    if domain.noun_valued:
+        return []
     name = spec.name
     shape = (spec.type, spec.repeatable)
     cases = [Case(f'{name}: type and repeatability', shape == (domain.type, domain.repeatable),
@@ -3841,7 +3859,8 @@ ELEMENT_PROBES = {'1b': element_alias_and_name, '1c': element_repeated_spelling,
                   '5': element_legacy_declarations, '6': element_alias_notes, '10': element_spellings_declared,
                   '12': element_repeatability_declared, '14': element_defaults, '16': element_legacy_operations,
                   '17': element_one_answer, '18': element_repeated_global_flags, '20': element_applicability,
-                  '21j': element_invalid_requests_answer_json, '22': element_config_failures}
+                  '21j': element_invalid_requests_answer_json, '22': element_config_failures,
+                  '29': partial(probe_one_value_domain, ELEMENT)}
 
 
 def test_the_element_cells_cover_every_rule():

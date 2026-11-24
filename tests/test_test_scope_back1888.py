@@ -78,16 +78,16 @@ def test_explicit_tests_is_trusted_as_the_suite(tmp_path):
     root = tmp_path / 'repo'
     _w(root / 'pkg' / 'mod.py', 'def target():\n    return 1\n')
     _w(root / 'custom' / 'helpers.py', PATCH)  # not test-named; the caller says this is the suite
-    report = _json(f'testability://{root / "pkg"}?tests={root / "custom"}')
+    report = _json(f'testability://{root / "pkg"}?test-paths={root / "custom"}')
     assert report['summary']['total_patch_uses'] == 1
-    assert report['test_scope'] == {'rule': 'tests=', 'files_scanned': 1}
+    assert report['test_scope'] == {'rule': 'test-paths', 'files_scanned': 1}
 
 
 def test_no_test_files_is_not_applicable_and_says_which_rule(tmp_path):
     _w(tmp_path / 'repo' / 'pkg' / 'mod.py', 'def target():\n    return 1\n')
     report = _json(f'testability://{tmp_path / "repo"}')
     assert report.get('applicable') is False
-    assert 'is_test_path' in report['reason'] and 'tests=' in report['reason']
+    assert 'is_test_path' in report['reason'] and '--test-paths' in report['reason']
 
 
 def test_text_output_names_the_rule(t_layout):

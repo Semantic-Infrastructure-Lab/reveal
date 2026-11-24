@@ -83,7 +83,7 @@ runs the quality rules on exactly the files the range touched.
 
 ```bash
 reveal patches tests --view target --limit 20
-reveal patches src --view pressure --tests tests
+reveal patches src --view pressure --test-paths tests
 ```
 
 **Why this matters:** Patch pressure becomes useful when grouped by production
@@ -388,9 +388,9 @@ reveal patches tests --view target --limit 20
 reveal patches tests --view test --min 3
 
 # Join patch pressure with production boundary fan-out
-reveal patches src --view pressure --tests tests
-reveal patches src --view pressure --tests tests --limit 20
-reveal patches src --view pressure --tests tests --format json
+reveal patches src --view pressure --test-paths tests
+reveal patches src --view pressure --test-paths tests --limit 20
+reveal patches src --view pressure --test-paths tests --format json
 ```
 
 Use this before refactoring patch-heavy test areas. The report is advisory:

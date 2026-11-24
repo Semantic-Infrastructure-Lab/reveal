@@ -150,7 +150,7 @@ def test_output_owners_join_exact_failure_and_recovery_counts(tmp_path, owner):
 def test_actual_output_discloses_failure_once_and_exits_incomplete(tmp_path, owner, output_format):
     src = _write(tmp_path / 'src' / 'ok.py', 'VALUE=1\n')
     target = _write(tmp_path / 'tests' / 'test_bad.py', 'def broken(:\n')
-    uri = f'testability://{src.parent}?tests={target.parent}' if owner == 'testability' else f'patches://{target.parent}'
+    uri = f'testability://{src.parent}?test-paths={target.parent}' if owner == 'testability' else f'patches://{target.parent}'
     result = _run_reveal_direct(uri, '--format', output_format)
     # patches adopted the declared D6 path with ?view=pressure (BACK-2160): a lost test file is exit 3 in both owners.
     assert result.returncode == 3

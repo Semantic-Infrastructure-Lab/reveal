@@ -40,7 +40,7 @@ def _answer(uri, **keywords):
     ('patches://tests', {'group': 'file'}, 'group=file'),               # dropped in silence before
     ('hotspots://.', {'files_only': True}, 'files_only=true'),          # TypeError before
     ('pack://.', {'budget': 100}, 'budget=100'),                        # TypeError before
-    ('testability://.', {'tests': ['tests']}, 'tests=tests'),           # TypeError before (a typed array)
+    ('testability://.', {'test_paths': ['tests']}, 'test-paths=tests'),  # TypeError before (a typed array)
 ])
 def test_a_typed_keyword_answers_as_its_uri_spelling(proj, uri, keywords, query):
     keyword = _answer(uri, **keywords)

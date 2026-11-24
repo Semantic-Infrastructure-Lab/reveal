@@ -258,7 +258,8 @@ def _mcp_descriptions():
 # Values that name something in the printed example's project (a function, a file) -> the fixture's own name.
 # Every other value is kept as printed, so a value outside a control's choices still fails.
 _NAMED_VALUES = {'callers': 'main', 'callees': 'main', 'root': 'main', 'target': 'main', 'from': 'main',
-                 'element': 'main', 'importers': 'app.py', 'backlinks': 'README.md', 'tests': 'proj/tests'}
+                 'element': 'main', 'importers': 'app.py', 'backlinks': 'README.md', 'tests': 'proj/tests',
+                 'test-paths': 'proj/tests'}
 # A placeholder value (``N``, ``<fn>``, ``EXPR``, an empty ``?match=``) by the control's declared type.
 _PLACEHOLDER = re.compile(r'^(?:<[^>]*>|[A-Z][A-Z_-]*|\.\.\.|\u2026|)$')
 _PLACEHOLDER_VALUES = {'where': 'name=main', 'since': '2026-01-01', 'until': '2030-01-01', 'against': 'HEAD',

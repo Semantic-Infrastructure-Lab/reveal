@@ -15,5 +15,5 @@ duplicate content (one home per fact).
 All query params, for V027 coherence (full docs in the guides linked above):
 
 ```
-reveal 'testability://src?tests=tests,integration_tests&limit=20&min_patches=3&min_categories=3&include_unresolved=true'
+reveal 'testability://src?test-paths=tests,integration_tests&limit=20&min_patches=3&min_categories=3&include_unresolved=true'
 ```

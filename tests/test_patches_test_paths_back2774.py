@@ -22,7 +22,8 @@ BOUNDARY = ("import subprocess\nimport requests\n\n\n"
             "    requests.get(url)\n"
             "    subprocess.run(['ls'])\n"
             "    return 1\n")
-# The suite lives under a name the conventions do not find (qa/check_mod.py): only the named roots find its patch.
+# The suite lives under a name the conventions do not find (qa/check_mod.py): only the named roots find its patch. The
+# conventional tests/ holds a test that patches nothing, so the default policy answers with no patch.
 REPO, QA = 'repo', str(Path('repo', 'qa'))
 NOTE = 'use --test-paths PATHS'
 
@@ -36,6 +37,7 @@ def _w(path, text):
 def repo(tmp_path, monkeypatch):
     _w(tmp_path / REPO / 'pkg' / 'mod.py', BOUNDARY)
     _w(tmp_path / REPO / 'qa' / 'check_mod.py', PATCH)
+    _w(tmp_path / REPO / 'tests' / 'test_plain.py', 'def test_y():\n    assert True\n')
     monkeypatch.chdir(tmp_path)
     return tmp_path
 
@@ -69,7 +71,7 @@ def test_test_paths_names_the_trusted_suite(repo):
     assert doc['summary']['total_patch_uses'] == 1  # the named root's patch, which the default policy never finds
     assert not _retired(doc)
     default = _doc(_cli())
-    assert default['summary']['total_patch_uses'] == 0  # positive control: without the roots there is no patch
+    assert default['summary']['total_patch_uses'] == 0  # control: the default policy reads tests/, which patches nothing
 
 
 def test_test_paths_is_one_answer_on_every_transport(repo):
@@ -97,7 +99,9 @@ def test_the_old_spelling_answers_as_test_paths_with_its_note(repo, noun):
     canonical = run(*head, '--test-paths', QA, '--format', 'json')
     legacy = run(*head, '--tests', QA, '--format', 'json')
     assert legacy.returncode == canonical.returncode == 0, legacy.stderr + canonical.stderr
-    assert NOTE in legacy.stderr and NOTE not in canonical.stderr
+    text = run(*head, '--tests', QA)
+    assert text.returncode == 0 and NOTE in text.stderr, text.stderr
+    assert NOTE not in run(*head, '--test-paths', QA).stderr
     legacy_doc = json.loads(legacy.stdout)
     assert [w['field'] for w in _retired(legacy_doc) if NOTE in w['message']] == [f'param:{noun}.tests']
     assert _answer(legacy_doc) == _answer(json.loads(canonical.stdout))
@@ -106,8 +110,11 @@ def test_the_old_spelling_answers_as_test_paths_with_its_note(repo, noun):
 def test_the_old_uri_key_and_keyword_answer_with_the_note(repo):
     from reveal import api
     expected = _answer(_doc(_cli('--test-paths', QA)))
-    uri = run(f'patches://{REPO}?view=pressure&tests={QA}', '--format', 'json')
-    assert uri.returncode == 0 and NOTE in uri.stderr, uri.stderr
+    spelled = f'patches://{REPO}?view=pressure&tests={QA}'
+    uri = run(spelled, '--format', 'json')
+    assert uri.returncode == 0, uri.stderr
+    text = run(spelled)  # the URI's request note spells the whole request, the roots as --test-paths
+    assert text.returncode == 0 and f'--test-paths {QA}' in text.stderr and 'tests=' not in text.stderr, text.stderr
     keyword = api.query('patches', REPO, view='pressure', tests=[QA])
     assert any(NOTE in w['message'] for w in _retired(keyword)), _retired(keyword)
     assert _answer(json.loads(uri.stdout)) == _answer(keyword) == expected
@@ -130,7 +137,8 @@ def test_the_shared_tests_policy_keeps_its_meaning_on_its_nouns(repo):
 
 def test_no_scannable_tests_teaches_test_paths(repo):
     """A tree with no test file the conventions find is declined, teaching the spelling that names the suite."""
-    for request in (['patches', str(Path(REPO, 'pkg'))], ['patches', str(Path(REPO, 'pkg')), '--view', 'pressure']):
+    _w(repo / 'lib' / 'mod.py', BOUNDARY)  # no test file anywhere beside it
+    for request in (['patches', 'lib'], ['patches', 'lib', '--view', 'pressure']):
         result = run(*request)
         assert result.returncode == 0, result.stderr
         assert '--test-paths' in result.stdout + result.stderr and 'tests=<path>' not in result.stdout + result.stderr, \

@@ -118,16 +118,16 @@ target is read from an object, a dict or a dynamic expression).
 Use `?view=pressure` (was `testability://`) when you want patch pressure joined with
 source boundary profiles. The path bounds source analysis; default test discovery
 also considers conventional sibling suites and declared project paths. Explicit
-`tests=` overrides this default selection:
+`--test-paths` overrides this default selection:
 
 ```bash
-reveal patches src --view pressure --tests tests
-reveal patches src --view pressure --tests tests --limit 20
-reveal patches src --view pressure --tests tests --format json
-reveal patches src --view pressure --limit 20 --where 'patches>=3' --where 'categories>=3' --tests tests integration_tests --include-unresolved
+reveal patches src --view pressure --test-paths tests
+reveal patches src --view pressure --test-paths tests --limit 20
+reveal patches src --view pressure --test-paths tests --format json
+reveal patches src --view pressure --limit 20 --where 'patches>=3' --where 'categories>=3' --test-paths tests integration_tests --include-unresolved
 ```
 
-The pressure view answers a `testability_report`. Its own parameters are `tests`, `limit`
+The pressure view answers a `testability_report`. Its own parameters are `test-paths`, `limit`
 (maximum groups per hotspot list, default 20), `where` and `include_unresolved`; `where` takes
 only `patches>=N` (target groups with N or more patches, default 3) and `categories>=N`
 (boundary profiles with N or more categories, default 3), repeated terms ANDed. `min`,
@@ -163,5 +163,5 @@ recognition; an existing empty explicit suite remains valid.
 
 - `reveal help://testability` - combined workflow guide
 - `reveal help://schemas/patches` - JSON schema
-- `reveal patches src --view pressure --tests tests` - patch pressure plus boundary fan-out
+- `reveal patches src --view pressure --test-paths tests` - patch pressure plus boundary fan-out
 

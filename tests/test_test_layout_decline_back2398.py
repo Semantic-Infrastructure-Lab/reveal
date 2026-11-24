@@ -33,8 +33,8 @@ def test_qualified_patch_selection_adopts_project_policy(configured, scheme, par
 
 def test_unrelated_surface_and_trusted_explicit_suite_remain_usable(configured):
     assert query(f'surface://{configured}')['type'] == 'surface_scan'
-    result = query(f'testability://{configured}?tests={configured / "helpers"}')
-    assert result['test_scope']['rule'] == 'tests='
+    result = query(f'testability://{configured}?test-paths={configured / "helpers"}')
+    assert result['test_scope']['rule'] == 'test-paths'
 
 
 def test_stats_invalid_policy_rejects_before_required_file_analysis(configured, monkeypatch):

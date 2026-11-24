@@ -38,7 +38,7 @@ def test_current_noun_and_uri_controls_use_existing_named_paths():
     ('reveal dev new-adapter demo', 'writes generated'),
     ('reveal scaffold adapter demo', 'writes generated'),
     ('reveal offline', 'download'),
-    ('reveal patches src --view pressure --tests tests missing', 'names missing'),
+    ('reveal patches src --view pressure --test-paths tests missing', 'names missing'),
     ('reveal calls src --callees missing.py:main', 'names missing.py'),
 ])
 def test_unavailable_or_mutating_examples_stay_disclosed(command, reason):
@@ -75,7 +75,7 @@ def test_current_nouns_analyze_real_calls_and_test_scope(named_harness):
     assert any(row['file'] == 'src/processor.py' and row['caller'] == 'process_batch'
                for row in calls['levels'][0]['callers'])
     code, out, err, _ = named_harness.run_subcommand(
-        'patches', 'src', '--view', 'pressure', '--tests', 'tests', '--format', 'json')
+        'patches', 'src', '--view', 'pressure', '--test-paths', 'tests', '--format', 'json')
     patches = json.loads(out)
     assert code == 0 and not err and patches['type'] == 'testability_report'
     assert patches['test_scope']['files_scanned'] == 1
@@ -85,7 +85,7 @@ def test_current_nouns_analyze_real_calls_and_test_scope(named_harness):
 
 
 @pytest.mark.parametrize('command', [
-    'reveal patches src --view pressure --tests tests integration_tests --top 20',
+    'reveal patches src --view pressure --test-paths tests integration_tests --top 20',
     'reveal patches tests --target package.* --group target --limit 5',
     'reveal calls src --callees src/app.py:main --depth 2',
     'reveal calls src --callees Foo::run',

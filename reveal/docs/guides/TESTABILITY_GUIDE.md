@@ -24,13 +24,13 @@ reveal patches://tests
 reveal 'patches://tests?view=target&limit=20'
 
 # Combined workflow: test patches + production boundaries
-reveal patches src --view pressure --tests tests
-reveal patches src --view pressure --tests tests --limit 20
-reveal patches src --view pressure --tests tests --format json
+reveal patches src --view pressure --test-paths tests
+reveal patches src --view pressure --test-paths tests --limit 20
+reveal patches src --view pressure --test-paths tests --format json
 
 # the same view as a queryable URI (testability:// is its retired spelling)
 reveal 'patches://src?view=pressure'
-reveal 'patches://src?view=pressure&tests=tests,integration_tests'
+reveal 'patches://src?view=pressure&test-paths=tests,integration_tests'
 reveal 'patches://src?view=pressure&limit=10'
 ```
 
@@ -43,7 +43,7 @@ Read the output as a ranked review queue:
 
 Both spellings return `testability_report`. Explicit test roots are checked before
 analysis: every requested path must exist. Paths are relative to the working
-directory. An existing empty explicit tests directory is valid. Omitting `tests`
+directory. An existing empty explicit tests directory is valid. Omitting `--test-paths`
 uses one selected project test/support policy over the target (its parent for a
 file), conventional sibling candidates for directory targets, and literal declared
 additional paths. The raw Patches view stays within its target. Narrowed targets
@@ -54,7 +54,7 @@ scan-root fallback.
 count. Candidate roots include optional missing declarations, so `tests` and
 `suite_roots` do not prove presence or runner collection. Existing sibling suites
 outside the selected anchor use conventional names without loading their config.
-Explicit `tests=` bypasses default policy selection, trusts all Python files and
+Explicit `--test-paths` bypasses default policy selection, trusts all Python files and
 retains JS/TS recognized test-name rules. Source boundary profiles remain a separate
 population and include test functions when they lie under the source target.
 
@@ -64,10 +64,12 @@ survive with an incomplete outcome. Configured selectors follow the
 [shared declaration contract](CONFIGURATION_GUIDE.md#project-test-and-support-paths).
 
 CLI path arguments stay literal. In a URI list, percent-encode each path before
-joining with commas: `tests=tests%2Cextra,integration_tests` names two roots, the
+joining with commas: `test-paths=tests%2Cextra,integration_tests` names two roots, the
 first of which contains a comma. Whole decimal controls such as `3.0` are accepted;
 fractions, booleans, exponent spellings and nonfinite values are usage errors.
-`top=0` remains unlimited; negative top clamps to zero and thresholds clamp to one.
+`--limit 0` is every group; a negative limit is a usage error and thresholds clamp to one.
+`--tests` is the shared `include|exclude` test policy of other nouns; the test roots' old spelling
+`--tests PATHS` (`?tests=`) answers as `--test-paths` with a deprecation note until 1.0.
 
 ## What It Finds
 
@@ -155,7 +157,7 @@ Use JSON for agents, dashboards, and CI experiments:
 
 ```bash
 reveal 'patches://tests?view=target' --format json
-reveal patches src --view pressure --tests tests --format json
+reveal patches src --view pressure --test-paths tests --format json
 ```
 
 The JSON output includes confidence metadata because static target resolution is
@@ -179,7 +181,7 @@ Direct CLI and URI requests use these exits:
 | Exit | Meaning |
 |------|---------|
 | `0` | Complete analysis, including genuine zero observations, or omitted-tests not-applicable |
-| `2` | Invalid request, including an empty `tests=` value or a test root that does not exist |
+| `2` | Invalid request, including an empty `--test-paths` value or a test root that does not exist |
 | `3` | Required evidence loss, malformed analysis, operational failure, or requested output failure |
 
 Known required loss with a surviving patch use or function profile is incomplete;

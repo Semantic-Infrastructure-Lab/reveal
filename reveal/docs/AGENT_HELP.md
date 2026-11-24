@@ -292,7 +292,7 @@ Reveal has both a **path-based interface** (`reveal <path>` + flags) and a set o
 - Building LLM context with a token budget → `reveal pack`.
 - Tracing what a function actually does (calls + side-effects) → `reveal calls <path> --callees <func> --depth 2 --detail`.
 - Mapping the system's external boundaries → `reveal surface`.
-- Finding testability pressure → `reveal patches src --view pressure --tests tests`.
+- Finding testability pressure → `reveal patches src --view pressure --test-paths tests`.
 - Building your own adapter, analyzer, or rule → `reveal dev new-adapter|new-analyzer|new-rule`.
 
 ---
@@ -668,9 +668,9 @@ reveal patches tests --view target --limit 20
 reveal patches tests --view test --min 3
 
 # Combined report: test patches + production boundary fan-out
-reveal patches src --view pressure --tests tests
-reveal patches src --view pressure --tests tests --limit 20
-reveal patches src --view pressure --tests tests --format json
+reveal patches src --view pressure --test-paths tests
+reveal patches src --view pressure --test-paths tests --limit 20
+reveal patches src --view pressure --test-paths tests --format json
 ```
 
 **Why this works:** Patch-heavy tests often point at production code that mixes runtime boundaries with decision logic. `reveal patches <tests>` shows what tests patch. `reveal patches <src> --view pressure` joins that pressure with production functions that touch network clients, persistence, filesystem state, logging, sleeps, environment/config, process exit, or mutation -- each function's own calls, classified exactly as `--view effects` classifies them, so the two never disagree. *(Supports Python (`unittest.mock`/`pytest`) and TypeScript/JavaScript (Jest/Vitest: `jest.mock`, `vi.mock`, `jest.spyOn`, `vi.spyOn`, `jest.fn`, `vi.fn`, `jest.replaceProperty`). Boundary fan-out half works for all languages. A tree whose only tests are in another language (Go, Java, Rust, ...) is declined as not applicable, exit 0, naming the language, never answered as 0 uses; a mixed tree scans the Python and JS/TS and, once the unread test files outnumber the read ones, discloses them in `test_scope.unscanned` and a `language_not_scanned` warning.)*

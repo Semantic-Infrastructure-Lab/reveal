@@ -27,7 +27,7 @@ from ..testability import PRESSURE_SPECS, TestabilityAdapter, _report_error, tes
 
 # The declaration `reveal patches` and patches:// are both generated from (BACK-2160). The default view is the raw
 # scan of a test root; ?view=pressure is testability's report (was testability://), whose path is the production
-# root and whose test files are chosen by the shared is_test_path rule or the explicit tests= override.
+# root and whose test files are chosen by the shared is_test_path rule or the explicit --test-paths roots.
 GROUPS = ('target', 'test', 'file')
 VIEWS = (*GROUPS, 'pressure')  # the raw scan's grouping is a view (D20, BACK-2625); omitted is the target grouping
 
@@ -122,8 +122,10 @@ def pressure_thresholds(params: Any) -> tuple:
     return max(1, found['patches']), max(1, found['categories'])
 
 
-_PRESSURE_SPECS = tuple(replace(spec, answers=_PRESSURE) for spec in PRESSURE_SPECS
-                        if spec.name in ('tests', 'include_unresolved'))
+# Its examples name the view that reads them (the scan refuses the pressure report's controls).
+_PRESSURE_EXAMPLES = {'test-paths': ('--view pressure --test-paths tests',)}
+_PRESSURE_SPECS = tuple(replace(spec, answers=_PRESSURE, examples=_PRESSURE_EXAMPLES.get(spec.name, spec.examples))
+                        for spec in PRESSURE_SPECS if spec.name in ('test-paths', 'include_unresolved'))
 # --head/--tail/--range slice this noun's rows today: flag-only legacy modifiers until the cut, read by every answer
 # (BACK-2673; their notes are the flag:<noun>.<flag> RETIREMENTS rows).
 # exclude: the shared walk control every walking noun declares (BACK-2730); the walk's scope applies it.
@@ -208,10 +210,10 @@ class PatchesAdapter(ResourceAdapter):
                 'Supports Python (unittest.mock/pytest) and TypeScript/JavaScript (Jest/Vitest).',
                 'A tree whose test files are all in another language (Go, Java, Rust, ...) is declined as not applicable (exit 0), naming the language: 0 uses there would mean not scanned, not none. A scanned JS/TS suite with no mock calls is a real 0.',
                 'Patch pressure is advisory. Mocking external boundaries can be normal and correct.',
-                'Use reveal patches <src> --view pressure --tests <tests> to join patch pressure with production boundary fan-out.',
+                'Use reveal patches <src> --view pressure --test-paths <tests> to join patch pressure with production boundary fan-out.',
             ],
             'see_also': [
-                'reveal patches src --view pressure --tests tests - Combined patch-pressure and boundary fan-out report',
+                'reveal patches src --view pressure --test-paths tests - Combined patch-pressure and boundary fan-out report',
             ],
             'output_formats': ['text', 'json'],
         }
@@ -251,7 +253,7 @@ class PatchesAdapter(ResourceAdapter):
                             'summary': {'type': 'object'},
                             'patch_hotspots': {'type': 'array'},
                             'boundary_hotspots': {'type': 'array'},
-                            'test_scope': {'type': 'object', 'description': 'Default project policy or explicit tests= selection; source boundary population is separate'},
+                            'test_scope': {'type': 'object', 'description': 'Default project policy or explicit --test-paths selection; source boundary population is separate'},
                         },
                     },
                 },
