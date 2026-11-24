@@ -50,7 +50,7 @@ def test_find_callees_matches_name_their_file_with_forward_slashes():
 
     # A definition as the walker records it on Windows: the native spelling.
     definition = SimpleNamespace(name='run', file='pkg\\a.py', line=3, calls=['target'], family='python',
-                                 references=[], reference_only_calls=[])
+                                 references=[], reference_only_calls=[], call_lines={'target': [4]})
 
     found = calls_index.find_callees('.', 'run', source=_Source([definition]))
 

@@ -666,8 +666,8 @@ def test_a_call_that_misses_its_bound_file_turns_call_targets_red(tmp_path, monk
 
 def test_call_targets_red_when_a_target_does_not_define_the_name():
     walks = [{'levels': [{'level': 1, 'callees': [
-        {'caller_file': 'p/a.py', 'caller_line': 1, 'call_expr': 'helper', 'callee': 'helper',
-         'resolved': True, 'callee_file': 'p/b.py', 'callee_line': 7}]}]}]
+        {'caller_file': 'p/a.py', 'caller_def_line': 1, 'call_expr': 'helper', 'callee': 'helper',
+         'resolved': True, 'callee_file': 'p/b.py', 'callee_def_line': 7}]}]}]
     outlines = {'p/a.py': {}, 'p/b.py': {'helper': {3}}}
     row = inv.check_call_targets(walks, {'files': {}}, outlines, 'p')
     assert row['status'] == 'red' and row['examples'][0]['rule'] == 'target_defines'

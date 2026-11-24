@@ -213,6 +213,14 @@ def _site_locations(rec: Dict[str, Any]) -> str:
     return f" [{_line_list('', calls)}]" if len(calls) > 1 else ''
 
 
+def _callee_sites(call_lines: List[int], reference_lines: List[int]) -> str:
+    """` [lines 7, 9]` beside a callee: where the definition calls it (and renders it). Unlike a callers row, a
+    callees row leads with no line, so a lone call is named too (BACK-2781)."""
+    if reference_lines:
+        return _site_locations({'call_lines': call_lines, 'reference_lines': reference_lines})
+    return f" [{_line_list('', call_lines)}]" if call_lines else ''
+
+
 def _render_callees_text(data: Dict[str, Any]) -> None:
     target = data.get('target', '?')
     total = data.get('total_calls', 0)
@@ -242,7 +250,9 @@ def _render_callees_text(data: Dict[str, Any]) -> None:
             for callee in calls:
                 suffix = (' (JSX reference)' if callee in reference_only
                           else ' (includes JSX reference)' if callee in references else '')
-                print(f"    → {callee}{suffix}")
+                sites = _callee_sites(match.get('call_lines_by_callee', {}).get(callee, []),
+                                      sorted({r['line'] for r in match.get('references', []) if r['callee'] == callee}))
+                print(f"    → {callee}{suffix}{sites}")
         else:
             print(f"    (no calls detected)")
         print()
@@ -270,7 +280,7 @@ def _render_callee_walk_text(data: Dict[str, Any]) -> None:
     edges: Dict[Any, List[Dict[str, Any]]] = {}
     for level in data.get('levels', []):
         for edge in level['callees']:
-            edges.setdefault((edge['caller_file'], edge['caller_line'], edge['caller']), []).append(edge)
+            edges.setdefault((edge['caller_file'], edge['caller_def_line'], edge['caller']), []).append(edge)
     tree = _WalkTree(edges, {(d['file'], d['line'], d['name']): d for d in definitions})
     for root in roots:
         for line in tree.lines(root, '  ', ''):
@@ -305,19 +315,20 @@ class _WalkTree:
     def _edge_lines(self, edge: Dict[str, Any], pad: str) -> List[str]:
         label = '→ ' + edge['callee'] + {'jsx_reference': ' (JSX reference)', 'call_and_jsx_reference':
                                           ' (includes JSX reference)'}.get(edge.get('relationship', ''), '')
+        label += _callee_sites(edge.get('call_lines', []), edge.get('reference_lines', []))
         if edge.get('ambiguous'):
             where = ', '.join(f"{os.path.basename(c['file'])}:{c['line']}" for c in edge['candidates'][:5])
             return [f"{pad}{label}  [ambiguous: {len(edge['candidates'])} definitions -- {where}]"]
         if not edge['resolved']:
             return [f"{pad}{label}  [external]"]
-        key = (edge['callee_file'], edge['callee_line'], edge['callee'])
+        key = (edge['callee_file'], edge['callee_def_line'], edge['callee'])
         target = self.definitions.get(key)
         if edge.get('expanded') and target is not None:
             return self.lines(target, pad, label)
         mark = ''
         if target is not None and target['expanded']:
             mark = '  (expanded above)' if key in self.printed else '  (expanded below)'
-        return [f"{pad}{label}  {edge['callee_file']}:{edge['callee_line']}{mark}"]
+        return [f"{pad}{label}  {edge['callee_file']}:{edge['callee_def_line']}{mark}"]
 
 
 def _render_ranking_text(data: Dict[str, Any]) -> None:
@@ -420,7 +431,7 @@ def _render_callees_recursive_text(data: Dict[str, Any]) -> None:
             callee = entry['callee']
             resolved = entry['resolved']
             file_path = entry.get('caller_file', '')
-            line = entry.get('caller_line', '')
+            line = entry.get('caller_def_line', '')
             status = '✓' if resolved else '✗ [external]'
             if resolved and not entry.get('ambiguous') and level_num < depth and entry.get('expanded') is False:
                 # BACK-2096: the target was reached by an earlier edge; its callees are listed there.

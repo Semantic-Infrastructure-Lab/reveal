@@ -88,9 +88,10 @@ def test_callees_text_labels_reference_only_and_mixed_callees(tmp_path):
         '  return <div><Both/><Only/></div>;\n'
         '}\n', encoding='utf-8')
     text = _text(tmp_path, 'callees=App')
-    assert '→ Only (JSX reference)' in text
-    assert '→ Both (includes JSX reference)' in text
-    assert any(line.strip() == '→ plain' for line in text.splitlines())
+    # Each row names its sites (BACK-2781): call lines, JSX lines, or both.
+    assert '→ Only (JSX reference) [JSX line 6]' in text
+    assert '→ Both (includes JSX reference) [call line 5, JSX line 6]' in text
+    assert any(line.strip() == '→ plain [line 5]' for line in text.splitlines())
 
 
 def test_callees_of_a_module_report_line_one(tmp_path):

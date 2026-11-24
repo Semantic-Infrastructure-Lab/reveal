@@ -495,7 +495,7 @@ The AST adapter extracts call graph data from every function and method during a
 
 - **`calls`** — list of function names called by this function (outgoing calls)
 - **`called_by`** — list of function names that call this function, within the same file
-- `resolved_calls` is retired (BACK-2566): where a call lands across files is `calls://<path>?callees=FILE:NAME&depth=2`, whose `levels[].callees[]` give each call's `callee_file` and `callee_line` by the import resolution `imports://` uses
+- `resolved_calls` is retired (BACK-2566): where a call lands across files is `calls://<path>?callees=FILE:NAME&depth=2`, whose `levels[].callees[]` give each call's `callee_file` and `callee_def_line` by the import resolution `imports://` uses
 
 Call graph fields appear automatically in JSON output and in the default text renderer (as `calls:` and `called by:` lines below each function).
 

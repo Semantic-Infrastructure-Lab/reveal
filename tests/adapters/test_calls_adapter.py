@@ -2405,7 +2405,7 @@ class TestRootCalleeWalk(unittest.TestCase):
         level2 = [(e['caller'], e['callee']) for e in result['levels'][1]['callees']]
         self.assertEqual(level2, [('run', 'beta')])
         run = result['levels'][0]['callees'][0]
-        self.assertEqual((os.path.basename(run['callee_file']), run['callee_line']), ('b.py', 1))
+        self.assertEqual((os.path.basename(run['callee_file']), run['callee_def_line']), ('b.py', 1))
 
     def test_unresolvable_same_named_callee_is_ambiguous_not_expanded(self):
         from reveal.adapters.calls.index import callee_levels, walk_callees
@@ -2528,13 +2528,13 @@ class TestCalleesRecursiveRenderer(unittest.TestCase):
             'levels': [
                 {'level': 1, 'callees': [
                     {'caller': 'entry', 'callee': 'helper', 'resolved': True,
-                     'caller_file': 'app.py', 'caller_line': 2},
+                     'caller_file': 'app.py', 'caller_def_line': 2},
                     {'caller': 'entry', 'callee': 'lib_call', 'resolved': False,
-                     'caller_file': 'app.py', 'caller_line': 3},
+                     'caller_file': 'app.py', 'caller_def_line': 3},
                 ]},
                 {'level': 2, 'callees': [
                     {'caller': 'helper', 'callee': 'worker', 'resolved': True,
-                     'caller_file': 'app.py', 'caller_line': 5},
+                     'caller_file': 'app.py', 'caller_def_line': 5},
                 ]},
             ],
         }

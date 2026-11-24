@@ -491,13 +491,13 @@ def outline_names(answer: Dict[str, Any]) -> Dict[str, Set[int]]:
 
 
 def walk_edges(walks: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Every distinct call edge of the callee walks, one per (caller file, caller line, caller, call): a
+    """Every distinct call edge of the callee walks, one per (caller file, caller definition line, caller, call): a
     caller is a definition, and two can share a line (``<module>`` and a function on line 1)."""
     seen: Dict[Tuple[Any, Any, Any, Any], Dict[str, Any]] = {}
     for walk in walks:
         for level in walk.get('levels') or []:
             for edge in level.get('callees') or []:
-                seen.setdefault((edge.get('caller_file'), edge.get('caller_line'), edge.get('caller'),
+                seen.setdefault((edge.get('caller_file'), edge.get('caller_def_line'), edge.get('caller'),
                                  edge.get('call_expr')), edge)
     return [seen[key] for key in sorted(seen, key=lambda k: tuple(str(p) for p in k))]
 
@@ -531,12 +531,12 @@ def check_call_targets(walks: Iterable[Dict[str, Any]], default_view: Dict[str, 
         resolved = bool(edge.get('resolved'))
         target = edge.get('callee_file') if resolved and not edge.get('ambiguous') else None
         shadowed = not qualified and tail in outlines.get(caller, {})
-        record = {'caller': f"{caller}:{edge.get('caller_line')}", 'call': call,
-                  'got': (f"{target}:{edge.get('callee_line')}" if target else
+        record = {'caller': f"{caller}:{edge.get('caller_def_line')}", 'call': call,
+                  'got': (f"{target}:{edge.get('callee_def_line')}" if target else
                           'ambiguous' if resolved else 'unresolved')}
         if target:
             counts['target_defines'] += 1
-            if edge.get('callee_line') not in outlines.get(target, {}).get(str(edge.get('callee') or tail), set()):
+            if edge.get('callee_def_line') not in outlines.get(target, {}).get(str(edge.get('callee') or tail), set()):
                 violations.append({'rule': 'target_defines', **record})
         binding = bindings.get(caller[len(prefix):], {}).get(head)
         if binding is None or shadowed:

@@ -153,6 +153,15 @@ _FORMAT = ParamSpec('format', 'string', 'Output format: text, json or dot (Graph
                     role='presentation', answers=(_Q, _C, _R, _U, _M))
 
 _RESOURCE = ResourceSpec(uri_codec='existing-path-first')
+# One callee-walk edge (levels[].callees[]): both definition lines, and the lines of the call in the caller
+# (`call_lines`, a list as on a callers record; a JSX use: `reference_lines`), BACK-2781.
+_CALLEE_EDGE_SCHEMA = {'type': 'object', 'properties': {
+    'caller': {'type': 'string'}, 'caller_file': {'type': 'string'}, 'caller_def_line': {'type': 'integer'},
+    'call_lines': {'type': 'array', 'items': {'type': 'integer'}}, 'call_expr': {'type': 'string'},
+    'callee': {'type': 'string'}, 'resolved': {'type': 'boolean'},
+    'callee_file': {'type': 'string'}, 'callee_def_line': {'type': 'integer'},
+    'relationship': {'type': 'string'}, 'reference_lines': {'type': 'array', 'items': {'type': 'integer'}},
+    'expanded': {'type': 'boolean'}, 'ambiguous': {'type': 'boolean'}, 'candidates': {'type': 'array'}}}
 # exclude: the shared walk control every walking noun declares (BACK-2730); the walk's scope applies it.
 _PARAM_SPECS: Tuple[ParamSpec, ...] = (_CALLERS, _CALLEES, _ROOT, _DEPTH, _DETAIL, _RANK, _TOP, _UNCALLED, _TYPE, _MODULES,
                 _EXTERNAL, _BUILTINS, _TEST_FRAMEWORK, _FORMAT, exclude_param())
@@ -345,12 +354,14 @@ _SCHEMA: Dict[str, Any] = {
                                 'function': {'type': 'string'},
                                 'line':     {'type': 'integer'},
                                 'calls':    {'type': 'array', 'items': {'type': 'string'}},
+                                'call_lines_by_callee': {'type': 'object', 'additionalProperties': {
+                                    'type': 'array', 'items': {'type': 'integer'}}},
                             },
                         },
                     },
                     'depth':            {'type': 'integer'},
                     'levels':           {'type': 'array', 'items': {'type': 'object', 'properties': {
-                        'level': {'type': 'integer'}, 'callees': {'type': 'array'}}}},
+                        'level': {'type': 'integer'}, 'callees': {'type': 'array', 'items': _CALLEE_EDGE_SCHEMA}}}},
                     'definitions':      {'type': 'array', 'items': {'type': 'object', 'properties': {
                         'name': {'type': 'string'}, 'file': {'type': 'string'}, 'line': {'type': 'integer'},
                         'level': {'type': 'integer'}, 'expanded': {'type': 'boolean'},
@@ -371,7 +382,9 @@ _SCHEMA: Dict[str, Any] = {
                 'target': 'validate_item',
                 'total_calls': 4,
                 'matches': [{'file': 'app/validators.py', 'function': 'validate_item', 'line': 55,
-                             'calls': ['check_required', 'normalize_value', 'log_validation', 'raise_error']}],
+                             'calls': ['check_required', 'normalize_value', 'log_validation', 'raise_error'],
+                             'call_lines_by_callee': {'check_required': [57], 'normalize_value': [58, 61],
+                                                      'log_validation': [63], 'raise_error': [65]}}],
             },
         },
         {
@@ -394,13 +407,7 @@ _SCHEMA: Dict[str, Any] = {
                             'type': 'object',
                             'properties': {
                                 'level':   {'type': 'integer'},
-                                'callees': {'type': 'array', 'items': {'type': 'object', 'properties': {
-                                    'caller': {'type': 'string'}, 'caller_file': {'type': 'string'},
-                                    'caller_line': {'type': 'integer'}, 'call_expr': {'type': 'string'},
-                                    'callee': {'type': 'string'}, 'resolved': {'type': 'boolean'},
-                                    'callee_file': {'type': 'string'}, 'callee_line': {'type': 'integer'},
-                                    'expanded': {'type': 'boolean'}, 'ambiguous': {'type': 'boolean'},
-                                    'candidates': {'type': 'array'}}}},
+                                'callees': {'type': 'array', 'items': _CALLEE_EDGE_SCHEMA},
                             },
                         },
                     },

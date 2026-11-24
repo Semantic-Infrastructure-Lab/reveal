@@ -828,6 +828,7 @@ def find_callees(
         if not name_matches(definition.name, target):
             continue
         calls = list(definition.calls)
+        call_lines = definition.call_lines or {}
         builtins = conventions_for(definition.family).builtins
         if not include_builtins and builtins:
             filtered = [c for c in calls if c.split('.')[-1] not in builtins]
@@ -838,6 +839,9 @@ def find_callees(
             'function': definition.name,
             'line': definition.line,
             'calls': calls,
+            # call text -> the sorted lines of its calls, keyed like `calls`; [] for a name only rendered
+            # (its JSX lines are references[].line). `line` stays the definition line (BACK-2781).
+            'call_lines_by_callee': {call: list(call_lines.get(call, ())) for call in calls},
             'references': [dict(reference) for reference in definition.references],
             'reference_only_calls': list(definition.reference_only_calls),
         })
@@ -927,6 +931,7 @@ class CallSource(NamedTuple):
     callable: bool = True  # False for a class field holding an object (`= new X()`): a source, no target (BACK-2581)
     parameters: Optional[Tuple[str, ...]] = None
     shadows: Tuple[str, ...] = ()  # call qualifiers it declares itself (a parameter `src`), so no import binds them (BACK-2580)
+    call_lines: Optional[Dict[str, List[int]]] = None  # callee -> sorted lines of its calls: call_sources' map, shared, never mutated (BACK-2781)
 
 
 class CalleeSource:
@@ -972,7 +977,8 @@ class CalleeSource:
             family(file_path), member=bool(elem.get('owner')) and elem.get('method') is not False,
             category=elem.get('category', ''), owner=str(elem.get('owner') or ''),
             callable=elem.get('callable', True) is not False,
-            parameters=tuple(elem['parameters']) if elem.get('parameters') is not None else None, shadows=tuple(elem.get('shadows', ())))
+            parameters=tuple(elem['parameters']) if elem.get('parameters') is not None else None, shadows=tuple(elem.get('shadows', ())),
+            call_lines=elem.get('call_lines'))
             for file_path, name, elem in _call_definitions(structures))
         return cls(definitions, getattr(structures, 'skipped', ()), getattr(structures, 'traversal_failures', ()),
                    scope, dropped_values_summary(structures), recovered_files(structures))
@@ -1100,6 +1106,7 @@ def _walk_index(source: CalleeSource) -> Tuple[List[Dict[str, Any]], Dict[str, L
         'category': d.category,
         'callable': d.callable,
         'shadows': d.shadows,
+        'call_lines': d.call_lines or {},
     } for d in source.definitions]
     definitions.sort(key=lambda d: (d['file'], d['line']))
     index: Dict[str, List[Dict[str, Any]]] = {}
@@ -1166,17 +1173,20 @@ def _callee_node(record: Dict[str, Any], name: str, level: int, depth: int) -> C
 
 
 def _callee_edge(node: CalleeNode, call: str, resolver: Any) -> Tuple[Dict[str, Any], Any]:
-    """One call site of *node*: the edge record and its target (definition, candidates, None)."""
+    """One call site of *node*: the edge record and its target (definition, candidates, None). It names
+    both definition lines (``caller_def_line``, ``callee_def_line``) and the lines of the call in the caller
+    (``call_lines``; JSX uses: ``reference_lines``), as the callers record of the same pair does (BACK-2781)."""
     tail, target = resolver.resolve(call, node.file, node.record.get('shadows', ()))
     edge: Dict[str, Any] = {
         'caller': node.name,
         'callee': tail if target is not None else call,
         'resolved': target is not None,
         'caller_file': node.file,
-        'caller_line': node.line,
+        'caller_def_line': node.line,
+        'call_lines': list(node.record['call_lines'].get(call, ())),
     }
     if isinstance(target, dict):
-        edge['callee_file'], edge['callee_line'] = target['file'], target['line']
+        edge['callee_file'], edge['callee_def_line'] = target['file'], target['line']
     elif target:
         edge['ambiguous'] = True
         edge['candidates'] = [{'file': c['file'], 'line': c['line']} for c in target]
@@ -1184,6 +1194,7 @@ def _callee_edge(node: CalleeNode, call: str, resolver: Any) -> Tuple[Dict[str, 
     if any(r['callee'] == call for r in node.references):
         edge['relationship'] = ('jsx_reference' if call in node.record['reference_only_calls']
                                 else 'call_and_jsx_reference')
+        edge['reference_lines'] = sorted({r['line'] for r in node.references if r['callee'] == call})
     return edge, target
 
 

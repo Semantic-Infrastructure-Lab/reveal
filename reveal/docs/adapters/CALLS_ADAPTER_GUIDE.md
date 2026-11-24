@@ -316,13 +316,24 @@ directory's files are read, plus, outside it, the files of languages whose packa
 declarations other files resolve through (C#, Java, Kotlin, Scala, PHP, Swift, Ruby). An import that binds no
 name (`#include`, Ruby `require`, C# `using`) binds nothing here. The answer keeps type `calls_callees` and its depth-1
 `matches`, and adds `depth`, `levels[].callees[]` (one per edge: `caller`, `caller_file`,
-`caller_line`, `call_expr`, `callee`, `resolved`, `callee_file`/`callee_line` or `ambiguous` and
-`candidates`, `expanded`), `definitions[]` (every definition reached: `name`, `file`, `line`,
+`caller_def_line`, `call_lines`, `call_expr`, `callee`, `resolved`, `callee_file`/`callee_def_line` or `ambiguous` and
+`candidates`, `relationship` and `reference_lines` for a JSX use, `expanded`), `definitions[]` (every definition reached: `name`, `file`, `line`,
 `level`, 0 for the roots, and `expanded`), the edge totals (`total_edges` = `total_resolved` +
 `total_unresolved`; `total_ambiguous` counts resolved edges with several candidates) and a
 `walk_rule` stating all of this (text: a `Rules:` pointer to JSON). `&detail=full` adds `params` and `effects` to each
 definition, also at depth 1. Text is a depth-indented tree: `[external]`, `[ambiguous: N ...]`,
 and `(expanded above)` / `(expanded below)` for a definition whose calls are listed elsewhere.
+
+**Callee records name each line.** A definition record (`matches[]`, `definitions[]`, `candidates[]`) has `line`, the
+definition line (a decorated function: its first decorator line; `<module>`: 1, as on a callers record). A match also
+has `call_lines_by_callee`: call text -> the sorted lines of its calls, keyed exactly like `calls` (builtins hidden from
+both alike); a name it only renders as JSX maps to `[]`, its JSX lines are `references[].line`. A walk edge names both
+definition lines, `caller_def_line` and `callee_def_line`, and carries `call_lines`, the lines of that call in the
+caller: the same list the callers record of that (caller, call text) holds; a JSX use adds `reference_lines`. Text puts
+the lines beside each callee (`→ target [lines 7, 9]`, `→ Btn (includes JSX reference) [call lines 8, 11, JSX line 10]`,
+`→ Btn (JSX reference) [JSX line 6]`); the trailing `file:line` of a walk row is the callee's definition. Because
+`<module>`'s line is 1, it comes first among its file's definitions wherever the walk orders them by file and line
+(its roots and candidates).
 
 Parameter names are syntax facts carried from the analyzer, not parsed from the display
 signature. Qualified forms cover Python, JavaScript/TypeScript/TSX, Go, Rust, Java, C#,
@@ -469,10 +480,10 @@ Total:      4 call(s) across 1 definition(s)
             (6 builtin(s) hidden — use --builtins to include)
 
   src/auth/validators.py:55  validate_item
-    → check_required
-    → normalize_value
-    → log_validation
-    → raise_error
+    → check_required [line 57]
+    → normalize_value [lines 58, 61]
+    → log_validation [line 63]
+    → raise_error [line 65]
 ```
 
 The pointer prints first, before `Callees of:`; callees `--detail full` also prints the full rule and standing caveats. With `?builtins=true` the `(N builtin(s) hidden ...)` line under `Total:` disappears and the full raw list (including `len`, `str`, `isinstance`, etc.) is shown. That line only appears when at least one builtin was filtered.
@@ -767,7 +778,7 @@ reveal calls . --callers fn       # use project root for full coverage
 `<module>` caller for calls outside named functions/methods, including script loops
 and Ruby DSL blocks. Caller JSON carries `caller_kind: module`, `caller_def_line: 1` (a module's scope starts at line 1)
 and every matching call in `call_lines`; a name the module only renders has its JSX lines in `reference_lines`
-(`callees=<module>` prints the module's first call line, not 1). Counts are unique caller scopes;
+(`callees=<module>` names line 1 too, and its calls' lines in `call_lines_by_callee`). Counts are unique caller scopes;
 several sites in one module remain one caller. Deferred function bodies retain
 their own scope. Extensionless Ruby DSL files and other
 languages' top-level code remain outside this relationship scope and are disclosed; JS/TS class-field initializers are not

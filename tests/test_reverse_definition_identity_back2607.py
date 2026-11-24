@@ -40,7 +40,7 @@ def test_real_import_chain_agrees_with_forward_target(tmp_path):
     target = forward['levels'][0]['callees'][0]
     record = answer['levels'][1]['callers'][0]
     assert record['target_resolution'] == 'resolved'
-    assert (record['target_file'], record['target_line']) == (target['callee_file'], target['callee_line'])
+    assert (record['target_file'], record['target_line']) == (target['callee_file'], target['callee_def_line'])
 
 
 def test_ambiguous_candidates_remain_explicit_candidates(tmp_path):

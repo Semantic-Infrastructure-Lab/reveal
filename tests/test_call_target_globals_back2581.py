@@ -69,8 +69,8 @@ def test_global_and_object_field_calls_reach_no_project_definition(project):
 
 def test_function_holding_fields_stay_call_targets(project):
     edges = _callees(project, 'ratio')
-    assert edges['p.handler']['resolved'] is True and edges['p.handler']['callee_line'] == 4
-    assert edges['p.save']['resolved'] is True and edges['p.save']['callee_line'] == 5
+    assert edges['p.handler']['resolved'] is True and edges['p.handler']['callee_def_line'] == 4
+    assert edges['p.save']['resolved'] is True and edges['p.save']['callee_def_line'] == 5
 
 
 def test_callers_of_a_project_max_exclude_the_global_call(project):

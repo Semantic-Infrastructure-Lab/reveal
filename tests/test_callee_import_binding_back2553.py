@@ -214,7 +214,7 @@ def test_a_bare_named_import_reaches_the_module_function_not_a_same_named_method
         'd.js': ('export function toHalfFloat(v) {\n  return v;\n}\n\n'
                  'export class DataUtils {\n  static toHalfFloat(v) {\n    return toHalfFloat(v);\n  }\n}\n')})
     edge = _edges(path, 'setX', depth=2)['toHalfFloat']
-    assert (_target(edge), edge['callee_line']) == (('d.js', None), 1)
+    assert (_target(edge), edge['callee_def_line']) == (('d.js', None), 1)
 
 
 def test_a_qualified_call_through_the_imported_class_reaches_its_member(tmp_path):
@@ -225,7 +225,7 @@ def test_a_qualified_call_through_the_imported_class_reaches_its_member(tmp_path
         'd.js': ('export function toHalfFloat(v) {\n  return v;\n}\n\n'
                  'export class DataUtils {\n  static toHalfFloat(v) {\n    return v;\n  }\n}\n')})
     edge = _edges(path, 'setX', depth=2)['DataUtils.toHalfFloat']
-    assert (_target(edge), edge['callee_line']) == (('d.js', None), 6)
+    assert (_target(edge), edge['callee_def_line']) == (('d.js', None), 6)
 
 
 def test_typescript_overloads_are_one_binding(tmp_path):
@@ -237,7 +237,7 @@ def test_typescript_overloads_are_one_binding(tmp_path):
                  'export function pointFrom(x: number, y: number): number;\n'
                  'export function pointFrom(x: number, y?: number): number {\n  return x;\n}\n')})
     edge = _edges(path, 'go', depth=2)['pointFrom']
-    assert _target(edge) == ('p.ts', None) and edge['callee_line'] == max(
+    assert _target(edge) == ('p.ts', None) and edge['callee_def_line'] == max(
         d['line'] for d in CallsAdapter(path, 'callees=p.ts:pointFrom&depth=2').get_structure()['definitions'])
 
 
