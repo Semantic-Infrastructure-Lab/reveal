@@ -618,10 +618,22 @@ def test_a_production_row_at_the_error_stage_exits_2_with_its_text(monkeypatch, 
     invalid-request document says the text (BACK-2627 item 3). A removed row (python://) is already at the error stage
     and runs as it ships."""
     monkeypatch.setitem(RETIREMENTS, key, replace(RETIREMENTS[key], stage='error'))
-    result = _run_reveal_direct(*PRODUCTION_CASES[key](str(source)), '--format', 'json')
+    argv = PRODUCTION_CASES[key](str(source))
+    result = _run_reveal_direct(*argv, '--format', 'json')
     assert result.returncode == 2
     assert f'error: {RETIREMENTS[key].text}' in result.stderr
+    if _undeclared_commands_own_spelling(key, argv):  # no route document: the command answers none of its refusals
+        assert result.stdout == ''
+        return
     assert (invalid_request_document(result) or {}).get('error') == RETIREMENTS[key].text, result.stdout[:300]
+
+
+def _undeclared_commands_own_spelling(key, argv):
+    """A spelling read by a command that is not declared (``check``'s flags, ``health``'s target): such a command
+    answers no refusal with the invalid-request document (its usage errors print text only), so its retirements have
+    none to answer with either (BACK-2627 R3); its own row (``subcommand:check``) refuses before it runs and has one."""
+    command = invocation.COMMANDS.get(argv[0])
+    return command is not None and not command.declared_adapter and key != f'subcommand:{argv[0]}'
 
 
 def test_declared_alias_flag_notes_the_spelling_used(monkeypatch, source):

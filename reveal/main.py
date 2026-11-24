@@ -324,9 +324,14 @@ def _dispatch_and_run(invocation: Invocation, admit: Optional[Callable[[Namespac
 
 def _apply_output_sinks(parser, args: Namespace, invocation: Invocation) -> None:
     """Resolve the request's ``--output`` sinks; a malformed one is the parser's usage error (in JSON mode, the
-    invalid-request document, where the parser answers one)."""
+    invalid-request document, where the parser answers one). A retired sink spelling at the error stage (``--also-json``)
+    answers as the parser's other refusals do (``answer_retired_spelling``, BACK-2627)."""
+    invalid_request = getattr(parser, 'invalid_request', None)  # the main and declared parsers; not every command's
     try:
         apply_output_sinks(args, invocation)
+    except RetiredSpellingError as error:
+        from .cli.routing.declared import answer_retired_spelling
+        answer_retired_spelling(error, args, lambda text: invalid_request(text, args) if invalid_request else None)
     except OutputSinkError as error:
         drop_file_sinks(args)
         answer_in_json = getattr(parser, 'answer_in_json', None)  # the main and declared parsers; not every command's
@@ -347,26 +352,66 @@ def _prepare(invocation: Invocation) -> Tuple[Namespace, Callable[[], None], Opt
             return (*_prepare_declared_uri(invocation, *declared), declared[0])
         _check_ghost_flags(invocation)
         parser = create_argument_parser(__version__, full_help=invocation.typed('--help-all'))
-        args = parser.parse_args(invocation.argv)
+        args = _parse_answering_retired(parser, invocation.argv, lambda: parser.parse_args(invocation.argv))
         record_typed_spellings(parser, invocation.argv)
-        note_path_read_flags(invocation)
+        try:
+            note_path_read_flags(invocation)
+        except RetiredSpellingError as exc:  # --search: the path read's or the URI's own refusal (BACK-2627)
+            from .cli.routing.declared import answer_retired_spelling
+            answer_retired_spelling(exc, args, lambda text: parser.invalid_request(text, args))
         validate_navigation_args(args, parser)
         _apply_output_sinks(parser, args, invocation)
         return args, lambda: _main_impl(invocation, parser, args), None
 
     _warn_if_subcommand_shadows_path(name)  # before the row, so an error-stage or removed word still shows it
-    retirement_note(f'subcommand:{name}')  # a removed command (no CommandSpec) raises here, its row at error
+    try:
+        retirement_note(f'subcommand:{name}')  # a removed command (no CommandSpec) raises here, its row at error
+    except RetiredSpellingError as exc:
+        _answer_retired_command(name, invocation, exc)
     sub_parser, runner = COMMANDS[name].load()
     formats = _subcommand_formats(name)
     _show_subcommand_formats(sub_parser, formats)
     _show_subcommand_options(sub_parser, name)
-    sub_args = sub_parser.parse_args(invocation.command_argv)
+    sub_args = _parse_answering_retired(sub_parser, invocation.command_argv,
+                                        lambda: sub_parser.parse_args(invocation.command_argv))
     record_typed_spellings(sub_parser, invocation.command_argv)
     _apply_output_sinks(sub_parser, sub_args, invocation)
     _require_subcommand_format(name, sub_args, formats)
     # BACK-1539: the flag ledger and the REVEAL_IGNORE/--exclude walk scope, once for all.
     from .cli.routing.subcommand import dispatch_subcommand
     return sub_args, lambda: dispatch_subcommand(name, sub_parser, runner, sub_args), name
+
+
+def _parse_answering_retired(parser: Any, argv: Sequence[str], parse: Callable[[], Any]) -> Any:
+    """*parse*'s answer: *parser* reading *argv*. A legacy switch spelling at the error stage (``--no-breadcrumbs``)
+    says its row while argparse reads it, before any args exist, so the request is read again from its words alone
+    (``JsonUsageParser.typed_request``) and answered with the parser's invalid-request document in JSON (BACK-2627); a
+    parser with no document (a command that is not declared) and text mode keep the error."""
+    try:
+        return parse()
+    except RetiredSpellingError as exc:
+        from .cli.routing.declared import JsonUsageParser, answer_retired_spelling
+        if not isinstance(parser, JsonUsageParser):
+            raise
+        typed = parser.typed_request(argv)
+        answer_retired_spelling(exc, typed, lambda text: parser.invalid_request(text, typed))
+
+
+def _answer_retired_command(name: str, invocation: Invocation, error: RetiredSpellingError) -> None:
+    """A subcommand's row at the error stage refuses before any of the request runs (a removed noun has no CommandSpec
+    left), so the request is read from its words alone (``JsonUsageParser.typed_request``): by the noun's own declared
+    parser while it exists, whose invalid-request document is its usage errors' (BACK-2627); else by the main parser's
+    options, the document typed by the noun's name (no adapter is left to predict an answer). In text mode the process's
+    ``error:`` line says it (``answer_retired_spelling``)."""
+    from .cli.routing.declared import JsonUsageParser, _invalid_answer, answer_retired_spelling
+    spec = COMMANDS.get(name)
+    parser = spec.load()[0] if spec is not None else None
+    if isinstance(parser, JsonUsageParser):
+        declared = parser.typed_request(invocation.command_argv)
+        answer_retired_spelling(error, declared, lambda text: parser.invalid_request(text, declared))
+    args = create_argument_parser(__version__).typed_request(invocation.command_argv)
+    answer_retired_spelling(error, args, lambda text: _invalid_answer(
+        None, name, getattr(args, 'path', None) or '.', text, args, result_type=name, default_fail_on='none'))
 
 
 def _prepare_declared_uri(invocation: Invocation, noun: str, parser: Any, argv: List[str],
@@ -376,7 +421,7 @@ def _prepare_declared_uri(invocation: Invocation, noun: str, parser: Any, argv: 
     request's second source, joined with the typed flags by the runner. Dispatched as the subcommand is."""
     from .cli.routing.declared import parse_declared_uri_args, run_declared_uri_command
     from .cli.routing.subcommand import dispatch_subcommand
-    args, element = parse_declared_uri_args(parser, argv)
+    args, element = _parse_answering_retired(parser, argv, lambda: parse_declared_uri_args(parser, argv))
     record_typed_spellings(parser, argv)
     _apply_output_sinks(parser, args, invocation)
 

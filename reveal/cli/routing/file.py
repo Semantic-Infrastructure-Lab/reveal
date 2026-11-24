@@ -708,7 +708,9 @@ def handle_file_or_directory(path_str: str, args: 'Namespace', *, answer_consume
     element request's own checks, the configuration it reads) in a JSON request answers with the path read's
     invalid-request document, exit 2, as a declared noun's does (BACK-2756 cell 21j), and a configuration that could
     not be loaded with the failed answer, exit 3; in text mode each goes on to the process's ``error:`` line unchanged.
-    A refusal at one of the route's own sites (``PathReadRefused``) prints its text, and its document in JSON.
+    A refusal at one of the route's own sites (``PathReadRefused``) prints its text, and its document in JSON. A
+    spelling at the error stage (``RetiredSpellingError``) answers in JSON with the same document saying its row's text
+    (``answer_retired_spelling``, BACK-2627), and in text mode, as for the API, goes on unchanged.
 
     Args:
         path_str: Path string to file or directory
@@ -717,10 +719,14 @@ def handle_file_or_directory(path_str: str, args: 'Namespace', *, answer_consume
             of its being emitted, as ``handle_uri`` hands its answers (the Python API, BACK-2325)
     """
     from ...errors import ConfigLoadError, RequestValidationError
+    from ..invocation import RetiredSpellingError
+    from .declared import answer_retired_spelling
     try:
         _handle_file_or_directory(path_str, args, answer_consumer)
     except PathReadRefused as refused:
         _hand_off(refused.answer, answer_consumer)
+    except RetiredSpellingError as exc:
+        answer_retired_spelling(exc, args, lambda text: invalid_path_read(path_str, text, args), answer_consumer)
     except (RequestValidationError, ConfigLoadError) as exc:
         if answer_consumer is None and getattr(args, 'format', None) != 'json':
             raise
