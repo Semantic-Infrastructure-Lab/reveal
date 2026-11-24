@@ -10,6 +10,7 @@ Also here (ruling S4 on the V1 inventory): testability's ``limit`` takes patches
 invalid request (exit 2) as it is on patches, instead of reading a negative cap as uncapped.
 """
 import json
+import shlex
 from pathlib import Path
 
 import pytest
@@ -114,7 +115,7 @@ def test_the_old_uri_key_and_keyword_answer_with_the_note(repo):
     uri = run(spelled, '--format', 'json')
     assert uri.returncode == 0, uri.stderr
     text = run(spelled)  # the URI's request note spells the whole request, the roots as --test-paths
-    assert text.returncode == 0 and f'--test-paths {QA}' in text.stderr and 'tests=' not in text.stderr, text.stderr
+    assert text.returncode == 0 and f'--test-paths {shlex.quote(QA)}' in text.stderr and 'tests=' not in text.stderr, text.stderr
     keyword = api.query('patches', REPO, view='pressure', tests=[QA])
     assert any(NOTE in w['message'] for w in _retired(keyword)), _retired(keyword)
     assert _answer(json.loads(uri.stdout)) == _answer(keyword) == expected
