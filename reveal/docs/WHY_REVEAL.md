@@ -157,7 +157,7 @@ reveal nginx.conf --extract domains | \
 reveal diff://git://main/.:git://HEAD/.
 
 # Find circular imports across a project
-reveal 'imports://src/?circular'
+reveal imports src/ --circular
 
 # Batch SSL check from a file of domains
 reveal @domains.txt --check

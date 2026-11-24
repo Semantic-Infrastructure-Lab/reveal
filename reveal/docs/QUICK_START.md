@@ -316,7 +316,7 @@ reveal 'ast://./src?complexity>10&lines<50'
 reveal git src/app.py --view blame --element handle_request
 
 # Analyze imports and dependencies
-reveal 'imports://./src'
+reveal imports ./src
 
 # Compare two files structurally
 reveal 'diff://file1.py:file2.py'

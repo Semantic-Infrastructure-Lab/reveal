@@ -121,8 +121,8 @@ The two key tools are `calls://` and `imports://?importers`:
 ```bash
 reveal 'calls://src/?callers=validate_token&depth=3'
 reveal 'calls://src/?sort=-callers&limit=20'
-reveal 'imports://src/auth/tokens.py?importers'
-reveal 'imports://src?sort=-fan-in&limit=20'
+reveal imports src/auth/tokens.py --importers
+reveal imports src --sort=-fan-in --limit 20
 ```
 
 Why it is good for this:
@@ -253,9 +253,9 @@ Reveal is useful before deep investigation because it can give you a concise pic
 ```bash
 reveal overview .
 reveal metrics src/ --view hotspots
-reveal 'imports://.?external'
-reveal 'imports://src?circular'
-reveal 'imports://src?violations'
+reveal imports . --external
+reveal imports src --circular
+reveal imports src --violations
 reveal metrics://src/
 ```
 
@@ -485,7 +485,7 @@ Reveal is good for people who like Unix-style pipelines, but want higher-level b
 ```bash
 reveal nginx.conf --extract domains | reveal --stdin --check
 reveal 'calls://src/?callers=main&format=dot' | dot -Tsvg > callgraph.svg
-reveal 'imports://src?importers&format=dot' | dot -Tsvg > imports.svg
+reveal imports src --importers --format dot | dot -Tsvg > imports.svg
 reveal @domains.txt --check
 ```
 

@@ -69,39 +69,39 @@ pattern (`--exclude ''`, `?exclude=`) exits 2 with `SPELLING needs a pattern: --
 
 - **`unused`** (flag) - Find unused imports
   ```bash
-  reveal 'imports://src?unused'
+  reveal imports src --unused
   ```
   Shows all imports that are declared but never referenced in the code.
 
 - **`circular`** (flag) - Detect circular dependencies
   ```bash
-  reveal 'imports://src?circular'
+  reveal imports src --circular
   ```
   Identifies circular import chains that can cause runtime errors.
 
 - **`violations`** (flag) - Check layer violations
   ```bash
-  reveal 'imports://src?violations'
+  reveal imports src --violations
   ```
   Detects imports that violate architectural layer boundaries (if configured).
 
 - **`detail`** (`normal` or `full`, combine with `circular`) - `full` shows the actual cycle path (A→B→C→A) for each circular dependency group, and every file in it. The subcommand spells it `--detail full`; the retired `verbose` (and the global `--verbose`) still means `full`, with a note:
   ```bash
-  reveal 'imports://src?circular&detail=full'
+  reveal imports src --circular --detail full
   ```
   With `detail=normal` (the default), circular output lists the files in each SCC. With `full`, it shows the full edge sequence tracing one representative cycle per group.
 
 - **`sort=-fan-in`** and **`limit=N`** - The fan-in ranking, most imported first, and how many of its rows to show (`0` = all; the retired `rank=fan-in` and `top=N` still answer, with a note):
   ```bash
-  reveal 'imports://src?sort=-fan-in&limit=10'
+  reveal imports src --sort=-fan-in --limit 10
   ```
 
 - **`scan-limit=N`** (integer, minimum 1) - Source files the walk may keep (default 20000): an input budget, not a row cap; a cut walk is incomplete (exit 3). It replaces the retired `max_files`.
 
 - **`lazy`** (`include`, `exclude` or `only`) - Which function-level (lazy) import edges an edge-derived answer counts
   ```bash
-  reveal 'imports://src?sort=-fan-in&lazy=exclude'   # load-time edges only: the architecture view
-  reveal 'imports://src?circular&lazy=include'      # count lazy back-edges as cycle edges too
+  reveal imports src --sort=-fan-in --lazy exclude   # load-time edges only: the architecture view
+  reveal imports src --circular --lazy include      # count lazy back-edges as cycle edges too
   ```
   Default: `circular` (and `metadata.has_cycles`) exclude them, since a function-level import runs after
   every module has loaded and is the usual way to break a cycle; fan-in, entrypoints, components and
@@ -115,7 +115,7 @@ pattern (`--exclude ''`, `?exclude=`) exits 2 with `SPELLING needs a pattern: --
 **Combining Parameters**: `unused`, `circular`, `violations` and the other views are separate --
 run one per call (two views in one request exit 2 naming both). `detail=full` combines with `circular`:
 ```bash
-reveal 'imports://src?circular&detail=full'   # Cycle paths
+reveal imports src --circular --detail full   # Cycle paths
 ```
 
 ---
@@ -490,7 +490,7 @@ reveal 'metrics://.?view=hotspots&code-only=true'
   a replaced-by note until the cut. `&format=dot` has no imports spelling yet, so the Graphviz view stays
   here until then.
   ```bash
-  reveal 'imports://src?importers&scope=path'   # the same edges, as each module's importers
+  reveal imports src --scope path --importers   # the same edges, as each module's importers
   ```
 
 One mode per request (`callers`, `callees`, `rank`, `modules`, or the retired `uncalled`, `target`
@@ -503,7 +503,7 @@ site). A scanned call-source language with no recall snapshot (Elixir, Objective
   files; on the measured corpora every edge the old flag added was a file under the path that the
   default had dropped for being spelled as a host path.
   ```bash
-  reveal 'imports://src?importers'   # importers from anywhere under the project root
+  reveal imports src --importers   # importers from anywhere under the project root
   ```
 
 ---
@@ -571,15 +571,15 @@ site). A scanned call-source language with no recall snapshot (Elixir, Objective
 **Retired spelling**: `depends://` prints a note and answers as before until the cut; the
 replacement is `imports://<path>?importers` (one file: `imports://<path>/<file>?importers`):
 ```bash
-reveal 'imports://src?importers'            # every module under src with its sorted importers
-reveal 'imports://src?importers=utils.py'   # one file's importers, each with its import line
+reveal imports src --importers            # every module under src with its sorted importers
+reveal imports src --importers utils.py   # one file's importers, each with its import line
 ```
 
 **Query Parameters**:
 
 - **`top=N`** (integer) - Limit to the N most-imported modules (directory) or the first N importers (file); `--limit N` maps here. The ranking's replacement:
   ```bash
-  reveal 'imports://src?sort=-fan-in&limit=10'
+  reveal imports src --sort=-fan-in --limit 10
   ```
 
 - **`format=dot`** (string) - Output GraphViz DOT format for visualization (directory mode only — single-file
@@ -782,7 +782,7 @@ Multiple query parameters are combined with `&`:
 ```bash
 reveal git . --view history --where 'author~=john' --where 'message~=fix'
 reveal markdown docs/ --where status=draft --where priority=high
-reveal 'imports://.?circular&detail=full'
+reveal imports . --circular --detail full
 ```
 
 **Behavior**:
@@ -828,8 +828,8 @@ reveal help://schemas/imports --format json | jq '.query_params'
 
 1. **Use quotes** around URIs with query parameters (shell may interpret `?` and `&`)
    ```bash
-   reveal 'imports://.?unused'    # ✅ Correct
-   reveal imports://.?unused       # ❌ Shell may break this
+   reveal json data.json --where 'age>25'    # ✅ Correct: the quotes keep > in the value
+   reveal json data.json --where age>25      # ❌ Unquoted, the shell reads >25 as a redirect to a file named 25
    ```
 
 2. **Start broad, then filter** - Run without params first to see data structure
