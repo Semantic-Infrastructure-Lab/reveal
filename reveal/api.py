@@ -246,7 +246,6 @@ def _walk_scope(adapter_class: Any, resource: str, bound: Any):
     """(walk root, patterns) a declared walking noun's URI request publishes for its walk (COMMAND_MODEL "Walk
     exclusion", BACK-2730): the ``exclude`` it bound, from the URI or a keyword, joined with REVEAL_IGNORE and config
     ``ignore`` as the CLI's routes join them (``dispatch_scope``); none when the request names no exclusion."""
-    import os
     from .utils.exclusions import dispatch_scope
     from .utils.query_parser import peek_query_items, split_exclude_param
     spec = getattr(adapter_class, 'RESOURCE_SPEC', None)
@@ -257,12 +256,21 @@ def _walk_scope(adapter_class: Any, resource: str, bound: Any):
                 for pattern in split_exclude_param(item)]
     if not patterns:
         return None, []
+    return dispatch_scope(_scope_path(adapter_class, resource), patterns)
+
+
+def _scope_path(adapter_class: Any, resource: str) -> str:
+    """The filesystem path a declared noun's URI *resource* names (its query string dropped), bound as the answer's own
+    path binds it (``bind_resource_path``, then ``scope_path_of``: calls' ``path:name`` names ``path``)."""
+    import os
     from .adapters.factory import scope_path_of
     from .utils.query_binding import bind_resource_path
     path = resource.partition('?')[0] or getattr(adapter_class, 'CANONICAL_EMPTY_RESOURCE', '.')
-    path = bind_resource_path(spec, path, transport='uri', resolve=getattr(adapter_class, 'resource_path', None),
-                              validate_kind=False)
-    return dispatch_scope(os.path.expanduser(scope_path_of(adapter_class, path)), patterns)
+    spec = getattr(adapter_class, 'RESOURCE_SPEC', None)
+    if spec is not None:
+        path = bind_resource_path(spec, path, transport='uri', resolve=getattr(adapter_class, 'resource_path', None),
+                                  validate_kind=False)
+    return os.path.expanduser(scope_path_of(adapter_class, path))
 
 
 def _query_noun(noun: str, target: Optional[str], controls: Dict[str, Any]) -> Dict[str, Any]:
