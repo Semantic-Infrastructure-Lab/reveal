@@ -100,7 +100,7 @@ No comparative agent-effectiveness claim follows from that diagnostic coverage.
 3. **One quality family.** `metrics` absorbs the retiring `hotspots` noun (BACK-2149). Compact overview
    already uses one import analysis; the old dashboard assessment passes were removed.
 4. **The rest of the result contract.** Typed outcomes at the remaining adapter and analyzer
-   boundaries (BACK-2325, BACK-1857), one rendering layer (BACK-916), one scan-budget policy
+   boundaries (BACK-1857), one rendering layer (BACK-916), one scan-budget policy
    (BACK-1052).
 5. **Measure what is still judgment.** Each heuristic output is measured, narrowed or
    retired, starting with the file hotspot score (BACK-2593);
