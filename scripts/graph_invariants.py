@@ -491,12 +491,14 @@ def outline_names(answer: Dict[str, Any]) -> Dict[str, Set[int]]:
 
 
 def walk_edges(walks: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Every distinct call edge of the callee walks, one per (caller file, caller line, call)."""
-    seen: Dict[Tuple[Any, Any, Any], Dict[str, Any]] = {}
+    """Every distinct call edge of the callee walks, one per (caller file, caller line, caller, call): a
+    caller is a definition, and two can share a line (``<module>`` and a function on line 1)."""
+    seen: Dict[Tuple[Any, Any, Any, Any], Dict[str, Any]] = {}
     for walk in walks:
         for level in walk.get('levels') or []:
             for edge in level.get('callees') or []:
-                seen.setdefault((edge.get('caller_file'), edge.get('caller_line'), edge.get('call_expr')), edge)
+                seen.setdefault((edge.get('caller_file'), edge.get('caller_line'), edge.get('caller'),
+                                 edge.get('call_expr')), edge)
     return [seen[key] for key in sorted(seen, key=lambda k: tuple(str(p) for p in k))]
 
 

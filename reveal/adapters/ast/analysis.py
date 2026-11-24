@@ -463,12 +463,22 @@ def _with_shadows(elem: Dict[str, Any], shadowed: Dict[str, List[str]]) -> Dict[
     return {**elem, 'shadows': names} if names else elem
 
 
+def _site_call_lines(sites: List[Dict[str, Any]]) -> Dict[str, List[int]]:
+    """callee -> the sorted lines of a scope's calls to it (a JSX use is no call): the ``call_lines`` a
+    ``<module>`` or class-field source carries, in the shape the walk gives a function (BACK-2781)."""
+    lines: Dict[str, Set[int]] = {}
+    for site in sites:
+        if site.get('relationship') != 'jsx_reference':
+            lines.setdefault(site['callee'], set()).add(site['line'])
+    return {callee: sorted(found) for callee, found in lines.items()}
+
+
 def _class_field_sources(file_struct: Dict[str, Any]):
     """One caller per class field whose initializer calls something (BACK-2230)."""
     for field in file_struct.get('class_field_call_sites', []):
         yield {'category': 'class_fields', 'name': field['name'], 'line': field['line'], 'caller_kind': 'class_field',
                'calls': list(dict.fromkeys(s['callee'] for s in field['sites'])), 'call_sites': field['sites'],
-               'callable': field.get('callable', True)}
+               'call_lines': _site_call_lines(field['sites']), 'callable': field.get('callable', True)}
 
 
 def _walk_call_lines(file_struct: Dict[str, Any], elem: Dict[str, Any]) -> Dict[str, List[int]]:
@@ -501,10 +511,11 @@ def call_sources(file_struct: Dict[str, Any]):
     sites = [s for s in file_struct.get('module_call_sites', []) if s.get('relationship') != 'jsx_reference']
     references = [r for r in refs if r['owner'] == '<module>']
     if sites or references:
-        # The scope line of a module is its first call or reference: what callers report per callee.
-        yield {'category': 'modules', 'name': '<module>', 'line': min(s['line'] for s in [*sites, *references]),
+        # A module's scope starts at line 1, the definition line every record names (BACK-2714, BACK-2781);
+        # its calls' lines are call_lines.
+        yield {'category': 'modules', 'name': '<module>', 'line': 1,
                'caller_kind': 'module', 'calls': list(dict.fromkeys(s['callee'] for s in [*sites, *references])),
-               'call_sites': [*sites, *references], 'references': references,
+               'call_sites': [*sites, *references], 'call_lines': _site_call_lines(sites), 'references': references,
                'reference_only_calls': [r['callee'] for r in references if r['callee'] not in {s['callee'] for s in sites}]}
 
 

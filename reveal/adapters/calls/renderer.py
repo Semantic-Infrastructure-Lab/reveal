@@ -270,8 +270,8 @@ def _render_callee_walk_text(data: Dict[str, Any]) -> None:
     edges: Dict[Any, List[Dict[str, Any]]] = {}
     for level in data.get('levels', []):
         for edge in level['callees']:
-            edges.setdefault((edge['caller_file'], edge['caller_line']), []).append(edge)
-    tree = _WalkTree(edges, {(d['file'], d['line']): d for d in definitions})
+            edges.setdefault((edge['caller_file'], edge['caller_line'], edge['caller']), []).append(edge)
+    tree = _WalkTree(edges, {(d['file'], d['line'], d['name']): d for d in definitions})
     for root in roots:
         for line in tree.lines(root, '  ', ''):
             print(line)
@@ -279,14 +279,17 @@ def _render_callee_walk_text(data: Dict[str, Any]) -> None:
 
 
 class _WalkTree:
-    """Pre-order lines of the callee walk: an edge whose target is expanded elsewhere says where."""
+    """Pre-order lines of the callee walk: an edge whose target is expanded elsewhere says where. A
+    definition is keyed by (file, line, name): two definitions can share a line (one-line JS, ``<module>``
+    and a function on line 1), and a (file, line) key gave both one edge list, so the text recursed
+    without end (BACK-2781)."""
 
     def __init__(self, edges: Dict[Any, List[Dict[str, Any]]], definitions: Dict[Any, Dict[str, Any]]):
         self.edges, self.definitions = edges, definitions
-        self.printed: Set[Tuple[Any, Any]] = set()
+        self.printed: Set[Tuple[Any, Any, Any]] = set()
 
     def lines(self, node: Dict[str, Any], pad: str, label: str) -> List[str]:
-        key = (node['file'], node['line'])
+        key = (node['file'], node['line'], node['name'])
         self.printed.add(key)
         out = [f"{pad}{label or node['name']}  {node['file']}:{node['line']}"]
         if 'params' in node:
@@ -307,7 +310,7 @@ class _WalkTree:
             return [f"{pad}{label}  [ambiguous: {len(edge['candidates'])} definitions -- {where}]"]
         if not edge['resolved']:
             return [f"{pad}{label}  [external]"]
-        key = (edge['callee_file'], edge['callee_line'])
+        key = (edge['callee_file'], edge['callee_line'], edge['callee'])
         target = self.definitions.get(key)
         if edge.get('expanded') and target is not None:
             return self.lines(target, pad, label)

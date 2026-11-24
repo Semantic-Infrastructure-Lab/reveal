@@ -93,7 +93,7 @@ def test_callees_text_labels_reference_only_and_mixed_callees(tmp_path):
     assert any(line.strip() == '→ plain' for line in text.splitlines())
 
 
-def test_callees_of_a_module_report_the_first_call_line(tmp_path):
+def test_callees_of_a_module_report_line_one(tmp_path):
     (tmp_path / 's.py').write_text(
         'def helper():\n    return 1\n\n\nhelper()\nhelper()\n', encoding='utf-8')
     (tmp_path / 'a.jsx').write_text(
@@ -104,15 +104,16 @@ def test_callees_of_a_module_report_the_first_call_line(tmp_path):
         'helper();\n', encoding='utf-8')
     matches = find_callees(str(tmp_path), '<module>')['matches']
     by_name = {m['file'].replace('\\', '/').rsplit('/', 1)[-1]: m['line'] for m in matches}
-    assert by_name == {'s.py': 5, 'a.jsx': 6}
+    # A module's scope starts at line 1, as its callers record says (BACK-2714 caller_def_line, BACK-2781);
+    # F6's first call line is in call_lines on both sides.
+    assert by_name == {'s.py': 1, 'a.jsx': 1}
     callers = find_callers(str(tmp_path), 'helper')['levels'][0]['callers']
-    # callers name the same line as the module's first call (BACK-2714: call_lines; caller_def_line is 1)
     assert {r['file'].replace('\\', '/').rsplit('/', 1)[-1]: r['call_lines'][0] for r in callers
             if r['caller'] == '<module>'} == {'s.py': 5, 'a.jsx': 6}
 
 
 def test_callees_of_a_function_keep_the_definition_line(tmp_path):
-    """Negative control: only `<module>` moves to a call line."""
+    """Negative control: a function's match is its definition line, as `<module>`'s is line 1."""
     (tmp_path / 's.py').write_text('def helper(): return 1\n\n\ndef run():\n    return helper()\n',
                                    encoding='utf-8')
     match = find_callees(str(tmp_path), 'run')['matches'][0]
