@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Optional, Dict, List, Any, Literal, Tuple, Iterable, cast
 
-from ..invocation import COMMANDS, Invocation, current_invocation
+from ..invocation import Invocation, current_invocation, is_command_word
 from ...utils.request_cache import host_request
 from ...utils.results import outcome_of
 
@@ -29,16 +29,17 @@ _SSL_BATCH_FLAGS = ('stdin', 'format', 'summary', 'only_failures', 'expiring_wit
 
 def _command_line_of(target: str) -> Optional[List[str]]:
     """The words of a batch line that is a command line (BACK-2707): not an existing path, and its first word is
-    a reveal command or a URI (``calls src --callers X``, ``git://app.py@HEAD --limit 5``). None for a path
-    line, which is taken whole because a path may hold spaces. A line with quotes is split as a POSIX shell
-    splits it; an unbalanced quote leaves it a path line."""
+    a reveal command or a URI (``calls src --callers X``, ``git://app.py@HEAD --limit 5``). A removed command is
+    still a command, so its line exits 2 with its row's text (BACK-2771). None for a path line, which is taken whole
+    because a path may hold spaces. A line with quotes is split as a POSIX shell splits it; an unbalanced quote
+    leaves it a path line."""
     if os.path.lexists(target):
         return None
     try:
         words = shlex.split(target) if ('"' in target or "'" in target) else target.split()
     except ValueError:
         return None
-    if words and (words[0] in COMMANDS or '://' in words[0]):
+    if words and (is_command_word(words[0]) or '://' in words[0]):
         return words
     return None
 
