@@ -253,10 +253,16 @@ def test_a_replacement_that_spells_a_retiring_word_is_refused(tmp_path, monkeypa
 
 # --- every rewrite the script would make answers as its original does --------------------------------------------------
 
-def _doc_rewrites():
-    """(original, rewritten) once each, for the rewrites in the shipped docs that the named fixture runs."""
+def _planned_rewrites(planned):
+    """The distinct originals of the rewrites in *planned* (a ``migrate.plan`` result), as ``_doc_rewrites`` keys them."""
+    return {shlex.join(e.tokens) for examples in planned.values() for e in examples if e.kind == 'rewrite'}
+
+
+def _doc_rewrites(planned=None):
+    """(original, rewritten) once each, for the rewrites in *planned* (default: the shipped docs) that the named
+    fixture runs."""
     names, seen = _fixture_names(), {}
-    for examples in migrate.plan().values():
+    for examples in (migrate.plan() if planned is None else planned).values():
         for e in examples:
             if e.kind == 'rewrite' and _named_fixture_skip(e.tokens, names) is None:
                 seen.setdefault(shlex.join(e.tokens), shlex.split(e.new_line, comments=True))
@@ -314,7 +320,28 @@ def test_a_doc_rewrite_answers_as_its_original(named_harness, original, rewritte
         assert _text(named_harness, rewritten) == _text(named_harness, shlex.split(original))
 
 
+def _vacuous(planned, runnable):
+    """Whether a proof of *runnable* pairs is too thin for the *planned* distinct rewrites: while any rewrite is
+    planned, at least half of them run on the fixture. A ratio, not a fixed count, because each noun batch writes its
+    rewrites out of the plan (the lowest point, calls alone, runs 20 of 25)."""
+    return bool(planned) and 2 * len(runnable) < len(planned)
+
+
 def test_the_doc_rewrite_proof_is_not_vacuous():
-    """While the docs teach URI requests the script rewrites, over 100 of them run on the fixture."""
-    rewrites = sum(e.kind == 'rewrite' for examples in migrate.plan().values() for e in examples)
-    assert rewrites == 0 or len(DOC_REWRITES) > 100, (rewrites, len(DOC_REWRITES))
+    """While the docs teach URI requests the script rewrites, at least half of the distinct ones run on the fixture."""
+    planned = _planned_rewrites(migrate.plan())
+    assert not _vacuous(planned, DOC_REWRITES), (len(planned), len(DOC_REWRITES))
+
+
+def test_the_vacuity_guard_fails_a_proof_the_fixture_cannot_run(tmp_path):
+    """Control: rewrites of files the fixture lacks plan rewrites but run none, and the guard says so; one runnable
+    rewrite in three is still too few, and two of three are enough."""
+    missing = [f"reveal 'ast://nowhere/missing_{n}.py?complexity>5'" for n in range(3)]
+    docs = _docs(tmp_path, _fenced(*missing))
+    planned_docs = migrate.plan(['guides/G.md'], docs=docs)
+    planned, runnable = _planned_rewrites(planned_docs), _doc_rewrites(planned_docs)
+    assert len(planned) == 3 and runnable == []
+    assert _vacuous(planned, runnable)
+    assert _vacuous(planned, ['one runnable pair'])
+    assert not _vacuous(planned, ['one', 'two'])
+    assert not _vacuous(set(), [])  # nothing planned: nothing to prove
