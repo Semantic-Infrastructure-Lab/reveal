@@ -383,6 +383,12 @@ def test_alias_and_original_calls_merge_into_one_record(tmp_path):
     assert [(r['caller'], r.get('call_lines')) for r in records] == [('f', [6, 7])]
 
 
+def test_ranking_merges_the_alias_and_original_lines_too(tmp_path):
+    root = _write(tmp_path / 'proj', ALIASED)
+    entry = next(e for e in _cli_json('calls', str(root), '--sort=-callers')['entries'] if e['name'] == 'target')
+    assert (entry['caller_count'], [(r['caller'], r['call_lines']) for r in entry['callers']]) == (1, [('f', [6, 7])])
+
+
 def test_alias_and_original_are_one_caller(tmp_path):
     """Sibling: the (file, caller) dedupe already counted one caller."""
     root = _write(tmp_path / 'proj', ALIASED)
