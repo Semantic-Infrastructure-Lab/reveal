@@ -56,10 +56,10 @@ def test_missing_history_and_empty_history_are_distinct(transcript, history):
     assert json.loads(missing.stdout)['meta']['errors'][0]['code'] == 'invalid_request'
 
 
-def test_python_missing_history_keeps_its_error_dictionary(transcript, history):
-    from reveal.api import query
+def test_python_missing_history_raises_the_clis_refusal(transcript, history):
+    from failed_answers import refused_query
     history.unlink()
-    answer = query('claude://history')
+    answer = refused_query('claude://history')  # the CLI's exit 2: the API raises its message (BACK-2788)
     assert answer['error'] and answer['entries'] == []
     assert answer['meta']['history_analysis']['request_absent'] is True
 

@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from failed_answers import failed_query
 from reveal.api import query
 from test_claude_source_evidence_back2617 import transcript, deny_scan
 
@@ -43,7 +44,7 @@ def test_root_enumeration_loss_is_not_an_empty_catalog(transcript, monkeypatch):
         return original(path)
     monkeypatch.setattr(Path, 'iterdir', entries)
     # The constructor must not do transcript lookup for a store resource.
-    answer = query('claude://sessions')
+    answer = failed_query('claude://sessions')
     assert answer['session_count'] == 0
     proof = answer['meta']['session_catalog']
     assert proof['analyzed_entries'] == 0 and proof['discovery_failures'] == 1

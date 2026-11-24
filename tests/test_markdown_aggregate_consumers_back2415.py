@@ -10,6 +10,7 @@ import pytest
 
 from conftest import _run_reveal_direct as run
 from conftest import without_request_notes
+from failed_answers import answered, failed_query
 from reveal import api
 from reveal.errors import RequestValidationError
 from reveal.adapters.markdown import MarkdownQueryAdapter
@@ -70,7 +71,8 @@ def test_api_and_cli_keep_aggregate_source_decisions(
     for name, content in [('good.md', good), ('bad.md', bad)]:
         if content is not None:
             (tmp_path / name).write_bytes(content)
-    answer = api.query(_uri(tmp_path, suffix))
+    answer, failed = answered(_uri(tmp_path, suffix))
+    assert failed == (counts[1] == 0 and code == 3)  # nothing analyzed: a failed answer the API raises (BACK-2788)
     assert (answer['matched_files'], answer['files_missing_field']) == (matched, missing)
     assert _values(answer) == values
     _counts(answer, counts)
@@ -161,7 +163,7 @@ def test_discovery_loss_is_not_a_clean_empty_population(tmp_path, monkeypatch, h
         yield from original(top, *args, **kwargs)
 
     monkeypatch.setattr(paths.os, 'walk', walked)
-    answer = api.query(_uri(tmp_path))
+    answer = (api.query if healthy else failed_query)(_uri(tmp_path))  # nothing analyzed: failed (BACK-2788)
     _counts(answer, (int(healthy), int(healthy), 0, 1))
     assert answer['files_missing_field'] == int(healthy)
     assert run(_uri(tmp_path), '--format', 'json').returncode == 3

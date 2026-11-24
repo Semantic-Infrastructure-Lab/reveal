@@ -8,6 +8,7 @@ import pytest
 
 from conftest import _run_reveal_direct as run
 from conftest import without_request_notes
+from failed_answers import failed_query
 from reveal import api
 from reveal.adapters.markdown import MarkdownQueryAdapter, operations
 from reveal.cli.defaults import _default_args
@@ -247,7 +248,7 @@ def test_root_disappearing_after_construction_is_discovery_failure(tmp_path):
 
 def test_unreadable_source_does_not_claim_to_lack_the_field(tmp_path):
     document(tmp_path, content=b'\xff')
-    answer = api.query(uri(tmp_path))
+    answer = failed_query(uri(tmp_path))  # its one source lost: a failed answer the API raises (BACK-2788)
     assert answer['matched_files'] == 0
     assert answer['files_missing_field'] == 0
     assert any(w['type'] == 'unreadable_files' for w in answer['meta']['warnings'])
@@ -263,7 +264,7 @@ def test_failed_frontmatter_read_is_not_a_negative_filter_decision(tmp_path, mon
         return read(source, *args, **kwargs)
 
     monkeypatch.setattr(Path, 'read_text', read_text)
-    answer = api.query(uri(tmp_path, 'aggregate=kind&where=kind=useful'))
+    answer = failed_query(uri(tmp_path, 'aggregate=kind&where=kind=useful'))
     assert any(w['type'] == 'unreadable_files' for w in answer.get('meta', {}).get('warnings', []))
     assert answer['aggregate'] == []
 

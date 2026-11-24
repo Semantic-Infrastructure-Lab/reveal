@@ -6,6 +6,7 @@ import sqlite3
 import pytest
 
 from conftest import _run_reveal_in
+from failed_answers import failed_query
 from codex_session_fixture import DOC_SESSION_ID
 from reveal import query
 from test_codex_declared_api_back2618 import codex
@@ -80,7 +81,7 @@ def test_search_source_and_match_receipts_survive_presentation(codex, monkeypatc
 def test_absent_rollout_path_is_failed_selection_not_a_skipped_session(codex):
     with closing(sqlite3.connect(codex / 'state_5.sqlite')) as conn, conn:
         conn.execute('UPDATE threads SET rollout_path = ? WHERE id = ?', ('', DOC_SESSION_ID))
-    answer = query('codex://sessions?search=authentication')
+    answer = failed_query('codex://sessions?search=authentication')
     proof = answer['meta']['content_analysis']
     assert proof['failed_sources'] == 1
     assert proof['rollouts'][0]['failures'][0]['phase'] == 'selection'

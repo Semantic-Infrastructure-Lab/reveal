@@ -5,7 +5,9 @@ from pathlib import Path
 import pytest
 
 from conftest import _run_reveal_in
+from failed_answers import failed_query
 from reveal import query
+from reveal.errors import RequestValidationError
 from test_codex_declared_api_back2618 import codex
 
 
@@ -38,11 +40,13 @@ def test_key_presence_is_distinct_from_falsy_value(codex, key, value, exit_code)
     assert result.returncode == exit_code
     answer = json.loads(result.stdout)
     assert answer['value'] == value and type(answer['value']) is type(value)
-    native = query('codex://config?key=' + key)
-    assert native['value'] == value and 'error' not in native
-    if key == 'absent':
-        assert 'absent' in answer['error']
+    if key == 'absent':  # the CLI's exit 2: the API raises its message (BACK-2788)
+        with pytest.raises(RequestValidationError) as refused:
+            query('codex://config?key=' + key)
+        assert str(refused.value) == answer['error'] and 'absent' in answer['error']
     else:
+        native = query('codex://config?key=' + key)
+        assert native['value'] == value and 'error' not in native
         assert 'error' not in answer
     assert answer['meta']['installation_analysis']['request_rejected'] == (key == 'absent')
 
@@ -55,7 +59,7 @@ def test_configuration_metadata_denial_is_not_missing_input(codex, monkeypatch):
             raise PermissionError('config metadata denied')
         return original(self, *args, **kwargs)
     monkeypatch.setattr(Path, 'stat', stat)
-    answer = query('codex://config')
+    answer = failed_query('codex://config')
     proof = answer['meta']['installation_analysis']
     assert not proof['request_rejected'] and proof['failed_operations'] == 1
     assert proof['operations'][0]['phase'] == 'select'

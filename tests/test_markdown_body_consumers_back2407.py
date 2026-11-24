@@ -11,6 +11,7 @@ import pytest
 
 from conftest import _run_reveal_direct as run
 from conftest import without_request_notes
+from failed_answers import answered, failed_query
 from reveal import api
 from reveal.errors import RequestValidationError
 from reveal.adapters.markdown import MarkdownQueryAdapter
@@ -50,14 +51,16 @@ def _warnings(answer, kind):
     (b'---\ntitle: needle\n---\nother\n', b'needle caf\xe9\n',
      '', [], (2, 1, 1, 0), 3),
 ])
-def test_python_returns_source_evidence_and_cli_classifies_it(
+def test_python_and_cli_classify_the_same_source_evidence(
         tmp_path, good, bad, suffix, names, counts, code):
     for name, content in [('good.md', good), ('bad.md', bad)]:
         if content is not None:
             (tmp_path / name).write_bytes(content)
     request = _uri(tmp_path, suffix)
-    # Returned source loss remains a dict in the raw API, including total loss.
-    direct = api.query(request)
+    # Partial source loss is returned, marked; total loss (nothing analyzed) is the failed answer the API raises
+    # with its document, as the CLI exits 3 (BACK-2788).
+    direct, failed = answered(request)
+    assert failed == (counts[1] == 0 and code == 3)
     _counts(direct, counts)
     assert _names(direct) == names
     response = run(request, '--format', 'json')
@@ -160,7 +163,7 @@ def test_discovery_events_are_separate_from_candidate_files(tmp_path, monkeypatc
     assert _names(partial) == ['good.md']
     assert run(_uri(tmp_path), '--format', 'json').returncode == 3
     good.unlink()
-    empty = api.query(_uri(tmp_path))
+    empty = failed_query(_uri(tmp_path))  # nothing analyzed: a failed answer (BACK-2788)
     _counts(empty, (0, 0, 0, 1))
     assert empty['results'] == []
     assert run(_uri(tmp_path), '--format', 'json').returncode == 3

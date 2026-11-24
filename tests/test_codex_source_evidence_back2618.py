@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from conftest import _run_reveal_in
+from failed_answers import failed_query
 from codex_session_fixture import DOC_SESSION_ID
 from reveal import query
 from test_codex_declared_api_back2618 import codex
@@ -44,7 +45,7 @@ def test_nonobjects_are_failed_records(codex, line):
 def test_failed_empty_and_healthy_empty_sources_are_distinct(codex):
     path = rollout(codex)
     path.write_text('{broken\n', encoding='utf-8')
-    failed = query('codex://' + DOC_SESSION_ID + '/messages')
+    failed = failed_query('codex://' + DOC_SESSION_ID + '/messages')
     path.write_text('\n \n', encoding='utf-8')
     healthy = query('codex://' + DOC_SESSION_ID + '/messages')
     assert failed['messages'] == healthy['messages'] == []
@@ -81,7 +82,8 @@ def test_read_failure_keeps_acquired_prefix_and_operation_proof(codex, monkeypat
             raise PermissionError('source denied')
         return builtins.open(target, *args, **kwargs)
     monkeypatch.setattr(module, 'open', opener, raising=False)
-    answer = query('codex://' + DOC_SESSION_ID + '/messages')
+    # An interrupted read keeps its prefix, an incomplete answer; a denied one acquired nothing, a failed answer.
+    answer = (query if prefix else failed_query)('codex://' + DOC_SESSION_ID + '/messages')
     assert [row['message'] for row in answer['messages']] == (['known prefix'] if prefix else [])
     proof = answer['meta']['rollout_analysis']
     assert proof['opened'] is prefix and proof['decision'] == 'interrupted'

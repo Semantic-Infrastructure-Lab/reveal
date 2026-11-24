@@ -7,6 +7,7 @@ import pytest
 from conftest import _run_reveal_in
 from reveal.adapters.claude.adapter import ClaudeAdapter
 from reveal.api import query
+from reveal.errors import RequestValidationError
 from test_claude_source_evidence_back2617 import transcript
 from test_claude_workspace_lists_back2617 import workspace_home
 
@@ -15,7 +16,9 @@ from test_claude_workspace_lists_back2617 import workspace_home
 def test_missing_lookup_is_request_error(transcript, workspace_home, noun):
     result = _run_reveal_in(transcript.parent, f'claude://{noun}/absent', '--format', 'json')
     assert result.returncode == 2
-    assert query(f'claude://{noun}/absent')['error']
+    with pytest.raises(RequestValidationError) as refused:  # the API raises the CLI's message (BACK-2788)
+        query(f'claude://{noun}/absent')
+    assert str(refused.value) == json.loads(result.stdout)['error']
 
 
 @pytest.mark.parametrize('noun', ['plans', 'agents'])

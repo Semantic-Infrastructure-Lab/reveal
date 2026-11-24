@@ -352,10 +352,12 @@ def query(
         ValueError: If the first argument is neither a noun nor a URI, or the URI's scheme is not supported.
         ImportError: If an optional dependency required by the adapter is missing.
         RequestValidationError: A ValueError for a request a declared noun cannot answer as written: an
-            element, an unread control (``UnreadControlError``) or an unsupported keyword; with a noun, every
-            request the CLI exits 2 on.
+            element, an unread control (``UnreadControlError``) or an unsupported keyword; with a noun or a
+            declared noun's URI, every request the CLI exits 2 on (a missing path is ``PathNotFoundError``, still a
+            ``FileNotFoundError``).
         TypeError: If a declared noun gets an unsupported keyword (``UnsupportedOverrideError`` is both).
-        AnalysisFailedError: With a noun, a failed analysis that raised no cause of its own (the CLI's exit 3).
+        AnalysisFailedError: With a noun or a declared noun's URI, a failed analysis that raised no cause of its
+            own (the CLI's exit 3); its ``result`` is the answer's document.
 
     Example::
 
@@ -404,15 +406,27 @@ def query(
     with host_request(), log_scope(to_stderr=False), gitignore_scope(respect_gitignore):
         if uses_bound_query_call(adapter_class) and legacy_element is None:
             bound = _canonical_init(adapter_class, resource, overrides=kwargs)
+            from .cli.routing.declared import declared_adapter_class
+            # The CLI answers a declared noun's URI by its declared route, which exits on the answer's facts; the other
+            # bound schemes take the generic URI route, which does not read them (stats://).
+            declared = declared_adapter_class(scheme) is not None
+
             def bound_answer(bound=bound):
                 from .utils.exclusions import exclusion_scope
                 with exclusion_scope(*_walk_scope(adapter_class, resource, bound)):  # the URI's exclude (BACK-2730)
                     result = bound.get_structure()
                 facts_of = getattr(type(bound), 'execution_facts', None)
                 if callable(facts_of) and isinstance(result, dict):
+                    facts = facts_of(result)
+                    if declared:
+                        # A failed answer raises as the noun form's does, through its one mapping (D21, BACK-2788).
+                        from .cli.routing.typed import answer_failure
+                        failure = answer_failure(bound, _spelled(result), facts)
+                        if failure is not None:
+                            raise failure
                     # The CLI's order: the incomplete marker, then the retirement notes (COMMAND_MODEL 'Transports').
                     from .utils.results import note_incomplete
-                    note_incomplete(result, facts_of(result))
+                    note_incomplete(result, facts)
                 return result
             bound_result: Dict[str, Any] = _noted_answer(scheme, uri, kwargs, bound_answer)
             return _spelled(bound_result)

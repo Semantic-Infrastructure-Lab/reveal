@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from conftest import _run_reveal_in
+from failed_answers import failed_query
 from codex_session_fixture import DOC_SESSION_ID
 from reveal import query
 from test_codex_declared_api_back2618 import codex
@@ -38,7 +39,7 @@ def test_catalog_metadata_denial_is_not_absence(codex, monkeypatch):
             raise PermissionError('catalog metadata denied')
         return original(self, *args, **kwargs)
     monkeypatch.setattr(Path, 'stat', stat)
-    answer = query('codex://sessions')
+    answer = failed_query('codex://sessions')
     assert answer['meta']['session_catalog']['failures'][0]['phase'] == 'metadata'
 
 
@@ -125,7 +126,7 @@ def test_catalog_readonly_open_race_cannot_create_source(codex, monkeypatch):
         path.unlink()
         return original(database)
     monkeypatch.setattr(module, '_connect', connect)
-    answer = query('codex://sessions')
+    answer = failed_query('codex://sessions')
     assert not path.exists()
     assert answer['meta']['session_catalog']['failures'][0]['phase'] == 'open'
 

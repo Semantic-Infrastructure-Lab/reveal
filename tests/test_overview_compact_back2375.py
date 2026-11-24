@@ -14,6 +14,7 @@ import pytest
 
 from conftest import _run_reveal_direct as run
 from conftest import without_request_notes
+from failed_answers import failed_query
 from reveal import api
 from reveal.adapters.overview import OverviewAdapter
 from reveal.analyzers.imports import service
@@ -134,7 +135,7 @@ def test_direct_api_missing_resource_is_not_empty_success(tmp_path):
 
 def test_direct_api_malformed_required_owner_is_failed(project, monkeypatch):
     monkeypatch.setattr(ImportView, 'fan_in', lambda self: {})
-    body = api.query(f'overview://{project.as_posix()}')
+    body = failed_query(f'overview://{project.as_posix()}')  # raised with its document, the CLI's exit 3 (BACK-2788)
     assert body['map_status'] == 'failed'
     assert OverviewAdapter.execution_facts(body).completeness is AnalysisCompleteness.FAILED
 
@@ -343,7 +344,7 @@ def test_all_raw_entrypoint_fields_are_required_in_each_transport(project, monke
         result, body = answer(project, query=f'top={top}')
         assert result.returncode == 3
     else:
-        body = api.query(f'overview://{project.as_posix()}', top=top)
+        body = failed_query(f'overview://{project.as_posix()}', top=top)  # the CLI's exit 3 (BACK-2788)
     assert body['map_status'] == 'failed'
     assert OverviewAdapter.execution_facts(body).completeness is AnalysisCompleteness.FAILED
 

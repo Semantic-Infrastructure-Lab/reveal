@@ -6,6 +6,7 @@ import pytest
 from conftest import _run_reveal_in
 from reveal.adapters.claude.adapter import ClaudeAdapter
 from reveal.api import query
+from reveal.errors import RequestValidationError
 from test_claude_source_evidence_back2617 import transcript
 
 
@@ -27,8 +28,10 @@ def test_missing_install_json_is_a_request_error_but_malformed_source_is_analysi
     path.unlink()
     missing = _run_reveal_in(transcript.parent, 'claude://' + resource, '--format', 'json')
     assert missing.returncode == 2
-    answer = query('claude://' + resource)
-    assert answer['error']
+    answer = json.loads(missing.stdout)
+    with pytest.raises(RequestValidationError) as refused:  # the API raises the CLI's message (BACK-2788)
+        query('claude://' + resource)
+    assert answer['error'] and str(refused.value) == answer['error']
     assert answer['meta']['installation_analysis']['request_rejected'] is True
 
 
@@ -37,7 +40,9 @@ def test_settings_and_config_keep_distinct_missing_key_semantics(transcript, ins
     assert settings.returncode == 2
     config = _run_reveal_in(transcript.parent, 'claude://config?key=absent', '--format', 'json')
     assert config.returncode == 0 and json.loads(config.stdout)['value'] is None
-    assert query('claude://settings', key='absent')['error']
+    with pytest.raises(RequestValidationError) as refused:  # the CLI's exit 2 (BACK-2788)
+        query('claude://settings', key='absent')
+    assert str(refused.value) == json.loads(settings.stdout)['error']
 
 
 def test_config_decode_repair_retains_values_with_source_loss(transcript, installation):

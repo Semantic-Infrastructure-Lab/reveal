@@ -79,7 +79,9 @@ def counts(monkeypatch):
 
 
 def query(root, suffix):
-    return api.query(f'calls://{root.as_posix()}?{suffix}')
+    """The answer, or the document of the failed answer api.query raises (the CLI's exit 3, BACK-2788)."""
+    from failed_answers import answered
+    return answered(f'calls://{root.as_posix()}?{suffix}')[0]
 
 
 def dump(result):

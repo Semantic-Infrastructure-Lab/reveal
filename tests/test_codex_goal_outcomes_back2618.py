@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from conftest import _run_reveal_in
+from failed_answers import failed_query
 from codex_session_fixture import DOC_SESSION_ID
 from reveal import query
 from test_codex_declared_api_back2618 import codex
@@ -47,7 +48,7 @@ def test_goal_metadata_denial_is_not_optional_absence(codex, monkeypatch):
             raise PermissionError('goal metadata denied')
         return original(self, *args, **kwargs)
     monkeypatch.setattr(Path, 'stat', stat)
-    answer = query('codex://' + DOC_SESSION_ID + '?goal')
+    answer = failed_query('codex://' + DOC_SESSION_ID + '?goal')
     assert answer['meta']['goal_lookup']['failures'][0]['phase'] == 'metadata'
     assert answer['error'] == 'goal metadata denied'
 
@@ -119,7 +120,7 @@ def test_goal_open_race_cannot_create_database(codex, monkeypatch):
         path.unlink()
         return original(database)
     monkeypatch.setattr(module, 'connect_readonly', connect)
-    answer = query('codex://' + DOC_SESSION_ID + '?goal')
+    answer = failed_query('codex://' + DOC_SESSION_ID + '?goal')
     assert not path.exists()
     assert answer['meta']['goal_lookup']['failures'][0]['phase'] == 'open'
     assert answer['error'] and answer['goal'] is None

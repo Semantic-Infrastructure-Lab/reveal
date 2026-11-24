@@ -8,6 +8,7 @@ import pytest
 
 from conftest import _run_reveal_direct as run
 from conftest import is_request_note, without_request_notes
+from failed_answers import answered
 from reveal import api
 from reveal.adapters.markdown import operations
 from reveal.core import disk_cache
@@ -65,7 +66,8 @@ def test_api_loss_and_recovery_keep_observed_population(docs, denied, total, mod
     healthy = api.query(_uri(docs, mode))
     assert healthy['total_files'] == 2 and not _warnings(healthy)
     denied.add(docs if total else docs / 'hidden')
-    lost = api.query(_uri(docs, mode))
+    lost, failed = answered(_uri(docs, mode))
+    assert failed is total  # nothing discovered: a failed answer the API raises with its document (BACK-2788)
     assert lost['total_files'] == (0 if total else 1)
     _loss(lost, '.' if total else 'hidden')
     if mode == 'link-graph':

@@ -10,6 +10,7 @@ from conftest import _run_reveal_direct
 from reveal import api
 from reveal.adapters.trace import TraceAdapter
 from reveal.adapters.factory import uses_bound_query_call
+from reveal.errors import RequestValidationError
 from reveal.utils.results import AnalysisCompleteness, FailureCause
 
 SOURCE = ('def main():\n    first()\n'
@@ -120,7 +121,11 @@ def test_once_percent_uri_selector_and_typed_literal_selector(project):
 
 def test_absent_root_and_lost_source_recover_on_reused_adapter(project, monkeypatch):
     from reveal.adapters.ast import analysis
-    absent = query(project, 'from=absent')
+    # An absent root is the CLI's invalid request (exit 2): the API raises its message (BACK-2788); the answer's own
+    # facts say why.
+    with pytest.raises(RequestValidationError, match="Entry point 'absent' not found"):
+        query(project, 'from=absent')
+    absent = TraceAdapter(str(project), 'from=absent').get_structure()
     assert not absent['frames'][0]['resolved']
     assert TraceAdapter.execution_facts(absent).failures == frozenset({FailureCause.INVALID_REQUEST})
     adapter = TraceAdapter(str(project), 'from=main&depth=3')

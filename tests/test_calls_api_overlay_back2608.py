@@ -94,7 +94,8 @@ def test_repeated_requests_see_edit_and_preserve_required_loss(project, monkeypa
         return original(file, *args, **kwargs)
     (project / 'app.py').write_text('def sink(): return 3\n', encoding='utf-8')
     monkeypatch.setattr(builtins, 'open', opened)
-    answer = ask(project, callers='sink')
+    from failed_answers import failed_query
+    answer = failed_query(f'calls://{project.as_posix()}', callers='sink')  # the CLI's exit 3, raised (BACK-2788)
     assert denied
     assert any(w.get('type') == 'analysis_failed' and 'PermissionError' in str(w) and 'incomplete' in w.get('message', '')
                for w in answer['meta']['warnings']), answer

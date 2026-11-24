@@ -4,6 +4,7 @@ import json
 import pytest
 
 from claude_session_fixture import build_claude_home
+from failed_answers import failed_query
 from reveal.api import query
 from reveal.adapters.claude.adapter import ClaudeAdapter
 
@@ -38,7 +39,7 @@ def test_nonmapping_record_is_disclosed_without_erasing_valid_records(transcript
 
 def test_failed_empty_and_genuinely_empty_sources_are_distinct(transcript):
     transcript.write_text('broken\n', encoding='utf-8')
-    failed = query('claude://session/my-session')
+    failed = failed_query('claude://session/my-session')
     transcript.write_text('\n \n', encoding='utf-8')
     empty = query('claude://session/my-session')
     assert failed['message_count'] == empty['message_count'] == 0

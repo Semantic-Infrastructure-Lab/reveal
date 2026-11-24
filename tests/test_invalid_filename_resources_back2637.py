@@ -42,7 +42,7 @@ def test_windows_rejected_literal_is_reported_without_prefix_fallback(tmp_path, 
 
 def test_windows_rejected_database_keeps_failed_metadata_receipt(codex, monkeypatch):
     from reveal.adapters.codex.adapter import CodexAdapter
-    from reveal import query
+    from failed_answers import failed_query
     target = codex / 'invalid?state.sqlite'
     monkeypatch.setattr(CodexAdapter, 'CODEX_DB', target)
     original = Path.stat
@@ -53,7 +53,7 @@ def test_windows_rejected_database_keeps_failed_metadata_receipt(codex, monkeypa
             raise error
         return original(path, *args, **kwargs)
     monkeypatch.setattr(Path, 'stat', stat)
-    answer = query('codex://' + DOC_SESSION_ID)
+    answer = failed_query('codex://' + DOC_SESSION_ID)
     proof = answer['meta']['session_lookup']
     assert proof['decision'] == 'failed'
     assert proof['failures'][0]['phase'] == 'metadata'

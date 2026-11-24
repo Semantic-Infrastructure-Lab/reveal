@@ -98,7 +98,7 @@ def test_actual_required_open_loss_repairs_and_keeps_sibling_and_api(files, monk
     assert json.loads(run(uri(source), '--format', 'json').stdout)['value'][0]['name'] == 'fresh'
 
 
-def test_api_exceptions_and_canonical_returned_errors(files):
+def test_api_exceptions_and_canonical_errors(files):
     with pytest.raises(FileNotFoundError, match='Path not found: ') as missing:  # the CLI's refusal (BACK-2788)
         api.query(uri(files / 'missing.json'))
     assert isinstance(missing.value, PathNotFoundError)
@@ -108,7 +108,8 @@ def test_api_exceptions_and_canonical_returned_errors(files):
         api.query(uri(files))
     with pytest.raises(ValueError, match='non-negative'):
         api.query(uri(files / 'good.json') + '?limit=-1')
-    assert api.query(uri(files / 'object.json') + '/absent')['type'] == 'json_value'
+    with pytest.raises(RequestValidationError, match='Key not found: absent'):  # the CLI's exit 2 (BACK-2788)
+        api.query(uri(files / 'object.json') + '/absent')
 
 
 @pytest.mark.parametrize('suffix,code,result_type', [

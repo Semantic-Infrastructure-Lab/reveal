@@ -21,6 +21,7 @@ import pytest
 
 from reveal import api
 from reveal.adapters.calls import confidence, index
+from reveal.errors import RequestValidationError
 from reveal.utils import gitignore, request_cache
 from reveal.utils.exclusions import exclusion_scope
 
@@ -67,7 +68,10 @@ def walks(monkeypatch):
 
 
 def query(root, suffix):
-    return api.query(f'calls://{root.as_posix()}?{suffix}')
+    try:
+        return api.query(f'calls://{root.as_posix()}?{suffix}')
+    except RequestValidationError as refused:  # a root without the function: the CLI's exit 2, raised (BACK-2788)
+        return {'refused': str(refused)}
 
 
 def dump(result):

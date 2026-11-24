@@ -7,6 +7,7 @@ import pytest
 
 from codex_session_fixture import DOC_SESSION_ID
 from conftest import is_request_note
+from failed_answers import failed_query, refused_query
 from reveal import query
 from test_codex_declared_api_back2618 import codex
 
@@ -24,10 +25,10 @@ def test_healthy_lookup_records_the_observed_query_scope(codex, identifier, phas
 
 
 def test_missing_target_and_unreadable_index_have_different_decisions(codex):
-    missing = query('codex://ffffffff-ffff-7fff-8fff-ffffffffffff')
+    missing = refused_query('codex://ffffffff-ffff-7fff-8fff-ffffffffffff')
     assert missing['meta']['session_lookup']['decision'] == 'missing'
     (codex / 'state_5.sqlite').write_bytes(b'not a SQLite database')
-    failed = query('codex://' + DOC_SESSION_ID)
+    failed = failed_query('codex://' + DOC_SESSION_ID)
     proof = failed['meta']['session_lookup']
     assert proof['decision'] == 'failed' and proof['failed_operations'] == 1
     assert proof['failures'][0]['phase'] == 'exact'
@@ -37,7 +38,7 @@ def test_missing_target_and_unreadable_index_have_different_decisions(codex):
 
 def test_absent_install_has_a_measured_missing_source(codex):
     (codex / 'state_5.sqlite').unlink()
-    answer = query('codex://' + DOC_SESSION_ID)
+    answer = refused_query('codex://' + DOC_SESSION_ID)
     proof = answer['meta']['session_lookup']
     assert answer['type'] == 'codex_not_installed'
     assert proof['decision'] == 'source_absent' and proof['source_present'] is False
@@ -52,7 +53,7 @@ def test_metadata_denial_is_not_target_absence(codex, monkeypatch):
             raise PermissionError('index metadata denied')
         return original(path, *args, **kwargs)
     monkeypatch.setattr(Path, 'stat', stat)
-    answer = query('codex://' + DOC_SESSION_ID)
+    answer = failed_query('codex://' + DOC_SESSION_ID)
     proof = answer['meta']['session_lookup']
     assert proof['decision'] == 'failed' and proof['source_present'] is None
     assert proof['failures'][0]['phase'] == 'metadata'
@@ -66,7 +67,7 @@ def test_open_race_cannot_create_an_empty_database(codex, monkeypatch):
         database.unlink()
         return original(*args, **kwargs)
     monkeypatch.setattr(module.sqlite3, 'connect', connect)
-    answer = query('codex://' + DOC_SESSION_ID)
+    answer = failed_query('codex://' + DOC_SESSION_ID)
     assert not database.exists()
     proof = answer['meta']['session_lookup']
     assert proof['source_present'] is True and proof['opened'] is False
@@ -81,7 +82,7 @@ def test_ambiguity_reports_bounded_observed_candidates(codex):
             identifier = DOC_SESSION_ID[:-3] + f'{index:03d}'
             conn.execute('INSERT INTO threads (id, rollout_path, created_at, updated_at) VALUES (?, ?, 1, 2)',
                          (identifier, str(path)))
-    answer = query('codex://' + DOC_SESSION_ID[:8])
+    answer = refused_query('codex://' + DOC_SESSION_ID[:8])
     proof = answer['meta']['session_lookup']
     assert proof['decision'] == 'ambiguous' and proof['selected_id'] is None
     assert len(proof['observed_ids']) == 6
@@ -101,7 +102,7 @@ def test_interrupted_prefix_retains_observed_ids_without_claiming_uniqueness(cod
             return rows()
         def close(self): pass
     monkeypatch.setattr(module.sqlite3, 'connect', lambda *args, **kwargs: Connection())
-    answer = query('codex://' + DOC_SESSION_ID[:8])
+    answer = failed_query('codex://' + DOC_SESSION_ID[:8])
     proof = answer['meta']['session_lookup']
     assert proof['decision'] == 'failed' and proof['selected_id'] is None
     assert proof['observed_ids'] == [DOC_SESSION_ID]

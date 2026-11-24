@@ -43,9 +43,10 @@ def test_invalid_request_is_two_with_canonical_identity(source, suffix):
     assert resolved.public_diagnostic
 
 
-def test_python_api_returns_canonical_errors_and_typed_validation(source):
+def test_python_api_raises_canonical_errors_and_typed_validation(source):
+    from failed_answers import refused_query
     for suffix in ('/absent', '?unknown', '/items[99]'):
-        result = api.query(uri(source, suffix))
+        result = refused_query(uri(source, suffix))  # the CLI's exit 2: the API raises its message (BACK-2788)
         assert result['type'] == 'json_value' and result['error']
         assert result['meta']['errors'][0]['code'] == 'invalid_request'
     for suffix in ('?limit=-1', '?offset=bad', '/items?n~=[', '/items[-:]'):
