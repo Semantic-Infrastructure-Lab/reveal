@@ -460,7 +460,7 @@ reveal 'metrics://.?view=hotspots&code-only=true'
   reveal 'calls://src?sort=-callers&limit=20'   # top 20
   ```
 
-- **`depth`** - Levels for `?callers` and `?callees` (default 1; the retired `?root`: 2), clamped 1-5
+- **`depth`** - Levels for `?callers` and `?callees` (default 1; the retired `?root`: 2), 1-5; a value outside it exits 2 (`depth must be 1..5, got N`)
   ```bash
   reveal 'calls://src?callers=validate_item&depth=2'  # callers-of-callers
   ```

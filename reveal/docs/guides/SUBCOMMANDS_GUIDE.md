@@ -415,7 +415,7 @@ reveal calls [PATH] --sort=-callers [--limit N] [--builtins] [--test-framework]
 | `--callees NAME` | `callees` | What every definition of NAME (or `FILE:NAME`, one file's) calls (builtins hidden); with `--depth 2-5` a level-by-level walk, each definition expanded once at its shallowest level |
 | `--detail LEVEL` | `detail` | With `--callees`: `normal` (default) or `full`, which adds the params and effects of every definition reached; any other mode exits 2. The valueless `--detail` and `true`/`false` are deprecated (a note names `--detail full`/`normal`) |
 | `--root NAME` | `root` | Retired: `--callees NAME --depth N` is the same walk (`--root` defaulted to depth 2); prints a note |
-| `--depth N` | `depth` | Signed whole integer, clamped 1–5: callers levels (default 1), callee walk levels for `--callees` (default 1) and the retired `--root` (default 2); other modes ignore it with a warning |
+| `--depth N` | `depth` | Whole integer 1–5 (outside it exits 2, `depth must be 1..5, got N`): callers levels (default 1), callee walk levels for `--callees` (default 1) and the retired `--root` (default 2); other modes refuse it (exit 2) |
 | `--rank callers` | `rank=callers` | Rank the functions and classes the path defines by caller count |
 | `--top N` | `top` | Entries for `--rank` (default 10) or the retired `--uncalled` (default all); 0 = all; negative values reject |
 | `--uncalled` | `uncalled` | Retired (D8): functions/methods with no callers; `--callers NAME` for one function, the language's own tool for a project-wide list; prints a note and no confidence |

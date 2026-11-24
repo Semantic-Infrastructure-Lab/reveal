@@ -1093,10 +1093,10 @@ existing behavior. This is a producer repair, not an exhaustive row-schema valid
 or adoption of the declared execution policy by legacy testability reports.
 
 Trace supports only `none`. Required nonempty `from` preserves typed strings and
-uses once-only percent decoding for URI scalars without plus decoding. Signed
-whole `depth` defaults to 2 and clamps to 1–5; booleans, fractions and scientific
-notation reject. Local proof validates renderer-consumed frames and nonnegative
-edge totals without equating edge counts to frame counts. Definitive root absence
+uses once-only percent decoding for URI scalars without plus decoding. Whole
+`depth` defaults to 2 and is 1–5 (outside it: `depth must be 1..5, got N`); booleans,
+fractions and scientific notation reject. Local proof validates renderer-consumed
+frames and nonnegative edge totals without equating edge counts to frame counts. Definitive root absence
 requires the canonical unresolved placeholder, zero totals and no known required
 input failures/recovery/malformed evidence. It is usage 2; incomplete evidence
 wins with 3. Postprocessing cannot fabricate absence from earlier successful or

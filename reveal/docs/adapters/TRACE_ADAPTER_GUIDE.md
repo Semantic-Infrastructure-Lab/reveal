@@ -31,8 +31,8 @@ the same text becomes an exit-2 error.
   `calls` (callee labels), `depth`, `resolved`, `ambiguous` (`candidates` when ambiguous) and
   `relationship` for JSX references. `[external]` and `[ambiguous: N definitions -- ...]` mark
   unresolved and ambiguous callees in text.
-- **Parameters:** `from` (required; `FILE:NAME` picks one definition) and `depth` (signed whole
-  integer, default 2, clamped 1-5; booleans and fractions exit 2).
+- **Parameters:** `from` (required; `FILE:NAME` picks one definition) and `depth` (whole
+  integer 1-5, default 2; a value outside 1-5, a boolean or a fraction exits 2).
 - **Exits:** 0 complete; 2 invalid input or a proven absent entry point; 3 incomplete analysis
   or a required output failure. Only `--fail-on none` is supported. The MCP tool keeps its
   historical nonerror answer for a proven absent entry point.
@@ -50,7 +50,8 @@ report = api.query("trace://src?from=main&depth=1", **{"from": "other", "depth":
 
 The original URI validates first: a missing or invalid required `from` still rejects
 before overrides. Explicit values replace valid URI controls; omission keeps them.
-`depth=None` selects default 2, and zero clamps to 1. Invalid typed values raise
+`depth=None` selects default 2; a depth outside 1-5 (zero included) raises `RequestValidationError`
+(`depth must be 1..5, got N`). Invalid typed values raise
 `ValueError`; unsupported API keywords, including `root` and `from_`, raise `TypeError`.
 Typed selectors remain literal rather than being URI-encoded or decoded again.
 
