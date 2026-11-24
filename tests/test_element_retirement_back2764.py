@@ -106,6 +106,17 @@ def test_cli_diff_declared_route_joins_the_element_and_notes_it(tmp_path, monkey
     assert run.returncode == 2 and "takes no positional element ('ok')" in run.stdout + run.stderr, run.stderr
 
 
+def test_the_declared_route_joins_an_element_to_an_empty_resource_as_the_element_alone():
+    """A noun whose resource may be empty (help's topic: ``reveal help:// quick`` once help is a declared subcommand,
+    BACK-2773) joins the element as the resource itself, ``quick``, not ``/quick`` (an element no topic has). A resource
+    keeps its own trailing-slash handling: ``L:R/`` and ``L:R`` join ``ok`` alike (diff, BACK-2768)."""
+    from reveal.cli.routing.declared import legacy_element_resource
+    assert legacy_element_resource('help', '', 'quick') == 'quick'
+    assert legacy_element_resource('diff', 'a.py:b.py', 'ok') == 'a.py:b.py/ok'
+    assert legacy_element_resource('diff', 'a.py:b.py/', 'ok') == 'a.py:b.py/ok'
+    assert legacy_element_resource('env', 'PATH', 'x') is None  # no target:env.element row: refused as before
+
+
 # --- the CLI's URI route (uri._resolve) ------------------------------------------------------------------------------
 
 def test_every_other_bound_noun_has_no_row():
