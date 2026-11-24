@@ -59,11 +59,18 @@ class PathNotFoundError(MissingResourceError, FileNotFoundError):
 class ElementNotFoundError(MissingResourceError):
     """The element a resource names is not there (``diff://a.py:b.py/nope``): an invalid request, exit 2, answered as
     every element miss is, with the adapter's element names (``available_elements``; the router's
-    ``_fail_element_not_found``). For an adapter whose structure call answers an element its resource names (BACK-2214)."""
+    ``_fail_element_not_found``). For an adapter whose structure call answers an element its resource names (BACK-2214).
+    *message*: what the miss says when it says more than the default (the path read's ``Element 'X' not found in
+    PATH``, ``No element #3 found in PATH``: the Python API raises the CLI's message, BACK-2325)."""
 
-    def __init__(self, element: str):
-        super().__init__(f"Element '{element}' not found")
+    def __init__(self, element: str, message: Optional[str] = None):
+        super().__init__(f"Element '{element}' not found" if message is None else message)
         self.element = element
+
+    def __reduce__(self):
+        # A copy or a pickle rebuilds the error from (element, message), not from its message alone (Answer keeps a
+        # copy of the request's error, uri._detached).
+        return type(self), (self.element, str(self)), self.__dict__
 
 
 class ConfigValidationError(RequestValidationError):
