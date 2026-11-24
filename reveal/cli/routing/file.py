@@ -352,36 +352,38 @@ def _handle_directory_path(path: Path, args: 'Namespace', answer_consumer=None) 
     output_format = getattr(args, 'format', 'text')
     listing = dict(respect_gitignore=args.respect_gitignore, exclude_patterns=args.exclude, sort_by=sort_by,
                    include_extensions=include_extensions, max_entries=args.max_entries)
+    failures: list = []
     if getattr(args, 'files', False):
         # --files defaults to newest-first; --asc flips it
         listing['sort_desc'] = not getattr(args, 'asc', False)
-        build_json, build_text = show_file_list_json, show_file_list
+        build = show_file_list_json if output_format == 'json' else show_file_list
     else:
         listing.update(depth=args.depth if args.depth is not None else 3, fast=args.fast,
-                       dir_limit=getattr(args, 'dir_limit', 0), sort_desc=getattr(args, 'desc', False))
-        build_json, build_text = show_directory_tree_json, show_directory_tree
-    _hand_off(_listing_answer(str(path), output_format, build_json, build_text, listing), answer_consumer)
+                       dir_limit=getattr(args, 'dir_limit', 0), sort_desc=getattr(args, 'desc', False),
+                       failures=failures)
+        build = show_directory_tree_json if output_format == 'json' else show_directory_tree
+    _hand_off(_listing_answer(str(path), output_format, build, listing, failures), answer_consumer)
 
 
-def _listing_answer(path: str, output_format: str, build_json, build_text, listing: dict):
-    """A directory listing (the tree, or ``--files``) as an Answer: its document in JSON, its text otherwise, complete
-    (BACK-2325: the Python API reads the document the CLI prints)."""
+def _listing_answer(path: str, output_format: str, build, listing: dict, failures: list):
+    """A directory listing (the tree, or ``--files``) as an Answer: its document in JSON, its text otherwise
+    (BACK-2325: the Python API reads the document the CLI prints). *failures*: the files *build* could not read (the
+    tree's line counts); a listing that lost one says so in itself and is incomplete, exit 3, as ``--grep`` on the same
+    tree is (BACK-2520)."""
     from ...utils import safe_json_dumps
-    from ...utils.results import AnalysisCompleteness, ExecutionFacts
+    from ...utils.results import AnalysisCompleteness, ExecutionFacts, execution_exit_code, note_incomplete
     from .uri import Answer
-    facts = ExecutionFacts(AnalysisCompleteness.COMPLETE)
-    if output_format == 'json':
-        result = build_json(path, **listing)
+    result = build(path, **listing)
+    facts = ExecutionFacts(AnalysisCompleteness.INCOMPLETE if failures else AnalysisCompleteness.COMPLETE)
+    note_incomplete(result, facts)
+    code = execution_exit_code(facts)
 
-        def print_document(_answer, **_options):
-            print(safe_json_dumps(attach_invocation_warnings(result)))
-        return Answer(result, 'structure', print_document, execution_facts=facts,
-                      document=lambda: attach_invocation_warnings(result))
-    text = build_text(path, **listing)
-
-    def print_text(_answer, **_options):
-        print(text)
-    return Answer(text, 'structure', print_text, execution_facts=facts)
+    def printer(_answer, **_options):
+        print(safe_json_dumps(attach_invocation_warnings(result)) if output_format == 'json' else result)
+        if code:
+            sys.exit(code)
+    document = (lambda: attach_invocation_warnings(result)) if output_format == 'json' else None
+    return Answer(result, 'structure', printer, execution_facts=facts, document=document)
 
 
 # Flags whose answer never reads the ELEMENT argument (dest -> spelling). `reveal a b --flag`

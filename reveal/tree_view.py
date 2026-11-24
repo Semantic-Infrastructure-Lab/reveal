@@ -12,7 +12,8 @@ from .reveal_types import CONTRACT_VERSION
 from .utils import format_size
 from .utils.results import ResultBuilder
 from .utils.path_utils import (
-    DISPLAY, WalkPurpose, _walk_code_files, hidden_entries_phrase, list_dir, to_posix, walk_filter,
+    DISPLAY, WalkPurpose, _walk_code_files, analysis_skipped_warning, failure_of, hidden_entries_phrase, list_dir,
+    to_posix, walk_filter,
 )
 
 Hidden = Callable[[Path, bool], Optional[str]]
@@ -207,13 +208,16 @@ def show_file_list_json(path: str, show_hidden: bool = False,
     return result
 
 
-def show_directory_tree(path: str, options: Optional[TreeViewOptions] = None, **kwargs) -> str:
+def show_directory_tree(path: str, options: Optional[TreeViewOptions] = None, *,
+                        failures: Optional[List[Tuple[str, str]]] = None, **kwargs) -> str:
     """Show directory tree with file info.
 
     Args:
         path: Directory path
         options: TreeViewOptions instance. If not provided, built from kwargs for
                  backwards compatibility.
+        failures: Receives ``(path, cause)`` for each file whose line count could not be read; the tree
+                  discloses them in a warning line after the body (BACK-2325)
         **kwargs: Backwards-compatible keyword arguments corresponding to TreeViewOptions
                   fields (depth, show_hidden, max_entries, fast, respect_gitignore,
                   exclude_patterns, dir_limit, sort_by, sort_desc, include_extensions).
@@ -261,7 +265,7 @@ def show_directory_tree(path: str, options: Optional[TreeViewOptions] = None, **
         'count': 0, 'max_entries': options.max_entries, 'truncated': 0,
         'dir_limit': options.dir_limit, 'sort_by': options.sort_by,
         'sort_desc': options.sort_desc, 'include_extensions': options.include_extensions,
-        'max_entries_hit': False, 'dir_limit_hit': False,
+        'max_entries_hit': False, 'dir_limit_hit': False, 'failures': [] if failures is None else failures,
     }
     _walk_directory(root_path, lines, depth=options.depth, fast=options.fast, context=context,
                    hidden=hidden)
@@ -280,6 +284,11 @@ def show_directory_tree(path: str, options: Optional[TreeViewOptions] = None, **
     suppressed_footer = _format_suppressed_footer(suppressed)
     if suppressed_footer:
         lines.append(f"\n{suppressed_footer}")
+    lost = _lost_files_warning(context['failures'], root_path)
+    if lost:
+        from .utils.warning_render import meta_warning_lines
+        lines.append('')
+        lines.extend(meta_warning_lines({'meta': {'warnings': [lost]}}))
 
     # Add navigation hint
     lines.append(f"\nUsage: reveal {path}/<file>")
@@ -435,7 +444,7 @@ def _process_file_entry(entry: Path, lines: List[str], prefix: str, connector: s
     Returns:
         Number of entries added (always 1 for files)
     """
-    file_info = _get_file_info(entry, fast=fast)
+    file_info = _get_file_info(entry, fast=fast, failures=context.get('failures'))
     lines.append(f"{prefix}{connector}{file_info}")
     context['count'] += 1
     return 1
@@ -509,10 +518,12 @@ def _walk_directory(path: Path, lines: List[str], prefix: str = '', depth: int =
                                                   context, depth, fast, hidden)
 
 
-def show_directory_tree_json(path: str, options: Optional[TreeViewOptions] = None, **kwargs) -> dict:
+def show_directory_tree_json(path: str, options: Optional[TreeViewOptions] = None, *,
+                             failures: Optional[List[Tuple[str, str]]] = None, **kwargs) -> dict:
     """JSON counterpart to show_directory_tree — same traversal (depth,
     dir_limit, max_entries, sort, filters), structured shape instead of an
-    ASCII tree. See show_directory_tree for arg semantics.
+    ASCII tree. See show_directory_tree for arg semantics; a file whose line count
+    could not be read is an ``analysis_failed`` warning in ``meta.warnings``.
     """
     if options is None:
         options = TreeViewOptions(
@@ -539,7 +550,7 @@ def show_directory_tree_json(path: str, options: Optional[TreeViewOptions] = Non
         'count': 0, 'max_entries': options.max_entries, 'truncated': 0,
         'dir_limit': options.dir_limit, 'sort_by': options.sort_by,
         'sort_desc': options.sort_desc, 'include_extensions': options.include_extensions,
-        'max_entries_hit': False, 'dir_limit_hit': False,
+        'max_entries_hit': False, 'dir_limit_hit': False, 'failures': [] if failures is None else failures,
     }
     entries = _walk_directory_json(root_path, depth=options.depth, fast=options.fast,
                                    context=context, hidden=hidden)
@@ -551,6 +562,9 @@ def show_directory_tree_json(path: str, options: Optional[TreeViewOptions] = Non
                                         'entries': entries}))
     if context['truncated'] > 0:
         result['truncated'] = context['truncated']
+    lost = _lost_files_warning(context['failures'], root_path)
+    if lost:
+        result['meta']['warnings'].append(lost)
 
     # Suppressed-entries tally (BACK-1224) — same footer info as show_directory_tree,
     # structured for MCP/agent consumers instead of formatted text.
@@ -572,7 +586,20 @@ def _check_dir_limit_json(dir_limit: int, dir_entry_count: int, entries: List[Pa
     return False
 
 
-def _file_entry_json(path: Path, fast: bool) -> dict:
+def _lost_files_warning(failures: List[Tuple[str, str]], root_path: Path):
+    """The ``analysis_failed`` warning of the files the tree could not read, as ``--grep`` on the same tree says it
+    (BACK-2520): the cause without the errno or the path (``failure_of``, BACK-2249), each file relative to the tree."""
+    return analysis_skipped_warning(failures, root_path, 'the listing is incomplete; their line counts are missing')
+
+
+def _record_failure(path: Path, error: BaseException, failures: Optional[List[Tuple[str, str]]]) -> str:
+    cause = failure_of(error).cause
+    if failures is not None:
+        failures.append((to_posix(path), cause))
+    return cause
+
+
+def _file_entry_json(path: Path, fast: bool, failures: Optional[List[Tuple[str, str]]] = None) -> dict:
     """Structured counterpart to _get_file_info."""
     entry: dict = {'name': path.name, 'type': 'file'}
     try:
@@ -588,7 +615,7 @@ def _file_entry_json(path: Path, fast: bool) -> dict:
         else:
             entry['size'] = os.stat(path).st_size
     except Exception as e:  # boundary-ok: broad-except -- an analyzer is arbitrary per-language code; the tree entry carries the error text instead of lines or size
-        entry['error'] = f'{type(e).__name__}: {e}'
+        entry['error'] = _record_failure(path, e, failures)
     return entry
 
 
@@ -625,7 +652,7 @@ def _walk_directory_json(path: Path, depth: int = 3, fast: bool = False,
             return result
 
         if entry.is_file():
-            result.append(_file_entry_json(entry, fast))
+            result.append(_file_entry_json(entry, fast, context.get('failures')))
             context['count'] += 1
             dir_entry_count += 1
         elif entry.is_dir():
@@ -644,12 +671,13 @@ def _walk_directory_json(path: Path, depth: int = 3, fast: bool = False,
     return result
 
 
-def _get_file_info(path: Path, fast: bool = False) -> str:
+def _get_file_info(path: Path, fast: bool = False, failures: Optional[List[Tuple[str, str]]] = None) -> str:
     """Get formatted file info for tree display.
 
     Args:
         path: File path
         fast: If True, skip expensive line counting
+        failures: Receives ``(path, cause)`` when the file's info could not be read
 
     Returns:
         Formatted string like "app.py (247 lines, Python)" or "app.py (12.5 KB)"
@@ -677,6 +705,6 @@ def _get_file_info(path: Path, fast: bool = False) -> str:
             size = format_size(stat.st_size)
             return f"{path.name} ({size})"
 
-    except Exception:  # boundary-ok: broad-except -- display label only: the file name alone is the correct fallback, and the structured tree entry carries the error
-        # If anything fails, just show filename
+    except Exception as e:  # boundary-ok: broad-except -- an analyzer is arbitrary per-language code; the label falls back to the file name and the loss is recorded for the tree's warning
+        _record_failure(path, e, failures)
         return path.name
