@@ -75,3 +75,35 @@ def test_an_unreadable_file_answers_the_failed_document_exit_3(fx):
     assert document['type'] == 'file_structure'
     assert document['error'] == 'cannot read denied.py: Permission denied'
     assert document['meta']['errors'] == [{'code': 'analysis', 'message': document['error']}]
+
+
+# B11: the navigation check of a path read (--head/--tail/--range, main._prepare) refuses before the file route runs.
+# In JSON it answers the path read's invalid-request document (invalid_path_read, the main parser's usage-error
+# answer: stderr labels the path, as `reveal ok.py --zz --format json` does); in text its two lines are unchanged.
+_RANGE = ("Invalid range format 'zz': range must be START-END or START- (1-indexed, e.g. 10-20 or 300-), got 'zz'\n"
+          'Expected format: START-END or START- for open-ended (e.g., 10-20, 300-, 1-indexed)')
+NAVIGATION = [
+    (['ok.py', '--range', 'zz'], 'file_structure', _RANGE),
+    (['ok.py', '--head', '1', '--tail', '1'], 'file_structure', '--head, --tail, and --range are mutually exclusive'),
+    (['ok.py', '--head', '-1'], 'file_structure', '--head must be 0 or more, got -1'),
+    (['ok.py', 'foo', '--tail', '-2'], 'code_element', '--tail must be 0 or more, got -2'),
+    (['d', '--head', '-1'], 'directory_tree', '--head must be 0 or more, got -1'),
+]
+
+
+@pytest.mark.parametrize('argv, facet, message', NAVIGATION, ids=[' '.join(s[0]) for s in NAVIGATION])
+def test_a_navigation_refusal_answers_the_invalid_request_document_in_json(fx, argv, facet, message):
+    run = _run_reveal_direct(*argv, '--format', 'json')
+    assert run.returncode == 2
+    document = json.loads(run.stdout)
+    assert document['type'] == facet and document['source'] == argv[0]
+    assert document['error'] == message
+    assert document['meta']['errors'] == [{'code': 'invalid_request', 'message': message}]
+    assert run.stderr == f'Error ({argv[0]}): {message}\n'
+
+
+@pytest.mark.parametrize('argv, facet, message', NAVIGATION, ids=[' '.join(s[0]) for s in NAVIGATION])
+def test_sibling_the_text_navigation_refusal_is_unchanged(fx, argv, facet, message):
+    run = _run_reveal_direct(*argv)
+    assert run.returncode == 2 and run.stdout == ''
+    assert run.stderr == f'Error: {message}\n'
