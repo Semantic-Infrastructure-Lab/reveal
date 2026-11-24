@@ -33,9 +33,11 @@ def typed_nouns() -> Tuple[str, ...]:
 
 def _noun_adapter(noun: str) -> Tuple[str, Any]:
     """(declared adapter name, class) for *noun*, or the ValueError that names what was asked for."""
-    from ..invocation import COMMANDS
+    from ..invocation import COMMANDS, is_command_word, retirement_note
     from .declared import declared_adapter_class
     spec = COMMANDS.get(noun)
+    if spec is None and is_command_word(noun):
+        retirement_note(f'subcommand:{noun}')  # a removed command raises with its row's text, as the CLI (BACK-2771)
     adapter_name = spec.declared_adapter if spec is not None else ''
     adapter = declared_adapter_class(adapter_name) if adapter_name else None
     if adapter is not None:

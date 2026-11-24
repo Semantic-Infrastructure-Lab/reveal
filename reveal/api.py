@@ -390,7 +390,8 @@ def query(
     resource, respect_gitignore = split_respect_gitignore(resource)
     adapter_class = get_adapter_class(scheme)
     if adapter_class is None:
-        from .cli.invocation import current_schemes
+        from .cli.invocation import current_schemes, retirement_note
+        retirement_note(f"scheme:{scheme.lower()}")  # a removed scheme raises with its row's text, as the CLI does
         supported = ", ".join(f"{s}://" for s in current_schemes())
         raise ValueError(
             f"Unsupported URI scheme: {scheme}://\n"
