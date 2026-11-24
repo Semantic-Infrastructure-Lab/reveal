@@ -19,7 +19,7 @@ from __future__ import annotations
 import argparse
 import os
 from functools import partial
-from typing import Any, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple, cast
 
 from .canonical import _WALK_CONTROLS, typed_options, typed_words  # noqa: F401  (the keyword <-> flag words live in canonical)
 
@@ -87,7 +87,8 @@ def _answer_document(answer: Any) -> Optional[Dict[str, Any]]:
     file's envelope, a directory listing; None when it prints no document), else ``json_answer(result)``."""
     from ...utils.json_utils import json_answer
     if answer.document is not None:
-        return answer.document()
+        built: Optional[Dict[str, Any]] = answer.document()
+        return built
     document: Dict[str, Any] = json_answer(answer.result)
     return document
 
@@ -183,7 +184,7 @@ def _analyzer_words(parser: argparse.ArgumentParser, options: Mapping[str, Tuple
             1 if action.type is int else 'x')
         setattr(args, action.dest, value)
         try:
-            produced = _build_analyzer_kwargs(_EveryAnalyzer(), args)
+            produced = _build_analyzer_kwargs(cast(Any, _EveryAnalyzer()), args)
         except (TypeError, ValueError):  # a value of the wrong shape for a reader this probe does not model
             continue
         for word in produced:
@@ -232,13 +233,14 @@ def answer_path_read(path: Any, controls: Mapping[str, Any]) -> Dict[str, Any]:
     host request and invocation log (``api.analyze``). An invalid request raises ``RequestValidationError`` (the CLI's
     exit 2; a missing path ``PathNotFoundError``), a failed analysis raises its cause or ``AnalysisFailedError``
     carrying the document (exit 3); an incomplete answer returns, marked in itself as on the CLI."""
-    from ... import __version__
+    from ...version import __version__
     from ...errors import RequestValidationError
     from ...utils.gitignore import gitignore_scope
     from ...utils.invocation_log import answer_is_json
     from ...utils.results import execution_failed, note_incomplete
     from ..invocation import Invocation, invocation_scope, record_typed_spellings
     from ..parser import check_navigation_args, create_argument_parser
+    from .declared import JsonUsageParser
     from .file import _parse_file_line_syntax, handle_file_or_directory
     if not isinstance(path, (str, os.PathLike)):
         raise TypeError(f'the path of a path read is a path string, got {type(path).__name__}')
@@ -246,7 +248,7 @@ def answer_path_read(path: Any, controls: Mapping[str, Any]) -> Dict[str, Any]:
     if _parse_file_line_syntax(target)[1] is not None:
         raise RequestValidationError(f"{target} names lines of a file, an element: "
                                      f"api.element({target.rpartition(':')[0]!r}, {':' + target.rpartition(':')[2]!r})")
-    parser = create_argument_parser(__version__)
+    parser = cast(JsonUsageParser, create_argument_parser(__version__))  # the main parser is one (raise_if_asked)
     parser.raise_usage_errors = True
     words = path_read_words(parser, controls)
     # The format words come before '--', which ends the options, so a path that starts with '-' stays the path.
