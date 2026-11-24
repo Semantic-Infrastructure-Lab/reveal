@@ -107,6 +107,14 @@ control whatever its value type; 1b, 1d and 6 read every spelling (aliases and n
       ``sort`` fields) are declared as such and not judged. A legacy word spelled like a shared control (patches
       ``tests``, AST ``depth``) is rule 8's; a control declared under a shared name only to refuse it is exempt in
       writing (``DOMAIN_EXEMPT``). The element views' cell measures their declarations the same way.
+  30  every control has a flag (D20 rule 2; D21, BACK-2773): each declared control is spelled by a flag of the noun's
+      declared parser: its own ``CliBinding``, a legacy entry's old flag, or the global flag that carries it
+      (``--exclude``, ``--all``, ``--format``, ``--respect-gitignore``). Not judged: a standalone legacy word (its own
+      note-stage row: the spelling retires) and a control reached only by another control's legacy rebind (the element
+      views' legacy-depth). A control with no flag is one no request reaches by its flag, so its answer can read
+      something else unnoticed: help's ``search``/``top`` had none, and ``reveal help://search --search TERM`` landed on
+      the file route's ``--name`` and answered "No search term" (vocab V1 2(c)). Rule 23 then holds ``URI --flag v`` to
+      the subcommand's answer, and rule 20 the control to the answer that reads it.
 
 A cell is ``conforms`` (asserted), ``not_yet`` (recorded below with the behaviour observed; the count may only
 fall and must reach zero before the cut) or ``exempt`` (a written reason; the probe must find nothing to run).
@@ -145,7 +153,7 @@ def _declared_nouns():
 NOUNS = _declared_nouns()
 ELEMENT = 'element'  # the element views' pseudo-noun: its own cells at the end of this file (BACK-2627 S3b-5)
 RULES = ('1a', '1b', '1c', '1d', '2', '3', '3b', '4', '5', '6', '8a', '8b', '10', '12', '16', '17', '18', '20',
-         '14', '21j', '22', '23', '24', '28', '25', '27', '26', '29')
+         '14', '21j', '22', '23', '24', '28', '25', '27', '26', '29', '30')
 
 # The request each noun answers by default: the parity gate's table (CLI argv after the noun, URI suffix), plus
 # the declared nouns it has no row for. None: no subcommand (stats is metrics' retired scheme; help:// and reveal://
@@ -303,6 +311,7 @@ EXEMPT = {
     **{(noun, '29'): 'declares no shared control (SHARED_CONTROL_NAMES): no value domain to compare'
        for noun in ('deps', 'env', 'help', 'reveal')},
     ('sqlite', '29'): 'declares only a noun-valued shared control (view, its own answers): nothing to judge',
+    **{(noun, '30'): 'declares no control: nothing a flag must spell' for noun in ('env', 'reveal')},
 }
 
 # Rules 1, 2, 5, 6, 10 and 12 are the shared seams' defaults (Scott 2026-11-16; BACK-2654 Step 3): their cells must
@@ -364,7 +373,7 @@ NOT_YET: dict = {
 
 NOT_YET_BASELINE = {'1a': 0, '1b': 0, '1c': 0, '1d': 0, '2': 0, '3': 0, '3b': 0, '4': 0, '5': 0, '6': 0,
                     '8a': 0, '8b': 0, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 0, '14': 0, '21j': 0, '22': 0,
-                    '23': 0, '24': 0, '28': 0, '25': 0, '27': 0, '26': 0, '29': 2}
+                    '23': 0, '24': 0, '28': 0, '25': 0, '27': 0, '26': 0, '29': 2, '30': 0}
 
 
 # --- the fixture -------------------------------------------------------------------------------------------
@@ -2638,6 +2647,51 @@ def probe_one_value_domain(noun):
     return cases
 
 
+# --- rule 30: every declared control has a flag (D20 rule 2; D21, BACK-2773) ---------------------------------------
+
+def _rebind_targets(specs):
+    """Controls reached only through another control's legacy rebind (the element views' legacy-depth): no spelling of
+    their own to have."""
+    return {target for spec in specs for entry in spec.legacy for _, target in entry.rebinds}
+
+
+def _standalone_word(noun, spec):
+    """A legacy word kept as a parameter of its own until the cut (a standalone note-stage row): its spelling retires."""
+    row = RETIREMENTS.get(f'param:{noun}.{spec.name}')
+    return row is not None and row.standalone and row.stage == 'note'
+
+
+def _flags_setting(spec, parser):
+    """The options of *parser* that set *spec*: its own CliBinding's flags, a legacy entry's old flag, or the global
+    flag that carries it (``--exclude``, ``--all``, ``--format``, ``--respect-gitignore``), by destination."""
+    dests = {spec.name.replace('-', '_'), *(alias.replace('-', '_') for alias in spec.aliases),
+             *((spec.cli.dest,) if spec.cli and spec.cli.dest else ())}
+    own = spec.cli.flags if spec.cli else ()
+    return sorted({option for action in parser._actions for option in action.option_strings
+                   if option.startswith('--') and (action.dest in dests or option in own)})
+
+
+def probe_every_control_has_a_flag(noun):
+    """Rule 30: a declared control the CLI cannot spell is a control no request reaches by its flag, so the answer can
+    keep reading something else (help's ``search`` and ``top`` had no flag: ``reveal help://search --search TERM`` landed
+    on the file route's ``--name`` and answered "No search term"; vocab V1 2(c)). None for a noun that declares none."""
+    specs = _specs(noun)
+    rebound = _rebind_targets(specs)
+    judged = [spec for spec in specs if spec.name not in rebound and not _standalone_word(noun, spec)]
+    if not judged:
+        return []
+    if noun == ELEMENT:  # the main parser's path read: each element control's own flag
+        flags_of = (lambda spec: list(spec.cli.flags) if spec.cli else [])
+    elif _sub(noun) is None:
+        flags_of = (lambda spec: [])
+    else:
+        flags_of = partial(_flags_setting, parser=create_declared_parser(noun))
+    return [Case(f'{spec.name}: spelled by a flag', bool(flags_of(spec)),
+                 f'{noun} declares {spec.name} with no flag that sets it'
+                 + ('' if _sub(noun) is not None or noun == ELEMENT else ' (no subcommand: no declared parser at all)'))
+            for spec in judged]
+
+
 PROBES = {'1a': probe_uri_and_flag, '1b': probe_alias_and_name, '1c': probe_repeated_spelling,
           '1d': probe_repeatable_aliases, '3': probe_unsupported_controls, '3b': probe_unknown_keys,
           '4': probe_verbose_is_detail_full, '8a': probe_bare_shared_keys,
@@ -2646,7 +2700,7 @@ PROBES = {'1a': probe_uri_and_flag, '1b': probe_alias_and_name, '1c': probe_repe
           '20': probe_applicability, '14': probe_defaults, '21j': probe_invalid_requests_answer_json,
           '22': probe_config_failures, '23': probe_flags_after_uri, '24': probe_request_note,
           '28': probe_help_one_spelling, '25': probe_time_window, '27': probe_empty_match_term,
-          '26': probe_walk_exclusion, '29': probe_one_value_domain}
+          '26': probe_walk_exclusion, '29': probe_one_value_domain, '30': probe_every_control_has_a_flag}
 # These call the MCP tools (the optional mcp extra) besides the CLI.
 MCP_PROBES = ('2', '5', '6', '24', '25', '27', '26')
 # These also run the retirement cases' sample file.
@@ -3860,7 +3914,7 @@ ELEMENT_PROBES = {'1b': element_alias_and_name, '1c': element_repeated_spelling,
                   '12': element_repeatability_declared, '14': element_defaults, '16': element_legacy_operations,
                   '17': element_one_answer, '18': element_repeated_global_flags, '20': element_applicability,
                   '21j': element_invalid_requests_answer_json, '22': element_config_failures,
-                  '29': partial(probe_one_value_domain, ELEMENT)}
+                  '29': partial(probe_one_value_domain, ELEMENT), '30': partial(probe_every_control_has_a_flag, ELEMENT)}
 
 
 def test_the_element_cells_cover_every_rule():
