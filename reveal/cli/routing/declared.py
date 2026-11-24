@@ -8,7 +8,7 @@ import os
 import sys
 from contextlib import nullcontext
 from pathlib import Path
-from typing import Any, Dict, Optional, TypeGuard
+from typing import Any, Dict, Optional, Sequence, TypeGuard
 
 from ..argparsing import RevealArgumentParser
 from .ledger import FlagLedger, complete, delegate, ledger_of, mark, peek
@@ -498,7 +498,7 @@ def _note_retired_flags(name: str, adapter) -> None:
     route's hook is ``_note_retired_spellings``. A hyphenated flag names its underscore alias
     (``--max-files`` is ``max_files``). A flag-only modifier has no URI key: its row is keyed by the flag,
     ``flag:<name>.<flag>`` (``ParamSpec.flag_only``). The value a flag carries is looked up as the URI's
-    ``value:<name>.<param>=<value>`` key is (``--show calls`` is ``?show=calls``, BACK-2613)."""
+    ``value:<name>.<param>=<value>`` key is (``--show calls`` is ``?show=calls``, BACK-2613; ``_typed_flag_value``)."""
     from ..invocation import current_invocation, retirement_note
     invocation = current_invocation()
     if invocation is None:
@@ -515,11 +515,28 @@ def _note_retired_flags(name: str, adapter) -> None:
         retirement_note(flag_retirement_key(name, spec, flag))
         if spec.flag_only:
             continue
-        param = _flag_param(spec, flag)
-        if not has_value and _flag_takes_value(spec, flag) and index + 1 < len(argv) and argv[index + 1] != '--':
-            has_value, value = '=', argv[index + 1]
-        if has_value:
-            retirement_note(f'value:{name}.{param}={value}')
+        typed = value if has_value else _typed_flag_value(spec, flag, argv[index + 1:index + 2])
+        if typed is not None:
+            retirement_note(f'value:{name}.{_flag_param(spec, flag)}={typed}')
+
+
+def _typed_flag_value(spec: ParamSpec, flag: str, following: Sequence[str]) -> Optional[str]:
+    """The value *flag* carries when typed without ``=``, spelled as the URI's value, else None. A flag that takes a
+    value reads the next word; a control's own flag whose value is optional (``nargs='?'``: Imports ``--importers
+    [FILE]``, Calls ``--detail [LEVEL]``) reads the next word when argparse does (it does not look like an option),
+    and given bare carries its ``const``, spelled as a bare URI key binds it (a boolean lowercase: ``?importers`` is
+    ``importers=true``; BACK-2774 ruling S1)."""
+    word = following[0] if following and following[0] != '--' else None
+    if _flag_takes_value(spec, flag):
+        return word
+    if spec.cli is None or spec.cli.nargs != '?' or flag not in spec.cli.flags:
+        return None
+    if word is not None and not word.startswith('-'):
+        return word
+    const = spec.cli.const
+    if const is None:
+        return None
+    return str(const).lower() if isinstance(const, bool) else str(const)
 
 
 def _flag_takes_value(spec: ParamSpec, flag: str) -> bool:
