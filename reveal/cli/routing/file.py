@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 from argparse import Namespace
 from contextlib import nullcontext
-from typing import NoReturn, Optional
+from typing import Any, Callable, NoReturn, Optional
 
 # Module-level imports so callers can mock reveal.cli.routing.file.handle_uri
 # and reveal.cli.routing.file.handle_file in tests.
@@ -353,6 +353,7 @@ def _handle_directory_path(path: Path, args: 'Namespace', answer_consumer=None) 
     listing = dict(respect_gitignore=args.respect_gitignore, exclude_patterns=args.exclude, sort_by=sort_by,
                    include_extensions=include_extensions, max_entries=args.max_entries)
     failures: list = []
+    build: Callable[..., Any]
     if getattr(args, 'files', False):
         # --files defaults to newest-first; --asc flips it
         listing['sort_desc'] = not getattr(args, 'asc', False)

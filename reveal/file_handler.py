@@ -153,7 +153,7 @@ def _get_analyzer_or_exit(path: str, allow_fallback: bool, unreadable_exit_code:
 
 
 def _refuse_or_exit(path: str, text: str, code: int, refusal_args: Optional['Namespace'], *,
-                    error: Optional[BaseException] = None, cause: Optional[FailureCause] = None) -> NoReturn:
+                    error: Optional[Exception] = None, cause: Optional[FailureCause] = None) -> NoReturn:
     """Print *text* and exit *code*, or, for a path read (*refusal_args*), raise the refusal as its Answer."""
     if refusal_args is None:
         print(text, file=sys.stderr)
@@ -562,7 +562,7 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
 
 def _handle_file(path: str, element: Optional[str], show_meta: bool, output_format: str,
                  args: Optional['Namespace'], element_request, answer_consumer) -> None:
-    from .display import show_structure, show_metadata, extract_element  # noqa: I006 — circular avoidance
+    from .display import show_structure, show_metadata  # noqa: I006 — circular avoidance
     from .config import RevealConfig  # noqa: I006 — circular avoidance
 
     request = element_request if element_request is not None else element_request_of(path, element, args)
@@ -592,19 +592,31 @@ def _handle_file(path: str, element: Optional[str], show_meta: bool, output_form
         element = _whole_file_element(analyzer, request)
 
     if element:
-        if request is not None:
-            _dispatch_nav(analyzer, element, output_format, args, request)
-            return
-        # A Markdown section has no control flow; its outline is its headings.
-        from .display.element import _is_markdown  # noqa: I006
-        if args is not None and getattr(args, 'outline', False) and _is_markdown(analyzer):
-            extract_element(analyzer, element, output_format, section_outline=True, depth=getattr(args, 'depth', None))
-            return
-        cut = tuple(getattr(args, flag, None) if args else None for flag in ('head', 'tail', 'range'))
-        extract_element(analyzer, element, output_format, config=config, cut=cut)
+        _handle_element(analyzer, element, output_format, args, config, request)
         return
 
     # Capture producer facts before display cuts and use the existing D6 output boundary.
+    show_structure(analyzer, output_format, args, config=config,
+                   emit=_structure_emitter(analyzer, path, output_format, args, config, answer_consumer))
+
+
+def _handle_element(analyzer, element: str, output_format: str, args, config, request) -> None:
+    """An element read: the bound element request's view, else the element's extraction."""
+    from .display import extract_element  # noqa: I006 — circular avoidance
+    if request is not None:
+        _dispatch_nav(analyzer, element, output_format, args, request)
+        return
+    # A Markdown section has no control flow; its outline is its headings.
+    from .display.element import _is_markdown  # noqa: I006
+    if args is not None and getattr(args, 'outline', False) and _is_markdown(analyzer):
+        extract_element(analyzer, element, output_format, section_outline=True, depth=getattr(args, 'depth', None))
+        return
+    cut = tuple(getattr(args, flag, None) if args else None for flag in ('head', 'tail', 'range'))
+    extract_element(analyzer, element, output_format, config=config, cut=cut)
+
+
+def _structure_emitter(analyzer, path: str, output_format: str, args, config, answer_consumer):
+    """``show_structure``'s emit: the file structure as an Answer, emitted or handed to *answer_consumer*."""
     from .cli.routing.uri import Answer, _emit_result, announce_outcome  # noqa: I006 — circular avoidance
     from .display.structure import _render_file_structure, file_structure_document
     from .utils.json_utils import attach_invocation_warnings
@@ -630,8 +642,7 @@ def _handle_file(path: str, element: Optional[str], show_meta: bool, output_form
             answer.emit()
         else:
             answer_consumer(answer)
-
-    show_structure(analyzer, output_format, args, config=config, emit=emit)
+    return emit
 
 
 def _structure_failure_diagnostic(structure, facts) -> Optional[str]:
