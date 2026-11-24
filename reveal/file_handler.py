@@ -643,12 +643,25 @@ def _element_emitter(analyzer, path: str, element: str, output_format: str, args
 
 
 def _element_miss(analyzer, path: str, element: str, text: str, output_format: str, args):
-    """The Answer of an element read that matched nothing: it says *text* (``extraction_error_text``), exit 2, its
-    document in JSON, an ``ElementNotFoundError`` to the Python API."""
+    """The Answer of an element read that matched nothing. It first asks the file's structure (BACK-2775, ruling S3 of
+    BACK-2325): a structure that failed is why nothing matched, so the read answers that failure as the bare read does,
+    with its line ``Error (PATH): <cause>``: a parse failure exit 3, a file that is not the document its type needs
+    exit 2. A line read needs no structure (``reveal bad.xml :1`` answers), so its miss is a miss. Otherwise the miss
+    says *text* (``extraction_error_text``), exit 2, an ``ElementNotFoundError`` to the Python API."""
     from .cli.routing.declared import path_read_refusal  # noqa: I006 — circular avoidance
+    from .display.element import _parse_element_syntax
     from .errors import ElementNotFoundError
     from argparse import Namespace
     refusal_args = args if args is not None else Namespace(format=output_format, element=element)
+    if _parse_element_syntax(element)['type'] != 'line':
+        structure = analyzer.get_structure()
+        facts = analyzer.structure_execution_facts(structure)
+        if execution_failed(facts):
+            cause = _structure_failure_diagnostic(structure, facts) or f'{path} could not be analyzed'
+            return path_read_refusal(path, f'Error ({path}): {cause}\n', refusal_args,
+                                     exit_code=execution_exit_code(facts), diagnostic=cause,
+                                     cause=(FailureCause.INVALID_REQUEST if FailureCause.INVALID_REQUEST in facts.failures
+                                            else FailureCause.ANALYSIS))
     message = text.partition('\n')[0].removeprefix('Error: ')
     return path_read_refusal(path, text, refusal_args, error=ElementNotFoundError(element, message))
 

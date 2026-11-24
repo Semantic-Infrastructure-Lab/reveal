@@ -94,6 +94,22 @@ def test_a_miss_hands_its_element_not_found_refusal_to_the_consumer(fx, capsys):
     assert answer.public_diagnostic.startswith("Error: Element 'nosuch' not found in ok.py\nHint:")
 
 
+def test_a_miss_of_a_file_whose_parse_failed_hands_the_failure_with_its_cause(fx, capsys):
+    [answer] = _consume_element('bad.xml', 'b')
+    assert capsys.readouterr() == ('', '')
+    assert execution_exit_code(answer.execution_facts) == 3
+    assert answer.public_diagnostic == 'XML parse error: mismatched tag: line 1, column 8'
+    assert answer.exception is None and answer.request_error is None
+    assert answer.result['type'] == 'code_element' and answer.result['error'] == answer.public_diagnostic
+
+
+def test_a_line_miss_of_a_broken_file_is_a_miss(fx, capsys):
+    # A line read needs no structure: past the end is a miss, exit 2, whatever the parse said.
+    [answer] = _consume_element('bad.xml', ':99')
+    assert execution_exit_code(answer.execution_facts) == 2
+    assert str(answer.request_error) == 'Line 99 is past the end of bad.xml (1 lines)'
+
+
 @pytest.mark.parametrize('argv, code', [(['ok.py', 'foo'], 0), (['ok.py', 'nosuch'], 2), (['bad.xml', ':1'], 0)])
 def test_sibling_without_a_consumer_the_element_text_is_unchanged(fx, argv, code):
     run = _run_reveal_direct(*argv)
