@@ -95,3 +95,35 @@ def test_a_file_line_spelling_is_an_element_read(fx):
 def test_a_request_that_prints_no_document_is_refused(fx):
     with pytest.raises(RequestValidationError, match='prints no JSON document'):
         _answer('notes.md', related_flat=True, related=True)
+
+
+# --- the element read (api.element): reveal PATH ELEMENT, through the same route ---------------------------------------------
+
+def _element(path, element):
+    with host_request(), log_scope(to_stderr=False):
+        return answer_path_read(path, {}, element)
+
+
+@pytest.mark.parametrize('element', ['foo', ':1', '@1', 'function:1'])
+def test_an_element_answers_the_clis_document_and_prints_nothing(fx, capsys, element):
+    expected = json.loads(_run_reveal_direct('ok.py', element, '--format', 'json').stdout)
+    capsys.readouterr()
+    assert _element('ok.py', element) == expected
+    assert capsys.readouterr() == ('', '')
+
+
+def test_an_element_miss_raises_element_not_found(fx):
+    from reveal.errors import ElementNotFoundError
+    with pytest.raises(ElementNotFoundError, match=r"^Element 'nosuch' not found in ok.py$"):
+        _element('ok.py', 'nosuch')
+
+
+def test_an_element_that_starts_with_a_dash_stays_the_element(fx):
+    from reveal.errors import ElementNotFoundError
+    with pytest.raises(ElementNotFoundError, match="'-x'"):
+        _element('ok.py', '-x')
+
+
+def test_an_element_is_a_string(fx):
+    with pytest.raises(TypeError, match='element of a path read is a string'):
+        _element('ok.py', 3)

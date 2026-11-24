@@ -227,12 +227,13 @@ class _Failed(Exception):
     """The answer consumer's stop: the path read failed (exit 2 or 3); the failure is raised outside the route."""
 
 
-def answer_path_read(path: Any, controls: Mapping[str, Any]) -> Dict[str, Any]:
-    """Answer ``reveal PATH --flags`` as the CLI's JSON document carries it (a file's envelope, a directory's tree),
-    through the CLI's own path-read route (``handle_file_or_directory`` with an answer consumer), inside the caller's
-    host request and invocation log (``api.analyze``). An invalid request raises ``RequestValidationError`` (the CLI's
-    exit 2; a missing path ``PathNotFoundError``), a failed analysis raises its cause or ``AnalysisFailedError``
-    carrying the document (exit 3); an incomplete answer returns, marked in itself as on the CLI."""
+def answer_path_read(path: Any, controls: Mapping[str, Any], element: Optional[str] = None) -> Dict[str, Any]:
+    """Answer ``reveal PATH [ELEMENT] --flags`` as the CLI's JSON document carries it (a file's envelope, a directory's
+    tree, an element), through the CLI's own path-read route (``handle_file_or_directory`` with an answer consumer),
+    inside the caller's host request and invocation log (``api.analyze``, ``api.element``). An invalid request raises
+    ``RequestValidationError`` (the CLI's exit 2; a missing path ``PathNotFoundError``, an element miss
+    ``ElementNotFoundError``), a failed analysis raises its cause or ``AnalysisFailedError`` carrying the document
+    (exit 3); an incomplete answer returns, marked in itself as on the CLI."""
     from ...version import __version__
     from ...errors import RequestValidationError
     from ...utils.gitignore import gitignore_scope
@@ -245,14 +246,16 @@ def answer_path_read(path: Any, controls: Mapping[str, Any]) -> Dict[str, Any]:
     if not isinstance(path, (str, os.PathLike)):
         raise TypeError(f'the path of a path read is a path string, got {type(path).__name__}')
     target = os.fspath(path)
-    if _parse_file_line_syntax(target)[1] is not None:
+    if element is not None and not isinstance(element, str):
+        raise TypeError(f'the element of a path read is a string, got {type(element).__name__}')
+    if element is None and _parse_file_line_syntax(target)[1] is not None:
         raise RequestValidationError(f"{target} names lines of a file, an element: "
                                      f"api.element({target.rpartition(':')[0]!r}, {':' + target.rpartition(':')[2]!r})")
     parser = cast(JsonUsageParser, create_argument_parser(__version__))  # the main parser is one (raise_if_asked)
     parser.raise_usage_errors = True
     words = path_read_words(parser, controls)
-    # The format words come before '--', which ends the options, so a path that starts with '-' stays the path.
-    invocation = Invocation.parse(['reveal', *words, '--format=json', '--', target])
+    # The format words come before '--', which ends the options, so a path or element that starts with '-' stays one.
+    invocation = Invocation.parse(['reveal', *words, '--format=json', '--', target, *([] if element is None else [element])])
     answers: list = []
 
     def consume(answer: Any) -> None:
