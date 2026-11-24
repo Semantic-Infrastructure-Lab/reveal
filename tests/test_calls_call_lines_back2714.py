@@ -475,6 +475,64 @@ def test_api_query_and_cli_agree_on_the_callers(tmp_path):
     assert [r['caller'] for r in _records(api)] == [r['caller'] for r in _records(cli)] == ['caller', 'method']
 
 
+# 12. A JSX owner's call lines come from the one call walk too (C4, ruling S5). The walk credits
+# `Two` with the call inside its closure `cb` (line 8, the documented closure bleed that already puts
+# `Btn` in `Two`'s calls); the second owner of JSX call lines (`jsx_owner_call_sites`) credited that
+# call to `cb` alone, so `Two` named `Btn` as a callee but only line 11 as its call.
+
+JSX_OWNERS = (
+    'export function Btn() { return null; }\n'   # 1
+    'export function App() {\n'                  # 2
+    '  Btn();\n'                                 # 3
+    '  return <div><Btn/><Btn/></div>;\n'        # 4
+    '}\n'                                        # 5
+    'export function One() { return <Btn/>; }\n'  # 6: rendered, never called
+    'export function Two() {\n'                  # 7
+    '  const cb = () => Btn();\n'                # 8: a call in Two's closure
+    '  return <div>\n'                           # 9
+    '    <Btn/>\n'                               # 10
+    '    {Btn()}\n'                              # 11
+    '  </div>;\n'                                # 12
+    '}\n'                                        # 13
+    '<Btn/>;\n'                                  # 14
+    'Btn();\n')                                  # 15
+
+
+def _jsx_owners(tmp_path):
+    root = _write(tmp_path / 'owners', {'p.tsx': JSX_OWNERS})
+    return root, {r['caller']: r for r in _records(_cli_json('calls', str(root), '--callers', 'Btn'))}
+
+
+def test_a_jsx_owner_names_every_call_the_walk_credits_it_with(tmp_path):
+    _, records = _jsx_owners(tmp_path)
+    two = records['Two']
+    assert (two['caller_def_line'], two['call_lines'], two['reference_lines'], two['relationship']) == \
+        (7, [8, 11], [10], 'call_and_jsx_reference')
+
+
+def test_a_jsx_owner_text_row_leads_with_its_first_walk_call(tmp_path):
+    root, _ = _jsx_owners(tmp_path)
+    text = _cli_text('calls', str(root), '--callers', 'Btn')
+    assert re.search(r'p\.tsx:8  Two  \(calls and JSX reference to Btn\) \[call lines 8, 11, JSX line 10\]$',
+                     _row(text, 'Two')), text
+
+
+def test_jsx_only_owners_and_plain_callers_keep_their_lines(tmp_path):
+    """Sibling: a name only rendered keeps its JSX lines, a caller with no JSX and an owner with no
+    closure call keep their call lines, and the callers set does not move."""
+    root, records = _jsx_owners(tmp_path)
+    assert {name: (r['caller_def_line'], r['call_lines'], r.get('reference_lines'), r.get('relationship'))
+            for name, r in records.items() if name != 'Two'} == {
+        'App': (2, [3], [4], 'call_and_jsx_reference'),
+        'One': (6, [], [6], 'jsx_reference'),
+        'cb': (8, [8], None, None),
+        '<module>': (1, [15], [14], 'call_and_jsx_reference')}
+    assert sorted(records) == ['<module>', 'App', 'One', 'Two', 'cb']
+    text = _cli_text('calls', str(root), '--callers', 'Btn')
+    assert re.search(r'p\.tsx:6  One  \(JSX reference to Btn\) \[JSX line 6\]$', _row(text, 'One')), text
+    assert re.search(r'p\.tsx:8  cb  \(calls Btn\)$', _row(text, 'cb')), text
+
+
 # Every call source's record has call lines, inside its own span, in every language the matrix covers.
 
 CONFORMANCE = os.path.join(os.path.dirname(__file__), 'fixtures', 'conformance')
