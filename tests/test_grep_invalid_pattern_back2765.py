@@ -2,8 +2,8 @@
 
 ``reveal ok.py --grep '('`` printed its failed result and exited 1, the findings code, and ``api.analyze('ok.py',
 grep='(')`` returned that failed document instead of raising, because the search's facts said only whether a file was
-lost. The pattern is the request's own error (D6): exit 2 on every form, the search's document in JSON naming it as an
-invalid request, the API raising it. stderr keeps its line; a file the search could not read keeps exit 3.
+lost. The pattern is the request's own error (D6): exit 2 on every form, the path read's invalid-request document in
+JSON (ruling S4), the API raising it. stderr keeps its line; a file the search could not read keeps exit 3.
 """
 import json
 import os
@@ -36,7 +36,8 @@ def test_an_invalid_pattern_exits_2(fx, target, fmt):
     assert run.stderr.startswith(f"Error ({target}): invalid pattern '(':")
     if fmt == 'json':
         document = json.loads(run.stdout)
-        assert document['type'] == 'grep_results' and document['pattern'] == '('
+        # The path read's invalid-request document (ruling S4; tests/test_grep_invalid_pattern_document_back2765.py).
+        assert document['type'] == ('file_structure' if target == 'ok.py' else 'directory_tree')
         assert document['error'].startswith("invalid pattern '(':")
         assert document['meta']['errors'] == [{'code': 'invalid_request', 'message': document['error']}]
 
