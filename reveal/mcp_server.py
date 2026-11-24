@@ -478,58 +478,19 @@ def reveal_element(path: str, element: str) -> str:
     Returns the full implementation — more token-efficient than reading
     the whole file when you only need one function.
 
+    The answer is ``reveal PATH ELEMENT``'s: the element as the CLI prints it, any element spelling the CLI takes
+    (``Class.method``, ``:LINE``, ``:A-B``, ``function:2``, ``@2``), and the CLI's outcome: a miss is a tool error
+    naming the miss and what the file holds, a file that failed to parse a tool error naming the cause (BACK-2775).
+
     Args:
         path: File path containing the element
         element: Function or class name to extract (e.g., 'validate_token')
     """
-    from pathlib import Path
-    from .registry import get_analyzer
-    from .display.element import _parse_element_syntax, _extract_by_syntax
-
-    p = Path(path)
-    if not p.exists():
+    # As reveal_structure: `path` is a filesystem path, never a URI or a command word, and `--` keeps an element
+    # spelled like a flag (`-x`) an element.
+    if not Path(path).exists():
         return _tool_failure(f"path not found: {path}")
-
-    try:
-        analyzer_class = get_analyzer(path, allow_fallback=True)
-        if not analyzer_class:
-            return _tool_failure(f"no analyzer found for {path}")
-
-        analyzer = analyzer_class(path)
-        syntax = _parse_element_syntax(element)
-        result = _extract_by_syntax(analyzer, element, syntax)
-    except Exception as exc:  # noqa: BLE001 -- match every sibling tool's error shape
-        return _tool_failure(str(exc), public=isinstance(exc, OSError), exception=exc)
-
-    if not result:
-        return _tool_failure(f"element '{element}' not found in {path}")
-
-    from .utils.results import ResultBuilder
-    result = ResultBuilder.element(result, p)
-
-    line_start = result.get('line_start', 1)
-    line_end = result.get('line_end', line_start)
-    source = result.get('content', '')
-    name = result.get('name', element)
-
-    # Several non-contiguous spans (markdown `A|B` or substring matches, JSONL
-    # records of one type, XML elements of one tag): each numbered from its
-    # own start line, as the CLI renders them -- the joined `source` numbered
-    # from the first start would invent line numbers.
-    spans = result.get('sections') or [
-        {'line_start': line_start, 'line_end': line_end, 'content': source}
-    ]
-    body = "\n\n".join(
-        f"{path}:{s['line_start']}-{s['line_end']} | {name}\n\n"
-        f"{analyzer.format_with_lines(s['content'], s['line_start'])}"
-        for s in spans
-    )
-    # BACK-1400: an ambiguous name must not silently return the first match;
-    # the agent gets the same note (and :LINE addresses) the CLI prints.
-    if result.get('candidates'):
-        from .element_resolve import ambiguity_note
-        body += "\n\n" + "\n".join(ambiguity_note(path, element, result['candidates']))
-    return body
+    return _run_command(['--format', 'text', '--', path, element])
 
 
 # Nav flags that take no value (boolean), derived from the element declarations (nav_params; BACK-457, BACK-2627):
