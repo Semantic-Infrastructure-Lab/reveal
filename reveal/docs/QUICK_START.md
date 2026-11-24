@@ -322,7 +322,7 @@ reveal imports ./src
 reveal 'diff://file1.py:file2.py'
 
 # Get codebase statistics
-reveal 'metrics://.'
+reveal metrics .
 
 # SSL certificate inspection
 reveal ssl://example.com              # Overview

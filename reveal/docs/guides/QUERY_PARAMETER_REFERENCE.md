@@ -296,7 +296,7 @@ reveal markdown primitives/ --where type=framework --columns book,cohort  # Appe
 
 - **`view=hotspots`** - The ranked hotspot files are the rows (the worst 10; `limit=N` for more, `0` for all)
   ```bash
-  reveal 'metrics://.?view=hotspots'
+  reveal metrics . --view hotspots
   ```
   Shows files with lowest quality scores (most in need of refactoring). Replaces `hotspots=true`.
 
@@ -304,13 +304,13 @@ reveal markdown primitives/ --where type=framework --columns book,cohort  # Appe
 
 - **`code-only`** (flag) - Exclude data/config files from analysis (`code_only` is its alias)
   ```bash
-  reveal 'metrics://.?code-only=true'
+  reveal metrics . --code-only
   ```
   Filters out `.json` > 10KB, `.yaml`, `.xml`, `.csv`, `.toml` files.
 
 **Combining Parameters**:
 ```bash
-reveal 'metrics://.?view=hotspots&code-only=true'
+reveal metrics . --view hotspots --code-only
 ```
 
 ---

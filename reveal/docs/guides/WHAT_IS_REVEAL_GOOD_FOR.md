@@ -256,7 +256,7 @@ reveal metrics src/ --view hotspots
 reveal imports . --external
 reveal imports src --circular
 reveal imports src --violations
-reveal metrics://src/
+reveal metrics src/
 ```
 
 Why it is good for this:

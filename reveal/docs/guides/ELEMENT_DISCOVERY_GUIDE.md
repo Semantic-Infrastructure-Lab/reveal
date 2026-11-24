@@ -586,7 +586,7 @@ reveal help://git      # See git:// element syntax
 reveal ssl://google.com/san
 
 # Query filter (parameter)
-reveal 'metrics://src?avg_complexity>=10'
+reveal metrics src --where 'avg_complexity>=10'
 ```
 
 ### No Element Hints in Output
