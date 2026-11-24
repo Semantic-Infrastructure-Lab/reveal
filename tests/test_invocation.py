@@ -59,6 +59,21 @@ def test_a_command_word_is_a_command_or_a_removed_subcommand_row(monkeypatch):
     assert is_command_word('deps')
 
 
+def test_a_removed_command_word_is_still_the_command_and_dot_slash_still_the_path(monkeypatch):
+    """BACK-2771: the router reads the predicate, so a removed word stays in command position (global options before
+    it included) and is refused from its row; ``./deps`` stays the path form (BACK-1112)."""
+    from dataclasses import replace
+
+    from reveal.cli.invocation import RETIREMENTS
+    monkeypatch.delitem(COMMANDS, 'deps')
+    monkeypatch.setitem(RETIREMENTS, 'subcommand:deps', replace(RETIREMENTS['subcommand:deps'], stage='error',
+                                                                 removed=True))
+    assert Invocation.parse(['reveal', 'deps', '.']).command == 'deps'
+    assert Invocation.parse(['reveal', '--format', 'json', 'deps', '.']).command == 'deps'
+    assert Invocation.parse(['reveal', './deps']).command is None
+    assert Invocation.parse(['reveal', '--', 'deps']).command is None
+
+
 # ------------------------------------------------------------------ normalization
 
 def test_perf_is_taken_out_for_any_command():

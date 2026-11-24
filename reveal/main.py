@@ -354,8 +354,8 @@ def _prepare(invocation: Invocation) -> Tuple[Namespace, Callable[[], None], Opt
         _apply_output_sinks(parser, args, invocation)
         return args, lambda: _main_impl(invocation, parser, args), None
 
-    retirement_note(f'subcommand:{name}')
-    _warn_if_subcommand_shadows_path(name)
+    _warn_if_subcommand_shadows_path(name)  # before the row, so an error-stage or removed word still shows it
+    retirement_note(f'subcommand:{name}')  # a removed command (no CommandSpec) raises here, its row at error
     sub_parser, runner = COMMANDS[name].load()
     formats = _subcommand_formats(name)
     _show_subcommand_formats(sub_parser, formats)

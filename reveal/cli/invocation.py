@@ -1082,13 +1082,13 @@ def _find_command(tokens: Tuple[str, ...]) -> Optional[int]:
     if not tokens:
         return None
     if not tokens[0].startswith('-'):
-        return 0 if tokens[0] in COMMANDS else None
+        return 0 if is_command_word(tokens[0]) else None
     arity = _global_option_arity()
     i = 0
     while i < len(tokens):
         tok = tokens[i]
         if not tok.startswith('-') or tok == '-':
-            return i if tok in COMMANDS else None
+            return i if is_command_word(tok) else None
         opt, has_value = tok.split('=', 1)[0], '=' in tok
         if opt not in arity:
             return None
