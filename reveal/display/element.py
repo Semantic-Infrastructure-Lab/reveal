@@ -404,27 +404,26 @@ def _available_names(analyzer) -> list:
     return names
 
 
-def _print_available_names(analyzer):
-    """Print available element names from the analyzer's structure to stderr."""
+def _available_names_lines(analyzer) -> list:
+    """The miss's line naming the available element names from the analyzer's structure."""
     try:
         available = _available_names(analyzer)
-        if available:
-            max_names = 10
-            suffix = f" (and {len(available) - max_names} more)" if len(available) > max_names else ""
-            print(f"Available: {', '.join(available[:max_names])}{suffix}", file=sys.stderr)
-    except Exception as e:  # boundary-ok: broad-except -- display hint only; the failure is printed as a warning on stderr
-        print(f"Warning: could not list available names: {e}", file=sys.stderr)
+    except Exception as e:  # boundary-ok: broad-except -- display hint only; the failure is said as a warning line of the miss
+        return [f"Warning: could not list available names: {e}"]
+    if not available:
+        return []
+    max_names = 10
+    suffix = f" (and {len(available) - max_names} more)" if len(available) > max_names else ""
+    return [f"Available: {', '.join(available[:max_names])}{suffix}"]
 
 
-def _print_did_you_mean(analyzer, element: str):
-    """Suggest the closest element names for a mistyped one (stderr)."""
+def _did_you_mean_lines(analyzer, element: str) -> list:
+    """The miss's line suggesting the closest element names for a mistyped one."""
     try:
         close = difflib.get_close_matches(element, _available_names(analyzer), n=3, cutoff=0.6)
-    except Exception as e:  # boundary-ok: broad-except -- display hint only; the failure is printed as a warning on stderr
-        print(f"Warning: could not suggest similar names: {e}", file=sys.stderr)
-        return
-    if close:
-        print(f"Did you mean: {', '.join(close)}?", file=sys.stderr)
+    except Exception as e:  # boundary-ok: broad-except -- display hint only; the failure is said as a warning line of the miss
+        return [f"Warning: could not suggest similar names: {e}"]
+    return [f"Did you mean: {', '.join(close)}?"] if close else []
 
 
 def _count_lines(path) -> Optional[int]:
@@ -436,8 +435,9 @@ def _count_lines(path) -> Optional[int]:
         return None
 
 
-def _handle_extraction_error(analyzer, element: str, syntax: dict):
-    """Print appropriate error message based on extraction type.
+def extraction_error_text(analyzer, element: str, syntax: dict) -> str:
+    """What a miss says on stderr, by extraction type: its error line, then any hints, did-you-mean and the available
+    names (the path read's refusal text, ``file_handler``; BACK-2325).
 
     Args:
         analyzer: File analyzer instance
@@ -445,14 +445,16 @@ def _handle_extraction_error(analyzer, element: str, syntax: dict):
         syntax: Parsed syntax dict
     """
     syntax_type = syntax['type']
+    path = to_posix(analyzer.path)
+    lines: list = []
 
     if syntax_type == 'ordinal':
         element_type = syntax['element_type']
         ordinal = syntax['ordinal']
         if element_type:
-            print(f"Error: No {element_type} #{ordinal} found in {to_posix(analyzer.path)}", file=sys.stderr)
+            lines.append(f"Error: No {element_type} #{ordinal} found in {path}")
         else:
-            print(f"Error: No element #{ordinal} found in {to_posix(analyzer.path)}", file=sys.stderr)
+            lines.append(f"Error: No element #{ordinal} found in {path}")
 
     elif syntax_type == 'line':
         target_line = syntax['start_line']
@@ -460,51 +462,45 @@ def _handle_extraction_error(analyzer, element: str, syntax: dict):
         total = _count_lines(analyzer.path)
         span = f"{target_line}-{end_line}" if end_line else str(target_line)
         if total is not None and target_line > total:
-            print(f"Error: Line {span} is past the end of {to_posix(analyzer.path)} ({total} lines)", file=sys.stderr)
+            lines.append(f"Error: Line {span} is past the end of {path} ({total} lines)")
         elif end_line:
-            print(f"Error: Invalid line range {span} in {to_posix(analyzer.path)}", file=sys.stderr)
+            lines.append(f"Error: Invalid line range {span} in {path}")
         else:
-            print(f"Error: No element found at line {target_line} in {to_posix(analyzer.path)}", file=sys.stderr)
+            lines.append(f"Error: No element found at line {target_line} in {path}")
 
     elif syntax_type == 'hierarchical':
         parent, child = element.rsplit('.', 1)
-        print(f"Error: Element '{element}' not found in {to_posix(analyzer.path)}", file=sys.stderr)
-        print(f"Hint: Looking for '{child}' within '{parent}'", file=sys.stderr)
+        lines.append(f"Error: Element '{element}' not found in {path}")
+        lines.append(f"Hint: Looking for '{child}' within '{parent}'")
 
     else:
-        print(f"Error: Element '{element}' not found in {to_posix(analyzer.path)}", file=sys.stderr)
+        lines.append(f"Error: Element '{element}' not found in {path}")
         if '|' in element:
-            print(
+            lines.append(
                 "Hint: '|' pattern matches headings only. "
-                f"For table or body content, use: reveal {to_posix(analyzer.path)} --grep '{element.split('|')[0].strip()}'",
-                file=sys.stderr
-            )
+                f"For table or body content, use: reveal {path} --grep '{element.split('|')[0].strip()}'")
         elif _is_markdown(analyzer):
-            print(
+            lines.append(
                 "Hint: a section name matches a heading exactly or as a substring, ignoring case. "
-                f"List the headings: reveal {to_posix(analyzer.path)}   "
-                f"Search the text: reveal {to_posix(analyzer.path)} --grep '{element}'",
-                file=sys.stderr
-            )
+                f"List the headings: reveal {path}   "
+                f"Search the text: reveal {path} --grep '{element}'")
         elif isinstance(getattr(analyzer, 'EXTRACT_BY_NAME_HINT', None), str):
-            print(
-                f"{analyzer.EXTRACT_BY_NAME_HINT} "
-                f"For content search, use: reveal {to_posix(analyzer.path)} --grep '{element}'",
-                file=sys.stderr
-            )
+            lines.append(f"{analyzer.EXTRACT_BY_NAME_HINT} For content search, use: reveal {path} --grep '{element}'")
         else:
-            print(
-                f"Hint: Code extraction matches exact names. "
-                f"For content search, use: reveal {to_posix(analyzer.path)} --grep '{element}'",
-                file=sys.stderr
-            )
-        _print_did_you_mean(analyzer, element)
-        _print_available_names(analyzer)
+            lines.append(f"Hint: Code extraction matches exact names. For content search, use: reveal {path} --grep '{element}'")
+        lines.extend(_did_you_mean_lines(analyzer, element))
+        lines.extend(_available_names_lines(analyzer))
+    return ''.join(f'{line}\n' for line in lines)
+
+
+def _handle_extraction_error(analyzer, element: str, syntax: dict):
+    """Print what a miss says (``extraction_error_text``) on stderr."""
+    print(extraction_error_text(analyzer, element, syntax), end='', file=sys.stderr)
 
 
 def extract_element(analyzer: FileAnalyzer, element: str, output_format: str, config=None,
                     section_outline: bool = False, depth: Optional[int] = None,
-                    cut: Optional[tuple] = None):
+                    cut: Optional[tuple] = None, *, emit=None):
     """Extract a specific element.
 
     Args:
@@ -517,6 +513,10 @@ def extract_element(analyzer: FileAnalyzer, element: str, output_format: str, co
         depth: Heading depth for section_outline (`--depth`)
         cut: (head, tail, range_) from --head/--tail/--range, applied to the
             extracted source lines (see cut_element)
+        emit: Optional transport callback, as ``show_structure``'s: called with the extracted result and the
+            printer that prints it, or, when nothing matched, with None and what the miss says on stderr
+            (``extraction_error_text``); the caller answers it (the path read's element Answer, BACK-2325). Without
+            it the result is printed, and a miss is printed and exits 2.
     """
     # Parse element syntax to determine extraction strategy
     syntax = _parse_element_syntax(element)
@@ -529,22 +529,39 @@ def extract_element(analyzer: FileAnalyzer, element: str, output_format: str, co
 
     # Handle extraction failure
     if not result:
-        _handle_extraction_error(analyzer, element, syntax)
+        text = extraction_error_text(analyzer, element, syntax)
+        if emit is not None:
+            emit(None, text)
+            return
+        print(text, end='', file=sys.stderr)
         # D6 / plan rule 9: a named element that matches nothing exits 2 (BACK-2492).
         sys.exit(2)
 
-    # Output result in requested format
-    if section_outline:
-        _output_section_outline(analyzer, result, element, output_format, depth)
-    else:
+    if not section_outline:
         cut = cut or (None, None, None)
         if any(cut):
             cut_element(result, *cut)
         elif _is_markdown(analyzer) and syntax['type'] in ('name', 'hierarchical'):
             collapse_large_section(analyzer, result)
+
+    def printer() -> None:
+        # Output result in requested format
+        if section_outline:
+            _output_section_outline(analyzer, result, element, output_format, depth)
+            return
         _output_result(analyzer, result, element, output_format, config)
         from .formatting import print_result_control_notes  # noqa: I006 — circular avoidance
         print_result_control_notes(result, output_format)
+
+    if emit is not None:
+        emit(result, printer)
+    else:
+        printer()
+
+
+def element_document(analyzer, result) -> dict:
+    """The JSON document an element read prints (``--format json``; a section outline's too): the element envelope."""
+    return attach_invocation_warnings(dict(ResultBuilder.element(result, analyzer.path)))
 
 
 # A markdown section this long that has subsections is shown as its own body plus the
@@ -629,7 +646,7 @@ def _output_section_outline(analyzer, result, element: str, output_format: str,
     from .formatting import _format_markdown_headings  # noqa: I006 — circular avoidance
 
     if output_format == 'json':
-        print(safe_json_dumps(attach_invocation_warnings(ResultBuilder.element(result, analyzer.path))))
+        print(safe_json_dumps(element_document(analyzer, result)))
         return
     spans = ', '.join(f"{s['line_start']}-{s['line_end']}" for s in result.get('sections', [result]))
     print(f"{to_posix(analyzer.path)}:{spans} | {element}\n")
@@ -1018,7 +1035,7 @@ def _output_result(analyzer, result, element: str, output_format: str, config=No
         config: Optional RevealConfig instance
     """
     if output_format == 'json':
-        print(safe_json_dumps(attach_invocation_warnings(ResultBuilder.element(result, analyzer.path))))
+        print(safe_json_dumps(element_document(analyzer, result)))
         return
 
     path = analyzer.path
