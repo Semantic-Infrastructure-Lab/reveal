@@ -151,3 +151,19 @@ def test_run_declared_uri_answers_the_request_note_at_the_error_stage(monkeypatc
     assert (document['type'], document['source']) == ('calls_query', '.')
     assert document['error'].startswith('a calls:// request is deprecated; use reveal calls')
     assert err.splitlines()[-1] == f"error: {document['error']}"
+
+
+def test_a_declared_uris_element_row_answers_the_document(monkeypatch):
+    """``reveal help:// quick``: the positional element's own row (``target:help.element``) is said by the declared
+    URI command before it binds, so it answers as the URI's keys do."""
+    from dataclasses import replace
+    from conftest import _run_reveal_direct
+    from reveal.cli.invocation import RETIREMENTS
+    row = replace(RETIREMENTS['target:help.element'], stage='error')
+    monkeypatch.setitem(RETIREMENTS, 'target:help.element', row)
+    result = _run_reveal_direct('help://', 'quick', '--format', 'json')
+    assert result.returncode == 2
+    out, err = result.stdout, result.stderr
+    document = json.loads(out)
+    assert (document['type'], document['source'], document['error']) == ('help', '', row.text)  # as `help:// --limit x`
+    assert err.splitlines()[-1] == f'error: {row.text}'

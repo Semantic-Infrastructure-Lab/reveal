@@ -8,7 +8,7 @@ import os
 import sys
 from contextlib import nullcontext
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional, Sequence, TypeGuard
+from typing import Any, Callable, Dict, NoReturn, Optional, Sequence, TypeGuard
 
 from ..argparsing import RevealArgumentParser
 from .ledger import FlagLedger, complete, delegate, ledger_of, mark, peek
@@ -346,7 +346,8 @@ def _path_read_answer(target: str, args) -> str:
     return 'directory_tree' if os.path.isdir(target) else 'file_structure'
 
 
-def answer_retired_spelling(error: RetiredSpellingError, args, refusal: Callable[[str], Any], answer_consumer=None) -> None:
+def answer_retired_spelling(error: RetiredSpellingError, args, refusal: Callable[[str], Any],
+                            answer_consumer=None) -> NoReturn:
     """A spelling at the error stage (*error*, a ``RetiredSpellingError``: a RETIREMENTS row, or a URI request's note)
     answered where a route answers its refusals (BACK-2627 note #9 item 3). In a JSON request: exit 2, the row's text
     as the process's one ``error:`` line on stderr (the line ``main.run_contained`` prints), and on stdout the route's
@@ -693,14 +694,14 @@ def run_declared_uri_command(name: str, uri: str, element: Optional[str], args) 
     resource = peek(args, adapter.RESOURCE_SPEC.name)
     try:
         _note_retired_spellings(uri)
+        if element:  # a positional element's own row (target:NOUN.element) notes here
+            legacy = legacy_element_resource(name, resource, element)
+            if legacy is None:
+                _refuse_element(name, resource, element, args)
+                return
+            resource = legacy
     except RetiredSpellingError as exc:
         answer_retired_spelling(exc, args, _declared_refusal(adapter, name, args, resource or '', query))
-    if element:
-        legacy = legacy_element_resource(name, resource, element)
-        if legacy is None:
-            _refuse_element(name, resource, element, args)
-            return
-        resource = legacy
     run_declared_command(name, args, uri_query=query, resource=resource)
 
 
