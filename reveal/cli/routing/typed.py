@@ -68,16 +68,13 @@ def _analysis_failure(answer: Any, facts: Any) -> Exception:
     """Exit 3: the analysis's cause, else ``AnalysisFailedError`` with the answer's failure warnings and the answer
     itself, built inside the request's invocation scope so it carries its notes as the CLI's document does."""
     from ...errors import AnalysisFailedError
-    from ...utils.results import note_incomplete
+    from ...utils.results import analysis_failure_text, note_incomplete
     exc: Optional[Exception] = answer.exception
     if exc is not None:
         return exc
     result = _answer_dict(answer)
-    meta = result.get('meta')
-    warnings = meta.get('warnings') or () if isinstance(meta, dict) else ()
-    failed = [w['message'] for w in warnings
-              if isinstance(w, dict) and w.get('type') == 'analysis_failed' and w.get('message')]
-    message = '; '.join(failed) or answer.public_diagnostic or result.get('error') or 'Required analysis or output failed'
+    message = (analysis_failure_text(result) or answer.public_diagnostic or result.get('error')
+               or 'Required analysis or output failed')
     if not result:
         return AnalysisFailedError(message)
     note_incomplete(result, facts)

@@ -525,6 +525,15 @@ def _meta_warnings_of(result: Any, kinds: frozenset) -> List[Dict[str, Any]]:
     return [w for w in warnings or [] if isinstance(w, dict) and w.get('type') in kinds]
 
 
+def analysis_failure_text(result: Any) -> Optional[str]:
+    """reveal's own sentence for an answer whose analysis failed: the authored ``message`` of each ``analysis_failed``
+    warning on *result* (it names the files and the class of each cause, never a parser's text), joined with ``'; '``;
+    None when it has none. One text for every host that returns a failure instead of exiting: the Python API's
+    ``AnalysisFailedError`` and MCP's tool error for the same answer (BACK-2786)."""
+    failed = [w['message'] for w in _meta_warnings_of(result, frozenset({'analysis_failed'})) if w.get('message')]
+    return '; '.join(failed) or None
+
+
 def truncations_of(result: Any) -> List[Dict[str, Any]]:
     """The lists a result says were cut: its ``truncated`` meta warnings (``note_truncation``)."""
     return _meta_warnings_of(result, frozenset({'truncated'}))
