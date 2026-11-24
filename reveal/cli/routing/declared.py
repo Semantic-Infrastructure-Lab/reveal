@@ -1019,7 +1019,7 @@ def _run_declared(name: str, args, path: str, source: Any, transport: str, consu
                                           resolve=getattr(adapter, 'resource_path', None))
             except (ValueError, FileNotFoundError, NotADirectoryError) as exc:
                 consume(_invalid_answer(adapter, name, path, _resource_error_message(exc, path), args,
-                                        result_type=expected_type, error=exc))
+                                        result_type=expected_type, error=_resource_error(exc, path)))
                 return
             except OSError as exc:
                 consume(_invalid_answer(adapter, name, path, str(exc), args, _resource_failure_cause(exc),
@@ -1060,6 +1060,15 @@ def _resource_error_message(error, path: str) -> str:
     if isinstance(error, (FileNotFoundError, NotADirectoryError)):
         return f'Path not found: {to_posix(path)}'
     return str(error)
+
+
+def _resource_error(error, path: str):
+    """What the Python API raises for a resource the route refuses: a path that does not exist is
+    ``PathNotFoundError`` with the route's message (ruling S7, BACK-2325), anything else the error itself."""
+    from ...errors import PathNotFoundError
+    if isinstance(error, (FileNotFoundError, NotADirectoryError)) and not isinstance(error, PathNotFoundError):
+        return PathNotFoundError(_resource_error_message(error, path))
+    return error
 
 
 def _join_walk_policy(args, uri_policy: Optional[bool], typed_policy, uri_query: str) -> None:
@@ -1145,8 +1154,9 @@ def _declared_answer(adapter_class, name: str, path: str, source: Any, transport
             _validate_bound_request(adapter_class, params, path, args)
         # stat distinguishes absence from inaccessible required work.
         check_resource_exists(adapter_class, path, scope)
-    except (FileNotFoundError, NotADirectoryError):
-        return _invalid_answer(adapter_class, name, scope, f'Path not found: {to_posix(path)}', args, result_type=expected_type)
+    except (FileNotFoundError, NotADirectoryError) as exc:
+        return _invalid_answer(adapter_class, name, scope, f'Path not found: {to_posix(path)}', args, result_type=expected_type,
+                               error=_resource_error(exc, path))
     except ValueError as exc:
         return _invalid_answer(adapter_class, name, scope, str(exc), args, result_type=expected_type, error=exc)
     except OSError as exc:
