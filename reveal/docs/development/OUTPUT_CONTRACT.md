@@ -474,8 +474,10 @@ request the subcommand exits 2 on raises `RequestValidationError` with the messa
 its `result` the JSON document), and every other answer is returned as the JSON document (BACK-2717).
 Its URI form raises the same way on a declared noun, whose URI the CLI answers by the noun's own route:
 `api.query('json://F/absent')` raises the CLI's `Key not found`, a missing path raises `PathNotFoundError`
-(BACK-2788). A scheme the CLI answers by its generic URI route (a plugin, an undeclared adapter)
-returns its answer as before.
+(BACK-2788). A request that does not apply to its target is no failure on either form: `api.query('git://DIR')`
+outside a repository, like `api.query('git', 'DIR')`, returns the declined document the CLI exits 0 on
+(`applicable: false`; it raised `NotApplicableError`, BACK-2789). A scheme the CLI answers by its generic URI
+route (a plugin, an undeclared adapter) returns its answer as before.
 
 ### Retired spellings (`retired_spelling`)
 
