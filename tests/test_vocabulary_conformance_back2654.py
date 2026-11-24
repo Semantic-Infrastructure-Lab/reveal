@@ -371,16 +371,15 @@ RULED_EXEMPT_NOUNS = {'stats': 'rule 9: the retired stats:// scheme is deleted a
 # BACK-2709), and an equal repeated term is one term (BACK-2715), so rule 23 conforms on every declared noun.
 # Rule 24 (BACK-2716 step 4) at fbf7715a plus the step-4 renderer fixes:
 NOT_YET: dict = {
-    # Rule 29 (D21, BACK-2774), the manager's rulings S1 and S2 on the vocab V1 inventory (2026-11-23):
-    ('calls', '29'): 'detail is a boolean (valueless --detail, true/false, normal/full) where every other noun\'s detail '
-                     'is a level of the one scale: it becomes the string control normal|full in V5 (S1)',
+    # Rule 29 (D21, BACK-2774), the manager's ruling S2 on the vocab V1 inventory (2026-11-23); calls detail (S1) conforms
+    # since V5 (the string control normal|full):
     ('pack', '29'): "since is a git ref, not the time window (it binds 'bogus'): it becomes --against REF in Pack's "
                     'package (S2)',
 }
 
 NOT_YET_BASELINE = {'1a': 0, '1b': 0, '1c': 0, '1d': 0, '2': 0, '3': 0, '3b': 0, '4': 0, '5': 0, '6': 0,
                     '8a': 0, '8b': 0, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 0, '14': 0, '21j': 0, '22': 0,
-                    '23': 0, '24': 0, '28': 0, '25': 0, '27': 0, '26': 0, '29': 2, '30': 0}
+                    '23': 0, '24': 0, '28': 0, '25': 0, '27': 0, '26': 0, '29': 1, '30': 0}
 
 
 # --- the fixture -------------------------------------------------------------------------------------------
