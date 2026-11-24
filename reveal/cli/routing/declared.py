@@ -279,6 +279,47 @@ def invalid_path_read(target, message: str, args, error: Optional[BaseException]
                            default_fail_on='none', error=error, label=target)
 
 
+class PathReadRefused(Exception):
+    """A path read refused at one of its sites (``path_read_refusal``), raised there and answered where the path read
+    answers: the file route's entry and ``file_handler.handle_file`` hand ``answer`` to their answer consumer, or emit
+    it (the site's own text and exit)."""
+
+    def __init__(self, answer: Any):
+        super().__init__(answer.public_diagnostic)
+        self.answer = answer
+
+
+def path_read_refusal(target: str, text: str, args, *, exit_code: int = 2, error: Optional[BaseException] = None,
+                      cause: Any = None):
+    """The Answer of a path read that a site of the file route refuses (BACK-2325, ruling S4). *text* is exactly what
+    the site prints on stderr, its error line then any hints; the document is the path read's invalid-request document
+    (``invalid_path_read``'s facet and shape), its message the error line without its ``Error:`` label; the exit is
+    *exit_code*, 2 for an invalid request (a site with a legacy code keeps it). *error*: what the Python API raises,
+    the request's own ``RequestValidationError``, or with *cause* ``FailureCause.ANALYSIS`` the ``OSError`` of a file
+    that could not be read (exit 3). MCP reads the facts and *text* (``public_diagnostic``), as the exit and stderr
+    it read before."""
+    from ...errors import RequestValidationError
+    from ...reveal_types import CONTRACT_VERSION
+    from ...utils.json_utils import print_json_result
+    from ...utils.results import FailureCause, ResultBuilder, failure_execution_facts
+    from .uri import Answer
+    cause = FailureCause.INVALID_REQUEST if cause is None else cause
+    first = text.splitlines()[0] if text else ''
+    message = first.removeprefix('❌ ').removeprefix('Error: ')
+    result = ResultBuilder.create(_path_read_answer(target, args), target, contract_version=CONTRACT_VERSION,
+                                  source_type='unknown', errors=[{'code': cause.value, 'message': message}],
+                                  error=message)
+
+    def emit(_answer, **_options):
+        print(text, end='' if text.endswith('\n') else '\n', file=sys.stderr)
+        if getattr(args, 'format', None) == 'json':
+            print_json_result(result)
+        sys.exit(exit_code)
+    return Answer(result, 'router', emit, execution_facts=failure_execution_facts(cause),
+                  exception=error if cause is FailureCause.ANALYSIS else None, public_diagnostic=text.strip(),
+                  request_error=error if isinstance(error, RequestValidationError) else None)
+
+
 def _path_read_answer(target: str, args) -> str:
     from ...nav_params import ELEMENT_ANSWER, element_request_given
     element = getattr(args, 'element', None)
