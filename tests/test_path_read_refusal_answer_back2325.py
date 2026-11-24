@@ -66,3 +66,10 @@ def test_an_element_read_and_a_directory_take_their_facets(tmp_path):
     assert path_read_refusal('x.py', 'Error: x\n', _args('x.py', 'foo')).result['type'] == 'code_element'
     assert path_read_refusal(str(tmp_path / 'd'), 'Error: x\n', _args(str(tmp_path / 'd'))).result['type'] == \
         'directory_tree'
+
+
+def test_an_invalid_request_without_an_error_of_its_own_carries_one_with_the_documents_message():
+    from reveal.errors import RequestValidationError
+    answer = path_read_refusal('x.rst', "Error: No analyzer found for file 'x.rst'\n\nContext:\n", _args('x.rst'))
+    assert type(answer.request_error) is RequestValidationError
+    assert str(answer.request_error) == "No analyzer found for file 'x.rst'" == answer.result['error']

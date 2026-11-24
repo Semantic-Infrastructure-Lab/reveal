@@ -295,9 +295,9 @@ def path_read_refusal(target: str, text: str, args, *, exit_code: int = 2, error
     the site prints on stderr, its error line then any hints; the document is the path read's invalid-request document
     (``invalid_path_read``'s facet and shape), its message the error line without its ``Error:`` label; the exit is
     *exit_code*, 2 for an invalid request (a site with a legacy code keeps it). *error*: what the Python API raises,
-    the request's own ``RequestValidationError``, or with *cause* ``FailureCause.ANALYSIS`` the ``OSError`` of a file
-    that could not be read (exit 3). MCP reads the facts and *text* (``public_diagnostic``), as the exit and stderr
-    it read before."""
+    the request's own ``RequestValidationError`` (by default one with the document's message), or with *cause*
+    ``FailureCause.ANALYSIS`` the ``OSError`` of a file that could not be read (exit 3). MCP reads the facts and *text*
+    (``public_diagnostic``), as the exit and stderr it read before."""
     from ...errors import RequestValidationError
     from ...reveal_types import CONTRACT_VERSION
     from ...utils.json_utils import print_json_result
@@ -306,6 +306,8 @@ def path_read_refusal(target: str, text: str, args, *, exit_code: int = 2, error
     cause = FailureCause.INVALID_REQUEST if cause is None else cause
     first = text.splitlines()[0] if text else ''
     message = first.removeprefix('❌ ').removeprefix('Error: ')
+    if error is None and cause is FailureCause.INVALID_REQUEST:
+        error = RequestValidationError(message)
     result = ResultBuilder.create(_path_read_answer(target, args), target, contract_version=CONTRACT_VERSION,
                                   source_type='unknown', errors=[{'code': cause.value, 'message': message}],
                                   error=message)
