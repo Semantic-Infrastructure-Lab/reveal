@@ -21,8 +21,9 @@ def test_missing_path_exits_2(tmp_path):
     assert 'no_such_file.py not found' in result.stderr
 
 
-# stats stays URI-only (metrics replaces it); codex was the example until it got its subcommand (BACK-2598).
-@pytest.mark.parametrize('scheme', ['stats'])
+# nginx is URI-only; stats teaches its RETIREMENTS row instead (BACK-2800); codex was the example until it got its
+# subcommand (BACK-2598).
+@pytest.mark.parametrize('scheme', ['nginx'])
 def test_uri_only_noun_names_working_spelling(tmp_path, scheme):
     result = _run_reveal_in(tmp_path, scheme, 'src with spaces')
     assert result.returncode == 2
