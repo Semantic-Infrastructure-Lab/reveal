@@ -62,14 +62,14 @@ def _language_commands(lang: str) -> list:
     """The five operations on one tier-1 sample, as argv lists."""
     exp = EXPECTED[lang]
     path = _sample(lang)
-    call_line = exp["calls_validate_callers"][0]["line"]
+    def_line = exp["calls_validate_callers"][0]["caller_def_line"]
     return [
         [path],
         [path, "--outline"],
         [path, exp["entry_function"]],
         [path, exp["batch_element"]],
-        [path, f":{call_line}-{call_line + 2}"],
-        [path, f":{call_line}"],
+        [path, f":{def_line}-{def_line + 2}"],
+        [path, f":{def_line}"],
         [path, "--grep", "result"],
     ]
 
@@ -328,13 +328,13 @@ def _assert_dir_grep_parity(text: str, data: dict):
 def _parity_cases(lang: str) -> list:
     exp = EXPECTED[lang]
     path = _sample(lang)
-    call_line = exp["calls_validate_callers"][0]["line"]
+    def_line = exp["calls_validate_callers"][0]["caller_def_line"]
     return [
         ([path], _assert_structure_parity),
         ([path, "--outline"], _assert_outline_parity),
         ([path, exp["entry_function"]], _assert_extract_parity),
         ([path, exp["batch_element"]], _assert_extract_parity),
-        ([path, f":{call_line}-{call_line + 2}"], _assert_extract_parity),
+        ([path, f":{def_line}-{def_line + 2}"], _assert_extract_parity),
         ([path, "--grep", "result"], _assert_file_grep_parity),
     ]
 

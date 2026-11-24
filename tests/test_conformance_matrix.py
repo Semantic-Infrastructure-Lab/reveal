@@ -97,19 +97,28 @@ def test_outline_lists_all_functions(lang):
 
 # ─────────────────────────────────── calls:// ─────────────────────────────────
 
-def test_calls_finds_cross_function_callers(lang):
-    """calls://?target=validate must find the in-file caller, for every language."""
+def _validate_callers(lang):
     target = EXPECTED[lang].get("validate_function", "validate")
     out = _run(f"calls://{_lang_dir(lang)}/?target={target}", "--format", "json")
-    data = json.loads(out)
+    return [c for level in json.loads(out)["levels"] for c in level["callers"]]
+
+
+def test_calls_finds_cross_function_callers(lang):
+    """calls://?target=validate must find the in-file caller, for every language: the caller's
+    definition line and the line of its call (BACK-2714)."""
     callers = [
-        {"line": c["line"], "function": c["caller"]}
-        for level in data["levels"]
-        for c in level["callers"]
+        {"caller_def_line": c.get("caller_def_line"), "call_lines": c.get("call_lines"), "function": c["caller"]}
+        for c in _validate_callers(lang)
     ]
     assert callers == EXPECTED[lang]["calls_validate_callers"], (
         f"{lang}: calls:// caller mismatch"
     )
+
+
+def test_calls_finds_the_cross_function_caller_names(lang):
+    """The caller names alone, the part of the answer BACK-2714 left unchanged."""
+    assert [c["caller"] for c in _validate_callers(lang)] == \
+        [row["function"] for row in EXPECTED[lang]["calls_validate_callers"]]
 
 
 # ────────────────────────────────── imports:// ────────────────────────────────

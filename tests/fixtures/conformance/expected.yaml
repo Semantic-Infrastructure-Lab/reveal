@@ -23,7 +23,7 @@ python:
   entry_function: process_order
   outline_functions: [validate, process_order, run]
   calls_validate_callers:
-  - {line: 12, function: process_order}
+  - {caller_def_line: 12, call_lines: [13], function: process_order}
   imports_unused: [sys]
   varflow_result:
   - {kind: WRITE, line: 13}
@@ -63,7 +63,7 @@ c:
   entry_function: process_order
   outline_functions: [validate, process_order, run]
   calls_validate_callers:
-  - {line: 12, function: process_order}
+  - {caller_def_line: 12, call_lines: [13], function: process_order}
   imports_unused:
     not_supported: true  # C generic import analyzer doesn't do unused-#include detection
   varflow_result:
@@ -107,7 +107,7 @@ cpp:
   entry_function: process_order
   outline_functions: [validate, process_order, run]
   calls_validate_callers:
-  - {line: 15, function: process_order}
+  - {caller_def_line: 15, call_lines: [16], function: process_order}
   imports_unused:
     not_supported: true  # C/C++ generic import analyzer doesn't do unused-#include detection
   varflow_result:
@@ -165,7 +165,7 @@ csharp:
   validate_function: Validate  # PascalCase — C# method-naming convention
   outline_functions: [Validate, ProcessOrder, Run]
   calls_validate_callers:
-  - {line: 19, function: ProcessOrder}
+  - {caller_def_line: 19, call_lines: [21], function: ProcessOrder}
   imports_unused:
     not_supported: true  # generic import extractor intentionally skips unused-detection (BACK-398)
   varflow_result:
@@ -203,7 +203,7 @@ java:
   entry_function: processOrder
   outline_functions: [validate, processOrder, run]
   calls_validate_callers:
-  - {line: 17, function: processOrder}
+  - {caller_def_line: 17, call_lines: [18], function: processOrder}
   imports_unused:
     not_supported: true  # generic import extractor intentionally skips unused-detection (BACK-398)
   varflow_result:
@@ -248,7 +248,7 @@ javascript:
   entry_function: processOrder
   outline_functions: [validate, processOrder, run]
   calls_validate_callers:
-  - {line: 13, function: processOrder}
+  - {caller_def_line: 13, call_lines: [14], function: processOrder}
   imports_unused: [util]
   varflow_result:
   - {kind: WRITE, line: 14}
@@ -287,7 +287,7 @@ rust:
   entry_function: process_order
   outline_functions: [validate, process_order, run]
   calls_validate_callers:
-  - {line: 13, function: process_order}
+  - {caller_def_line: 13, call_lines: [14], function: process_order}
   imports_unused: ["std::collections::HashMap"]
   varflow_result:
   - {kind: WRITE, line: 14}
@@ -338,7 +338,7 @@ typescript:
   entry_function: processOrder
   outline_functions: [validate, processOrder, run]
   calls_validate_callers:
-  - {line: 13, function: processOrder}
+  - {caller_def_line: 13, call_lines: [14], function: processOrder}
   imports_unused: [util]
   varflow_result:
   - {kind: WRITE, line: 14}
@@ -375,7 +375,7 @@ go:
   entry_function: processOrder
   outline_functions: [validate, processOrder, Run]
   calls_validate_callers:
-  - {line: 19, function: processOrder}
+  - {caller_def_line: 19, call_lines: [20], function: processOrder}
   imports_unused: [strconv]
   varflow_result:
   - {kind: WRITE, line: 20}
@@ -419,7 +419,7 @@ kotlin:
   entry_function: processOrder
   outline_functions: [validate, processOrder, run]
   calls_validate_callers:
-  - {line: 11, function: processOrder}
+  - {caller_def_line: 11, call_lines: [12], function: processOrder}
   imports_unused:
     not_supported: true  # no import extractor registered for .kt/.kts (BACK-431 Issue G)
   varflow_result:
@@ -455,7 +455,7 @@ swift:
   entry_function: processOrder
   outline_functions: [validate, processOrder, run]
   calls_validate_callers:
-  - {line: 11, function: processOrder}
+  - {caller_def_line: 11, call_lines: [13], function: processOrder}
   imports_unused:
     not_supported: true  # no import extractor registered (BACK-431 Issue G)
   varflow_result:
@@ -493,7 +493,7 @@ ruby:
   entry_function: process_order
   outline_functions: [validate, process_order, run]
   calls_validate_callers:
-  - {line: 9, function: process_order}
+  - {caller_def_line: 9, call_lines: [10], function: process_order}
   imports_unused:
     not_supported: true  # extractor exists (require/require_relative) but unused-detection not claimed (skip_unused always set)
   varflow_result:
@@ -537,7 +537,7 @@ php:
   entry_function: processOrder
   outline_functions: [validate, processOrder, run]
   calls_validate_callers:
-  - {line: 12, function: processOrder}
+  - {caller_def_line: 12, call_lines: [14], function: processOrder}
   imports_unused:
     not_supported: true  # extractor exists (require/include + generic) but unused-detection not claimed
   varflow_var: "$result"  # PHP variables are always $-sigil-spelled; bare 'result' is a correct non-match, not a bug
@@ -576,7 +576,7 @@ lua:
   entry_function: processOrder
   outline_functions: [validate, processOrder, run]
   calls_validate_callers:
-  - {line: 11, function: processOrder}
+  - {caller_def_line: 11, call_lines: [12], function: processOrder}
   imports_unused:
     not_supported: true  # require extraction exists; unused detection is not supported
   varflow_result:
@@ -616,7 +616,7 @@ dart:
   entry_function: processOrder
   outline_functions: [validate, processOrder, run, summarize]
   calls_validate_callers:
-  - {line: 12, function: processOrder}
+  - {caller_def_line: 12, call_lines: [13], function: processOrder}
   imports_unused:
     not_supported: true  # generic Dart import extraction has no unused-name analysis
   varflow_result:
@@ -655,7 +655,7 @@ scala:
   entry_function: processOrder
   outline_functions: [validate, processOrder, run, summarize]
   calls_validate_callers:
-  - {line: 13, function: processOrder}
+  - {caller_def_line: 13, call_lines: [14], function: processOrder}
   imports_unused:
     not_supported: true  # Scala import extraction has no unused-name analysis
   varflow_result:
@@ -694,7 +694,7 @@ gdscript:
   entry_function: processOrder
   outline_functions: [validate, processOrder, run, summarize]
   calls_validate_callers:
-  - {line: 12, function: processOrder}
+  - {caller_def_line: 12, call_lines: [13], function: processOrder}
   imports_unused:
     not_supported: true  # preload extraction exists; no unused-name analysis
   varflow_result:
@@ -734,7 +734,7 @@ zig:
   entry_function: processOrder
   outline_functions: [validate, processOrder, run]
   calls_validate_callers:
-  - {line: 12, function: processOrder}
+  - {caller_def_line: 12, call_lines: [13], function: processOrder}
   imports_unused:
     not_supported: true  # @import extraction exists; no unused-name analysis
   varflow_result:
