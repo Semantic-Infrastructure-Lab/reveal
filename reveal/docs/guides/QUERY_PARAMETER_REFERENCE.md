@@ -516,23 +516,23 @@ site). A scanned call-source language with no recall snapshot (Elixir, Objective
 
 - **`detail=summary`** - Session overview plus analytics (deprecated `summary` retains its original behavior)
   ```bash
-  reveal 'claude://my-session?detail=summary'
+  reveal claude://my-session --detail summary
   ```
 
 - **`errors`** (flag) - Filter for messages containing errors
   ```bash
-  reveal 'claude://my-session?errors'
+  reveal claude://my-session --errors
   ```
 
 - **`tools=<name>`** (string) - Filter for specific tool usage
   ```bash
-  reveal 'claude://my-session?tools=Bash'
-  reveal 'claude://my-session?tools=Edit'
+  reveal claude://my-session --tools Bash
+  reveal claude://my-session --tools Edit
   ```
 
 - **`match=<text>`** - Narrative message text on the messages view, or tool-result text with tools/errors (deprecated `contains` retains its original scope)
   ```bash
-  reveal 'claude://session/my-session/messages?match=reveal'
+  reveal claude://session/my-session/messages --match reveal
   ```
 
 - **User messages only** - there is no `role=` filter; the `prompts` view lists the
@@ -543,23 +543,23 @@ site). A scanned call-source language with no recall snapshot (Elixir, Objective
 
 - **`match=<term>`** - Search session content (text, thinking, tool inputs/results), case-insensitive; the deprecated `search` retains its original codec
   ```bash
-  reveal 'claude://my-session?match=FileNotFoundError'
+  reveal claude://my-session --match FileNotFoundError
   ```
 
 - **`view=messages&sort=-message_index&limit=N`** - Latest N assistant turns, latest-first. The deprecated `tail` preserves chronological order and zero-empty behavior; canonical limit zero is uncapped.
   ```bash
-  reveal 'claude://session/my-session/messages?sort=-message_index&limit=3'
-  reveal 'claude://session/my-session/messages?sort=-message_index&limit=1'
+  reveal claude://session/my-session/messages --limit 3 --sort=-message_index
+  reveal claude://session/my-session/messages --limit 1 --sort=-message_index
   ```
 
 - **`view=messages&sort=-message_index&limit=1`** - Latest assistant turn. Deprecated `last` retains bare/zero-as-one behavior.
   ```bash
-  reveal 'claude://session/my-session/messages?sort=-message_index&limit=1'
+  reveal claude://session/my-session/messages --limit 1 --sort=-message_index
   ```
 
 - **`tokens`** (flag) - Token usage breakdown by message role (input/output/cache)
   ```bash
-  reveal 'claude://my-session?tokens'
+  reveal claude://my-session --tokens
   ```
 
 ---
