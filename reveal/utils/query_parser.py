@@ -471,6 +471,8 @@ class ParamSpec:
     convert: Callable[[Any], Any]
     examples: Tuple[str, ...] = ()
     minimum: Optional[int] = None
+    # An upper bound, refused like the minimum, never clamped (walk depth's 1..5: depth_param, BACK-2793).
+    maximum: Optional[int] = None
     zero_policy: Optional[str] = None
     cli_flags: Tuple[Tuple[str, str], ...] = ()
     choices: Tuple[Any, ...] = ()
@@ -633,12 +635,29 @@ class ParamSpec:
             except (TypeError, ValueError):
                 what = 'a whole number' if self.type == 'integer' else f'a valid {self.type}'
                 raise ValueError(f'{self.name} must be {what}, got {raw!r}') from None
-        if self.minimum is not None and value is not None and value < self.minimum:
-            raise ValueError(f'{self.name} must be >= {self.minimum}')
+        if value is not None:
+            self._check_bounds(value)
         if self.choices and value is not None and value not in self.choices \
                 and value not in self.retired_values:  # an absent optional choice; a retired value answers until the cut
             raise ValueError(f'{self.name} must be one of {self.choices!r}, got {value!r}')
         return value
+
+    def _check_bounds(self, value: Any) -> None:
+        """Refuse a converted *value* outside the declared bounds: with both bounds, ``NAME must be LOW..HIGH, got N``
+        on either side (the one text every transport shows); a minimum alone keeps ``NAME must be >= LOW``."""
+        below = self.minimum is not None and value < self.minimum
+        above = self.maximum is not None and value > self.maximum
+        if not (below or above):
+            return
+        if self.minimum is not None and self.maximum is not None:
+            raise ValueError(f'{self.name} must be {self.minimum}..{self.maximum}, got {value}')
+        if below:
+            raise ValueError(f'{self.name} must be >= {self.minimum}')
+        raise ValueError(f'{self.name} must be <= {self.maximum}, got {value}')
+
+    def _given_fields(self, *names: str) -> Dict[str, Any]:
+        """The named optional fields this declaration sets (not None), in order, for its schema."""
+        return {name: getattr(self, name) for name in names if getattr(self, name) is not None}
 
     def schema(self) -> Dict[str, Any]:
         result = {'type': self.type, 'description': self.description,
@@ -647,16 +666,10 @@ class ParamSpec:
             result['aliases'] = list(self.aliases) + list(self.legacy_words)
         if self.first_selectors:
             result['legacy_first_selectors'] = list(self.first_selectors)
-        if self.minimum is not None:
-            result['minimum'] = self.minimum
-        if self.zero_policy is not None:
-            result['zero_policy'] = self.zero_policy
+        result.update(self._given_fields('minimum', 'maximum', 'zero_policy'))
         if self.choices:
             result['choices'] = list(self.choices)
-        if self.role is not None:
-            result['role'] = self.role
-        if self.names is not None:
-            result['names'] = self.names
+        result.update(self._given_fields('role', 'names'))
         if self.answers:
             result['answers'] = list(self.answers)
         if self.requires:
@@ -739,6 +752,22 @@ def _exclude_patterns(value: Any) -> str:
         if isinstance(item, bool) or not isinstance(item, str) or not item.strip():
             raise ValueError('exclude requires a value')
     return ','.join(values)
+
+
+# Graph hops of a walk: the one range of every declared walk depth (COMMAND_MODEL "Walk depth range", Scott 2026-11-24,
+# BACK-2793). Other depths (nesting, directory, heading) are different quantities with their own domains.
+WALK_DEPTH = (1, 5)
+
+
+def depth_param(description: str, *, default: Any = None, answers: Tuple[str, ...] = (),
+                requires: Tuple[str, ...] = (), examples: Tuple[str, ...] = ()) -> ParamSpec:
+    """The one declaration of a walk depth (calls, trace, the element views' ``--transitive``): graph hops
+    ``WALK_DEPTH``, refused outside it by ``ParamSpec.validate`` with ``depth must be 1..5, got N`` on every transport,
+    never clamped. *description* says what the hops walk; the range from ``WALK_DEPTH`` leads it (``1..5 levels``)."""
+    low, high = WALK_DEPTH
+    return ParamSpec('depth', 'integer', f'{low}..{high} {description}', default, whole_number, examples=examples,
+                     minimum=low, maximum=high, role='analysis', cli=CliBinding(('--depth',), metavar='N'),
+                     answers=answers, requires=requires)
 
 
 def exclude_param() -> ParamSpec:
