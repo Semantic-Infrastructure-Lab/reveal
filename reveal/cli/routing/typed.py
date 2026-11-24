@@ -113,6 +113,24 @@ def answer_failure(adapter: Any, result: Any, facts: Any) -> Optional[Exception]
     return _failure(Answer(result, 'structure', _unprinted, execution_facts=facts, public_diagnostic=diagnostic), facts)
 
 
+def answer_decline(adapter: Any, scheme: str, scope: str, params: Any, error: Any) -> Dict[str, Any]:
+    """The declined answer the CLI's declared route gives a request that does not apply to its target (exit 0,
+    BACK-1210): the router's own not-applicable result (``uri._decline``, what ``_call_adapter`` answers a
+    ``NotApplicableError`` with: the reason, the declared controls *adapter* was given and never read), its type the one
+    the route predicts for the request (``predicted_result_type`` of the bound *params* at *scope*, the path the resource
+    names) and ``source`` that path, as ``_declared_answer`` builds it (no *params*: the router's own type, the scheme).
+    The URI form of ``api.query`` returns it for the *error* a declared noun's structure call raised, as the noun form
+    returns the route's own (D21, BACK-2789)."""
+    from ...adapters.factory import predicted_result_type
+    from .uri import _answer, _decline
+    adapter_class = type(adapter)
+    expected_type = predicted_result_type(adapter_class, params, scope) if params is not None else None
+    answer = _answer(lambda: _decline(scheme, scope, error.reason, adapter_class, adapter), scheme, argparse.Namespace(),
+                     result_type=expected_type, source_path=scope, facts_of=adapter_class.execution_facts)
+    declined: Dict[str, Any] = answer.result
+    return declined
+
+
 def _unprinted(_answer: Any, **_options: Any) -> None:
     """The printer of an answer the Python API raises instead of printing."""
 
