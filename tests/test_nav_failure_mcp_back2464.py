@@ -1,5 +1,6 @@
 """Authored nav source failures survive the actual SDK and stdio boundary."""
 import asyncio
+import json
 import logging
 from pathlib import Path
 
@@ -141,8 +142,14 @@ def test_disappearance_after_cli_preflight_exits_2(source, monkeypatch):
 def test_cli_missing_and_absent_exit_2_with_stderr(source):
     for path, element in [(source.parent / 'missing.py', 'empty'), (source, 'absent')]:
         result = _run_reveal_direct(path, element, '--effects', '--format', 'json')
-        assert result.returncode == 2 and result.stdout == ''
+        assert result.returncode == 2
         assert result.stderr
+    # A missing path is the file route's refusal: in JSON it answers the invalid-request document (BACK-2325, S4); an
+    # absent element is the element view's own failure, stdout empty as before.
+    missing = _run_reveal_direct(source.parent / 'missing.py', 'empty', '--effects', '--format', 'json')
+    document = json.loads(missing.stdout)
+    assert document['type'] == 'element_view' and document['meta']['errors'][0]['code'] == 'invalid_request'
+    assert _run_reveal_direct(source, 'absent', '--effects', '--format', 'json').stdout == ''
 
 
 def test_unexpected_constructor_failure_is_masked_and_logged(source, monkeypatch, caplog):

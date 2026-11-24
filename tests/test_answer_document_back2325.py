@@ -44,13 +44,15 @@ def test_the_document_is_not_part_of_repr_or_equality():
     assert 'document' not in repr(first)
 
 
-def test_the_file_route_answer_leaves_it_unset_today(tmp_path, capsys):
-    # Negative control: the one route that emits a structure Answer (BACK-2762) is unchanged by the field.
+def test_the_file_route_answer_carries_the_document_it_prints(tmp_path, capsys):
+    # The file structure's Answer (BACK-2762) carries the document its renderer prints (BACK-2325, step A3): the
+    # Python API reads it; emitting never calls it.
+    import json
     path = tmp_path / 'ok.py'
     path.write_text('def ok():\n    return 1\n', encoding='utf-8')
     with log_scope(to_stderr=False):
         handle_file(str(path), None, False, 'json')
         answer = current_log().last_answer
+        document = answer.document() if answer is not None and answer.document is not None else None
     assert answer is not None and answer.kind == 'structure'
-    assert answer.document is None
-    capsys.readouterr()
+    assert document == json.loads(capsys.readouterr().out)
