@@ -118,7 +118,7 @@ def test_each_legacy_flag_binds_its_replacements_request(legacy, canonical):
 @pytest.mark.parametrize('legacy,other', [
     (['--ifmap'], ['--view', 'flow']), (['--fanout'], ['--view', 'effects']), (['--statewrites'], ['--view', 'effects']),
     (['--boundary'], ['--view', 'exits']), (['--fanout', '--depth', '2'], ['--view', 'effects', '--in-loops']),
-    (['--boundary', '--transitive', '--depth', '9'], ['--view', 'boundary', '--transitive', '--depth', '4']),
+    (['--boundary', '--transitive', '--depth', '3'], ['--view', 'boundary', '--transitive', '--depth', '4']),
 ])
 def test_sibling_the_comparison_sees_a_different_request(legacy, other):
     """Positive control for the parity table: a request that differs in one field is not equal."""
@@ -158,18 +158,25 @@ def test_effects_answers_are_keyed_by_their_mode():
         == ['effects:ordinary', 'effects:loops', 'effects:state', 'exits', 'inputs']
 
 
-# -- X10/E8: the legacy transitive depth keeps its clamp; the canonical one is strict ---------------------------------
+# -- X10 reversed, E8 (BACK-2793): every spelling of the transitive depth is the one walk depth, refused outside 1..5 --
 
-@pytest.mark.parametrize('depth,effective', [('0', 2), ('-1', 1), ('9', 5), ('4', 4)])
+@pytest.mark.parametrize('depth', ['0', '-1', '9'])
 @pytest.mark.parametrize('view', ['--boundary', '--sideeffects'])
-def test_the_legacy_transitive_depth_clamps(view, depth, effective):
-    assert bind([view, '--transitive', '--depth', depth]).depth == effective
+def test_the_legacy_transitive_depth_is_strict(view, depth):
+    # it clamped (0 meant the default 2, -1 walked one hop, 9 five)
+    refused([view, '--transitive', '--depth', depth], f'depth must be 1..5, got {int(depth)}')
+
+
+@pytest.mark.parametrize('view', ['--boundary', '--sideeffects'])
+def test_the_legacy_transitive_depth_binds_an_in_range_value(view):
+    assert bind([view, '--transitive', '--depth', '4']).depth == 4
+    assert bind([view, '--transitive']).depth == 2
 
 
 @pytest.mark.parametrize('depth', ['0', '6', '-1'])
 @pytest.mark.parametrize('view', [['--view', 'boundary'], ['--view', 'effects'], ['--effects']])
 def test_the_canonical_transitive_depth_is_strict(view, depth):
-    refused([*view, '--transitive', '--depth', depth], 'depth', '1..5')
+    refused([*view, '--transitive', '--depth', depth], f'depth must be 1..5, got {int(depth)}')
 
 
 # -- X4/D10: effects' modifiers through requires ----------------------------------------------------------------------
@@ -313,7 +320,7 @@ def test_a_request_without_an_element_control_is_not_an_element_request(argv, pa
 
 def test_the_element_keys_are_every_spelling_of_the_element_controls():
     assert {'view', 'kind', 'boundary', 'flow', 'fanout', 'outline', 'deps', 'calls', 'scope', 'around'} <= ELEMENT_KEYS
-    assert not {'depth', 'range', 'head', 'tail', 'name', 'grep', 'type', 'sort', 'legacy-depth'} & ELEMENT_KEYS
+    assert not {'depth', 'range', 'head', 'tail', 'name', 'grep', 'type', 'sort'} & ELEMENT_KEYS
 
 
 # -- a typed source (MCP reveal_nav, S3b-4) binds by name and by presence ---------------------------------------------

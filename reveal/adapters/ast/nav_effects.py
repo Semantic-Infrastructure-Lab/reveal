@@ -2061,12 +2061,6 @@ def _traversal_note(failures: Sequence[PathFailure]) -> Optional[str]:
     return warning['message'] if warning else None
 
 
-def effective_transitive_depth(depth: int) -> int:
-    """The hop budget a transitive walk uses for a requested *depth*: 1 to 5 (the legacy spellings clamp; the D10
-    request rejects out-of-range values before it gets here). Its callers state this value, never the request's."""
-    return max(1, min(depth, 5))
-
-
 def collect_effects_transitive(
     path: str,
     root_name: str,
@@ -2094,8 +2088,6 @@ def collect_effects_transitive(
     that reached it, e.g. ['handle_request', '_save', 'db_execute']).
     """
     from ..calls.index import walk_callees  # noqa: I006
-
-    depth = effective_transitive_depth(depth)
 
     hop0 = collect_effects(root_node, from_line, to_line, get_text, language)
     for e in hop0:

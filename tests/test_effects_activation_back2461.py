@@ -137,10 +137,13 @@ def test_empty_is_success_and_legacy_names_report_one_correction(project, old, n
     assert result.stderr.count('deprecated') == 0  # the JSON carries it (BACK-2659)
 
 
-def test_legacy_boundary_depth_policy_remains_unmodified(project):
-    result = _run(project, 'entry', '--boundary', '--transitive', '--depth', '0', '--format', 'json')
+def test_legacy_boundary_depth_reaches_the_hop_it_names(project):
+    # --depth 0 meant the default 2 on the legacy flag until BACK-2793; it exits 2 now, and 2 is spelled 2
+    result = _run(project, 'entry', '--boundary', '--transitive', '--depth', '2', '--format', 'json')
     assert result.returncode == 0, result.stderr
     assert any(row.get('hop') == 2 for row in json.loads(result.stdout)['findings'])
+    refused = _run(project, 'entry', '--boundary', '--transitive', '--depth', '0', '--format', 'json')
+    assert refused.returncode == 2 and json.loads(refused.stdout)['error'] == 'depth must be 1..5, got 0'
 
 
 def test_new_transitive_keeps_discovery_loss_warning(project, discovery_fault):

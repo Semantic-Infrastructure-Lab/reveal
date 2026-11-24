@@ -110,8 +110,8 @@ control whatever its value type; 1b, 1d and 6 read every spelling (aliases and n
   30  every control has a flag (D20 rule 2; D21, BACK-2773): each declared control is spelled by a flag of the noun's
       declared parser: its own ``CliBinding``, a legacy entry's old flag, or the global flag that carries it
       (``--exclude``, ``--all``, ``--format``, ``--respect-gitignore``). Not judged: a standalone legacy word (its own
-      note-stage row: the spelling retires) and a control reached only by another control's legacy rebind (the element
-      views' legacy-depth). A control with no flag is one no request reaches by its flag, so its answer can read
+      note-stage row: the spelling retires) and a control another control's legacy entry rebinds to (the element views'
+      legacy-depth until BACK-2793). A control with no flag is one no request reaches by its flag, so its answer can read
       something else unnoticed: help's ``search``/``top`` had none, and ``reveal help://search --search TERM`` landed on
       the file route's ``--name`` and answered "No search term" (vocab V1 2(c)). Rule 23 then holds ``URI --flag v`` to
       the subcommand's answer, and rule 20 the control to the answer that reads it.
@@ -326,8 +326,9 @@ EXEMPT = {
     ('sqlite', '29'): 'declares only a noun-valued shared control (view, its own answers): nothing to judge',
     **{(noun, '30'): 'declares no control: nothing a flag must spell' for noun in ('env', 'reveal')},
     **{(noun, '31'): 'declares no depth: no walk to bound' for noun in (
-        'architecture', 'ast', 'claude', 'codex', 'contracts', 'deps', 'diff', 'env', 'git', 'help', 'hotspots', 'imports',
-        'json', 'markdown', 'metrics', 'overview', 'pack', 'patches', 'reveal', 'sqlite', 'surface', 'testability', 'xlsx')},
+        'architecture', 'ast', 'claude', 'codex', 'contracts', 'deps', 'diff', 'env', 'git', 'help', 'hotspots',
+        'imports', 'json', 'markdown', 'metrics', 'overview', 'pack', 'patches', 'reveal', 'sqlite', 'surface',
+        'testability', 'xlsx')},
 }
 
 # Rules 1, 2, 5, 6, 10 and 12 are the shared seams' defaults (Scott 2026-11-16; BACK-2654 Step 3): their cells must
@@ -2309,7 +2310,7 @@ def probe_time_window(noun):
     return cases
 
 
-# --- rule 31: walk depth range (Scott 2026-11-24, BACK-2793) ------------------------------------------------------------
+# --- rule 31: walk depth range (Scott 2026-11-24, BACK-2793) -------------------------------------------------------
 
 WALK_DEPTH_OUTSIDE = ('0', '6', '-1')
 
@@ -2328,7 +2329,7 @@ def _mcp_shown(request):
 
 
 def _walk_depth_refusals(noun, value):
-    """An out-of-range depth on the subcommand, the URI, a flag after the URI, api.query and MCP (the real reveal_run)."""
+    """An out-of-range depth on the subcommand, the URI, a flag after the URI, api.query and MCP (real reveal_run)."""
     from reveal import api
     from reveal.errors import RequestValidationError
     wants = f'exit 2 with depth must be 1..5, got {value}'
@@ -2731,8 +2732,8 @@ def probe_one_value_domain(noun):
 # --- rule 30: every declared control has a flag (D20 rule 2; D21, BACK-2773) ---------------------------------------
 
 def _rebind_targets(specs):
-    """Controls reached only through another control's legacy rebind (the element views' legacy-depth): no spelling of
-    their own to have."""
+    """Controls another control's legacy entry rebinds to (the element views' nesting-depth, from a structural flag's
+    --depth; the rebind-only legacy-depth until BACK-2793): not judged by rule 30."""
     return {target for spec in specs for entry in spec.legacy for _, target in entry.rebinds}
 
 
@@ -3654,7 +3655,7 @@ def element_workspace(tmp_path, monkeypatch):
 
 def _element_specs():
     """The element controls a probe may give: the declarations minus the path read's own selectors (grep, name, ...,
-    another answer of the path read) and the rebind-only legacy-depth (no spelling of its own)."""
+    another answer of the path read) and any control without a flag of its own."""
     return [spec for spec in _specs(ELEMENT) if spec.name not in _PATH_READ_NAMES and spec.cli is not None]
 
 
@@ -4025,8 +4026,8 @@ ELEMENT_PROBES = {'1b': element_alias_and_name, '1c': element_repeated_spelling,
                   '12': element_repeatability_declared, '14': element_defaults, '16': element_legacy_operations,
                   '17': element_one_answer, '18': element_repeated_global_flags, '20': element_applicability,
                   '21j': element_invalid_requests_answer_json, '22': element_config_failures,
-                  '29': partial(probe_one_value_domain, ELEMENT), '30': partial(probe_every_control_has_a_flag, ELEMENT),
-                  '31': element_walk_depth_range}
+                  '29': partial(probe_one_value_domain, ELEMENT),
+                  '30': partial(probe_every_control_has_a_flag, ELEMENT), '31': element_walk_depth_range}
 
 
 def test_the_element_cells_cover_every_rule():

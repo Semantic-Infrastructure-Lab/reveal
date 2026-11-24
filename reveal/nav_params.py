@@ -6,7 +6,8 @@ generated from them (``add_declared_arguments``) and the request is bound by the
 answer per request and Conflicting values come from these declarations (COMMAND_MODEL; X1). The views' modifiers follow
 the COMMAND_MODEL rows: ``--depth`` is graph hops (``--transitive``), ``--nesting-depth`` structural depth (Depth row, D1);
 flow's selectors are ``--kind``, a selection that repeats and combines (X3); effects keeps D10's strict modifiers (X4);
-the legacy transitive ``--depth`` keeps its clamp until the cut (X10); ``--range`` is the element selection (X9). The
+``--depth`` with ``--transitive`` is the one walk depth on every spelling, the legacy flags' included, refused outside
+1..5 (X10's legacy clamp reversed, Scott 2026-11-24, BACK-2793); ``--range`` is the element selection (X9). The
 vars, callsites and outputs homes wait on Scott (X5-X7): those operations stay standalone legacy operations with no new
 spelling, and a later ``view=vars`` is an added choice.
 """
@@ -18,7 +19,7 @@ from typing import Any, Callable, Mapping, Optional, Tuple
 from .errors import NavRequestValidationError, RequestValidationError
 from .utils.query_binding import (bind_prepared_params, bind_resource_path, boolean_value, prepare_declared_params,
                                   reject_two_answers, reject_unread_controls, string_value)
-from .utils.query_parser import CliBinding, LegacySpelling, ParamSpec, ParamValueError, ResourceSpec, clamped_whole, \
+from .utils.query_parser import CliBinding, LegacySpelling, ParamSpec, ParamValueError, ResourceSpec, depth_param, \
     line_range, whole_number
 
 ELEMENT_VIEWS = ('boundary', 'effects', 'flow', 'exits')
@@ -36,10 +37,6 @@ def _on(values: Mapping[str, Any], name: str) -> bool:
         return boolean_value(values.get(name) or False)
     except ValueError:  # an invalid switch value is the binder's error, reported on its own
         return False
-
-
-def _transitive(values: Mapping[str, Any]) -> bool:
-    return _on(values, 'transitive')
 
 
 def _in_loops(values: Mapping[str, Any]) -> bool:
@@ -105,14 +102,6 @@ def flow_kinds(value: Any) -> Tuple[str, ...]:
     return tuple(dict.fromkeys(kinds))
 
 
-def hop_depth(value: Any) -> int:
-    """``--depth`` on ``--transitive``: graph hops 1..5, strict on the canonical spelling (D10, X10)."""
-    hops = whole_number(value)
-    if not 1 <= hops <= 5:
-        raise ParamValueError(f'depth must be 1..5 graph hops with --transitive, got {value!r}')
-    return hops
-
-
 def nesting_depth(value: Any) -> int:
     """``--nesting-depth``: structural depth, a positive integer. A legacy structural flag's ``--depth`` binds here, so
     the refusal names both spellings."""
@@ -121,12 +110,6 @@ def nesting_depth(value: Any) -> int:
         raise ParamValueError(f'nesting-depth (--depth on a legacy structural flag) must be a positive integer, '
                               f'got {value!r}')
     return depth
-
-
-def legacy_hop_depth(value: Any) -> int:
-    """The legacy transitive ``--depth`` (``--boundary``/``--sideeffects --transitive --depth N``) keeps its clamp until
-    the cut (X10): 0 is the default 2, other values clamp to 1..5. The answer states the effective depth (E8)."""
-    return clamped_whole(whole_number(value) or 2, 1, 5)  # nav_effects.effective_transitive_depth's 1..5
 
 
 def _switch(name: str, description: str, **kwargs: Any) -> ParamSpec:
@@ -146,16 +129,15 @@ def _kind_word(name: str, kind: str) -> LegacySpelling:
 # The answers an element control is read by, as facets: ``view=V`` one view, an operation's name, ``view`` every view.
 _SELECTED_LINES = ('view', 'inputs', 'outputs', 'callsites', 'varflow', 'keys')
 _DEPTH_TO_NESTING = (('depth', 'nesting-depth'),)
-_DEPTH_TO_LEGACY = (('depth', 'legacy-depth'),)
 
 VIEW = ParamSpec(
     'view', 'string', f"Element view: {', '.join(ELEMENT_VIEWS)}", None, string_value, choices=ELEMENT_VIEWS,
     role='operation', cli=CliBinding(('--view',), metavar='VIEW'),
-    legacy=(_view_word('boundary', 'boundary', rebinds=_DEPTH_TO_LEGACY, rebinds_when=_transitive),
+    legacy=(_view_word('boundary', 'boundary'),
             _view_word('exits', 'exits'), _view_word('returns', 'exits'), _view_word('flowto', 'exits'),
-            # D10: the legacy --effects spelling keeps --depth strict (no clamp); with --in-loops it is structural.
+            # D10: with --in-loops the legacy --effects spelling's --depth is structural, else the walk depth.
             _view_word('effects', 'effects', rebinds=_DEPTH_TO_NESTING, rebinds_when=_in_loops),
-            _view_word('sideeffects', 'effects', rebinds=_DEPTH_TO_LEGACY, rebinds_when=_transitive),
+            _view_word('sideeffects', 'effects'),
             _view_word('fanout', 'effects', sets=(('in-loops', True),), rebinds=_DEPTH_TO_NESTING),
             _view_word('statewrites', 'effects', sets=(('state', True),)),
             # The code-element --outline: no generated flag (the main parser keeps --outline for file and Markdown
@@ -173,13 +155,9 @@ STATE = _switch('state', 'Effects view: detected persistent and shared-state wri
 TRANSITIVE = _switch('transitive', 'Boundary or ordinary effects view: follow calls into project-local helpers '
                                    '(--depth hops, default 2, 1..5)',
                      answers=('view=boundary', 'view=effects'), requires=('in-loops=false', 'state=false'))
-DEPTH = ParamSpec('depth', 'integer', 'Graph hops with --transitive: 1..5 (default 2)', None, hop_depth,
-                  cli=CliBinding(('--depth',)), answers=('view=boundary', 'view=effects'),
-                  requires=('transitive=true',))
-# Reached only by rebinding the legacy transitive --depth (X10); no flag, no canonical spelling.
-LEGACY_DEPTH = ParamSpec('legacy-depth', 'integer', 'Legacy: the transitive --depth of --boundary or --sideeffects, '
-                                                    'clamped to 1..5', None, legacy_hop_depth,
-                         answers=('view=boundary', 'view=effects'), requires=('transitive=true',))
+# The walk depth on every spelling of --transitive (BACK-2793): the main parser owns --depth, so its flag is reused.
+DEPTH = depth_param('graph hops with --transitive (default 2)', answers=('view=boundary', 'view=effects'),
+                    requires=('transitive=true',))
 NESTING_DEPTH = ParamSpec('nesting-depth', 'integer', 'Structural depth of the flow view and of --in-loops (default 3)',
                           3, nesting_depth, minimum=1, cli=CliBinding(('--nesting-depth',), metavar='N'),
                           answers=('view=flow', 'view=effects'), requires=('view=flow|in-loops=true',))
@@ -227,7 +205,7 @@ SORT = ParamSpec('sort', 'string', 'Path read: the structural-query answer\'s so
 _ELEMENT_CONTROLS: Tuple[ParamSpec, ...] = (VIEW, KIND, IN_LOOPS, STATE, TRANSITIVE, NESTING_DEPTH, INPUTS, OUTPUTS,
                                             CALLSITES, VARFLOW, KEYS, NARROW, CROSS_CALLS, SCOPE, AROUND)
 # Read by element views and by other answers of the path read (tree and outline depth, outline slices).
-_SHARED_CONTROLS: Tuple[ParamSpec, ...] = (DEPTH, LEGACY_DEPTH, RANGE)
+_SHARED_CONTROLS: Tuple[ParamSpec, ...] = (DEPTH, RANGE)
 _PATH_READ_CONTROLS: Tuple[ParamSpec, ...] = (HEAD, TAIL, GREP, NAME, TYPE, SORT)
 ELEMENT_VIEW_SPECS: Tuple[ParamSpec, ...] = _ELEMENT_CONTROLS + _SHARED_CONTROLS + _PATH_READ_CONTROLS
 # The operations that are not views (the order a request record names its one operation).
@@ -252,8 +230,8 @@ def element_request_given(source: Mapping[str, Any]) -> bool:
 class ElementRequest:
     """The bound selection of one element request, which the handlers read instead of the argparse namespace. *view* is
     one of ``ELEMENT_VIEWS``, or None when a standalone legacy *operation* (inputs, outputs, callsites, varflow, keys,
-    narrow, scope, around) is the answer, carrying *value*. *depth* is the transitive hop budget in effect (the strict
-    value, the legacy clamp, or 2), None without ``--transitive``."""
+    narrow, scope, around) is the answer, carrying *value*. *depth* is the transitive hop budget in effect (the given
+    value, 1..5, or 2), None without ``--transitive``."""
     path: str
     element: Optional[str]
     view: Optional[str] = None
@@ -290,10 +268,8 @@ def _operation(params: Any) -> Tuple[Optional[str], Any]:
 
 
 def _hop_budget(params: Any, transitive: bool) -> Optional[int]:
-    """The transitive hop budget in effect: the legacy clamp, the strict value, or the default 2; None without
+    """The transitive hop budget in effect: the given value (1..5, refused outside it) or the default 2; None without
     ``--transitive``."""
-    if 'legacy-depth' in params._given:
-        return int(LEGACY_DEPTH.read(params))
     if 'depth' in params._given:
         return int(DEPTH.read(params))
     return 2 if transitive else None

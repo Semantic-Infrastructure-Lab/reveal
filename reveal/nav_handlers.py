@@ -371,7 +371,7 @@ def _nav_sideeffects(ctx: _NavCtx) -> None:
     transitive = ctx.request.transitive
 
     if transitive:
-        depth = ctx.request.depth  # the hop budget in effect: strict, the legacy clamp, or the default 2
+        depth = ctx.request.depth  # the hop budget in effect: the given 1..5 or the default 2
         effects = collect_effects_transitive(
             ctx.analyzer.path, ctx.element, ctx.func_node, from_line, to_line, ctx.get_text,
             language=language, depth=depth,
@@ -471,7 +471,7 @@ def _nav_boundary(ctx: _NavCtx) -> None:
     transitive = ctx.request.transitive
 
     if transitive:
-        # The depth the walk uses, stated as such in text and JSON (BACK-2627 E8): the legacy flag keeps its clamp.
+        # The depth the walk uses, stated as such in text and JSON (BACK-2627 E8): the given 1..5 or the default 2.
         depth = ctx.request.depth
         boundary = collect_boundary_transitive(
             ctx.analyzer.path, ctx.element, ctx.func_node, from_line, to_line, ctx.get_text,

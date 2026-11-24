@@ -4,7 +4,7 @@
 the retirement note, text stdout, exit), on every fixture language for a named element and a line range; the old flag
 keeps answering with one generated note naming its ``--view`` replacement (D5). Flow's selectors are ``--kind`` on the
 flow view, a selection that repeats and combines (X3); effects keeps D10's modifiers and strict validation (X4);
-boundary's transitive depth is strict on the new spelling while the legacy flag keeps its clamp (X10). The 13 existing
+boundary's transitive depth is strict on the new spelling and, since BACK-2793, on the legacy flag too. The 13 existing
 element RETIREMENTS rows stop naming a replacement that itself retires. The vars, callsites and outputs homes wait on
 Scott (X5-X7): no new spelling is asserted for them here.
 """
@@ -144,14 +144,15 @@ def test_view_effects_validates_like_effects(copies, flags):  # noqa: F811
     assert response.returncode == 2 and 'unrecognized arguments' not in response.stderr, response.stderr[:400]
 
 
-# -- X10, E8: boundary's transitive depth is strict on --view; the legacy flag keeps its clamp ----------------------
+# -- X10 reversed, E8 (BACK-2793): boundary's transitive depth is strict on --view and on the legacy flag ----------
 
 @pytest.mark.parametrize('depth', ['0', '6', '-1'])
 def test_view_boundary_transitive_depth_is_strict(copies, depth):  # noqa: F811
     path, element = copies['python'], target('python')[1]
-    assert run(path, element, '--boundary', '--transitive', '--depth', depth).returncode == 0  # legacy clamp stays
-    response = run(path, element, '--view', 'boundary', '--transitive', '--depth', depth)
-    assert response.returncode == 2 and 'depth' in response.stderr and 'unrecognized' not in response.stderr
+    for view in (['--boundary'], ['--view', 'boundary']):  # the legacy flag clamped until BACK-2793
+        response = run(path, element, *view, '--transitive', '--depth', depth)
+        assert response.returncode == 2 and f'depth must be 1..5, got {int(depth)}' in response.stderr, response.stderr
+        assert 'unrecognized' not in response.stderr
 
 
 def test_view_boundary_transitive_states_its_depth_in_text_and_json(copies):  # noqa: F811

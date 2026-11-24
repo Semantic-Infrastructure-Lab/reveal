@@ -545,21 +545,23 @@ def _depth_values(meta):
     return [value for key, value in meta.items() if 'depth' in key]
 
 
-def test_boundary_transitive_states_the_clamped_depth(copies):
+@pytest.mark.parametrize('given', ['9', '0'])
+def test_boundary_transitive_refuses_a_depth_outside_one_to_five(copies, given):
+    """9 was clamped to 5 and 0 meant the default 2 on the legacy flag (BACK-2793): both exit 2 now."""
     path, element = _python(copies)
-    text = run(path, element, '--boundary', '--transitive', '--depth', '9').stdout
-    assert 'depth=9' not in text and 'depth=5' in text, [line for line in text.splitlines() if 'depth' in line]
-    answer = json.loads(run(path, element, '--boundary', '--transitive', '--depth', '9', '--format', 'json').stdout)
+    result = run(path, element, '--boundary', '--transitive', '--depth', given, '--format', 'json')
+    assert result.returncode == 2 and json.loads(result.stdout)['error'] == f'depth must be 1..5, got {given}'
+
+
+def test_boundary_transitive_json_states_the_default_depth(copies):
+    path, element = _python(copies)
+    answer = json.loads(run(path, element, '--boundary', '--transitive', '--format', 'json').stdout)
+    assert _depth_values(answer['meta']) == [2], answer['meta']
+    answer = json.loads(run(path, element, '--boundary', '--transitive', '--depth', '5', '--format', 'json').stdout)
     assert _depth_values(answer['meta']) == [5], answer['meta']
 
 
-def test_boundary_transitive_json_states_the_default_depth_for_zero(copies):
-    path, element = _python(copies)
-    answer = json.loads(run(path, element, '--boundary', '--transitive', '--depth', '0', '--format', 'json').stdout)
-    assert _depth_values(answer['meta']) == [2], answer['meta']
-
-
-@pytest.mark.parametrize('given,stated', [('3', '3'), ('0', '2')])
+@pytest.mark.parametrize('given,stated', [('3', '3'), ('5', '5')])
 def test_sibling_boundary_transitive_text_states_depths_up_to_five(copies, given, stated):
     path, element = _python(copies)
     assert f'depth={stated}' in run(path, element, '--boundary', '--transitive', '--depth', given).stdout
