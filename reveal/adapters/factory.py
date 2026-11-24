@@ -251,7 +251,24 @@ def _built_with_overrides(adapter_class: type, path: str, query: Optional[str], 
 
     bound = bind_declared_params(getattr(adapter_class, 'PARAM_SPECS'), query or '', transport='uri',
                                  overrides=overrides, validate=original)
+    _check_typed_request(adapter_class, bound, path)
     return _built(adapter_class, path, lambda: bound, lambda: adapter_class(path, params=bound))
+
+
+def _check_typed_request(adapter_class: type, bound: Any, path: str) -> None:
+    """The noun's own request checks on the URI form's typed request (``api.query(URI, **controls)``, this module's
+    one caller with overrides), as the CLI's declared route runs them: ``patches://P?view=pressure&tests=nope`` raises
+    the CLI's ``Test path not found`` instead of answering not applicable (D21, BACK-2325). There are no CLI flags,
+    so a check of one (``--fail-on``) has nothing to refuse; a plain ``ValueError`` is the request's error, which the
+    CLI answers as one (exit 2) and the noun form raises as one."""
+    from argparse import Namespace
+    from ..errors import RequestValidationError
+    try:
+        check_bound_request(adapter_class, bound, path, Namespace())
+    except RequestValidationError:
+        raise
+    except ValueError as exc:
+        raise RequestValidationError(str(exc)) from exc
 
 
 def _built(adapter_class: type, path: str, bound: Callable[[], Any], construct: Callable[[], Any]) -> Any:
