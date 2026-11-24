@@ -210,14 +210,16 @@ def reject_empty_walk_patterns(patterns: Iterable[Any], spelling: str = '--exclu
 
 def _normalize_aliases(declarations: Iterable[ParamSpec], supplied: Mapping[str, Any],
                        spelled: Optional[Mapping[str, str]] = None,
-                       implied_by: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+                       implied_by: Optional[Dict[str, str]] = None, *, uri: bool = False) -> Dict[str, Any]:
     """Every spelling of a control has one value owner; mixed spellings cannot hide precedence. A legacy
     spelling's value is translated into the control's own (``rank=fan-in`` is ``sort=-fan-in``), and the controls a
     legacy word ``sets`` join the request's own (``_join_set_controls``). A conflict names each spelling as the request
     typed it: *spelled* maps a key to the flag that carried it (the subcommand form); without it the key is what was
     typed (a URI key, an ``api.query`` keyword). *implied_by* collects, for each control a legacy word set, that word
     (so a later conflict or a second answer names what was typed). An empty term is refused first (a query string's
-    already was, before its repeated keys were gathered: ``_prepare_uri_params``)."""
+    already was, before its repeated keys were gathered: ``_prepare_uri_params``). *uri*: the values are a query
+    string's, still in the control's URI codec: two spellings are compared as decoded (the values are kept as given and
+    decoded once, when the request binds)."""
     declarations = tuple(declarations)
     result = dict(peek_query_items(supplied))
     _reject_empty_terms(declarations, result.items(), spelled)
@@ -226,23 +228,32 @@ def _normalize_aliases(declarations: Iterable[ParamSpec], supplied: Mapping[str,
     for spec in declarations:
         present = [name for name in spec.spellings if name in result]
         if present:
-            set_by += _normalize_spellings(spec, present, result, spelled)
+            set_by += _normalize_spellings(spec, present, result, spelled, uri)
             given_as[spec.name] = present[0]
     _join_set_controls(declarations, result, set_by, given_as, spelled, implied_by)
     return result
 
 
 def _normalize_spellings(spec: ParamSpec, present: list, result: Dict[str, Any],
-                         spelled: Optional[Mapping[str, str]]) -> list:
-    """*spec*'s spellings in *result* as its one value; the (word, control, value) its legacy words set."""
+                         spelled: Optional[Mapping[str, str]], uri: bool = False) -> list:
+    """*spec*'s spellings in *result* as its one value; the (word, control, value) its legacy words set. *uri*: compare
+    the spellings as the URI codec decodes them (``?test-paths=a&tests=a`` is one comma-percent list, BACK-2774)."""
     raws = [(name, result.pop(name)) for name in present]
     values = [spec.canonical_value(name, raw) for name, raw in raws]
     if spec.repeatable and len(values) > 1:  # an omitted spelling (None) adds no term
         values = [value for value in values if value is not None] or [None]
-    if not _spellings_agree(spec, values):
+    if not _spellings_agree(spec, _compared_spellings(spec, raws, values, uri)):
         raise ValueError(_conflicting_spellings(spec, present, spelled))
     result[spec.name] = _accumulated(values) if spec.repeatable and len(values) > 1 else values[0]
     return [(name, control, value) for name, raw in raws for control, value in _set_controls(spec, name, raw)]
+
+
+def _compared_spellings(spec: ParamSpec, raws: list, values: list, uri: bool) -> list:
+    """The values two spellings are compared by: a query string's decoded by the control's URI codec, else *values*.
+    One spelling is not compared, so it keeps its own decode (and its decode error) for the binding."""
+    if not uri or len(raws) < 2:
+        return values
+    return [spec.canonical_value(name, _decode_value(spec, raw)) for name, raw in raws]
 
 
 def _set_controls(spec: ParamSpec, name: str, raw: Any) -> list:
@@ -566,7 +577,7 @@ def _prepare_uri_params(declarations: tuple[ParamSpec, ...], source: str) -> Que
         if expression else ((), ())
     _reject_unknown_keys(declarations, params, shared, expression)
     implied_by: Dict[str, str] = {}
-    prepared = QueryParams(_normalize_aliases(declarations, params, implied_by=implied_by))
+    prepared = QueryParams(_normalize_aliases(declarations, params, implied_by=implied_by, uri=True))
     prepared._implied_by = implied_by
     prepared._aliases = {spec.name: spec.spellings[1:] for spec in declarations}
     prepared._folded = folded  # the bare field keys folded into where (a noun reading where reads them)
