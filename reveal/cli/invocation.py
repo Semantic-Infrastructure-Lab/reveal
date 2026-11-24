@@ -883,6 +883,13 @@ def internal_request() -> Iterator[None]:
         _INTERNAL.reset(token)
 
 
+def _article(scheme: str) -> str:
+    """The indefinite article a scheme is spoken with: ``an`` before a vowel sound (``an ast://``, ``an imports://``,
+    and ``an xlsx://``, whose x before a consonant is said "ex"), ``a`` before the others (``a markdown://``)."""
+    vowel = scheme[:1] in tuple('aeiou') or (scheme[:1] == 'x' and scheme[1:2] not in tuple('aeiou'))
+    return 'an' if vowel else 'a'
+
+
 def request_note(scheme: str, replacement_for: Callable[[str], str]) -> Optional[Retirement]:
     """The one note of a retiring URI request: *replacement_for(form)* is the executable canonical request rendered from
     the bound request in the running transport's own form. Keyed ``request:<scheme>`` so it is said once per scheme per
@@ -896,7 +903,7 @@ def request_note(scheme: str, replacement_for: Callable[[str], str]) -> Optional
     except UnrenderableRequest:
         _say_covered_notes()  # no canonical form to recommend: each covered spelling says its own row
         return None
-    entry = Retirement(f'a {scheme}:// request', replacement, REQUEST_STAGE)
+    entry = Retirement(f'{_article(scheme)} {scheme}:// request', replacement, REQUEST_STAGE)
     key = f'request:{scheme}'
     if entry.stage == 'error':
         raise RetiredSpellingError(key, entry)

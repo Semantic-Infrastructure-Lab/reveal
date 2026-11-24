@@ -53,3 +53,16 @@ def test_the_api_and_mcp_notes_take_the_schemes_article(project, scheme, opening
     [note] = _request_notes(api.query(f'{scheme}://{project}')['meta']['warnings'])
     assert note['message'].startswith(f'{opening} is deprecated')
     assert f'[note: {opening} is deprecated' in mcp_server.reveal_run([f'{scheme}://{project}'])
+
+
+@pytest.mark.parametrize('scheme, article', [
+    ('ast', 'an'), ('imports', 'an'), ('overview', 'an'), ('env', 'an'), ('architecture', 'an'),
+    ('xlsx', 'an'),  # x before a consonant is said "ex"
+    ('markdown', 'a'), ('json', 'a'), ('sqlite', 'a'), ('help', 'a'), ('metrics', 'a'),
+])
+def test_the_generated_note_text_takes_the_article(scheme, article):
+    """The one generator, ``request_note``: its entry's ``old`` and its text open with the article."""
+    from reveal.cli.invocation import request_note
+    entry = request_note(scheme, lambda form: f'reveal {scheme} proj')
+    assert entry.old == f'{article} {scheme}:// request'
+    assert entry.text.startswith(f'{article} {scheme}:// request is deprecated')
