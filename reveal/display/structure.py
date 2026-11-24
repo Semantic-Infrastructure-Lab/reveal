@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, cast
 from reveal.base import FileAnalyzer
 from reveal.defaults import DisplayDefaults
 from reveal.utils import safe_json_dumps, get_file_type_from_analyzer, print_breadcrumbs
-from reveal.utils.json_utils import attach_invocation_warnings
+from reveal.utils.json_utils import json_answer
 from reveal.utils.formatting import lines_label
 from reveal.utils.path_utils import is_minified_content, is_minified_filename, to_posix
 from reveal.utils.results import note_truncation, outcome_of, truncations_of
@@ -285,7 +285,7 @@ def _render_typed_structure_output(
         category_filter: Optional filter by display_category (property, staticmethod, etc.)
     """
     if output_format == "json":
-        print(safe_json_dumps(attach_invocation_warnings(typed_structure_document(analyzer, structure))))
+        print(safe_json_dumps(json_answer(typed_structure_document(analyzer, structure))))
         return
 
     from reveal.structure import TypedStructure
@@ -479,7 +479,7 @@ def _enrich_structure(structure: Dict[str, Any], file_path: str) -> Dict[str, An
 
 def _render_json_output(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[str, Any]]]) -> None:
     """Render structure as JSON output (standard format)."""
-    print(safe_json_dumps(attach_invocation_warnings(structure_document(analyzer, structure))))
+    print(safe_json_dumps(json_answer(structure_document(analyzer, structure))))
 
 
 def structure_document(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[str, Any]]]) -> Dict[str, Any]:
@@ -997,7 +997,7 @@ def _render_file_structure(analyzer: FileAnalyzer, structure, output_format, arg
         return
     if output_format == 'json':
         document = file_structure_document(analyzer, structure, args)
-        print(safe_json_dumps(attach_invocation_warnings(document)))
+        print(safe_json_dumps(json_answer(document)))
         return
 
     _render_structure_view(analyzer, structure, output_format, args, config)

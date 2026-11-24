@@ -670,7 +670,7 @@ def _structure_emitter(analyzer, path: str, output_format: str, args, config, an
     """``show_structure``'s emit: the file structure as an Answer, emitted or handed to *answer_consumer*."""
     from .cli.routing.uri import Answer, _emit_result, announce_outcome  # noqa: I006 — circular avoidance
     from .display.structure import _render_file_structure, file_structure_document
-    from .utils.json_utils import attach_invocation_warnings
+    from .utils.json_utils import json_answer
     from argparse import Namespace
 
     def emit(structure, facts):
@@ -683,7 +683,7 @@ def _structure_emitter(analyzer, path: str, output_format: str, args, config, an
                          announce_error=False, renderer_owns_json=True)
         def document():
             built = file_structure_document(analyzer, structure, args)
-            return None if built is None else attach_invocation_warnings(built)
+            return None if built is None else json_answer(built)
         # Emitted as an Answer, as a URI's is: the open invocation log keeps it, so a host running the CLI's dispatch
         # (MCP reveal_run, reveal_structure) maps the file's outcome from its facts (BACK-2762); a consumer (the Python
         # API) reads its document, the one the renderer prints (BACK-2325).

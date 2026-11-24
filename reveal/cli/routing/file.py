@@ -26,7 +26,7 @@ from .grep import handle_grep, handle_grep_directory
 from .ledger import FlagLedger, ledger_of, mark, peek  # noqa: E402
 from ..defaults import _parser_defaults  # noqa: E402
 from ..invocation import internal_request, typed_spelling  # noqa: E402
-from ...utils.json_utils import attach_invocation_warnings  # noqa: E402
+from ...utils.json_utils import json_answer  # noqa: E402
 from ...utils.path_utils import to_posix  # noqa: E402
 from ...registry import get_markdown_extensions  # noqa: E402
 
@@ -170,7 +170,7 @@ def _show_directory_meta(path: Path, args: 'Namespace') -> None:
     if output_format == 'json':
         from ...utils.results import ResultBuilder
         from ...reveal_types import CONTRACT_VERSION
-        print(safe_json_dumps(attach_invocation_warnings(ResultBuilder.create(
+        print(safe_json_dumps(json_answer(ResultBuilder.create(
             'directory_metadata', path, data=meta, source_type='directory',
             contract_version=CONTRACT_VERSION))))
     else:
@@ -382,10 +382,10 @@ def _listing_answer(path: str, output_format: str, build, listing: dict, failure
     code = execution_exit_code(facts)
 
     def printer(_answer, **_options):
-        print(safe_json_dumps(attach_invocation_warnings(result)) if output_format == 'json' else built)
+        print(safe_json_dumps(json_answer(result)) if output_format == 'json' else built)
         if code:
             sys.exit(code)
-    document = (lambda: attach_invocation_warnings(result)) if output_format == 'json' else None
+    document = (lambda: json_answer(result)) if output_format == 'json' else None
     return Answer(result, 'structure', printer, execution_facts=facts, document=document)
 
 

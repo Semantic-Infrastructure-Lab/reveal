@@ -257,11 +257,16 @@ def answer_path_read(path: Any, controls: Mapping[str, Any], element: Optional[s
     # The format words come before '--', which ends the options, so a path or element that starts with '-' stays one.
     invocation = Invocation.parse(['reveal', *words, '--format=json', '--', target, *([] if element is None else [element])])
     answers: list = []
+    documents: List[Optional[Dict[str, Any]]] = []
 
     def consume(answer: Any) -> None:
         answers.append(answer)
         if answer.execution_facts is not None and execution_failed(answer.execution_facts):
             raise _Failed()
+        # The document is read where the CLI prints it, inside the dispatch: the flag ledger's unused-input facts reach
+        # its meta.warnings and the ledger prints no stderr note (ruling STOP 2 (a)).
+        note_incomplete(answer.result, answer.execution_facts)  # as the CLI's JSON says it (a listing did)
+        documents.append(_answer_document(answer))
 
     with invocation_scope(invocation, retirements_to_stderr=False, form='python'):
         args = parser.parse_args(invocation.argv)
@@ -273,10 +278,9 @@ def answer_path_read(path: Any, controls: Mapping[str, Any], element: Optional[s
                 handle_file_or_directory(args.path, args, answer_consumer=consume)
         except _Failed:
             raise _failure(answers[-1], answers[-1].execution_facts) from None
-        if not answers:
+        if not documents:
             raise RuntimeError(f'reveal {target} returned without an answer')
-        note_incomplete(answers[-1].result, answers[-1].execution_facts)  # as the CLI's JSON says it (a listing did)
-        document = _answer_document(answers[-1])
+        document = documents[-1]
         if document is None:
             raise RequestValidationError(f'reveal {target} {" ".join(words)} prints no JSON document (its answer is '
                                          'text: --related-flat prints paths)')

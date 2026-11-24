@@ -14,7 +14,7 @@ from reveal.element_resolve import (
 )
 from reveal.treesitter import ELEMENT_TYPE_MAP, ALL_ELEMENT_NODE_TYPES
 from reveal.utils import safe_json_dumps, get_file_type_from_analyzer, print_breadcrumbs
-from reveal.utils.json_utils import attach_invocation_warnings
+from reveal.utils.json_utils import json_answer
 from reveal.utils.formatting import lines_label
 from reveal.utils.path_utils import to_posix
 from reveal.utils.results import ResultBuilder, note_truncation, slice_items, truncations_of
@@ -561,7 +561,7 @@ def extract_element(analyzer: FileAnalyzer, element: str, output_format: str, co
 
 def element_document(analyzer, result) -> dict:
     """The JSON document an element read prints (``--format json``; a section outline's too): the element envelope."""
-    document: dict = attach_invocation_warnings(dict(ResultBuilder.element(result, analyzer.path)))
+    document: dict = json_answer(dict(ResultBuilder.element(result, analyzer.path)))
     return document
 
 

@@ -16,6 +16,7 @@ from ...display.formatting import print_result_control_notes
 from ...display.grep import FORMATS as GREP_FORMATS, _json_view as json_view, render_grep
 from .formats import require_supported_format
 from ...grep_handler import grep_directory, grep_execution_facts, grep_file
+from ...utils.json_utils import json_answer
 from ...utils.results import execution_exit_code
 from .uri import announce_outcome, conclude_outcome
 
@@ -35,7 +36,7 @@ def _emit(result: Dict[str, Any], args: Namespace, label: str, answer_consumer=N
             print_result_control_notes(result, output_format)
             sys.exit(code)
         conclude_outcome(result, outcome, output_format)
-    answer = Answer(result, 'structure', printer, execution_facts=facts, document=lambda: json_view(result))
+    answer = Answer(result, 'structure', printer, execution_facts=facts, document=lambda: json_answer(json_view(result)))
     if answer_consumer is None:
         answer.emit()
     else:

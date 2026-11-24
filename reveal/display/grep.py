@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from ..utils import safe_json_dumps
+from ..utils.json_utils import json_answer
 from ..utils.warning_render import meta_warning_lines, render_meta_warnings
 
 
@@ -26,7 +27,7 @@ FORMATS = ('text', 'json', 'grep')
 
 def render_grep(result: Dict[str, Any], output_format: str) -> None:
     if output_format == 'json':
-        print(safe_json_dumps(_json_view(result)))
+        print(safe_json_dumps(json_answer(_json_view(result))))
     elif result.get('error'):
         return  # the router has reported it
     elif output_format == 'grep':
