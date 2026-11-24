@@ -1211,7 +1211,7 @@ arrays stay complete. Existing API resource splitting/decoding and host-request
 scope remain unchanged. A known typed keyword binds as its URI query key does on every declared
 noun and meets the same checks, the unread-control refusal included; deps, hotspots, pack, patches and
 testability used to drop it or raise Python's unexpected-keyword `TypeError` (BACK-2656). The noun's own
-request checks run too, as on the CLI: `api.query('patches://P?view=pressure&tests=nope')` raises the CLI's
+request checks run too, as on the CLI: `api.query('patches://P?view=pressure&test-paths=nope')` raises the CLI's
 `Test path not found` as a `RequestValidationError` (BACK-2325). On a declared
 noun `element_name` is refused as the CLI refuses a positional element, before the adapter is built,
 naming the URI form (BACK-2687). Plugins and undeclared adapters keep forwarding keywords and the
