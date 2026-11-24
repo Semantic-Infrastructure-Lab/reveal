@@ -97,6 +97,15 @@ control whatever its value type; 1b, 1d and 6 read every spelling (aliases and n
       ``--search``; Codex ``?search=``) exits 2 with the one message ``SPELLING needs a term: EXAMPLE``, naming the
       spelling as typed, on the subcommand, the URI, ``api.query`` (RequestValidationError) and MCP; a nonblank
       ``--match`` still answers.
+  29  one value domain (Scott 2026-11-23, D21, BACK-2774): each ``SHARED_CONTROL_NAMES`` entry has one domain on every
+      noun that declares it, recorded once in ``SHARED_DOMAINS``: the ParamSpec type and repeatability, and for an
+      enumerated control (``tests`` include|exclude, ``detail``) the one value set, of which each noun's choices are a
+      non-empty subset that binds as written while a value outside it is refused; for a typed control (``limit``,
+      ``offset``, ``depth``, ``since``, ``until``) the grammar, measured through each declaration's own validation (a
+      ``limit`` zero also uncaps). Noun-valued controls (``kind``, ``view``, ``sort`` fields) and grammars whose words
+      are the noun's data (``where``/``match`` terms, ``exclude`` patterns, an ``against`` ref) are judged on type and
+      repeatability only. A legacy word spelled like a shared control (patches ``tests``, AST ``depth``) is rule 8's;
+      a control declared under a shared name only to refuse it is exempt in writing (``DOMAIN_EXEMPT``).
 
 A cell is ``conforms`` (asserted), ``not_yet`` (recorded below with the behaviour observed; the count may only
 fall and must reach zero before the cut) or ``exempt`` (a written reason; the probe must find nothing to run).
@@ -123,7 +132,7 @@ from reveal.cli.invocation import COMMANDS, RETIREMENTS
 from reveal.cli.parser import create_argument_parser
 from reveal.cli.routing.declared import create_declared_parser, declared_adapter_class
 from reveal.cli.routing.flag_specs import FLAG_SPECS, uncapping_fragment
-from reveal.utils.query_parser import SHARED_CONTROL_NAMES, query_key
+from reveal.utils.query_parser import SHARED_CONTROL_NAMES, UNCAPPING_ZEROS, query_key
 
 
 def _declared_nouns():
@@ -135,7 +144,7 @@ def _declared_nouns():
 NOUNS = _declared_nouns()
 ELEMENT = 'element'  # the element views' pseudo-noun: its own cells at the end of this file (BACK-2627 S3b-5)
 RULES = ('1a', '1b', '1c', '1d', '2', '3', '3b', '4', '5', '6', '8a', '8b', '10', '12', '16', '17', '18', '20',
-         '14', '21j', '22', '23', '24', '28', '25', '27', '26')
+         '14', '21j', '22', '23', '24', '28', '25', '27', '26', '29')
 
 # The request each noun answers by default: the parity gate's table (CLI argv after the noun, URI suffix), plus
 # the declared nouns it has no row for. None: no subcommand (stats is metrics' retired scheme; help:// and reveal://
@@ -289,6 +298,8 @@ EXEMPT = {
     **{(noun, '26'): 'a retired twin: its URI answers through its own scheme: row until the cut (rule 24\'s exemption); '
                      'its --exclude is the walk scope every walking parser carries'
        for noun in ('architecture', 'deps', 'hotspots', 'testability', 'trace')},
+    **{(noun, '29'): 'declares no shared control (SHARED_CONTROL_NAMES): no value domain to compare'
+       for noun in ('deps', 'env', 'help', 'reveal')},
 }
 
 # Rules 1, 2, 5, 6, 10 and 12 are the shared seams' defaults (Scott 2026-11-16; BACK-2654 Step 3): their cells must
@@ -340,11 +351,17 @@ RULED_EXEMPT_NOUNS = {'stats': 'rule 9: the retired stats:// scheme is deleted a
 # legacy flags are flag-only modifiers of the declarations (--head, --check, Claude --type, Claude --tail since
 # BACK-2709), and an equal repeated term is one term (BACK-2715), so rule 23 conforms on every declared noun.
 # Rule 24 (BACK-2716 step 4) at fbf7715a plus the step-4 renderer fixes:
-NOT_YET: dict = {}
+NOT_YET: dict = {
+    # Rule 29 (D21, BACK-2774), the manager's rulings S1 and S2 on the vocab V1 inventory (2026-11-23):
+    ('calls', '29'): 'detail is a boolean (valueless --detail, true/false, normal/full) where every other noun\'s detail '
+                     'is a level of the one scale: it becomes the string control normal|full in V5 (S1)',
+    ('pack', '29'): "since is a git ref, not the time window (it binds 'bogus'): it becomes --against REF in Pack's "
+                    'package (S2)',
+}
 
 NOT_YET_BASELINE = {'1a': 0, '1b': 0, '1c': 0, '1d': 0, '2': 0, '3': 0, '3b': 0, '4': 0, '5': 0, '6': 0,
                     '8a': 0, '8b': 0, '10': 0, '12': 0, '16': 0, '17': 0, '18': 0, '20': 0, '14': 0, '21j': 0, '22': 0,
-                    '23': 0, '24': 0, '28': 0, '25': 0, '27': 0, '26': 0}
+                    '23': 0, '24': 0, '28': 0, '25': 0, '27': 0, '26': 0, '29': 2}
 
 
 # --- the fixture -------------------------------------------------------------------------------------------
@@ -2511,6 +2528,98 @@ def probe_walk_exclusion(noun):
         _file_target_cases(noun, declared is not None and not _open_where(noun))
 
 
+# --- rule 29: one value domain per shared control (Scott 2026-11-23, D21, BACK-2774) --------------------------------
+
+@dataclass(frozen=True)
+class Domain:
+    """A shared control's one value domain. ``type``/``repeatable``: its ParamSpec type and repeatability on every noun.
+    ``values``: an enumerated control's one value set: each noun's choices are a non-empty subset that binds as written,
+    and a value outside the set is refused. ``accepts`` ((raw, bound value) pairs) and ``refuses`` (raws): a typed
+    control's grammar, measured through each declaration's own validation (the binder's). ``uncaps``: a zero lifts the
+    cap (UNCAPPING_ZEROS). None of them: a noun-valued control or a grammar whose words are the noun's data, judged on
+    type and repeatability only."""
+    type: str
+    repeatable: bool = False
+    values: tuple = ()
+    accepts: tuple = ()
+    refuses: tuple = ()
+    uncaps: bool = False
+
+
+_WHOLE = (('0', 0), ('1', 1), ('25', 25), (3, 3))
+_NOT_WHOLE = ('-1', -1, 'x')
+_TIME_FORMS = tuple((form, form) for form in ('2026', '2026-02', '2026-02-01', 'today'))
+_NOT_A_TIME = ('bogus', '2026-13-45')
+# One entry per SHARED_CONTROL_NAMES entry (test_every_shared_control_has_one_recorded_domain). Defaults are a noun's
+# own (tests: include on imports, exclude where it is refused; limit: 10, 20 or none) and are not part of the domain.
+SHARED_DOMAINS = {
+    'limit': Domain('integer', accepts=_WHOLE, refuses=_NOT_WHOLE, uncaps=True),
+    'offset': Domain('integer', accepts=_WHOLE, refuses=_NOT_WHOLE),
+    'sort': Domain('string'),  # [-]FIELD: the fields are the noun's rows
+    'where': Domain('array', repeatable=True),  # FIELD OP VALUE terms over the noun's fields
+    'match': Domain('array', repeatable=True),  # text terms (an empty term is rule 27's)
+    'detail': Domain('string', values=('summary', 'normal', 'full', 'raw')),
+    'kind': Domain('string'),  # the noun's kinds
+    'depth': Domain('integer', accepts=(('1', 1), ('5', 5), ('0', 1), ('6', 5)), refuses=('x',)),  # hops, held to 1-5
+    'tests': Domain('string', values=('include', 'exclude')),  # the shared test/support policy
+    'since': Domain('string', accepts=_TIME_FORMS, refuses=_NOT_A_TIME),  # utils/time_window.py, rule 25
+    'until': Domain('string', accepts=_TIME_FORMS, refuses=_NOT_A_TIME),
+    'against': Domain('string'),  # a git ref
+    'view': Domain('string'),  # the noun's answers
+    'exclude': Domain('string', repeatable=True),  # .gitignore patterns (exclude_param())
+}
+# A control declared under a shared name only to refuse every value with a teaching message: not a domain, so not
+# judged; each entry is held to that by test_a_domain_exemption_is_a_control_that_refuses_every_value and goes with
+# its declaration (Scott 2026-11-23, ruling S3).
+DOMAIN_EXEMPT = {(noun, 'tests'): 'removed control: refuses every value with its teaching message (deleted at the cut)'
+                 for noun in ('architecture', 'overview')}
+
+
+def _validated(spec, raw):
+    """('binds', value) or ('refused', message): the declaration's own validation of *raw*."""
+    try:
+        return 'binds', spec.validate(raw)
+    except (TypeError, ValueError) as exc:
+        return 'refused', str(exc)[:100]
+
+
+def _domain_cases(noun, spec, domain):
+    name = spec.name
+    shape = (spec.type, spec.repeatable)
+    cases = [Case(f'{name}: type and repeatability', shape == (domain.type, domain.repeatable),
+                  f'{noun} declares {name} as {shape}; the shared domain is {(domain.type, domain.repeatable)}')]
+    if domain.values:
+        choices = tuple(spec.choices)
+        cases.append(Case(f'{name}: choices within {"|".join(domain.values)}',
+                          bool(choices) and set(choices) <= set(domain.values),
+                          f'{noun} {name} choices {choices!r}'))
+        for value in (value for value in domain.values if value in choices):
+            outcome = _validated(spec, value)
+            cases.append(Case(f'{name}={value} binds', outcome == ('binds', value), f'{noun} {name}={value} -> {outcome}'))
+        outcome = _validated(spec, 'bogus')
+        cases.append(Case(f'{name}=bogus refused', outcome[0] == 'refused', f'{noun} {name}=bogus -> {outcome}'))
+    for raw, bound in domain.accepts:
+        outcome = _validated(spec, raw)
+        cases.append(Case(f'{name}={raw!r} binds as {bound!r}', outcome == ('binds', bound),
+                          f'{noun} {name}={raw!r} -> {outcome}'))
+    for raw in domain.refuses:
+        outcome = _validated(spec, raw)
+        cases.append(Case(f'{name}={raw!r} refused', outcome[0] == 'refused', f'{noun} {name}={raw!r} -> {outcome}'))
+    if domain.uncaps:
+        cases.append(Case(f'{name}=0 uncaps', spec.zero_policy in UNCAPPING_ZEROS,
+                          f'{noun} {name} zero policy {spec.zero_policy!r} (wants one of {sorted(UNCAPPING_ZEROS)})'))
+    return cases
+
+
+def probe_one_value_domain(noun):
+    """Rule 29: none for a noun that declares no shared control."""
+    cases = []
+    for spec in _specs(noun):
+        if spec.name in SHARED_DOMAINS and (noun, spec.name) not in DOMAIN_EXEMPT:
+            cases += _domain_cases(noun, spec, SHARED_DOMAINS[spec.name])
+    return cases
+
+
 PROBES = {'1a': probe_uri_and_flag, '1b': probe_alias_and_name, '1c': probe_repeated_spelling,
           '1d': probe_repeatable_aliases, '3': probe_unsupported_controls, '3b': probe_unknown_keys,
           '4': probe_verbose_is_detail_full, '8a': probe_bare_shared_keys,
@@ -2519,7 +2628,7 @@ PROBES = {'1a': probe_uri_and_flag, '1b': probe_alias_and_name, '1c': probe_repe
           '20': probe_applicability, '14': probe_defaults, '21j': probe_invalid_requests_answer_json,
           '22': probe_config_failures, '23': probe_flags_after_uri, '24': probe_request_note,
           '28': probe_help_one_spelling, '25': probe_time_window, '27': probe_empty_match_term,
-          '26': probe_walk_exclusion}
+          '26': probe_walk_exclusion, '29': probe_one_value_domain}
 # These call the MCP tools (the optional mcp extra) besides the CLI.
 MCP_PROBES = ('2', '5', '6', '24', '25', '27', '26')
 # These also run the retirement cases' sample file.
@@ -2826,7 +2935,8 @@ POSITIVE_CONTROLS = [('metrics', '1a', '--hotspots vs ?hotspots= conflict'),
                      ('ast', '23', '?limit=A --limit B conflict'),
                      ('calls', '24', 'proj default CLI round trip'), ('calls', '24', 'proj default MCP round trip'),
                      ('calls', '24', 'proj default api.query round trip'), ('calls', '24', 'proj default CLI error stage'),
-                     ('calls', '24', 'proj default MCP error stage'), ('calls', '24', 'proj default api.query error stage')]
+                     ('calls', '24', 'proj default MCP error stage'), ('calls', '24', 'proj default api.query error stage'),
+                     ('imports', '29', 'tests=bogus refused'), ('patches', '29', "limit='-1' refused")]
 
 
 @pytest.mark.parametrize('noun,rule,label', POSITIVE_CONTROLS)
@@ -2972,6 +3082,42 @@ def test_the_shared_control_names_are_declared_once_in_shared_code():
     assert SHARED_CONTROL_NAMES == ('limit', 'offset', 'sort', 'where', 'match', 'detail', 'kind', 'depth', 'tests',
                                     'since', 'until', 'against', 'view', 'exclude')
     assert set(SHARED_CONTROLS) == set(SHARED_CONTROL_NAMES) - {'view'}  # the probes read the one list
+
+
+def test_every_shared_control_has_one_recorded_domain():
+    """Rule 29 (D21, BACK-2774): a name added to the shared list gets its one domain here, or column 29 cannot judge it."""
+    assert set(SHARED_DOMAINS) == set(SHARED_CONTROL_NAMES)
+    assert all(SHARED_CONTROLS[name] in domain.values for name, domain in SHARED_DOMAINS.items()
+               if domain.values and name in SHARED_CONTROLS)  # rule 3's probe value is a value of the domain
+
+
+@pytest.mark.parametrize('noun,name', sorted(DOMAIN_EXEMPT))
+def test_a_domain_exemption_is_a_control_that_refuses_every_value(noun, name):
+    """S3: the written exemption holds only while the noun declares the control and refuses every value with its
+    teaching message; when the declaration goes (the cut) or starts to take a value, the entry must go."""
+    spec = next((spec for spec in _specs(noun) if spec.name == name), None)
+    assert spec is not None, f'{noun} no longer declares {name}: remove ({noun!r}, {name!r}) from DOMAIN_EXEMPT'
+    outcomes = {_validated(spec, value) for value in (*SHARED_DOMAINS[name].values, 'bogus')}
+    assert len(outcomes) == 1, (noun, name, outcomes)  # one teaching message, whatever the value
+    (state, message), = outcomes
+    assert state == 'refused' and name in message and 'must be' not in message, (noun, name, message)
+
+
+def test_the_domain_probe_rejects_a_divergent_declaration():
+    """Column 29's matcher, on declarations shaped like the splits it was added for: a path list under the policy's
+    name, a cap that reads a negative value as uncapped, a boolean detail, a ref under a time window's name."""
+    from reveal.utils.query_parser import ParamSpec, whole_number
+    divergent = {
+        'tests': ParamSpec('tests', 'array', 'Test paths', None, tuple),
+        'limit': ParamSpec('limit', 'integer', 'cap', 20, lambda v: max(0, whole_number(int(v))), zero_policy='unlimited'),
+        'detail': ParamSpec('detail', 'boolean', 'more', False, bool),
+        'since': ParamSpec('since', 'string', 'a ref', None, str),
+    }
+    for name, spec in divergent.items():
+        cases = _domain_cases('x', spec, SHARED_DOMAINS[name])
+        assert cases and not all(case.ok for case in cases), (name, cases)
+    conforming = ParamSpec('tests', 'string', 'policy', 'include', str, choices=('include', 'exclude'))
+    assert all(case.ok for case in _domain_cases('x', conforming, SHARED_DOMAINS['tests']))
 
 
 def test_the_unknown_key_message_names_the_controls_and_fields():
