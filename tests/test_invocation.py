@@ -43,6 +43,22 @@ def test_every_command_loads_its_parser_and_runner():
         assert isinstance(parser, ArgumentParser) and callable(runner), name
 
 
+def test_a_command_word_is_a_command_or_a_removed_subcommand_row(monkeypatch):
+    """BACK-2771: the one predicate. A removed ``subcommand:`` row keeps its word a command after its CommandSpec is
+    deleted; a row not marked removed does not (the guard test catches that orphan), nor a scheme-only row."""
+    from dataclasses import replace
+
+    from reveal.cli.invocation import RETIREMENTS, is_command_word
+    assert is_command_word('overview') and is_command_word('hotspots')  # live, and retired but still answering
+    assert not is_command_word('nosuchnoun') and not is_command_word('stats')  # unknown; a scheme row only
+    monkeypatch.delitem(COMMANDS, 'trace')
+    assert not is_command_word('trace')  # deleted without marking its row removed
+    monkeypatch.delitem(COMMANDS, 'deps')
+    monkeypatch.setitem(RETIREMENTS, 'subcommand:deps', replace(RETIREMENTS['subcommand:deps'], stage='error',
+                                                                 removed=True))
+    assert is_command_word('deps')
+
+
 # ------------------------------------------------------------------ normalization
 
 def test_perf_is_taken_out_for_any_command():

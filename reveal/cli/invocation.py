@@ -813,6 +813,20 @@ def generated_retirements() -> Dict[str, Retirement]:
     return rows
 
 
+def orphaned_retirements() -> list:
+    """Sorted ``subcommand:``/``scheme:`` row keys whose ``removed`` mark disagrees with the code, for the guard test
+    (BACK-2771): a row not marked removed whose CommandSpec or adapter is gone (the word would fall to the path read
+    and its row would never be read), or a removed row whose CommandSpec or adapter still answers (dead code)."""
+    from ..adapters.registry import list_supported_schemes
+    live = {'subcommand': set(COMMANDS), 'scheme': set(list_supported_schemes())}
+    orphans = []
+    for key, entry in RETIREMENTS.items():
+        kind, _, word = key.partition(':')
+        if kind in live and (word in live[kind]) == entry.removed:
+            orphans.append(key)
+    return sorted(orphans)
+
+
 def retirement_note(key: str) -> Optional[Retirement]:
     """The one hook: consulted where each kind of spelling is parsed. Returns the table row for
     *key*, or None when it is not retired (nothing printed). A ``note`` row joins the invocation's
@@ -1044,6 +1058,18 @@ def _global_option_arity() -> Dict[str, int]:
         for opt in action.option_strings:
             arity[opt] = takes
     return arity
+
+
+def is_command_word(word: str) -> bool:
+    """Whether *word* in command position is a reveal command: a COMMANDS key, or a command the cut deleted, whose
+    ``subcommand:`` row is marked removed (BACK-2771). A removed word stays a command, so it is refused with its row's
+    text (``_prepare`` reads the row before any parser) instead of falling to the path read or a silent ``--stdin``
+    skip; ``./WORD`` is the path, as for a live command (BACK-1112). The one predicate for the router, the ``--stdin``
+    line classifier and the Python API's noun lookup."""
+    if word in COMMANDS:
+        return True
+    entry = RETIREMENTS.get(f'subcommand:{word}')
+    return entry is not None and entry.removed
 
 
 def _find_command(tokens: Tuple[str, ...]) -> Optional[int]:
