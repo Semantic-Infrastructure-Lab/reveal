@@ -426,7 +426,7 @@ def query(
     legacy_element = _legacy_element(adapter_class, scheme, element_name)
 
     from .utils.request_cache import host_request
-    from .utils.invocation_log import log_scope
+    from .utils.invocation_log import answer_is_json, log_scope
     from .cli.routing.uri import _echo_source
 
     def _spelled(result: Dict[str, Any]) -> Dict[str, Any]:
@@ -439,6 +439,9 @@ def query(
     # One invocation log for the whole call, so a config problem met while the adapter is
     # built reaches the answer as the CLI's JSON carries it (BACK-2659).
     with host_request(), log_scope(to_stderr=False), gitignore_scope(respect_gitignore):
+        # The answer is a JSON document, so its diagnostics are in it and a per-file stderr line is not printed, as
+        # with --format json and the noun form (BACK-2799).
+        answer_is_json(True)
         if uses_bound_query_call(adapter_class) and legacy_element is None:
             bound = _canonical_init(adapter_class, resource, overrides=kwargs)
             from .cli.routing.declared import declared_adapter_class
