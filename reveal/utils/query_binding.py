@@ -1103,7 +1103,8 @@ def reject_unsupported_overrides(declarations: Iterable[ParamSpec], overrides: M
 
 def apply_declared_overrides(declarations: Iterable[ParamSpec], params: QueryParams,
                              overrides: Optional[Mapping[str, Any]]) -> QueryParams:
-    """Apply typed overrides after original-source validation, without URI serialization."""
+    """Apply typed overrides after original-source validation, without URI serialization. A typed None selects the
+    default: the control is omitted (no key, not given), as a control the request never named is (BACK-2779)."""
     declarations = tuple(declarations)
     if overrides is not None:
         if not isinstance(overrides, Mapping):
@@ -1118,11 +1119,14 @@ def apply_declared_overrides(declarations: Iterable[ParamSpec], params: QueryPar
         from .query_parser import query_key_recorder
         query_key_recorder(*supplied)
         for spec in declarations:
-            if spec.name in supplied:
-                raw = supplied[spec.name]
-                (params._given.discard if raw is None else params._given.add)(spec.name)  # None: the default
-                value = spec.validate(None) if raw is None else _validate_binding(spec, raw, 'typed')
-                params.set_normalized(spec, value)
+            if spec.name not in supplied:
+                continue
+            raw = supplied[spec.name]
+            if raw is None:  # None selects the default: the control is omitted, as if the request never named it
+                _omit(params, spec.name)
+                continue
+            params._given.add(spec.name)
+            params.set_normalized(spec, _validate_binding(spec, raw, 'typed'))
         _rebind_overrides(declarations, params, overrides, supplied)
         reject_unknown_where_fields(declarations, params)
     return params
