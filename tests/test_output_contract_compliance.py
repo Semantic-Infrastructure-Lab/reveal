@@ -176,6 +176,7 @@ SUBCOMMAND_ARGV = {
     'xlsx': ['proj/data.xlsx'],
     'env': [],  # the listing, as env:// (FIXTURE_URIS): the empty HOME keeps it hermetic
     'diff': ['proj/app_old.py', 'proj/app.py'],  # the pair FIXTURE_URIS names, one word per side (BACK-2214)
+    'help': [],  # the index, help's own result type; the search's cut is test_help_match_back2773's (BACK-2773)
     'markdown': ['proj'],
     'architecture': ['proj'],
     'calls': ['proj', '--target', 'main'],

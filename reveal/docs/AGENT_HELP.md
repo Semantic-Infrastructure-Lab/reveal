@@ -29,7 +29,7 @@ help_category: ai_guides
 - `reveal help://tricks/full` — complete RECIPES guide
 - `reveal 'help://schemas/<adapter>'` — machine-readable adapter schema
 - `reveal 'help://examples/<task>'` — query recipes per task
-- `reveal 'help://search?search=<term>'` — full-text search this help corpus by your own phrasing, when nothing above matches it
+- `reveal help://search --match <term>` — full-text search this help corpus by your own phrasing, when nothing above matches it
 
 Guides >200 lines show the first section by default (progressive disclosure). Append `/full` to get the complete guide.
 
@@ -282,6 +282,7 @@ Reveal has both a **path-based interface** (`reveal <path>` + flags) and a set o
 | `reveal review <path>` | Retired: use reveal check --changed RANGE and reveal diff (structure: reveal diff git://A/. git://B/.); still answers and prints a replaced-by note | `reveal review --help` |
 | `reveal health [URI...]` | Ops health: SSL + databases + DNS + nginx | `reveal health --help` |
 | `reveal pack <path>` | Token-budgeted context snapshot for LLM consumption (use `--budget`, `--focus`, `--since`) | `reveal pack --help` |
+| `reveal help [TOPIC] [--match TEXT] [--limit N]` | Reveal's own help: a guide, an adapter or a topic (help://TOPIC), or a full-text search with --match | `reveal help --help` |
 | `reveal dev <command>` | Scaffold adapters/analyzers/rules; inspect effective `.reveal.yaml` config | `reveal dev --help` |
 | `reveal scaffold <kind>` | Retired: use `reveal dev new-*` (compatibility reference) | `reveal scaffold --help` |
 | `reveal offline` | Pre-download tree-sitter grammars for offline/air-gapped use | `reveal offline --help` |

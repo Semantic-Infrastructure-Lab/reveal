@@ -146,6 +146,8 @@ def _patterns(key):
         return [_health_names_a_code_path]
     if kind == 'target' and key == 'target:nav.outline':
         return [_outline_names_a_code_element]
+    if kind == 'target' and key == 'target:help.search-term':  # the term in the path (BACK-2773 ruling S7)
+        return [re.compile(r"help://search/[^\s'\"`)]")]
     if kind == 'target' and rest.endswith('.element'):  # SCHEME:// ELEMENT, the positional after a resource URI
         scheme = rest[:-len('.element')]
         # The element word ends the command (end of line, a comment, a flag, a pipe or the closing backtick); a prose
@@ -183,6 +185,8 @@ def _sample(key):
         return 'reveal health ./src'
     if key == 'target:nav.outline':
         return 'reveal app.py work --outline'
+    if key == 'target:help.search-term':
+        return 'reveal help://search/callers'
     if kind == 'target' and rest.endswith('.element'):
         return {'help': 'reveal help:// quick', 'reveal': 'reveal reveal://adapters/env.py EnvAdapter',
                 'diff': 'reveal diff://app.py:old.py handle_request'}.get(

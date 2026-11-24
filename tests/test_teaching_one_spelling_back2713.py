@@ -117,6 +117,7 @@ def test_help_quick_gap_row_names_no_noun_shown_above_it(quick_page):
     "6. reveal_query('calls://<dir>?callees=FN&depth=2&detail') — \"what happens when X runs?\"",
     "'?limit=N', '?sort=field' (or '?sort=-field' for desc) and '?offset=M'",
     'calls:// and imports:// cap their rankings, patches://?view=pressure takes it too',
+    "reveal 'help://search?search=<term>' # full-text search",  # help's search is --match since BACK-2773
 ])
 def test_the_check_bites_on_the_lines_it_replaced(line):
     """Positive control: lines the first screens printed before BACK-2713 are found."""
@@ -124,7 +125,8 @@ def test_the_check_bites_on_the_lines_it_replaced(line):
 
 
 @pytest.mark.parametrize('line', [
-    "reveal 'help://search?search=<term>' # full-text search",
+    'reveal help://search --match <term>  # full-text search',
+    'reveal help://agent/full',
     "structure: `reveal 'diff://git://main/.:git://HEAD/.'`",
     'reveal claude://sessions/ --match auth-refactor',
     'reveal NOUN TARGET --option value; a resource URI takes the same flags (git://FILE --view history --limit 5)',

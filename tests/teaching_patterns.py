@@ -16,8 +16,9 @@ ANALYSIS_ONLY = tuple(sorted(
     if getattr(get_adapter_class(scheme), 'ANALYSIS_ONLY', False) and f'scheme:{scheme}' not in RETIREMENTS))
 ANALYSIS_URI = re.compile(r'\b(?:' + '|'.join(ANALYSIS_ONLY) + r')://')
 QUERY_OPTION = re.compile(r'(?<![\w/])[?&][A-Za-z_][\w-]*')
-# ``help://TOPIC`` (``help://search?search=TERM`` included) and ``diff://A:B`` have no flag form: rule 1 keeps them.
-_EXEMPT_URI = re.compile(r"\b(?:help|diff)://[^\s'\"`]*")
+# ``help://TOPIC`` and ``diff://A:B`` have no flag form: rule 1 keeps them. help's query does (``--match``, ``--limit``
+# since BACK-2773), so a query string on it is judged like any other.
+_EXEMPT_URI = re.compile(r"\b(?:help://[^\s'\"`?]*|diff://[^\s'\"`]*)")
 # A query string on any URI, the ``/?key=`` form included, which QUERY_OPTION leaves to it.
 _URI_QUERY = re.compile(r"\b[A-Za-z][\w+.-]*://[^\s'\"`]*?\?[A-Za-z_]")
 

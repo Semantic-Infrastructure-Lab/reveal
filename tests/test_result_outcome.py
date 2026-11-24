@@ -117,7 +117,7 @@ def test_codex_without_a_db_exits_nonzero(proj, fmt, monkeypatch):
 @pytest.mark.parametrize('fmt', FORMATS)
 def test_help_unknown_schema_exits_nonzero(proj, fmt):
     r = _run_reveal_direct('help://schemas/nonexistent_zz_1059', '--format', fmt)
-    assert r.returncode == 1
+    assert r.returncode == 2  # a page naming nothing is an invalid request (D6; it exited 1, BACK-2773)
 
 
 @pytest.mark.parametrize('fmt', FORMATS)
@@ -144,7 +144,7 @@ def test_the_error_is_reported_once_and_first(proj, uri, scheme):
     """The router prints the error line before rendering; renderers add only detail.
     Before, claude/codex/help/calls renderers each printed their own 'Error:' line."""
     r = _run_reveal_direct(uri)
-    assert r.returncode == (2 if scheme in ('calls', 'json', 'codex') else 1)  # codex: an unknown resource (BACK-2700)
+    assert r.returncode == 2  # codex: an unknown resource (BACK-2700); help: a page naming nothing (D6, BACK-2773)
     assert r.stderr.startswith(f'Error ({scheme}://): '), r.stderr
     assert (r.stdout + r.stderr).count('Error') == 1, r.stdout + r.stderr
 

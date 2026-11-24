@@ -385,6 +385,35 @@ subcommands:
       review: not-applicable
       via:
       - declared-unused
+  help:
+    all:
+      reason: 'BACK-2773: the declared runner binds --all through the URI form''s own --all declaration (limit=0, every
+        search hit); a page with no cap answers as without it; test_help_match_back2773.py compares it with --limit 0.'
+      review: honored
+      via:
+      - declared-read
+    respect_gitignore:
+      reason: --respect_gitignore is not declared on `reveal help`'s own parser --
+        argparse rejects it loudly (unrecognized arguments), not a silent gap
+      review: not-applicable
+      via: []
+    since:
+      reason: --since is not declared on `reveal help`'s own parser -- argparse rejects
+        it loudly (unrecognized arguments), not a silent gap
+      review: not-applicable
+      via: []
+    until:
+      reason: --until is not declared on `reveal help`'s own parser -- argparse rejects
+        it loudly (unrecognized arguments), not a silent gap
+      review: not-applicable
+      via: []
+    verbose:
+      reason: 'BACK-2654 rule 4: --verbose is --detail full, bound from the
+        declarations; this noun declares no detail, so it exits 2 naming detail and its
+        controls.'
+      review: honored
+      via:
+      - declared-read
   hotspots:
     all:
       reason: 'BACK-2654 item 1c: the declared runner binds --all through the URI form''s own --all declaration (top=1000000); test_declared_parity_back2053.py::test_option_values_are_read_alike compares both forms; test_all_lifts_the_same_cap_on_both_forms proves 10 -> 14 rows on both forms.'

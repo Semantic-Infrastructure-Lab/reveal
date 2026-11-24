@@ -93,7 +93,7 @@ reveal help://schemas/ast/ast_query    # One output type's full JSON-Schema
 reveal help://schemas/ast/full         # Unsummarized schema payload
 reveal help://examples        # Canonical query recipes by task
 reveal help://examples/quality  # Recipes for code quality analysis
-reveal 'help://search?search=<term>'  # Full-text search across guides/adapters/examples (&top=N: more than 20 hits)
+reveal help://search --match <term>  # Full-text search across guides/adapters/examples (--limit N: more than 20 hits)
 ```
 
 **Audience:** Humans exploring capabilities, developers
@@ -432,7 +432,7 @@ A: A guide's cost in the help:// index is measured from the file (`_guide_token_
 ## Future Enhancements
 
 **Possible improvements:**
-- ~~Search within help~~ — shipped (BACK-1023): `help://search?search=<term>`, see §3 above.
+- ~~Search within help~~ — shipped (BACK-1023): `reveal help://search --match <term>`, see §3 above.
 - Version-specific help (`help://ast@v0.20`)
 - Language-specific examples (`help://ast?lang=python`)
 - Interactive examples (`help://ast --try`)

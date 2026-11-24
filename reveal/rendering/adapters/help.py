@@ -197,7 +197,7 @@ def _render_navigation_section() -> None:
     print("  reveal help://schemas/index  # Thin index of every adapter schema")
     print("  reveal help://schemas/all    # Full schema for every adapter, in one payload")
     print("  reveal help://examples       # Canonical query recipes by task")
-    print("  reveal 'help://search?search=<term>' # Full-text search when nothing above matches your phrasing")
+    print("  reveal help://search --match <term>  # Full-text search when nothing above matches your phrasing")
     print()
     print("**What can reveal check / parse:**")
     print("  reveal help://rules          # Pattern-detection rule catalog")
@@ -540,7 +540,7 @@ def _render_help_see_also(data: Dict[str, Any]) -> None:
 
 
 def _render_help_search(data: Dict[str, Any]) -> None:
-    """Render help://search?search=<term> — full-text hits across the help corpus."""
+    """Render reveal help://search --match <term> — full-text hits across the help corpus."""
     if 'error' in data:
         _render_error_detail(data)
         return

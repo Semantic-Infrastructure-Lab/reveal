@@ -15,8 +15,13 @@ from reveal.adapters.help import HelpAdapter
 pytestmark = pytest.mark.component
 
 
+def _search(term):
+    """help's search through the bound match control (reveal help://search --match TERM; BACK-2773)."""
+    return HelpAdapter('search', params={'match': term}).get_structure()
+
+
 def _guide_topics(term):
-    result = HelpAdapter().get_element(f'search?search={term}')
+    result = _search(term)
     assert result['type'] == 'help_search'
     return [h['topic'] for h in result['hits'] if h['type'] == 'guide']
 
@@ -40,7 +45,7 @@ def test_extras_search_ranks_the_install_guide_first():
 
 def test_nonsense_term_finds_nothing():
     """Negative control: the guide is matched by content, not returned for everything."""
-    result = HelpAdapter().get_element('search?search=zzqxvnonsensetermqq')
+    result = _search('zzqxvnonsensetermqq')
     assert result['count'] == 0
 
 

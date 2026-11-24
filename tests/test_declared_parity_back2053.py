@@ -27,6 +27,7 @@ CASES = {
     'deps': ([], ''),
     'diff': ([], ''),
     'env': ([], ''),
+    'help': (['--match', 'callers'], '?match=callers'),  # the search (BACK-2773); its resource is the search topic
     'hotspots': ([], ''),
     'imports': ([], ''),
     'git': ([], ''),
@@ -195,6 +196,8 @@ def argv_for(noun, spelling, resource='proj'):
         resource = 'book.xlsx'
     if noun == 'env' and resource == 'proj':
         resource = ENV_VARIABLE
+    if noun == 'help' and resource == 'proj':
+        resource = 'search'
     if noun == 'diff':
         resource = DIFF_PAIR if resource == 'proj' else f'{resource}:{resource}'
     if noun == 'json':
@@ -342,7 +345,7 @@ def test_fail_on_means_the_same_before_after_and_on_a_uri(project, noun, gate):
     """The project carries an unused import and a branchy function, so a declared gate has something to match."""
     cli, query = FINDINGS_VIEWS.get(noun, CASES[noun])
     target = {'json': 'proj/data.json', 'claude': 'sessions', 'codex': 'sessions', 'sqlite': 'app.db', 'env': ENV_VARIABLE,
-              'xlsx': 'book.xlsx', 'diff': DIFF_PAIR}.get(noun, 'proj')
+              'xlsx': 'book.xlsx', 'diff': DIFF_PAIR, 'help': 'search'}.get(noun, 'proj')
     walk_flags = ['--respect-gitignore=off'] if declared_adapter_class(noun).RESOURCE_SPEC.walks else []
     spellings = {
         'after': [noun, target, *cli, '--fail-on', gate],

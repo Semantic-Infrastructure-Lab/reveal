@@ -56,6 +56,11 @@ _RETIRED_SCHEMES = {noun for noun in NOUNS if f'scheme:{noun}' in RETIREMENTS}
 _SCHEMES = '|'.join(sorted(NOUNS, key=len, reverse=True))
 URI = re.compile(rf"(?<![\w/.-])(?:{_SCHEMES})://[^\s'\"`|]*")
 COMMAND = re.compile(rf"(?<![\w/.-])reveal\s+(?:{_SCHEMES})(?=\s|$)[^\n`|#\\]*")
+# A resource URI printed with its flags (``reveal help://search --match TEXT``, or a schema example's ``help://search
+# --match callers``, alone or as a JSON string: COMMAND_MODEL rule 1, a URI takes the noun's flags): one request, judged
+# with its flags, not the bare URI it starts with (BACK-2773).
+URI_COMMAND = re.compile(rf"(?:(?<![\w/.-])reveal\s+'?|^|(?<=\"))((?:{_SCHEMES})://[^\s'\"`|]*)'?(?=\s+--?\w)"
+                         rf"[^\n`|#\\\"]*")
 # Prose that ends a command quoted in a sentence: "reveal calls <path> --callers NAME - CLI subcommand form". A shell
 # redirection ends a command as a pipe does (``reveal metrics src --format=json > stats.json``; BACK-2726).
 _PROSE_END = re.compile(r'\s(?:[-\u2014]|or|and|instead|then)(?:\s|$)|\s\(|\s{2,}\S|[,;](?:\s|$)|\.\s|\.$|\s>>?\s')
@@ -138,8 +143,11 @@ def _texts(out, err):
 
 
 def _found_in(text):
-    """Each declared-noun URI and ``reveal NOUN ...`` command in *text*, as printed."""
-    found = [match.group(0) for match in URI.finditer(text)]
+    """Each declared-noun URI, ``reveal URI --flag ...`` and ``reveal NOUN ...`` command in *text*, as printed."""
+    with_flags = list(URI_COMMAND.finditer(text))
+    found = [_PROSE_END.split(match.group(0) if match.group(0).startswith('reveal') else f'reveal {match.group(0)}',
+                              maxsplit=1)[0] for match in with_flags]
+    found += [match.group(0) for match in URI.finditer(text) if match.span() not in {m.span(1) for m in with_flags}]
     for match in COMMAND.finditer(text):
         found.append(_PROSE_END.split(match.group(0), maxsplit=1)[0])
     return found
@@ -369,6 +377,7 @@ def _diff_sides(left, right):
 
 def _uri_argv(printed):
     scheme, _, rest = printed.partition('://')
+    rest = re.sub(r'^\[[^\]]*\]', '', rest)  # an optional path (help://[topic]) left out: the request without it
     rest = rest.replace('[', '').replace(']', '').rstrip('\\')
     if rest.startswith((')', '*', '?*')) or '\\' in rest:  # a syntax pattern quoted in prose, not a request
         return None
@@ -392,9 +401,9 @@ def _uri_argv(printed):
 
 
 def _cli_target(noun, target):
-    """The subcommand's positional for a fixture target: '.' when none is printed, except on env, whose empty resource is
-    the listing (a '.' would name a variable that is not set)."""
-    return [target] if target else ([] if noun == 'env' else ['.'])
+    """The subcommand's positional for a fixture target: '.' when none is printed, except on env and help, whose empty
+    resource is the listing or the index (a '.' would name a variable that is not set, or a topic)."""
+    return [target] if target else ([] if noun in ('env', 'help') else ['.'])
 
 
 def _command_argv(printed):
@@ -551,7 +560,7 @@ def _command_candidates(printed, examples):
         return []
     if len(tokens) > 1 and '://' in tokens[1]:  # a resource URI with its flags
         uri = _argv(tokens[1])
-        return [[*uri, *tokens[2:]]] if uri else []
+        return [[*uri, *_command_flags(tokens[1].partition('://')[0], tokens[2:])]] if uri else []
     argv = _argv(printed)
     if not argv:
         return []

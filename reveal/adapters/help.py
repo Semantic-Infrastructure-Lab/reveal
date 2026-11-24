@@ -8,10 +8,12 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from .base import ResourceAdapter, Stability, register_adapter, register_renderer, _ADAPTER_REGISTRY, list_public_schemes
 from .registry import OPS_SCHEMES, _SCAFFOLD_SCHEMES, is_internal_scheme
-from ..errors import MissingResourceError
+from ..errors import ElementNotFoundError
 from ..utils.formatting import shell_command
-from ..utils.query_parser import ParamSpec, ResourceSpec, param_schema, whole_number
-from ..utils.results import AnalysisCompleteness, ResultBuilder, note_truncation, note_warning, result_execution_facts
+from ..utils.match_terms import TermValue, empty_term_error, match_terms
+from ..utils.query_parser import CliBinding, LegacySpelling, ParamSpec, ResourceSpec, param_schema, whole_number
+from ..utils.results import (AnalysisCompleteness, FailureCause, ResultBuilder, note_truncation, note_warning,
+                             result_execution_facts)
 from reveal.reveal_types import CONTRACT_VERSION
 from reveal.utils.lines import split_lines
 
@@ -290,7 +292,8 @@ class HelpRenderer:
 
     @staticmethod
     def render_structure(result: dict, format: str = 'text') -> None:
-        """Render help topic list.
+        """Render the topic list, or the topic page the structure call answered (``reveal help quick``,
+        ``reveal help://search --match TEXT``: the declared subcommand answers a topic through the structure call).
 
         Args:
             result: Structure dict from HelpAdapter.get_structure()
@@ -300,7 +303,7 @@ class HelpRenderer:
         # help renderer), so a module-level import made `import reveal.rendering`
         # fail with a circular ImportError when it ran first.
         from ..rendering import render_help
-        render_help(result, format, list_mode=True)
+        render_help(result, format, list_mode=result.get('type') == HelpAdapter.RESULT_TYPE)
 
     @staticmethod
     def render_element(result: dict, format: str = 'text') -> None:
@@ -314,15 +317,65 @@ class HelpRenderer:
         render_help(result, format)
 
 
-# help://search's hit cap; the rest is recorded as a cut (BACK-1543). ?top=N widens it
-# (BACK-1383). Named like the native caps of hotspots/calls/depends/testability: limit= is
-# a result-control key that help:// does not take (refused as an unsupported control, BACK-2767).
-_SEARCH_TOP = ParamSpec('top', 'integer', 'help://search only: maximum hits to list', 20,
-                        whole_number, ('top=50',), minimum=0, zero_policy='all', answers=('help_search',))
-# help://'s whole query vocabulary: a key outside it, or an api.query keyword, is refused as unsupported; both are read by
-# help://search only, so another topic refuses them (COMMAND_MODEL "Applicability"; BACK-2764, BACK-2767).
-HELP_PARAM_SPECS = (ParamSpec('search', 'string', 'help://search?search=<term>: full-text search over guides, adapters '
-                              'and recipes', None, str, ('search=navigation',), answers=('help_search',)), _SEARCH_TOP)
+_SEARCH_ANSWER = ('help_search',)
+_search_term = TermValue('match', '--match TEXT')
+
+
+def _search_terms(value: Any) -> List[str]:
+    """help search's terms: one string, or every repeat of a repeated --match, each nonblank; a hit holds every word."""
+    return [_search_term(item) for item in value] if isinstance(value, (list, tuple)) else [_search_term(value)]
+
+
+def _plus_is_space(value: Any) -> Any:
+    """The legacy ``?search=`` read ``+`` as a space (``unquote_plus``), so ``?search=find+callers`` keeps its answer
+    until the cut; the canonical ``match`` decodes percent escapes once and keeps ``+`` literal, as Markdown's does."""
+    if isinstance(value, (list, tuple)):
+        return [item.replace('+', ' ') if isinstance(item, str) else item for item in value]
+    return value.replace('+', ' ') if isinstance(value, str) else value
+
+
+# help search's term is the shared match control (D21, BACK-2773; COMMAND_MODEL "Match text"): ?search= and --search are
+# its legacy words until the cut, and an empty term is refused by the binder (BACK-2736). Repeated terms AND, as the words
+# of one term already do.
+_SEARCH_MATCH = ParamSpec('match', 'array', 'Full-text search over guides, adapters and recipes (reveal help://search '
+                          '--match TEXT, or reveal help --match TEXT); a hit holds every word; repeat to add terms', None,
+                          _search_terms,
+                          ('--match navigation', '--match "find callers"'), repeatable=True, uri_codec='percent',
+                          cli=CliBinding(('--match',), metavar='TEXT'),
+                          legacy=(LegacySpelling('search', flag='--search', codec=_plus_is_space),), answers=_SEARCH_ANSWER)
+# The search's hit cap; the rest is recorded as a cut (BACK-1543). The shared row cap (COMMAND_MODEL "Caps"; ruling S6 on
+# BACK-2773): ?top= and --top are its legacy words until the cut (BACK-1383 added top).
+_SEARCH_LIMIT = ParamSpec('limit', 'integer', 'Search hits to list; 0 = every hit', 20, whole_number,
+                          ('--match callers --limit 50', '--match callers --limit 0'), minimum=0, zero_policy='all',
+                          cli=CliBinding(('--limit',), metavar='N'), legacy=(LegacySpelling('top', flag='--top'),),
+                          answers=_SEARCH_ANSWER)
+# help's whole vocabulary: a key outside it, or an api.query keyword, is refused as unsupported; both are read by the
+# search only, so another topic refuses them (COMMAND_MODEL "Applicability"; BACK-2764, BACK-2767).
+HELP_PARAM_SPECS = (_SEARCH_MATCH, _SEARCH_LIMIT)
+# The RETIREMENTS row of the search's older address, the term in the path (help://search/<term>; ruling S7).
+SEARCH_PATH_RETIREMENT = 'target:help.search-term'
+# The errors of a topic page whose address names nothing that exists: an invalid request (D6), not a failed answer.
+_NAMES_NOTHING = frozenset({'Invalid section', 'Section not found', 'Unknown adapter', 'Unknown task',
+                            'Unknown output type', 'CLI-only subcommand', 'No schema available', 'No help available'})
+# The answer types of a help topic page, which the index's type stands for (``result_type_at``): help is a declared
+# subcommand (ruling S5-A, BACK-2773), so every page is qualified as one of these before it is shown.
+_TOPIC_TYPES = (
+    ('static_guide', 'A markdown guide, e.g. help://ast or help://agent'),
+    ('help_section', 'One section of an adapter guide, e.g. help://ast/workflows'),
+    ('static_help', 'A bounded section of AGENT_HELP.md, e.g. help://anti-patterns'),
+    ('adapter_help', "An adapter's own help data where it has no guide, e.g. help://reveal"),
+    ('file_analyzer', 'A file-based analyzer that is not a URI scheme, e.g. help://nginx'),
+    ('adapter_summary', 'help://adapters: every adapter with its description'),
+    ('help_quick', 'help://quick: which adapter or flag fits a task'),
+    ('adapter_schema_index', 'help://schemas: adapters that provide a schema'),
+    ('adapter_schema_all', 'help://schemas/index (thin) or help://schemas/all (full)'),
+    ('adapter_schema', "help://schemas/<adapter>: one adapter's machine-readable schema"),
+    ('query_recipes_index', 'help://examples: recipe categories'),
+    ('query_recipes', 'help://examples/<task>: runnable recipes for one task'),
+    ('help_rules', 'help://rules: the quality-rule catalog'),
+    ('help_languages', 'help://languages: supported languages and file types'),
+    ('help_relationships', 'help://relationships: which adapters work together'),
+)
 _FENCE_RE = re.compile(r'^\s*(```|~~~)')
 _HEADING_RE = re.compile(r'^(#{1,6})\s+(.*)')
 
@@ -379,7 +432,7 @@ def _search_result(term: str, ranked: List[Dict[str, Any]], top: int) -> Dict[st
     }
     # BACK-1543: 'help://search/file' listed 20 of 47 hits as all of them.
     note_truncation(result, 'hits', len(hits), len(ranked), 'limit',
-                    hint='raise ?top=N (0 = all), or add a search word to narrow it')
+                    hint='raise --limit N (0 = all), or add a search word to narrow it')
     return result
 
 
@@ -418,7 +471,10 @@ class HelpAdapter(ResourceAdapter):
     # topic (help:// quick) answers with its note until the cut (invocation.element_retirement, BACK-2764).
     PARAM_SPECS = HELP_PARAM_SPECS
     BOUND_QUERY_CALL = True
+    # The global --all lifts the search's hit cap, as --limit 0 does (COMMAND_MODEL "Caps"); every other page has no cap.
+    CLI_QUERY_FLAGS = {'all': 'limit=0'}
     RESULT_TYPE = 'help'  # the index; a topic answers its own type (help_quick, static_guide, help_search...)
+    RESULT_TYPE_VARIANTS = {RESULT_TYPE: tuple(name for name, _ in _TOPIC_TYPES)}
     DEFAULT_FAIL_ON = 'none'
     FINDINGS_POLICIES = ('none',)
 
@@ -429,13 +485,22 @@ class HelpAdapter(ResourceAdapter):
 
     @classmethod
     def result_type_at(cls, params, resource):
-        """The answer the topic selects, as far as its controls' applicability reads it: help://search's hits, or a
-        page (the index's type stands for every other topic, which reads neither search nor top)."""
-        return 'help_search' if str(resource or '').partition('?')[0] == 'search' else cls.RESULT_TYPE
+        """The answer the topic selects, as far as its controls' applicability reads it: the search's hits (help://search,
+        its older help://search/TERM, or no topic with a --match: ``reveal help --match TEXT``), or a page (the index's
+        type stands for every other topic, which reads neither match nor limit)."""
+        topic = str(resource or '').partition('?')[0]
+        if topic == 'search' or topic.startswith('search/') or (not topic and (params or {}).get('match')):
+            return 'help_search'
+        return cls.RESULT_TYPE
 
     @staticmethod
     def execution_facts(result):
-        return result_execution_facts(result, completeness=AnalysisCompleteness.COMPLETE)
+        """D6: a page that names nothing that exists (a section, an adapter, a task, an output type) is an invalid request,
+        exit 2; a page that exists but could not be built (a plugin's get_help raised, a guide failed to load) is a failed
+        answer, exit 3."""
+        error = result.get('error') if isinstance(result, dict) else None
+        cause = FailureCause.INVALID_REQUEST if error in _NAMES_NOTHING else FailureCause.ANALYSIS
+        return result_execution_facts(result, completeness=AnalysisCompleteness.COMPLETE, failure_cause=cause)
     RESOURCE_SPEC = ResourceSpec(name='topic', cli_default='', uri_default='', walks=False, filesystem=False)
 
     # Valid section names for help://adapter/section queries
@@ -545,7 +610,7 @@ class HelpAdapter(ResourceAdapter):
         return {
             'name': 'help',
             'description': (
-                'Explore reveal help system - '
+                "Explore reveal's help - "
                 'discover adapters, read guides'
             ),
             'syntax': 'help://[topic]',
@@ -575,7 +640,7 @@ class HelpAdapter(ResourceAdapter):
                     'description': 'Cool tricks and hidden features guide'
                 },
                 {
-                    'uri': "help://search?search=<term>",
+                    'uri': "help://search --match <term>",
                     'description': 'Full-text search over guides/adapters/examples by your own phrasing'
                 }
             ],
@@ -626,22 +691,10 @@ class HelpAdapter(ResourceAdapter):
             'cli_flags': [],
             'supports_batch': False,
             'supports_advanced': False,
-            'output_types': [
-                _type('help', 'help:// with no topic: index of adapters, guides and topics'),
-                _type('static_guide', 'A markdown guide, e.g. help://ast or help://agent'),
-                _type('help_section', 'One section of an adapter guide, e.g. help://ast/workflows'),
-                _type('adapter_summary', 'help://adapters: every adapter with its description'),
-                _type('help_quick', 'help://quick: which adapter or flag fits a task'),
-                _type('help_search', 'help://search?search=<term>: matching guides, adapters and recipes'),
-                _type('adapter_schema_index', 'help://schemas: adapters that provide a schema'),
-                _type('adapter_schema_all', 'help://schemas/index (thin) or help://schemas/all (full)'),
-                _type('adapter_schema', "help://schemas/<adapter>: one adapter's machine-readable schema"),
-                _type('query_recipes_index', 'help://examples: recipe categories'),
-                _type('query_recipes', 'help://examples/<task>: runnable recipes for one task'),
-                _type('help_rules', 'help://rules: the quality-rule catalog'),
-                _type('help_languages', 'help://languages: supported languages and file types'),
-                _type('help_relationships', 'help://relationships: which adapters work together'),
-            ],
+            'output_types': [_type('help', 'help:// with no topic: index of adapters, guides and topics'),
+                             *(_type(name, description) for name, description in _TOPIC_TYPES),
+                             _type('help_search', 'Matching guides, adapters and recipes (reveal help://search '
+                                                  '--match TEXT)')],
             'example_queries': [
                 {'uri': 'help://', 'description': 'List all help topics', 'output_type': 'help'},
                 {'uri': 'help://quick', 'description': 'Find the adapter or flag for a task',
@@ -649,7 +702,7 @@ class HelpAdapter(ResourceAdapter):
                 {'uri': 'help://ast', 'description': 'Read the ast:// guide', 'output_type': 'static_guide'},
                 {'uri': 'help://ast/workflows', 'description': 'One section of a guide',
                  'output_type': 'help_section'},
-                {'uri': 'help://search?search=callers', 'description': 'Search the help corpus',
+                {'uri': 'help://search --match callers', 'description': 'Search the help corpus',
                  'output_type': 'help_search'},
                 {'uri': 'help://schemas/ast', 'description': "An adapter's machine-readable schema",
                  'output_type': 'adapter_schema'},
@@ -664,18 +717,18 @@ class HelpAdapter(ResourceAdapter):
 
         Args:
             resource: Specific help topic to display ('' = list all)
-            query: The topic's own query (help://search?search=TERM), split off by canonical construction; the
-                structure call gives it back to the topic it belongs to.
-            params: Already-bound or typed controls (``api.query('help://search', search=TERM)``), in place of *query*.
+            query: The topic's own query (help://search?match=TERM), split off by canonical construction.
+            params: Already-bound or typed controls (``api.query('help://search', match=TERM)``), in place of *query*.
+        The search reads its term and cap from the bound controls (D21, BACK-2773), never from the query text again.
         """
         from ..utils.query_binding import bound_constructor_params
         self.query_params = bound_constructor_params(HELP_PARAM_SPECS, query, params)
-        if params is not None:
-            from urllib.parse import urlencode
-            given = {key: value for key, value in self.query_params.items() if value is not None}
-            query = query or (urlencode(given) if given else None)  # the topic reads its query string
         self.topic = resource or None
-        self._topic_query = query
+        if (resource or '').startswith('search/'):
+            # The term in the path is the search's older address (ruling S7): its note is said as the request binds,
+            # before any answer, so at the cut it is the invalid request it then is (exit 2), never a failed answer.
+            from ..cli.invocation import retirement_note
+            retirement_note(SEARCH_PATH_RETIREMENT)
         # Merge auto-discovered guides with manual STATIC_HELP entries
         # STATIC_HELP takes precedence (allows aliases and special mappings)
         self.help_topics = self._discover_and_merge_guides()
@@ -812,6 +865,8 @@ class HelpAdapter(ResourceAdapter):
         exist is the invalid request the CLI exits 2 on (BACK-2764, the env precedent of BACK-2626)."""
         if self.topic:
             return self._topic_answer()
+        if self.query_params.get('match'):  # reveal help --match TEXT: the search, as help://search --match TEXT
+            return self._topic_answer('search')
         return ResultBuilder.create(
             result_type='help',
             source='help://',
@@ -834,12 +889,23 @@ class HelpAdapter(ResourceAdapter):
             }
         )
 
-    def _topic_answer(self) -> Dict[str, Any]:
-        """The topic this adapter was built for, with the query canonical construction split off (``search?search=``)."""
-        topic = f'{self.topic}?{self._topic_query}' if self._topic_query else str(self.topic)
+    def _topic_answer(self, topic: Optional[str] = None) -> Dict[str, Any]:
+        """The topic this adapter was built for, in the answer envelope every declared noun's answer carries (ruling S5-A):
+        the topic's own type (an adapter's help data, which has none, is ``adapter_help``), its address as the source."""
+        topic = topic or str(self.topic)
         result = self.get_element(topic)
-        if result is None:
-            raise MissingResourceError(f"Element '{topic}' not found")
+        if result is None:  # a miss names the closest topics and the way back (the router's element-miss answer)
+            raise ElementNotFoundError(topic)
+        return self._in_envelope(result, topic)
+
+    @staticmethod
+    def _in_envelope(result: Dict[str, Any], topic: str) -> Dict[str, Any]:
+        result.setdefault('type', 'adapter_help')
+        result.setdefault('source', f'help://{topic}')
+        result.setdefault('source_type', 'runtime')
+        meta = result.setdefault('meta', {})
+        meta.setdefault('warnings', [])
+        meta.setdefault('errors', [])
         return result
 
     def get_element(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:
@@ -897,7 +963,7 @@ class HelpAdapter(ResourceAdapter):
             # only) between the bare menu and the full 'all' payload.
             'schemas/all': partial(self._get_schema_all, thin=False),
             'schemas/index': partial(self._get_schema_all, thin=True),
-            'search': partial(self._search_help, ''),
+            'search': self._search_bound,
             # BACK-846: --rules and --languages were flag-only, so MCP clients
             # (whose only introspection channel is reveal_query(uri)) could not
             # reach the catalogs at all.
@@ -917,13 +983,9 @@ class HelpAdapter(ResourceAdapter):
     def _prefix_topic_routes(self) -> Tuple[Tuple[str, Callable[[str], Optional[Dict[str, Any]]]], ...]:
         """(prefix, handler) pairs; each handler gets the topic after its prefix."""
         return (
-            # Full-text search over the help corpus: help://search?search=<term>
-            # (also help://search/<term> for shells that mangle '?'). Param
-            # name matches the ?search= convention already used by claude://,
-            # codex://, and xlsx:// for the same "free-text content search"
-            # operation (see QUERY_PARAMETER_REFERENCE.md's Search vs Filter note).
-            ('search?', self._search_from_query),
-            ('search/', self._search_help),
+            # The full-text search's older address, the term in the path (help://search/<term>, for shells that
+            # mangle '?'): a legacy spelling of help://search --match TERM until the cut (ruling S7, BACK-2773).
+            ('search/', self._search_in_path),
             ('schemas/', self._get_schema_route),
             ('examples/', self._get_example_recipes),
         )
@@ -962,24 +1024,20 @@ class HelpAdapter(ResourceAdapter):
         note_warning(result, omitted)
         return result
 
-    def _search_from_query(self, query_string: str) -> Dict[str, Any]:
-        """help://search?search=<term>."""
-        # The shared parser records that ?search= was read; a private
-        # parse_qs left the flag ledger saying it had no effect (BACK-1569).
-        from urllib.parse import unquote_plus
-        from ..utils.query_parser import parse_query_params
-        params = parse_query_params(query_string)
-        term = unquote_plus(str(params.get('search') or ''))
-        try:
-            top = _SEARCH_TOP.read(params)
-        except ValueError as exc:
-            return {
-                'type': 'help_search',
-                'query': term.strip(),
-                'error': str(exc),
-                'message': "Usage: reveal 'help://search?search=<term>&top=N' (top=0 lists every hit)",
-            }
-        return self._search_help(term, top=top)
+    def _search_bound(self, path_term: str = '') -> Dict[str, Any]:
+        """The search, from the bound controls (``--match TEXT``, ``--limit N``; their legacy words ``?search=``,
+        ``?top=`` arrive translated): the controls the binder checked are the ones the answer reads (D21, BACK-2773).
+        *path_term* is the older address's term (help://search/TERM), one more term of the repeatable match. No term at
+        all is the term-less search address, an invalid request as an empty term is (BACK-2736)."""
+        terms = match_terms([path_term.strip()] * bool(path_term.strip()) + list(_SEARCH_MATCH.read(self.query_params) or []))
+        if not terms:
+            raise empty_term_error('search', '--match TEXT')
+        return self._search_help(' '.join(terms), top=_SEARCH_LIMIT.read(self.query_params))
+
+    def _search_in_path(self, term: str) -> Dict[str, Any]:
+        """help://search/<term>: the term in the path, the legacy spelling of --match until the cut (S7; the
+        constructor says its note)."""
+        return self._search_bound(term)
 
     def _get_schema_route(self, remainder: str) -> Optional[Dict[str, Any]]:
         """help://schemas/<adapter>[/<output_type>|/full]."""
@@ -1189,8 +1247,9 @@ class HelpAdapter(ResourceAdapter):
         universe = set(self._list_topics()) | discovery
         return difflib.get_close_matches(base, sorted(universe), n=n, cutoff=0.6)
 
-    def _search_help(self, query_term: str, top: int = _SEARCH_TOP.default) -> Dict[str, Any]:
-        """Full-text search over reveal's own help corpus (help://search?search=<term>).
+    def _search_help(self, query_term: str, top: int = _SEARCH_LIMIT.default) -> Dict[str, Any]:
+        """Full-text search over reveal's own help corpus (reveal help://search --match TEXT); *query_term* is nonblank
+        (``_search_bound`` refuses a missing term).
 
         BACK-1023: help://quick's decision_tree only routes a reader who
         already matches its curated phrasing ("find dead code" hits
@@ -1200,18 +1259,7 @@ class HelpAdapter(ResourceAdapter):
         an agent can query its own intent instead of depending on a human
         having pre-curated every phrasing.
         """
-        term = (query_term or '').strip()
-        if not term:
-            return {
-                'type': 'help_search',
-                'query': '',
-                'error': 'No search term',
-                'message': "Usage: reveal 'help://search?search=<term>'",
-                'examples': [
-                    "reveal 'help://search?search=find callers'",
-                    "reveal 'help://search?search=dead code'",
-                ],
-            }
+        term = query_term.strip()
 
         # Word-order/pluralization-tolerant matching: every query word must
         # appear as a substring *somewhere* in the haystack, not as one
@@ -1684,7 +1732,7 @@ class HelpAdapter(ResourceAdapter):
                 'reveal help://rules             # pattern-detection rule catalog',
                 'reveal help://languages         # supported languages + analyzer depth',
                 'reveal help://output-diagnostics # --format vs meta trust envelope vs --provenance vs --perf',
-                "reveal 'help://search?search=<term>' # full-text search when nothing above matches your phrasing",
+                "reveal help://search --match <term>   # full-text search when nothing above matches your phrasing",
             ],
         }
 

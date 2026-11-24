@@ -497,8 +497,11 @@ adapters:
       - declared-binding
   help:
     all:
-      review: unreviewed
-      via: []
+      reason: 'BACK-2773: --all binds the search''s limit=0 through CLI_QUERY_FLAGS (every hit, as --limit 0); a page
+        with no cap answers as without it'
+      review: honored
+      via:
+      - declared
     code_only:
       reason: 'metrics'' own switch (BACK-2621): no other adapter has a data/config
         file filter; the flag ledger reports it unused here'

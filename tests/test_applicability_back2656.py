@@ -329,7 +329,7 @@ from test_vocabulary_conformance_back2654 import BASE, NOUNS, TARGETS, _adapter,
 
 REFUSED_CONTROL = {'architecture': ('top', '2'), 'ast': ('limit', '2'), 'calls': ('limit', '2'),
                    'claude': ('limit', '2'), 'codex': ('matches', '2'), 'contracts': ('implementations_limit', '2'),
-                   'deps': ('top', '2'), 'diff': ('exclude', 'tests'), 'git': ('limit', '2'), 'help': ('top', '2'), 'hotspots': ('limit', '2'),
+                   'deps': ('top', '2'), 'diff': ('exclude', 'tests'), 'git': ('limit', '2'), 'help': ('limit', '2'), 'hotspots': ('limit', '2'),
                    'imports': ('limit', '2'),
                    'json': ('limit', '2'), 'markdown': ('limit', '2'), 'metrics': ('limit', '2'),
                    'overview': ('top', '2'), 'pack': ('budget', '2000'), 'patches': ('limit', '2'),

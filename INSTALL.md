@@ -91,7 +91,7 @@ pip install "reveal-cli[all]"            # every adapter + reveal-mcp (not power
 
 What each extra unlocks, and the error you get without it, is in the
 [install guide](reveal/docs/guides/INSTALL_GUIDE.md#optional-extras) -- also searchable
-from the CLI: `reveal help://install` or `reveal 'help://search?search=extras'`.
+from the CLI: `reveal help://install` or `reveal help://search --match extras`.
 
 ## Network Requirements
 

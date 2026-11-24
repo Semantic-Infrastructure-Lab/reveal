@@ -105,6 +105,8 @@ COMMANDS: Dict[str, CommandSpec] = {
                      'dependency health: external packages, circular deps, unused imports'),
     'diff':         _declared('diff', 'reveal diff LEFT RIGHT[/ELEMENT]',
                      'Compare the structure of two files, directories or git versions, or one element across them'),
+    'help':         _declared('help', 'reveal help [TOPIC] [--match TEXT] [--limit N]',
+                     "Reveal's own help: a guide, an adapter or a topic (help://TOPIC), or a full-text search with --match"),
     'dev':          _spec('dev',
                      'reveal dev <command>',
                      'Scaffold adapters/analyzers/rules; inspect effective `.reveal.yaml` config',
@@ -173,7 +175,7 @@ COMMANDS: Dict[str, CommandSpec] = {
 
 # Order of the `--help-all` subcommand listing: task entry points first, tooling last.
 EPILOG_ORDER = ('ast', 'overview', 'imports', 'deps', 'hotspots', 'git', 'claude', 'codex', 'json', 'sqlite', 'xlsx', 'env', 'markdown', 'metrics', 'contracts', 'surface',
-                'patches', 'testability', 'calls', 'trace', 'diff', 'check', 'review', 'health', 'pack', 'dev',
+                'patches', 'testability', 'calls', 'trace', 'diff', 'check', 'review', 'health', 'pack', 'help', 'dev',
                 'scaffold', 'offline', 'architecture')
 
 
@@ -413,6 +415,11 @@ RETIREMENTS: Dict[str, Retirement] = {
     # where a declared noun without such a row refuses it (``element_retirement``). COMMAND_MODEL rule 2 names the
     # topic in the URI; a reveal source file is a path, which ``reveal reveal://FILE`` names.
     'target:help.element': Retirement('help:// TOPIC', 'help://TOPIC'),
+    # help's search is the shared match control and its cap the shared limit (D21, BACK-2773; rulings S6, S7): the same
+    # hits. A term is an option, not a resource (D20), so the term in the path is the older address.
+    'param:help.search': Retirement('help ?search=TEXT (--search TEXT)', '--match TEXT'),
+    'param:help.top': Retirement('help ?top=N (--top N)', '--limit N; 0 is uncapped'),
+    'target:help.search-term': Retirement('help://search/TERM', 'reveal help://search --match TERM'),
     'target:reveal.element': Retirement('reveal://FILE ELEMENT', 'reveal PATH ELEMENT on that source file '
                                         '(reveal reveal://FILE names its path)'),
     # diff:// names its element in the URI (rule 1 composes addresses; BACK-2768): diff://LEFT:RIGHT/ELEMENT answers

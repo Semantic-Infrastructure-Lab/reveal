@@ -626,7 +626,7 @@ apply after this legacy outcome handling:
   the knob is read, not inside a shared helper: a helper that returns only the top N has lost
   the total (`identify_hotspots`, `group_patches` did, BACK-1543). A total field (`total`,
   `total_modules`, `count`) may stay for JSON readers, but it doesn't replace the marker for a raw list. The
-  hint can also say how to narrow the question (`help://search`: `raise ?top=N (0 = all), or
+  hint can also say how to narrow the question (help's search: `raise --limit N (0 = all), or
   add a search word to narrow it`); a cap with no knob still records the cut and says that.
 - **A bounded rows record carries its own presentation proof.** An intrinsic page such as
   overview's graph sections may use `{rows, total, returned, omitted}` instead of repeating

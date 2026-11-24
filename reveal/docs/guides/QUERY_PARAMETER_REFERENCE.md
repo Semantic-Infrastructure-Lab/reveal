@@ -26,7 +26,7 @@ Query parameters allow filtering, formatting, and modifying adapter behavior usi
 | **codex://** | `where` (`session~=TEXT`), `match`, `matches`, `since`, `until`, `view`, `detail`, `key`, `limit`, `offset` (retired, with a note: `filter`, `search`, `full`, `last`, `tokens`, `goal`) | `codex://sessions/?match=auth-refactor` |
 | **depends://** (retired, with a note: use `imports://?importers`) | `top`, `format` | `depends://src?top=10` |
 | **xlsx://** | `--sheet`, `--cells`, `--match`, `--limit`, `--formulas`, `--powerpivot`, `--powerquery`, `--names`, `--connections` (`?range`, `?search` legacy) | `reveal xlsx model.xlsx --sheet Sales` |
-| **help://** | `search`, `top` (only on `help://search`, another topic exits 2 naming them; `top` caps hits, default 20, `0` = all; any other key exits 2) | `help://search?search=find callers&top=50` |
+| **help://** | `--match`, `--limit` (the search only: `reveal help://search --match TEXT`, or `reveal help --match TEXT`; another topic exits 2 naming them; `--limit` caps hits, default 20, `0` = all; `?search`, `?top` and `help://search/TERM` are deprecated) | `reveal help://search --match 'find callers' --limit 50` |
 | **cpanel://** | `domain_type`, `dns-verified`, `check-live` | `cpanel://USER/ssl?domain_type=addon` |
 | **ssl://** | `expiring-within` (implies `--check`), `summary` (batch and nginx views) | `ssl://host?expiring-within=30` |
 | **diff://** | `--exclude` (a directory pair walks both sides; any other key exits 2 naming it) | `reveal diff src/ backup/src/ --exclude tests` |
@@ -744,17 +744,17 @@ through the wrong syntax.
 contain this term?" It does not combine with *field filters* (`field~=`), but it takes its
 adapter's scoping options (for example `since` and `until` on `claude://` and `codex://`, `word` and
 `snippet` on `claude://`, `matches` on `codex://`).
-Used consistently by `claude://`, `codex://`, `xlsx://`, and `help://search`
+Used consistently by `claude://`, `codex://`, `xlsx://`, and help's search
 — all four search unstructured or semi-structured content (chat transcripts,
 spreadsheet cells, help docs) where there's no meaningful field to scope the
 match to. Matching precision varies by corpus size and is adapter-documented
 (e.g. `claude://`/`codex://` do literal substring/whole-word match, tuned for
 precision over a large transcript corpus you likely remember an exact phrase
-from; `help://search` does word-order-tolerant AND-of-terms matching, tuned
+from; help's search does word-order-tolerant AND-of-terms matching, tuned
 for recall over a small curated doc corpus where an agent's phrasing rarely
-matches the docs verbatim). `codex://` spells this search `match` now
-(`reveal codex://sessions/ --match TEXT`, repeat it to AND terms); its `?search=` is
-a deprecated spelling that works until 1.0 with a note.
+matches the docs verbatim). `codex://` and help spell this search `match` now
+(`reveal codex://sessions/ --match TEXT`, `reveal help://search --match TEXT`; repeat it to AND
+terms); their `?search=` is a deprecated spelling that works until 1.0 with a note.
 
 **`field~=value` (and markdown's `match`) — structured field filtering.** "Does
 *this specific field* contain this substring?" AND-composable with other

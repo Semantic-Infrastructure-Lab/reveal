@@ -258,11 +258,12 @@ def test_unread_query_key_is_named(db):
     assert proc.returncode == 2 and "unsupported control 'bogus'; supported controls: view" in proc.stderr
 
 
-def test_exclude_on_an_adapter_that_never_walks_is_named(db):
-    proc = _cli('sqlite://t.db', '--exclude', 'tests', cwd=db)  # declared (BACK-2626): refused by name
-    assert proc.returncode == 2 and "unsupported control '--exclude'" in proc.stderr
-    proc = _cli('help://adapters', '--exclude', 'tests', cwd=db)
-    assert 'Note: --exclude has no effect on help://' in proc.stderr
+def test_exclude_on_an_adapter_that_never_walks_is_named(db, undeclared_plugin):
+    for uri in ('sqlite://t.db', 'help://adapters'):  # declared (BACK-2626; help since BACK-2773): refused by name
+        proc = _cli(uri, '--exclude', 'tests', cwd=db)
+        assert proc.returncode == 2 and "unsupported control '--exclude'" in proc.stderr
+    proc = _run_reveal_direct(f'{undeclared_plugin}://x', '--exclude', 'tests')  # undeclared: named by the ledger
+    assert proc.returncode == 0 and f'Note: --exclude has no effect on {undeclared_plugin}://' in proc.stderr
 
 
 @pytest.fixture
@@ -297,9 +298,10 @@ def test_json_filters_on_an_object_are_named(jsons, uri, control):
     assert 'has no effect on this data' in warnings[0]['message']
 
 
-def test_check_on_an_adapter_without_check_is_named(db):
-    proc = _cli('help://', '--check', cwd=db)  # undeclared (env:// is declared: --check is its noted legacy flag)
-    assert 'Note: --check has no effect on help://' in proc.stderr
+def test_check_on_an_adapter_without_check_is_named(undeclared_plugin):
+    # undeclared (env:// is declared: --check is its noted legacy flag; help:// refuses it since BACK-2773)
+    proc = _run_reveal_direct(f'{undeclared_plugin}://x', '--check')
+    assert f'Note: --check has no effect on {undeclared_plugin}://' in proc.stderr
 
 
 def test_a_used_flag_gets_no_note(db):

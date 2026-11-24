@@ -79,12 +79,14 @@ class TestTypedKeysAreStrippedWithAWarning:
 
 class TestDeclaredSchemesRefuseTheKeys:
     """help:// and reveal:// left the opt-out set when they were declared (BACK-2767): a result-control key or flag is
-    an unsupported control, exit 2 naming it and the controls the scheme takes (it was stripped with a warning)."""
+    an unsupported control, exit 2 naming it and the controls the scheme takes (it was stripped with a warning). help's
+    search takes the shared limit since BACK-2773 (ruling S6), so its refused key is sort; help is a declared subcommand
+    there, so a flag after its URI is named as typed."""
 
-    @pytest.mark.parametrize('argv,named', [(['help://search?search=ast&limit=2'], "'limit'"),
+    @pytest.mark.parametrize('argv,named', [(['help://search?match=ast&sort=name'], "'sort'"),
                                             (['reveal://?sort=name&offset=2'], "'sort'"),
                                             (['reveal://', '--limit', '2'], "'limit'"),
-                                            (['help://', '--sort', 'name'], "'sort'")])
+                                            (['help://', '--sort', 'name'], "'--sort'")])
     def test_exit_2_naming_the_control(self, argv, named):
         proc = run_reveal(*argv, '--format', 'json')
         assert proc.returncode == 2, proc.stderr

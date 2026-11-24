@@ -421,6 +421,10 @@ PRODUCTION_CASES = {
     'target:health.code': lambda f: ['health', str(Path(f).parent)],
     # BACK-2767: help:// and reveal:// keep their positional element, noted, until the cut.
     'target:help.element': lambda f: ['help://', 'quick'],
+    # BACK-2773: help's search is the shared match, its cap the shared limit; the term in the path is the older address.
+    'param:help.search': lambda f: ['help', 'search', '--search', 'callers'],
+    'param:help.top': lambda f: ['help', 'search', '--match', 'callers', '--top', '1'],
+    'target:help.search-term': lambda f: ['help://search/callers'],
     'target:reveal.element': lambda f: ['reveal://adapters/env.py', 'EnvAdapter'],
     # BACK-2768: the diff:// element names itself in the URI (diff://L:R/ELEMENT), for git:// sides too.
     'target:diff.element': lambda f: [f'diff://{Path(f).as_posix()}::{Path(f).as_posix()}', 'auth_gate'],

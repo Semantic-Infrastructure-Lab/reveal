@@ -156,9 +156,9 @@ RULES = ('1a', '1b', '1c', '1d', '2', '3', '3b', '4', '5', '6', '8a', '8b', '10'
          '14', '21j', '22', '23', '24', '28', '25', '27', '26', '29', '30')
 
 # The request each noun answers by default: the parity gate's table (CLI argv after the noun, URI suffix), plus
-# the declared nouns it has no row for. None: no subcommand (stats is metrics' retired scheme; help:// and reveal://
-# are resource schemes with no subcommand, declared since BACK-2767).
-BASE = {**CASES, 'stats': (None, ''), 'help': (None, ''), 'reveal': (None, '')}
+# the declared nouns it has no row for. None: no subcommand (stats is metrics' retired scheme; reveal:// is a resource
+# scheme with no subcommand, declared since BACK-2767; help is a subcommand since BACK-2773, ruling S5-A).
+BASE = {**CASES, 'stats': (None, ''), 'help': ([], ''), 'reveal': (None, '')}
 # Targets that are not the fixture project directory. reveal://analyzers, not config: config reports the REVEAL_*
 # variables it is run under, so rule 14's REVEAL_FORMAT probe would see its own setting in the answer.
 TARGETS = {'claude': 'sessions', 'codex': 'sessions', 'json': 'proj/data.json', 'sqlite': 'app.db', 'xlsx': 'book.xlsx',
@@ -170,8 +170,8 @@ CONTROL_TARGETS = {('claude', 'tail'): 'session/my-session', ('git', 'detail'): 
                    # Codex: the resource whose answer reads the control (BACK-2656; the catalog reads few of them)
                    ('codex', 'key'): 'config', ('codex', 'detail'): '019e5cc5-0000-7000-8000-000000000001/exchanges',
                    ('codex', 'view'): '019e5cc5-0000-7000-8000-000000000001',
-                   # help://search's hits read search and top; another topic refuses both (BACK-2767)
-                   ('help', 'search'): 'search', ('help', 'top'): 'search'}
+                   # help's search reads match and limit; another topic refuses both (BACK-2767, BACK-2773)
+                   ('help', 'match'): 'search', ('help', 'limit'): 'search'}
 # The answer a probe of a control's spelling selects when the default one does not read the control (rule 20,
 # BACK-2656: there it is refused, which is applicability's subject, not the spelling's): (subcommand argv, URI query).
 CONTROL_BASES = {('calls', 'kind'): (['--uncalled'], '?uncalled'), ('calls', 'external'): (['--modules'], '?modules'),
@@ -191,7 +191,8 @@ CONTROL_BASES = {('calls', 'kind'): (['--uncalled'], '?uncalled'), ('calls', 'ex
                  **{('xlsx', control): (['--sheet', 'Sales'], '?sheet=Sales') for control in ('cells', 'formulas', 'limit')},
                  **{('codex', bound): (['--where', 'session~=auth'], '?where=session~=auth')
                     for bound in ('since', 'until')},
-                 ('metrics', 'since'): (['--view', 'hotspots'], '?view=hotspots')}  # since bounds the ranking's churn
+                 ('metrics', 'since'): (['--view', 'hotspots'], '?view=hotspots'),  # since bounds the ranking's churn
+                 ('help', 'limit'): (['--match', 'callers'], '?match=callers')}  # the search's cap needs a term
 
 # The shared controls (rule 7: the one declared list, query_parser.SHARED_CONTROL_NAMES), each probed with a value a
 # supporting noun would accept. Left out: view (the deferred row, D18). Not shared controls: format/output (global
@@ -213,8 +214,8 @@ EXEMPT = {
     ('sqlite', '1a'): 'binds no global flag as a URI key (no CLI_QUERY_FLAGS, no walk policy): no key and flag to give '
                       'together',
     **{(noun, '1d'): 'declares no repeatable control with an alias'
-       for noun in NOUNS if noun not in ('ast', 'claude', 'codex', 'git', 'markdown', 'metrics', 'patches', 'stats',
-                                         'xlsx')},  # git: ignore-commits (BACK-2733)
+       for noun in NOUNS if noun not in ('ast', 'claude', 'codex', 'git', 'help', 'markdown', 'metrics', 'patches',
+                                         'stats', 'xlsx')},  # git: ignore-commits (BACK-2733); help: match (BACK-2773)
     **{(noun, '5'): 'no note-stage param: row whose replacement is a control of this noun' for noun in (
         'trace',)},
     **{(noun, '6'): 'declares no alias: nothing to note or keep note-free' for noun in (
@@ -253,10 +254,16 @@ EXEMPT = {
         ('17', 'no control selects the answer: the resource does (the listing, or the variable it names)'),
         ('20', 'declares no control an answer could leave unread (the inert --check is read by every answer)'),
         ('24', 'declares no query key: a resource URI with no query string says no request note'))},
-    # help:// and reveal:// (BACK-2767): resource schemes with no subcommand. help's two controls (search, top) are read
-    # by help://search only; reveal:// declares none. Rules 3, 3b, 4, 14, 18, 21j and 22 conform on both, and 1c, 10, 20
-    # on help; each probe below finds nothing to give. Their only rows are the target:SCHEME.element notes.
-    **{(noun, rule): reason for noun in ('help', 'reveal') for rule, reason in (
+    # reveal:// (BACK-2767): a resource scheme with no subcommand that declares no control. Rules 3, 3b, 4, 14, 18, 21j
+    # and 22 conform; each probe below finds nothing to give. Its only row is its target:reveal.element note. help was
+    # the other such scheme until it became a declared subcommand (BACK-2773, ruling S5-A): its match and limit are read
+    # by the search only, and every rule but the ones below conforms on it.
+    **{('help', rule): reason for rule, reason in (
+        ('8a', 'no where expression: a bare key is never read as a field'),
+        ('8b', 'declares no where control: there are no field filters'),
+        ('17', 'one control at most selects the answer (match, given on the index, selects the search): no two '
+               'selections to give'))},
+    **{('reveal', rule): reason for rule, reason in (
         ('1a', 'binds no global flag as a URI key (no CLI_QUERY_FLAGS, no walk policy): no key and flag to give together'),
         ('1b', _NO_ALIAS),
         ('2', 'no note-stage param: or value: row: its only note row is its target:SCHEME.element row (a positional '
@@ -300,7 +307,7 @@ EXEMPT = {
                     'package',
     **{(noun, '27'): 'declares no match or where, and no text-valued standalone word whose replacement is one: no term '
                      'to be empty (hotspots ?functions_only is a switch)'
-       for noun in ('architecture', 'calls', 'contracts', 'deps', 'env', 'help', 'hotspots', 'imports', 'overview', 'pack',
+       for noun in ('architecture', 'calls', 'contracts', 'deps', 'env', 'hotspots', 'imports', 'overview', 'pack',
                     'reveal', 'sqlite', 'surface', 'testability', 'trace')},
     **{(noun, '26'): 'does not walk a tree: no walk to exclude from (--exclude and ?exclude= are refused by rule 3; JSON\'s '
                      'bare ?exclude= is its generated legacy where term, rule 8a)'
@@ -309,7 +316,7 @@ EXEMPT = {
                      'its --exclude is the walk scope every walking parser carries'
        for noun in ('architecture', 'deps', 'hotspots', 'testability', 'trace')},
     **{(noun, '29'): 'declares no shared control (SHARED_CONTROL_NAMES): no value domain to compare'
-       for noun in ('deps', 'env', 'help', 'reveal')},
+       for noun in ('deps', 'env', 'reveal')},
     ('sqlite', '29'): 'declares only a noun-valued shared control (view, its own answers): nothing to judge',
     **{(noun, '30'): 'declares no control: nothing a flag must spell' for noun in ('env', 'reveal')},
 }
@@ -2376,7 +2383,7 @@ def probe_empty_match_term(noun):
     for key, flag in _term_spellings(noun):
         cases += _empty_term_cases(noun, key, flag)
     if any(spec.name == 'match' and spec.cli is not None for spec in _specs(noun)):
-        request = _sub(noun, '--match', 'x') or [_uri(noun), '--match', 'x']
+        request = _sub(noun, '--match', 'x', control='match') or [_uri(noun, control='match'), '--match', 'x']
         run = _run(*request, '--format', 'json')
         cases.append(Case('--match x answers', run.rc == 0, f'{run.brief()} (wants exit 0: a nonblank term answers)'))
     return cases

@@ -17,8 +17,9 @@ def adapter():
 
 
 def test_every_fixed_route_resolves(adapter):
+    searching = HelpAdapter('', params={'match': 'routes'})  # the search page reads its bound term (BACK-2773)
     for topic in adapter._fixed_topic_routes():
-        result = adapter.get_element(topic)
+        result = (searching if topic == 'search' else adapter).get_element(topic)
         assert isinstance(result, dict), topic
         assert result.get('type'), topic
 
@@ -33,7 +34,8 @@ def test_fixed_route_wins_over_same_named_guide(adapter):
 
 def test_prefix_routes_receive_the_remainder(adapter):
     assert adapter.get_element('search/limit')['query'] == 'limit'
-    assert adapter.get_element('search?search=git+history')['query'] == 'git history'
+    # the topic is the page alone: a query on it is the URI's, bound before the answer (BACK-2773)
+    assert adapter.get_element('search?search=git+history') is None
     assert adapter.get_element('examples/security')['type'] != 'query_recipes_index'
     assert adapter.get_element('schemas/git') is not None
 
