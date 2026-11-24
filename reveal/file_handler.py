@@ -104,7 +104,7 @@ from reveal.utils.lines import split_lines
 
 
 def _get_analyzer_or_exit(path: str, allow_fallback: bool, unreadable_exit_code: Optional[int] = None, *,
-                          nav_source: bool = False):
+                          nav_source: bool = False, refusal_args: Optional['Namespace'] = None):
     """Get analyzer for path or exit with error.
 
     Args:
@@ -113,6 +113,8 @@ def _get_analyzer_or_exit(path: str, allow_fallback: bool, unreadable_exit_code:
         unreadable_exit_code: Exit code when the file exists but cannot be read; by default
             the D6 code of the read's cause (`check` passes 3, or 0 under --exit-zero)
         nav_source: Adopt authored source failure facts for a navigation request
+        refusal_args: The path read's request (``handle_file``): a refusal is raised as its Answer
+            (``declared.PathReadRefused``: the same text and exit, its document in JSON) instead of printed here
 
     Returns:
         Analyzer instance
@@ -129,9 +131,8 @@ def _get_analyzer_or_exit(path: str, allow_fallback: bool, unreadable_exit_code:
         # No "similar extensions" hint: a substring match named another language
         # ('.rs' for '.rst') and the reader cannot act on it (BACK-2492).
         error = AnalyzerNotFoundError(path=path, allow_fallback=allow_fallback)
-        print(str(error), file=sys.stderr)
         # D6: a file no analyzer reads is an invalid resource (2), not findings (1).
-        sys.exit(2)
+        _refuse_or_exit(path, str(error), 2, refusal_args)
 
     try:
         return analyzer_class(path)  # reads the file
@@ -139,14 +140,26 @@ def _get_analyzer_or_exit(path: str, allow_fallback: bool, unreadable_exit_code:
         # An unreadable file (chmod 000, a FIFO, a vanished mount) printed a raw
         # traceback, while a missing path got a clean error (BACK-1424).
         diagnostic = _source_read_diagnostic(e, path, nav_source)
-        print(diagnostic, file=sys.stderr)
-        facts = failure_execution_facts(_read_failure_cause(e, path))
+        cause = _read_failure_cause(e, path)
+        facts = failure_execution_facts(cause)
         # D6: a required source that could not be read is 3, a vanished one 2; exit 1 is
         # a findings gate (BACK-2527).
         code = execution_exit_code(facts) if unreadable_exit_code is None else unreadable_exit_code
         if nav_source:
+            print(diagnostic, file=sys.stderr)
             raise NavSourceFailure(code, execution_facts=facts, public_diagnostic=diagnostic) from e
+        _refuse_or_exit(path, diagnostic, code, refusal_args, error=e if cause is FailureCause.ANALYSIS else None,
+                        cause=cause)
+
+
+def _refuse_or_exit(path: str, text: str, code: int, refusal_args: Optional['Namespace'], *,
+                    error: Optional[BaseException] = None, cause: Optional[FailureCause] = None) -> NoReturn:
+    """Print *text* and exit *code*, or, for a path read (*refusal_args*), raise the refusal as its Answer."""
+    if refusal_args is None:
+        print(text, file=sys.stderr)
         sys.exit(code)
+    from .cli.routing.declared import PathReadRefused, path_read_refusal  # noqa: I006 — circular avoidance
+    raise PathReadRefused(path_read_refusal(path, text, refusal_args, exit_code=code, error=error, cause=cause))
 
 
 def _source_read_diagnostic(error: OSError, path: str, nav_source: bool) -> str:
@@ -522,7 +535,8 @@ def _whole_file_element(analyzer, request) -> str:
 
 
 def handle_file(path: str, element: Optional[str], show_meta: bool,
-                output_format: str, args: Optional['Namespace'] = None, *, element_request=None) -> None:
+                output_format: str, args: Optional['Namespace'] = None, *, element_request=None,
+                answer_consumer=None) -> None:
     """Handle file analysis.
 
     Args:
@@ -533,14 +547,28 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
         args: Full argument namespace (for filter options)
         element_request: The bound element request (the file route binds it at its entry); a caller that passes only
             a namespace has it bound here (``element_request_of``).
+        answer_consumer: Receives the file structure's Answer and a refusal's (no analyzer, an unreadable file)
+            instead of their being emitted, as ``handle_uri`` hands its answers (the Python API, BACK-2325).
     """
+    from .cli.routing.declared import PathReadRefused  # noqa: I006 — circular avoidance
+    try:
+        _handle_file(path, element, show_meta, output_format, args, element_request, answer_consumer)
+    except PathReadRefused as refused:
+        if answer_consumer is None:
+            refused.answer.emit()  # the site's text, its document in JSON, its exit
+        else:
+            answer_consumer(refused.answer)
+
+
+def _handle_file(path: str, element: Optional[str], show_meta: bool, output_format: str,
+                 args: Optional['Namespace'], element_request, answer_consumer) -> None:
     from .display import show_structure, show_metadata, extract_element  # noqa: I006 — circular avoidance
     from .config import RevealConfig  # noqa: I006 — circular avoidance
 
     request = element_request if element_request is not None else element_request_of(path, element, args)
 
     allow_fallback = getattr(args, 'fallback', None) is not False if args else True
-    analyzer = _get_analyzer_or_exit(path, allow_fallback, nav_source=request is not None)
+    analyzer = _get_analyzer_or_exit(path, allow_fallback, nav_source=request is not None, refusal_args=args)
 
     cli_overrides = _build_file_cli_overrides(args)
     config = RevealConfig.get(
@@ -578,21 +606,30 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
 
     # Capture producer facts before display cuts and use the existing D6 output boundary.
     from .cli.routing.uri import Answer, _emit_result, announce_outcome  # noqa: I006 — circular avoidance
-    from .display.structure import _render_file_structure
+    from .display.structure import _render_file_structure, file_structure_document
+    from .utils.json_utils import attach_invocation_warnings
     from argparse import Namespace
 
     def emit(structure, facts):
-        announce_outcome(structure, path)
         def render(result, format):
             _render_file_structure(analyzer, result, format, args, config)
         def printer(answer, **_options):
+            announce_outcome(structure, path)
             _emit_result(structure, args or Namespace(format=output_format), 'file', render,
                          execution_facts=facts, execution_answer=answer, default_fail_on='none',
                          announce_error=False, renderer_owns_json=True)
+        def document():
+            built = file_structure_document(analyzer, structure, args)
+            return None if built is None else attach_invocation_warnings(built)
         # Emitted as an Answer, as a URI's is: the open invocation log keeps it, so a host running the CLI's dispatch
-        # (MCP reveal_run, reveal_structure) maps the file's outcome from its facts (BACK-2762).
-        Answer(structure, 'structure', printer, execution_facts=facts,
-               public_diagnostic=_structure_failure_diagnostic(structure, facts)).emit()
+        # (MCP reveal_run, reveal_structure) maps the file's outcome from its facts (BACK-2762); a consumer (the Python
+        # API) reads its document, the one the renderer prints (BACK-2325).
+        answer = Answer(structure, 'structure', printer, execution_facts=facts,
+                        public_diagnostic=_structure_failure_diagnostic(structure, facts), document=document)
+        if answer_consumer is None:
+            answer.emit()
+        else:
+            answer_consumer(answer)
 
     show_structure(analyzer, output_format, args, config=config, emit=emit)
 
