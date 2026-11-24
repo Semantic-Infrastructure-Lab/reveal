@@ -1,7 +1,7 @@
 """Declared Git controls, applied through the existing resource and predicate owners."""
 from typing import Any
 
-from ...utils.query_binding import boolean_value, legacy_switch, switch_value, verbose_legacy
+from ...utils.query_binding import boolean_value, detail_level, legacy_switch, switch_value, verbose_legacy
 from ...utils.query_parser import CliBinding, LegacySpelling, ParamSpec, ParamValueError, nonempty_scalar, nonnegative_display_limit, legacy_check, legacy_slices
 from ...utils.time_window import time_window_param
 
@@ -32,12 +32,6 @@ def predicates(value):
     except ValueError as exc:
         raise ParamValueError(str(exc)) from exc
     return terms
-
-
-def detail(value: Any) -> str:
-    if isinstance(value, bool):
-        return 'full' if value else 'normal'
-    return nonempty_scalar(value)  # summary is a value entry translated to normal (its declaration)
 
 
 def raw_detail(value: Any) -> Any:
@@ -113,7 +107,7 @@ WHERE = ParamSpec('where', 'array', 'Existing commit predicates; repeat to AND (
                   [], predicates, role='filter-expression', repeatable=True, cli=CliBinding(('--where',)),
                   fields=tuple(COMMIT_FILTER_FIELDS), answers=_COMMITS)
 # Legacy raw is detail=raw (raw=false: the structure, the omitted level); summary is the older word for normal.
-DETAIL = ParamSpec('detail', 'string', 'normal, full blame, or raw historical file content', None, detail,
+DETAIL = ParamSpec('detail', 'string', 'normal, full blame, or raw historical file content', None, detail_level,
                    choices=('normal', 'full', 'raw'), cli=CliBinding(('--detail',)),
                    legacy=(verbose_legacy('full', 'detail=full (--detail full)'), LegacySpelling('raw', codec=raw_detail),
                            LegacySpelling('detail', value='summary', codec=lambda _: 'normal')),

@@ -11,7 +11,7 @@ from urllib.parse import quote, unquote
 from ..errors import RequestValidationError, UnreadControlError, UnsupportedOverrideError
 from .match_terms import PATTERN_EXAMPLES, TERM_EXAMPLES, TermValue, empty_term_error, is_blank_term
 from .query_parser import (SHARED_CONTROL_NAMES, CliBinding, LegacySpelling, ParamSpec, ParamValueError, QueryParams,
-                           ResourceSpec, exclude_param, filter_expression, mark_query_keys, parse_query_params,
+                           ResourceSpec, exclude_param, filter_expression, mark_query_keys, nonempty_scalar, parse_query_params,
                            peek_query_items, _spelling_variants, query_key, query_key_recorder, whole_number)
 
 
@@ -22,6 +22,16 @@ def boolean_value(value: Any) -> bool:
     if isinstance(value, str) and value.lower() in ('true', 'false', 'yes', 'no', '1', '0'):
         return value.lower() in ('true', 'yes', '1')
     raise ValueError('expected true or false')
+
+
+def detail_level(value: Any) -> str:
+    """A ``detail`` level (COMMAND_MODEL "How much of it": one scale on every noun): a boolean, which a bare key or flag
+    and the Python keyword give, is the old two-level spelling (``True`` full, ``False`` normal); any other value stays a
+    name the declaration's choices judge, and a value-keyed legacy entry translates an older word first (git
+    ``summary``)."""
+    if isinstance(value, bool):
+        return 'full' if value else 'normal'
+    return nonempty_scalar(value)
 
 
 def switch_value(value: Any) -> bool:
