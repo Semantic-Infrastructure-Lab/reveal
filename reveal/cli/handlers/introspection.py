@@ -547,7 +547,7 @@ def build_discover_payload(show_all: bool = False) -> dict:
         'adapters': adapters,
     }
     try:
-        from ... import __version__ as _ver
+        from ...version import __version__ as _ver
         result['reveal_version'] = _ver
     except ImportError:
         pass
