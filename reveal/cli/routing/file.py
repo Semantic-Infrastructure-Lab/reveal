@@ -12,12 +12,12 @@ import sys
 from pathlib import Path
 from argparse import Namespace
 from contextlib import nullcontext
-from typing import Optional
+from typing import NoReturn, Optional
 
 # Module-level imports so callers can mock reveal.cli.routing.file.handle_uri
 # and reveal.cli.routing.file.handle_file in tests.
 from .uri import handle_uri  # noqa: E402
-from .declared import invalid_path_read, is_path_read  # noqa: E402
+from .declared import PathReadRefused, invalid_path_read, is_path_read, path_read_refusal  # noqa: E402
 from .formats import (  # noqa: E402
     DEFAULT_OUTPUT_FORMATS, reject_unhonored_also_json, require_supported_format,
 )
@@ -55,27 +55,37 @@ def _parse_file_line_syntax(path_str: str) -> tuple[Path, Optional[str]]:
     return path, element_from_path
 
 
-def _validate_path_exists(path: Path, path_str: str, element: Optional[str] = None) -> None:
-    """Validate that path exists, providing helpful error messages."""
+def _validate_path_exists(path: Path, path_str: str, element: Optional[str] = None, *, args=None) -> None:
+    """Validate that path exists, providing helpful error messages. A missing path is refused as the path read's answer
+    (``PathReadRefused``: this text, exit 2, its document in JSON; ``PathNotFoundError`` for the Python API)."""
     if not path.exists():
         from ...adapters.registry import list_supported_schemes
         if path_str in list_supported_schemes():
             target = shlex.quote(f'{path_str}://{element or "."}')
-            print(f'Error: {path_str} is a URI noun: reveal {target}', file=sys.stderr)
-            sys.exit(2)
+            _refuse(path_str, args, [f'Error: {path_str} is a URI noun: reveal {target}'], missing=True)
         cwd = os.getcwd()
         if ':' in path_str and re.search(r':\d+', path_str):
             base_path = path_str.rsplit(':', 1)[0]
-            print(f"Error: {path_str} not found", file=sys.stderr)
-            print(f"Hint: If extracting lines, use: reveal {base_path} :{path_str.rsplit(':', 1)[1]}", file=sys.stderr)
+            lines = [f"Error: {path_str} not found",
+                     f"Hint: If extracting lines, use: reveal {base_path} :{path_str.rsplit(':', 1)[1]}"]
         else:
             abs_suggestion = os.path.join(cwd, path_str)
-            print(f"Error: {path_str} not found", file=sys.stderr)
-            print(f"Hint: Running from {cwd}", file=sys.stderr)
+            lines = [f"Error: {path_str} not found", f"Hint: Running from {cwd}"]
             if abs_suggestion != path_str and os.path.exists(abs_suggestion):
-                print(f"      Try: reveal {abs_suggestion}", file=sys.stderr)
+                lines.append(f"      Try: reveal {abs_suggestion}")
         # D6: a missing path is an invalid resource (2), as in `reveal check` (BACK-2492).
-        sys.exit(2)
+        _refuse(path_str, args, lines, missing=True)
+
+
+def _refuse(path_str: str, args, lines: list, *, exit_code: int = 2, missing: bool = False) -> NoReturn:
+    """Refuse the path read with the site's own stderr *lines* and exit code (``declared.path_read_refusal``): the
+    route answers it, emitted or handed to its answer consumer (BACK-2325). *missing*: the path does not exist, which
+    the Python API raises as ``PathNotFoundError``."""
+    from ...errors import PathNotFoundError
+    text = '\n'.join(lines) + '\n'
+    message = lines[0].removeprefix('Error: ')
+    raise PathReadRefused(path_read_refusal(path_str, text, Namespace() if args is None else args, exit_code=exit_code,
+                                            error=PathNotFoundError(message) if missing else None))
 
 
 def _stat_one_file(fpath: Path, ext_counts: dict) -> Optional[tuple]:
@@ -202,13 +212,10 @@ def _guard_hotspots_flag(args: 'Namespace', path_str: str) -> None:
     if not getattr(args, 'hotspots', False):
         return
     # A usage error (exit 2, D6) that names the command answering it (BACK-2621, B8).
-    print("❌ Error: --hotspots is not a path option: the hotspot ranking is the metrics noun's view", file=sys.stderr)
-    print(file=sys.stderr)
-    print(f"  reveal metrics {path_str} --view hotspots", file=sys.stderr)
-    print(f"  reveal 'metrics://{path_str}?view=hotspots'", file=sys.stderr)
-    print(file=sys.stderr)
-    print("Learn more: reveal help://metrics", file=sys.stderr)
-    sys.exit(2)
+    _refuse(path_str, args, [
+        "❌ Error: --hotspots is not a path option: the hotspot ranking is the metrics noun's view", '',
+        f"  reveal metrics {path_str} --view hotspots", f"  reveal 'metrics://{path_str}?view=hotspots'", '',
+        "Learn more: reveal help://metrics"])
 
 
 def _guard_adapter_flags(args: 'Namespace', scheme: str, path_str: Optional[str]) -> None:
@@ -230,13 +237,10 @@ def _guard_adapter_flags(args: 'Namespace', scheme: str, path_str: Optional[str]
     help_topic = getattr(adapter_cls, 'GUARDED_FLAG_HELP', scheme)
     for spec in adapter_cls.GUARDED_FLAGS:
         if getattr(args, spec.attr, False):
-            print(f"❌ Error: {spec.flag} only works with {context}", file=sys.stderr)
-            print(file=sys.stderr)
-            print("Examples:", file=sys.stderr)
-            print(spec.examples, file=sys.stderr)
-            print(file=sys.stderr)
-            print(f"Learn more: reveal help://{help_topic}", file=sys.stderr)
-            sys.exit(1)
+            # Exit 1 is this refusal's legacy code; the request is invalid (the Python API raises it as one).
+            _refuse(path_str or getattr(args, 'path', None) or '', args, [
+                f"❌ Error: {spec.flag} only works with {context}", '', "Examples:", spec.examples, '',
+                f"Learn more: reveal help://{help_topic}"], exit_code=1)
 
 
 def _guard_nginx_flags(args: 'Namespace', path_str: str) -> None:
@@ -272,17 +276,13 @@ def _guard_related_flags(args: 'Namespace', path_str: str) -> None:
     if md_ext in get_markdown_extensions():
         return
     flag = '--related-all' if getattr(args, 'related_all', False) else '--related'
-    print(f"❌ Error: {flag} only works with markdown files", file=sys.stderr)
-    print(file=sys.stderr)
-    print("Examples:", file=sys.stderr)
-    print(f"  reveal docs/ --related          # on a markdown directory", file=sys.stderr)
-    print(f"  reveal doc.md --related         # on a .md file", file=sys.stderr)
-    print(file=sys.stderr)
-    print("Learn more: reveal help://markdown", file=sys.stderr)
-    sys.exit(1)
+    _refuse(path_str, args, [
+        f"❌ Error: {flag} only works with markdown files", '', "Examples:",
+        "  reveal docs/ --related          # on a markdown directory",
+        "  reveal doc.md --related         # on a .md file", '', "Learn more: reveal help://markdown"], exit_code=1)
 
 
-def _handle_directory_path(path: Path, args: 'Namespace') -> None:
+def _handle_directory_path(path: Path, args: 'Namespace', answer_consumer=None) -> None:
     """Route a resolved directory path to directory-meta, file-list, or tree view."""
     from ...tree_view import (
         show_directory_tree, show_file_list, show_directory_tree_json, show_file_list_json,
@@ -297,7 +297,8 @@ def _handle_directory_path(path: Path, args: 'Namespace') -> None:
         if getattr(args, 'name', None):
             print("Note: --name ignored when --grep is used (--grep searches all text, --name filters structural output)", file=sys.stderr)
         reject_unhonored_also_json(args, '--grep')
-        handle_grep_directory(to_posix(path), args.grep, args, _parse_ext_arg(getattr(args, 'ext', None)))
+        handle_grep_directory(to_posix(path), args.grep, args, _parse_ext_arg(getattr(args, 'ext', None)),
+                              answer_consumer=answer_consumer)
         return
     # BACK-1203: --max-items/--max-snippet-chars have no analog on a bare
     # directory listing (a recursive tree, not a flat result list) — the
@@ -338,55 +339,49 @@ def _handle_directory_path(path: Path, args: 'Namespace') -> None:
         else:
             # AST node-type filter (class, function, etc.) or --ext already set
             with internal_request():
-                handle_uri(_build_ast_query_from_flags(path, args), args.element, args)
+                handle_uri(_build_ast_query_from_flags(path, args), args.element, args, answer_consumer=answer_consumer)
             return
     elif getattr(args, 'name', None):
         with internal_request():
-            handle_uri(_build_ast_query_from_flags(path, args), args.element, args)
+            handle_uri(_build_ast_query_from_flags(path, args), args.element, args, answer_consumer=answer_consumer)
         return
     require_supported_format(args, DEFAULT_OUTPUT_FORMATS, 'a directory listing')
     reject_unhonored_also_json(args, 'a directory listing')
     sort_by = getattr(args, 'sort', None)
     include_extensions = _parse_ext_arg(ext_from_args)
     output_format = getattr(args, 'format', 'text')
+    listing = dict(respect_gitignore=args.respect_gitignore, exclude_patterns=args.exclude, sort_by=sort_by,
+                   include_extensions=include_extensions, max_entries=args.max_entries)
     if getattr(args, 'files', False):
         # --files defaults to newest-first; --asc flips it
-        sort_desc = not getattr(args, 'asc', False)
-        if output_format == 'json':
-            from ...utils import safe_json_dumps
-            print(safe_json_dumps(attach_invocation_warnings(show_file_list_json(
-                str(path), respect_gitignore=args.respect_gitignore,
-                exclude_patterns=args.exclude,
-                sort_by=sort_by, sort_desc=sort_desc,
-                include_extensions=include_extensions,
-                max_entries=args.max_entries))))
-        else:
-            print(show_file_list(str(path),
-                                 respect_gitignore=args.respect_gitignore,
-                                 exclude_patterns=args.exclude,
-                                 sort_by=sort_by, sort_desc=sort_desc,
-                                 include_extensions=include_extensions,
-                                 max_entries=args.max_entries))
+        listing['sort_desc'] = not getattr(args, 'asc', False)
+        build_json, build_text = show_file_list_json, show_file_list
     else:
-        sort_desc = getattr(args, 'desc', False)
-        if output_format == 'json':
-            from ...utils import safe_json_dumps
-            print(safe_json_dumps(attach_invocation_warnings(show_directory_tree_json(
-                str(path), depth=args.depth if args.depth is not None else 3,
-                max_entries=args.max_entries, fast=args.fast,
-                respect_gitignore=args.respect_gitignore,
-                exclude_patterns=args.exclude,
-                dir_limit=getattr(args, 'dir_limit', 0),
-                sort_by=sort_by, sort_desc=sort_desc,
-                include_extensions=include_extensions))))
-        else:
-            print(show_directory_tree(str(path), depth=args.depth if args.depth is not None else 3,
-                                      max_entries=args.max_entries, fast=args.fast,
-                                      respect_gitignore=args.respect_gitignore,
-                                      exclude_patterns=args.exclude,
-                                      dir_limit=getattr(args, 'dir_limit', 0),
-                                      sort_by=sort_by, sort_desc=sort_desc,
-                                      include_extensions=include_extensions))
+        listing.update(depth=args.depth if args.depth is not None else 3, fast=args.fast,
+                       dir_limit=getattr(args, 'dir_limit', 0), sort_desc=getattr(args, 'desc', False))
+        build_json, build_text = show_directory_tree_json, show_directory_tree
+    _hand_off(_listing_answer(str(path), output_format, build_json, build_text, listing), answer_consumer)
+
+
+def _listing_answer(path: str, output_format: str, build_json, build_text, listing: dict):
+    """A directory listing (the tree, or ``--files``) as an Answer: its document in JSON, its text otherwise, complete
+    (BACK-2325: the Python API reads the document the CLI prints)."""
+    from ...utils import safe_json_dumps
+    from ...utils.results import AnalysisCompleteness, ExecutionFacts
+    from .uri import Answer
+    facts = ExecutionFacts(AnalysisCompleteness.COMPLETE)
+    if output_format == 'json':
+        result = build_json(path, **listing)
+
+        def print_document(_answer, **_options):
+            print(safe_json_dumps(attach_invocation_warnings(result)))
+        return Answer(result, 'structure', print_document, execution_facts=facts,
+                      document=lambda: attach_invocation_warnings(result))
+    text = build_text(path, **listing)
+
+    def print_text(_answer, **_options):
+        print(text)
+    return Answer(text, 'structure', print_text, execution_facts=facts)
 
 
 # Flags whose answer never reads the ELEMENT argument (dest -> spelling). `reveal a b --flag`
@@ -547,18 +542,19 @@ def _flag_usage(dest: str, spelling: str) -> str:
     return spelling
 
 
-def _handle_file_path(path: Path, element_from_path: Optional[str], args: 'Namespace', request=None) -> None:
+def _handle_file_path(path: Path, element_from_path: Optional[str], args: 'Namespace', request=None,
+                      answer_consumer=None) -> None:
     """Route a resolved file path — to ast query if convenience flags set, else normal handler. *request*: the bound
     element request (``_element_request``); binding refused a grep or query flag beside it (one answer per request)."""
     if getattr(args, 'grep', None):
         if getattr(args, 'name', None):
             print(f"Note: --name '{args.name}' ignored when --grep is used (--grep searches all text, --name filters structural output)", file=sys.stderr)
         reject_unhonored_also_json(args, '--grep')
-        handle_grep(to_posix(path), args.grep, args)
+        handle_grep(to_posix(path), args.grep, args, answer_consumer=answer_consumer)
         return
     if getattr(args, 'name', None) or getattr(args, 'sort', None) or getattr(args, 'type', None):
         with internal_request():
-            handle_uri(_build_ast_query_from_flags(path, args), args.element, args)
+            handle_uri(_build_ast_query_from_flags(path, args), args.element, args, answer_consumer=answer_consumer)
         return
 
     element = element_from_path or args.element
@@ -566,16 +562,14 @@ def _handle_file_path(path: Path, element_from_path: Optional[str], args: 'Names
         if path.suffix.lower() in get_markdown_extensions():
             element = args.section
         else:
-            print("❌ Error: --section only works with markdown files (.md, .markdown)", file=sys.stderr)
-            print(file=sys.stderr)
-            print("Examples:", file=sys.stderr)
-            print(f"  reveal {to_posix(path)}.md --section 'Heading Name'   # markdown section extraction", file=sys.stderr)
-            print(f"  reveal {to_posix(path)} \"element_name\"                # for non-markdown, use element syntax", file=sys.stderr)
-            print(file=sys.stderr)
-            print("Learn more: reveal help://ux", file=sys.stderr)
-            sys.exit(1)
+            _refuse(args.path if is_path_read(getattr(args, 'path', None)) else to_posix(path), args, [
+                "❌ Error: --section only works with markdown files (.md, .markdown)", '', "Examples:",
+                f"  reveal {to_posix(path)}.md --section 'Heading Name'   # markdown section extraction",
+                f"  reveal {to_posix(path)} \"element_name\"                # for non-markdown, use element syntax", '',
+                "Learn more: reveal help://ux"], exit_code=1)
     reject_unhonored_also_json(args, 'the file view')
-    handle_file(str(path), element, args.meta, args.format, args, element_request=request)
+    handle_file(str(path), element, args.meta, args.format, args, element_request=request,
+                answer_consumer=answer_consumer)
 
 
 def _run_check_with_ledger(args: 'Namespace') -> None:
@@ -664,7 +658,7 @@ def _element_request(path_str: str, args: 'Namespace'):
     request = element_request_of(str(path), element, args,
                                  before_binding=lambda: _reject_unsupported_element_controls(args))
     if request is not None:  # an invalid value refuses before the path is looked at, as argparse's types did
-        _validate_path_exists(path, path_str, element)
+        _validate_path_exists(path, path_str, element, args=args)
         _note_element_retirements()
     return request
 
@@ -694,44 +688,54 @@ def _reject_unread_element(path: Path, path_str: str, element: Optional[str], ar
     if not element:
         return
     if path.is_dir():
-        print(f"Error: {path_str} is a directory; it has no element '{element}'", file=sys.stderr)
-        print(f"Hint: name a file (reveal {path_str.rstrip('/')}/FILE {element}) or filter by name "
-              f"(reveal {path_str} --name {element})", file=sys.stderr)
-        sys.exit(2)
+        _refuse(path_str, args, [f"Error: {path_str} is a directory; it has no element '{element}'",
+                                 f"Hint: name a file (reveal {path_str.rstrip('/')}/FILE {element}) or filter by name "
+                                 f"(reveal {path_str} --name {element})"])
     flag = next((typed_spelling(dest, spelling) for dest, spelling in _WHOLE_FILE_FLAGS
                  if getattr(args, dest, None)), None)
     if flag:
-        print(f"Error: {flag} answers for the whole of {path_str}; it does not select '{element}'",
-              file=sys.stderr)
-        print(f"Hint: drop '{element}' to search or query the file, or drop {flag} to show '{element}'",
-              file=sys.stderr)
-        sys.exit(2)
+        _refuse(path_str, args, [f"Error: {flag} answers for the whole of {path_str}; it does not select '{element}'",
+                                 f"Hint: drop '{element}' to search or query the file, or drop {flag} to show '{element}'"])
 
 
-def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
+def handle_file_or_directory(path_str: str, args: 'Namespace', *, answer_consumer=None) -> None:
     """Handle regular file or directory path. A refusal of the request (``RequestValidationError``: the binder, the
     element request's own checks, the configuration it reads) in a JSON request answers with the path read's
     invalid-request document, exit 2, as a declared noun's does (BACK-2756 cell 21j), and a configuration that could
     not be loaded with the failed answer, exit 3; in text mode each goes on to the process's ``error:`` line unchanged.
+    A refusal at one of the route's own sites (``PathReadRefused``) prints its text, and its document in JSON.
 
     Args:
         path_str: Path string to file or directory
         args: Parsed arguments
+        answer_consumer: Receives each Answer the path read gives (the file structure, the tree, a refusal) instead
+            of its being emitted, as ``handle_uri`` hands its answers (the Python API, BACK-2325)
     """
     from ...errors import ConfigLoadError, RequestValidationError
     try:
-        _handle_file_or_directory(path_str, args)
+        _handle_file_or_directory(path_str, args, answer_consumer)
+    except PathReadRefused as refused:
+        _hand_off(refused.answer, answer_consumer)
     except (RequestValidationError, ConfigLoadError) as exc:
-        if getattr(args, 'format', None) != 'json':
+        if answer_consumer is None and getattr(args, 'format', None) != 'json':
             raise
         answer = invalid_path_read(path_str, str(exc), args, error=exc)
         if answer is None:
             raise
+        _hand_off(answer, answer_consumer)
+        if answer_consumer is None:
+            sys.exit(2)  # emit exits with the answer's outcome; this is the usage exit if it did not
+
+
+def _hand_off(answer, answer_consumer) -> None:
+    """The path read's answer to its consumer, or emitted (printed, then the exit its outcome says)."""
+    if answer_consumer is None:
         answer.emit()
-        sys.exit(2)  # emit exits with the answer's outcome; this is the usage exit if it did not
+    else:
+        answer_consumer(answer)
 
 
-def _handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
+def _handle_file_or_directory(path_str: str, args: 'Namespace', answer_consumer=None) -> None:
     from ...config import require_selected_config
     require_selected_config()  # on every path read, read or not, as on every noun (BACK-2677, BACK-2756 cell 22)
     request = _element_request(path_str, args)
@@ -749,11 +753,10 @@ def _handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
     _guard_related_flags(args, path_str)
 
     path, element_from_path = _parse_file_line_syntax(path_str)
-    _validate_path_exists(path, path_str, getattr(args, 'element', None))
+    _validate_path_exists(path, path_str, getattr(args, 'element', None), args=args)
 
     if not path.is_dir() and not path.is_file():
-        print(f"Error: {path_str} is neither file nor directory", file=sys.stderr)
-        sys.exit(1)
+        _refuse(path_str, args, [f"Error: {path_str} is neither file nor directory"], exit_code=1)
     _reject_unread_element(path, path_str, element_from_path or getattr(args, 'element', None), args)
 
     # BACK-1634: a flag the file or directory view never reads gets one note, as on the URI
@@ -771,9 +774,9 @@ def _handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
                 # REVEAL_IGNORE, relative to this directory, as for a URI or a subcommand.
                 from ...utils.exclusions import dispatch_scope, exclusion_scope
                 with exclusion_scope(*dispatch_scope(str(path), peek(args, 'exclude'))):
-                    _handle_directory_path(path, args)
+                    _handle_directory_path(path, args, answer_consumer)
             else:
-                _handle_file_path(path, element_from_path, args, request)
+                _handle_file_path(path, element_from_path, args, request, answer_consumer)
         if ledger is not None:
             ledger.complete = True
     finally:

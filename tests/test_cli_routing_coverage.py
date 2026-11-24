@@ -45,6 +45,25 @@ from reveal.cli.routing import (
 pytestmark = pytest.mark.component
 
 
+def _emitting(site):
+    """A refusal site of the file route raises its Answer (PathReadRefused) and the route emits it: the site's text on
+    stderr and its exit (BACK-2325). Called directly here, the site is emitted the way the route emits it."""
+    from reveal.cli.routing.declared import PathReadRefused
+
+    def call(*args, **kwargs):
+        try:
+            return site(*args, **kwargs)
+        except PathReadRefused as refused:
+            refused.answer.emit()
+    return call
+
+
+(_validate_path_exists, _guard_hotspots_flag, _guard_nginx_flags, _guard_ssl_flags, _guard_cpanel_flags,
+ _guard_letsencrypt_flags, _guard_autossl_flags, _guard_related_flags, _handle_file_path) = map(
+    _emitting, (_validate_path_exists, _guard_hotspots_flag, _guard_nginx_flags, _guard_ssl_flags, _guard_cpanel_flags,
+                _guard_letsencrypt_flags, _guard_autossl_flags, _guard_related_flags, _handle_file_path))
+
+
 def _args(**kwargs):
     defaults = {
         'format': 'text',
