@@ -65,7 +65,7 @@ def test_r2_a_directory_answers_the_clis_tree_document(fx):
 
 # --- R3, R4: a failed structure raises as the noun form does -----------------------------------------------------------
 
-@pytest.mark.parametrize('name, cause', [('bad.xml', 'XML parse error'), ('bad.ipynb', 'notebook')])
+@pytest.mark.parametrize('name, cause', [('bad.xml', 'XML parse error'), ('bad.ipynb', 'Expecting value')])
 def test_r3_a_parse_failure_raises_analysis_failed_carrying_the_clis_document(fx, name, cause):
     code, expected, _ = _cli(name)
     assert code == 3 and expected['error']

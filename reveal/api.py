@@ -6,9 +6,9 @@ Usage::
 
     from reveal import analyze, element, query, check
 
-    # Analyze a Python file — returns structured dict
-    result = analyze("myfile.py")
-    for fn in result.get("functions", []):
+    # Read a file as `reveal myfile.py --format json` does: the outline is under "structure"
+    doc = analyze("myfile.py")
+    for fn in doc["structure"].get("functions", []):
         print(fn["name"], fn["line"])
 
     # Extract a specific named element
@@ -36,49 +36,48 @@ logger = logging.getLogger(__name__)
 
 
 def analyze(path: str, **kwargs: Any) -> Dict[str, Any]:
-    """Get the structural overview of a file.
+    """The JSON document ``reveal PATH --format json`` prints, for a file or a directory.
 
-    Equivalent to ``reveal myfile.py`` at the CLI, but returns the raw data dict
-    instead of rendering it to the terminal.
+    ``analyze("app.py", head=5)`` is ``reveal app.py --head 5 --format json``: the same answer, run through the CLI's
+    own path-read route, returned instead of printed (D21, BACK-2325). A file answers its envelope (``type``,
+    ``contract_version``, ``source``, ``meta``, its outline under ``structure``); a directory answers its tree
+    (``type`` ``directory_tree``, ``entries``).
 
     Args:
-        path: Path to the file to analyze.
-        **kwargs: Additional keyword arguments forwarded to the analyzer's
-            ``get_structure()`` method. ``head``, ``tail`` and ``range`` (1-indexed
-            ``(start, end)``) are not forwarded: they cut each list of the result, as
-            ``reveal FILE --head N`` does, and each cut is a ``meta.warnings`` entry.
+        path: The file or directory to read.
+        **kwargs: The flags of ``reveal PATH`` with ``-`` written as ``_`` (``head=2``, ``range="2-4"`` or
+            ``range=(2, 4)``, ``outline=True``, ``depth=1``, ``links=True``, ``link_type="external"``,
+            ``respect_gitignore=False``); a flag that takes no value takes True. An unknown keyword raises
+            ``UnsupportedOverrideError``, and so do the output options (``format``, ``output``), the modes that
+            read no path (``check``, ``meta``) and an element's controls (``view``, ``section``): an element is
+            :func:`element`'s.
+
+    Each call is one host request, like :func:`query`.
 
     Returns:
-        Dict with keys such as ``"functions"``, ``"classes"``, ``"imports"``,
-        etc.  Exact keys depend on the file type and analyzer.
+        The CLI's JSON document. An incomplete answer (a directory with a file it could not read) is returned and
+        says so in ``meta.warnings``, as the CLI's JSON does.
 
     Raises:
-        FileNotFoundError: If *path* does not exist on disk.
-        ValueError: If no analyzer is registered for this file type.
+        PathNotFoundError: *path* does not exist (a ``RequestValidationError`` and still a ``FileNotFoundError``).
+        RequestValidationError: Every request the CLI exits 2 on, with the CLI's message: no analyzer reads the file,
+            a file that is not the document its type needs (a notebook that is not one, a ``.docx`` that is not a
+            zip), an invalid value.
+        UnsupportedOverrideError: An unknown keyword (also a ``TypeError``).
+        AnalysisFailedError: A file whose analysis failed (an XML or notebook parse error), where the CLI exits 3;
+            its ``result`` is the CLI's document. A file that could not be read raises its ``OSError``.
 
     Example::
 
-        result = analyze("mymodule.py")
-        for fn in result.get("functions", []):
+        doc = analyze("mymodule.py")
+        for fn in doc["structure"].get("functions", []):
             print(fn["name"], fn["line"])
     """
-    from .registry import get_analyzer
-
-    file_path = Path(path)
-    if not file_path.exists():
-        raise FileNotFoundError(f"File not found: {path}")
-
-    analyzer_class = get_analyzer(str(file_path))
-    if analyzer_class is None:
-        raise ValueError(f"No analyzer available for: {path}")
-
-    head, tail, range_ = (kwargs.pop(k, None) for k in ('head', 'tail', 'range'))
-    if head or tail or range_:
-        kwargs.setdefault('navigate', True)  # as the CLI tells markdown (StructureOptions)
-    analyzer = analyzer_class(str(file_path))
-    structure = analyzer.get_structure(**kwargs)
-    analyzer.cut_structure(structure, head, tail, range_)
-    return structure
+    from .cli.routing.typed import answer_path_read
+    from .utils.invocation_log import log_scope
+    from .utils.request_cache import host_request
+    with host_request(), log_scope(to_stderr=False):
+        return answer_path_read(path, kwargs)
 
 
 def element(
