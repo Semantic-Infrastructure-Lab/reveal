@@ -41,7 +41,7 @@ reveal docs/guide.md               # Markdown with --links, --outline
 **Use a URI** when you're querying a system resource or need filtering:
 ```bash
 reveal ssl://example.com           # Live cert check — not a local file
-reveal 'ast://./src?complexity>10' # Code as a queryable database
+reveal ast ./src --where 'complexity>10' # Code as a queryable database
 reveal git . --where author=Alice      # Git log filtered by author
 reveal 'cpanel://USERNAME/ssl'     # cPanel filesystem introspection
 ```
@@ -57,8 +57,8 @@ reveal 'cpanel://USERNAME/ssl'     # cPanel filesystem introspection
 **Universal operations** — work everywhere:
 ```bash
 reveal ssl://host --check          # Health check
-reveal ast://src --format json     # JSON output
-reveal ast://src --format json --fields name,line  # Select output fields
+reveal ast src --format json     # JSON output
+reveal ast src --format json --fields name,line  # Select output fields
 reveal file.py --head 10           # First 10 results
 ```
 
@@ -74,7 +74,7 @@ reveal doc.md --links              # markdown-specific
 
 **URI adapter filtering** — options that belong with the resource:
 ```bash
-reveal 'ast://src?complexity>10'             # Filter by complexity
+reveal ast src --where 'complexity>10'             # Filter by complexity
 reveal 'ssl://host?expiring-within=30'           # Expiry threshold (implies --check)
 reveal 'cpanel://USER/ssl?dns-verified'     # Exclude NXDOMAIN domains
 reveal git . --where author=Alice --since 2024-01-01  # Multi-condition git query
@@ -122,7 +122,7 @@ reveal file.py --name authenticate
 reveal file.py --name authenticate --type function --sort=-complexity
 
 # Step 3: Need complex conditions? Switch to URI — NOTE the rename
-reveal 'ast://file.py?name~=authenticate&kind=function&complexity>10&sort=-complexity'
+reveal ast file.py --where 'name~=authenticate' --where 'complexity>10' --kind function --sort=-complexity
 #                       ^^^^^^^^^^^                               ← --name becomes name~=
 ```
 
@@ -132,7 +132,7 @@ reveal 'ast://file.py?name~=authenticate&kind=function&complexity>10&sort=-compl
 
 ```bash
 reveal file.py --name CONFIG                      # ← finds nothing (CONFIG is a variable, not a named element)
-reveal 'ast://file.py?reveal_type=CONFIG'         # ← variables/constants
+reveal ast file.py --reveal-type CONFIG         # ← variables/constants
 reveal file.py --grep CONFIG                      # ← every line containing the text "CONFIG"
 reveal doc.md --grep 'BACK-308'                   # ← text in table cells, body, anywhere
 ```
@@ -165,7 +165,7 @@ These look similar but are **not interchangeable**:
 reveal file.py --head 5            # First 5 functions/sections
 
 # ?limit=: filter before output (more precise)
-reveal 'ast://src?complexity>10&limit=5'  # Top 5 complex functions (filtered first)
+reveal ast src --where 'complexity>10' --limit 5  # Top 5 complex functions (filtered first)
 ```
 
 `--tail` has no URI equivalent — use `?sort=-field&limit=N` to approximate "top N by metric."
@@ -183,7 +183,7 @@ reveal 'ast://src?sort=name' --sort complexity
 # → Error (ast://): --sort conflicts with sort=name in the URI: sort is set twice with different values; give it once
 
 # The same value, or the flag alone, is one request
-reveal 'ast://src?complexity>10' --sort=-lines
+reveal ast src --where 'complexity>10' --sort=-lines
 # → the same answer as 'ast://src?complexity>10&sort=-lines'
 ```
 
@@ -205,7 +205,7 @@ reveal file.py --name auth --type function --sort=-complexity
 
 # Step 4: Complex multi-condition query → switch to URI
 # (--name becomes ?name~=, rest maps cleanly)
-reveal 'ast://file.py?name~=auth&kind=function&complexity>10&lines>20&sort=-complexity'
+reveal ast file.py --where 'name~=auth' --where 'complexity>10' --where 'lines>20' --kind function --sort=-complexity
 
 # Step 5: Combine with cross-adapter patterns
 # (--stdin reads one path per line, so hand it file paths, not the text listing)

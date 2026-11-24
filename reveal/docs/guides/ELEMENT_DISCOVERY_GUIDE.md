@@ -189,7 +189,7 @@ Combine elements with query operators:
 reveal domain://google.com/dns --format json | jq '.records.a'
 
 # Complex functions, first 10 (ast:// applies filters, sort and limit)
-reveal 'ast://src?kind=function&complexity>10&sort=-complexity&limit=10'
+reveal ast src --where 'complexity>10' --kind function --sort=-complexity --limit 10
 ```
 
 ---
@@ -521,13 +521,13 @@ if 'dates' in [e['name'] for e in overview.get('available_elements', [])]:
 **❌ Don't** (get all data then filter):
 ```bash
 # Get every function, filter in shell
-reveal 'ast://src' | grep auth
+reveal ast src | grep auth
 ```
 
 **✅ Do** (filter at adapter level when possible):
 ```bash
 # Use query operators for efficiency
-reveal 'ast://src?name=*auth*'
+reveal ast src --where 'name=*auth*'
 ```
 
 ### 5. Document Expected Elements

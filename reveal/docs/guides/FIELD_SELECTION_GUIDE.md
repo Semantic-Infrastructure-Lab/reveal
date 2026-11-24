@@ -20,13 +20,13 @@ help_category: feature_guides
 reveal ssl://example.com --fields=host,days_until_expiry,health_status --format=json
 
 # Stop after N results (budget mode)
-reveal 'ast://src?kind=function' --max-items=10 --format=json
+reveal ast src --kind function --max-items=10 --format=json
 
 # Truncate long string values (every string, paths and names included)
 reveal git . --view history --limit 20 --max-snippet-chars=60 --format=json
 
 # Combine field selection + budget
-reveal 'ast://src?kind=function' --fields=name,line,complexity --max-items=20 --format=json
+reveal ast src --kind function --fields=name,line,complexity --max-items=20 --format=json
 ```
 
 Field selection applies to a URI adapter's JSON result (`--format json`). In text output
@@ -210,12 +210,12 @@ Output (envelope omitted):
 
 **Budget-limited query** (stop after 10 results):
 ```bash
-reveal 'ast://src?kind=function' --max-items=10 --format=json
+reveal ast src --kind function --max-items=10 --format=json
 ```
 
 **Field selection + budget** (the total, plus three keys of each function):
 ```bash
-reveal 'ast://src?kind=function' --fields=total_results,results.name,results.line,results.complexity --max-items=5 --format=json
+reveal ast src --kind function --fields=total_results,results.name,results.line,results.complexity --max-items=5 --format=json
 ```
 
 Output (`source`, `source_type` and `meta.budget` omitted):
@@ -309,7 +309,7 @@ reveal json users.json --where role=admin --fields=id,name,email --format=json
 
 ```bash
 # Limit to 20 results with only needed fields
-reveal 'ast://src?kind=function&lines>50' --max-items=20 --fields=name,line,complexity --format=json
+reveal ast src --where 'lines>50' --kind function --max-items=20 --fields=name,line,complexity --format=json
 
 # Check truncation in response
 if data['meta']['budget']['truncated']:
@@ -340,12 +340,12 @@ reveal ssl://example.com --fields=host,days_until_expiry,health_status --format=
 
 ```bash
 # First page
-reveal 'ast://src?kind=function' --max-items=50 --format=json > page1.json
+reveal ast src --kind function --max-items=50 --format=json > page1.json
 
 # Check truncation
 if data['meta']['budget']['truncated']:
     # Second page
-    reveal 'ast://src?kind=function&offset=50' --max-items=50 --format=json > page2.json
+    reveal ast src --kind function --offset 50 --max-items=50 --format=json > page2.json
     # Third page: next_cursor on page 2 says offset=100
 ```
 
@@ -415,7 +415,7 @@ Both flags together give precise control:
 
 ```bash
 # Limit results AND select only needed fields
-reveal 'ast://src?kind=function' --max-items=10 --fields=name,line,complexity --format=json
+reveal ast src --kind function --max-items=10 --fields=name,line,complexity --format=json
 ```
 
 ---
@@ -483,7 +483,7 @@ reveal metrics src --fields=file,quality.score --max-items=100 --format=json
 reveal metrics src --view hotspots --fields=summary,hotspots --format=json
 
 # Level 3: Deep dive on specific file
-reveal 'ast://src/problematic_file.py' --format=json
+reveal ast src/problematic_file.py --format=json
 ```
 
 ---

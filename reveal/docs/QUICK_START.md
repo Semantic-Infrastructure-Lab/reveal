@@ -209,7 +209,7 @@ reveal pack src/ --architecture   # + entry points and core abstractions brief
 # Complexity hotspots: worst files (exit 1 on a finding with --fail-on findings), then the most complex functions
 reveal metrics src/ --view hotspots
 reveal metrics src/ --view hotspots --fail-on findings
-reveal 'ast://src/?complexity>=10&sort=-complexity&limit=10' --format json
+reveal ast src/ --where 'complexity>=10' --sort=-complexity --limit 10 --format json
 
 # Project map and architectural comparison
 reveal overview .                 # Compact project map: scope, components, imports
@@ -289,7 +289,7 @@ reveal src/database.py connect
 
 ```bash
 # Find all functions with complexity > 10
-reveal 'ast://./src?complexity>10'
+reveal ast ./src --where 'complexity>10'
 
 # Output:
 # src/app.py:53   handle_request [32 lines, complexity: 15]
@@ -310,7 +310,7 @@ Reveal has **26 URI adapters** for specialized queries:
 
 ```bash
 # Query code structure
-reveal 'ast://./src?complexity>10&lines<50'
+reveal ast ./src --where 'complexity>10' --where 'lines<50'
 
 # Git blame a specific function
 reveal git src/app.py --view blame --element handle_request

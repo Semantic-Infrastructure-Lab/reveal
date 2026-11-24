@@ -103,7 +103,7 @@ reveal file.py --name authenticate --type function --sort=-complexity
 
 # Step 4: Need complex conditions? Use URI syntax
 # Note: --name <pattern> becomes ?name~=<pattern> in URI form (intentional rename)
-reveal 'ast://file.py?name~=authenticate&kind=function&complexity>10&lines>50&sort=-complexity'
+reveal ast file.py --where 'name~=authenticate' --where 'complexity>10' --where 'lines>50' --kind function --sort=-complexity
 ```
 
 ---
@@ -179,7 +179,7 @@ the people with no age at the end. A missing value is not sorted as a zero.
 
 ```bash
 # Top 10 most complex functions
-reveal 'ast://src/?kind=function&sort=-complexity&limit=10'
+reveal ast src/ --kind function --sort=-complexity --limit 10
 
 # Files 50-100 lines, by complexity
 reveal metrics src/ --where lines=50..100 --sort=-complexity
@@ -313,38 +313,38 @@ reveal metrics src/ --where 'lines<100' --where 'complexity>15'
 
 **Type filtering** (AST-specific `in` operator):
 ```bash
-reveal 'ast://src/?kind=function'                   # Functions only
-reveal 'ast://src/?kind=class'                      # Classes only
+reveal ast src/ --kind function                   # Functions only
+reveal ast src/ --kind class                      # Classes only
 ```
 
 **Complexity filtering**:
 ```bash
-reveal 'ast://src/?complexity>10'                   # Complex elements
-reveal 'ast://src/?complexity<=5'                   # Simple elements
+reveal ast src/ --where 'complexity>10'                   # Complex elements
+reveal ast src/ --where 'complexity<=5'                   # Simple elements
 ```
 
 **Size filtering**:
 ```bash
-reveal 'ast://src/?lines>50'                        # Long functions
-reveal 'ast://src/?lines=20..50'                    # Medium functions
+reveal ast src/ --where 'lines>50'                        # Long functions
+reveal ast src/ --where lines=20..50                    # Medium functions
 ```
 
 **Name filtering** (glob support):
 ```bash
-reveal 'ast://src/?name=test_*'                     # Test functions
-reveal 'ast://src/?name~=^get_'                     # Getters (regex)
+reveal ast src/ --where 'name=test_*'                     # Test functions
+reveal ast src/ --where 'name~=^get_'                     # Getters (regex)
 ```
 
 **Quality queries**:
 ```bash
 # Top 10 most complex functions
-reveal 'ast://src/?kind=function&sort=-complexity&limit=10'
+reveal ast src/ --kind function --sort=-complexity --limit 10
 
 # Long but simple functions (candidates for refactoring)
-reveal 'ast://src/?lines>100&complexity<5'
+reveal ast src/ --where 'lines>100' --where 'complexity<5'
 
 # Small, complex functions (needs simplification)
-reveal 'ast://src/?lines<30&complexity>10'
+reveal ast src/ --where 'lines<30' --where 'complexity>10'
 ```
 
 ---
@@ -517,7 +517,7 @@ reveal metrics src/ --where 'lines>200' --where 'complexity>10'
 reveal git . --where author=John --where 'message~=bug' --where 'date>2026-01-01'
 
 # AST: Long, complex functions
-reveal 'ast://src/?kind=function&lines>100&complexity>15'
+reveal ast src/ --where 'lines>100' --where 'complexity>15' --kind function
 ```
 
 **Behavior**:
@@ -556,7 +556,7 @@ Find worst/best items:
 
 ```bash
 # Top 10 most complex functions
-reveal 'ast://src/?kind=function&sort=-complexity&limit=10'
+reveal ast src/ --kind function --sort=-complexity --limit 10
 
 # 20 largest files
 reveal metrics src/ --sort=-lines --limit 20
@@ -579,7 +579,7 @@ Filter by range, sort within range:
 reveal metrics src/ --where lines=100..500 --sort=-complexity
 
 # Functions 20-50 lines, most complex first
-reveal 'ast://src/?lines=20..50&sort=-complexity'
+reveal ast src/ --where lines=20..50 --sort=-complexity
 
 # Commits from January, newest first
 reveal git . --where date=2026-01..2026-02 --sort=-date
@@ -616,7 +616,7 @@ reveal git . --where 'message~=(bug|feat)'
 reveal metrics src/ --where 'file~=\.(py|js)$'
 
 # Test or spec files
-reveal 'ast://src/?name~=(test_|spec_)'
+reveal ast src/ --where 'name~=(test_|spec_)'
 
 # Admin or moderator roles
 reveal json users.json --where 'role~=(admin|moderator)'
@@ -659,10 +659,10 @@ reveal metrics src/ --where 'lines>200' --where 'complexity>10' --sort=-complexi
 reveal metrics src/ --where 'quality<50' --sort quality --limit 20
 
 # Overly complex small functions
-reveal 'ast://src/?kind=function&lines<50&complexity>10'
+reveal ast src/ --where 'lines<50' --where 'complexity>10' --kind function
 
 # Long functions needing splitting
-reveal 'ast://src/?kind=function&lines>100&sort=-lines'
+reveal ast src/ --where 'lines>100' --kind function --sort=-lines
 ```
 
 ---

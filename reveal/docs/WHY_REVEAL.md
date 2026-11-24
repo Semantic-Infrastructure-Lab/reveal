@@ -27,7 +27,7 @@ It's a **semantic query layer** — a unified interface for asking questions abo
 Most tools expose features as subcommands (`git log`, `git blame`). Reveal exposes *resources* as URIs with query parameters:
 
 ```bash
-reveal 'ast://src/?complexity>10&sort=-complexity'
+reveal ast src/ --where 'complexity>10' --sort=-complexity
 reveal 'calls://src/?callers=validate_token&depth=3'
 reveal ssl://api.example.com
 reveal 'mysql://prod/?type=replication'
@@ -269,16 +269,16 @@ reveal src/auth.py
 reveal src/auth.py validate_token
 
 # What functions are most complex?
-reveal 'ast://src/?sort=-complexity&limit=10'
+reveal ast src/ --sort=-complexity --limit 10
 
 # Find all functions over complexity 10
-reveal 'ast://src/?complexity>10'
+reveal ast src/ --where 'complexity>10'
 
 # Find all cached functions (wildcard decorator matching)
-reveal 'ast://.?decorator=*cache*'
+reveal ast . --where 'decorator=*cache*'
 
 # Find large functions for refactoring candidates
-reveal 'ast://src/?lines>50&sort=-lines'
+reveal ast src/ --where 'lines>50' --sort=-lines
 
 # Who wrote this function? (semantic blame)
 reveal git src/auth.py --view blame --element validate_token

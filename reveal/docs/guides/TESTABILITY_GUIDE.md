@@ -141,7 +141,7 @@ reveal src/module.py function_name --view boundary
 reveal src/module.py function_name --view effects
 
 # Find other complex production functions
-reveal 'ast://src?complexity>10&sort=-complexity&limit=20'
+reveal ast src --where 'complexity>10' --sort=-complexity --limit 20
 
 # See cross-file calls for a function
 reveal 'calls://src?callees=function_name'

@@ -832,7 +832,7 @@ Top Hotspots (10):
 
 4. **Inspect code structure**:
    ```bash
-   reveal 'ast://./src/core.py?kind=function'
+   reveal ast ./src/core.py --kind function
    ```
 
 5. **Review implementation**:
@@ -1580,7 +1580,7 @@ reveal metrics ./src/file.py
 reveal metrics ./src/file.py --format=json | jq '.files[0].issues'
 
 # Review specific functions
-reveal 'ast://./src/file.py?kind=function'
+reveal ast ./src/file.py --kind function
 ```
 
 ### Issue 3: Analysis too slow
@@ -2030,7 +2030,7 @@ For **duplication detection**, use specialized tools like:
 **A**: The metrics adapter shows **aggregate metrics** (file-level, directory-level). For **function-level details**, use:
 ```bash
 # Function-level structure
-reveal 'ast://./src/file.py?kind=function'
+reveal ast ./src/file.py --kind function
 
 # Then manually inspect specific functions
 reveal ./src/file.py

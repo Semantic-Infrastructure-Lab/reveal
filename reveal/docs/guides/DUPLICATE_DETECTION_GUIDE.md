@@ -21,10 +21,10 @@ reveal check file.py --select D001
 reveal check file.py --select D
 
 # Find functions by naming patterns (cross-file)
-reveal 'ast://./src?name=*parse*'
+reveal ast ./src --where 'name=*parse*'
 
 # Find duplication-prone code (complex/long functions)
-reveal 'ast://./src?complexity>10&lines>50'
+reveal ast ./src --where 'complexity>10' --where 'lines>50'
 ```
 
 ---
@@ -207,14 +207,14 @@ duplicates (not yet automated), combine reveal with standard tools:
 **1. Find candidate functions by naming patterns:**
 ```bash
 # Find all 'parse' functions across codebase
-reveal 'ast://./src?name=*parse*'
+reveal ast ./src --where 'name=*parse*'
 
 # Find all 'validate' functions
-reveal 'ast://./src?name=*validate*'
+reveal ast ./src --where 'name=*validate*'
 
 # Find 'process' or 'handle' patterns
-reveal 'ast://./src?name=*process*'
-reveal 'ast://./src?name=*handle*'
+reveal ast ./src --where 'name=*process*'
+reveal ast ./src --where 'name=*handle*'
 ```
 
 **Output shows files and line numbers** (here run on reveal's own `adapters/`):
@@ -237,13 +237,13 @@ File: adapters/ast/nav_narrow.py
 **2. Identify duplication-prone code:**
 ```bash
 # Find long functions (>50 lines)
-reveal 'ast://./src?lines>50'
+reveal ast ./src --where 'lines>50'
 
 # Find complex functions (cyclomatic complexity > 10)
-reveal 'ast://./src?complexity>10'
+reveal ast ./src --where 'complexity>10'
 
 # Combine filters
-reveal 'ast://./src?complexity>10&lines>50'
+reveal ast ./src --where 'complexity>10' --where 'lines>50'
 ```
 
 **These are likely to contain duplicated logic or need refactoring.**
@@ -358,12 +358,12 @@ reveal check file.py --select D001
 
 2. **Use AST queries for cross-file analysis**
 ```bash
-reveal 'ast://./src?name=*pattern*'
+reveal ast ./src --where 'name=*pattern*'
 ```
 
 3. **Find complex code first** (duplication hotspots)
 ```bash
-reveal 'ast://./src?complexity>10&lines>50'
+reveal ast ./src --where 'complexity>10' --where 'lines>50'
 ```
 
 4. **Batch check a directory in one call**
