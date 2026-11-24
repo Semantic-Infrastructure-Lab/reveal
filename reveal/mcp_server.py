@@ -310,6 +310,10 @@ def _declared_failure(answer) -> str | None:
         return None
     if answer.exception is not None:
         exc = answer.exception
+        if isinstance(exc, OSError) and answer.public_diagnostic is not None:
+            # The owner's own line for a file it could not read ("Error: cannot read F: Permission denied"), as the
+            # CLI prints it; str(OSError) is a Python spelling with the path in it (BACK-2249).
+            return _tool_failure(answer.public_diagnostic, exception=exc)
         return _tool_failure(str(exc), public=isinstance(exc, (OSError, ConfigLoadError)), exception=exc)
     if answer.public_diagnostic is not None:
         return _tool_failure(answer.public_diagnostic)
