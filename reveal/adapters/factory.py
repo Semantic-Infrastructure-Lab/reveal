@@ -217,6 +217,17 @@ def _canonical_init(adapter_class: type, resource: str, *, params: Optional[Any]
                   lambda: adapter_class(path, query))
 
 
+def check_bound_request(adapter_class: type, params: Any, path: str, args: Any) -> None:
+    """The noun's own checks of a bound request (``validate_request(params, args)``, ``validate_request_at(params, path,
+    args)``), before it answers: the CLI's declared route runs them with its parsed flags."""
+    validate = getattr(adapter_class, 'validate_request', None)
+    if validate is not None:
+        validate(params, args)
+    validate_at = getattr(adapter_class, 'validate_request_at', None)
+    if validate_at is not None:
+        validate_at(params, path, args)
+
+
 def _built_with_overrides(adapter_class: type, path: str, query: Optional[str], overrides: Mapping[str, Any],
                           empty_default: str) -> Any:
     """Typed overrides bind after validating the URI query, then reach the constructor as params."""

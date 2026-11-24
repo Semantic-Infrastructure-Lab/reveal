@@ -1125,14 +1125,10 @@ def _typed_spellings(adapter) -> set:
 
 
 def _validate_bound_request(adapter_class, params, path, args):
+    from ...adapters.factory import check_bound_request
     from ...utils.query_binding import reject_two_answers
     reject_two_answers(adapter_class.PARAM_SPECS, params, _typed_spellings(adapter_class))  # one answer (BACK-2654)
-    validate = getattr(adapter_class, 'validate_request', None)
-    if validate is not None:
-        validate(params, args)
-    validate_at = getattr(adapter_class, 'validate_request_at', None)
-    if validate_at is not None:
-        validate_at(params, path, args)
+    check_bound_request(adapter_class, params, path, args)
 
 
 def _declared_answer(adapter_class, name: str, path: str, source: Any, transport: str, args, expected_type: str,
