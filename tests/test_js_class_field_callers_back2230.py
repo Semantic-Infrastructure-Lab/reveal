@@ -84,4 +84,4 @@ def test_a_field_record_names_its_own_line_and_the_call_lines_inside_it(project)
     records = [c for level in query(project, 'callers=helper')['levels'] for c in level['callers']
                if c['caller'] == 'handler']
     (record,) = records
-    assert record['caller_kind'] == 'class_field' and record['line'] == 2 and record['call_lines'] == [2]
+    assert record['caller_kind'] == 'class_field' and record['caller_def_line'] == 2 and record['call_lines'] == [2]

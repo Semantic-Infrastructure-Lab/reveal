@@ -178,7 +178,7 @@ def test_top_level_callers_preserve_sites_and_agree_with_forward_queries(tmp_pat
     records = callers['levels'][0]['callers']
     module = next(r for r in records if r['caller'] == '<module>')
     assert module['caller_kind'] == 'module'
-    assert module['call_lines'] == lines and module['line'] == lines[0]
+    assert module['call_lines'] == lines and module['caller_def_line'] == 1  # its scope starts at 1 (BACK-2714)
     assert any(r['caller'] == 'wrapper' for r in records)
     forward = find_callees(str(tmp_path), '<module>')
     assert 'target_fn' in forward['matches'][0]['calls']

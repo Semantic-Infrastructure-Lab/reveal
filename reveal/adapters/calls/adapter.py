@@ -322,8 +322,10 @@ _SCHEMA: Dict[str, Any] = {
                 'depth': 1,
                 'total_callers': 3,
                 'levels': [{'level': 1, 'callers': [
-                    {'file': 'app/routes.py', 'caller': 'post_item', 'line': 42, 'call_expr': 'validate_item'},
-                    {'file': 'app/batch.py', 'caller': 'process_batch', 'line': 17, 'call_expr': 'validate_item'},
+                    {'file': 'app/routes.py', 'caller': 'post_item', 'caller_def_line': 42, 'call_expr': 'validate_item',
+                     'call_lines': [45]},
+                    {'file': 'app/batch.py', 'caller': 'process_batch', 'caller_def_line': 17, 'call_expr': 'validate_item',
+                     'call_lines': [20, 24]},
                 ]}],
             },
         },

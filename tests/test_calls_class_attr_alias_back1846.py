@@ -54,7 +54,7 @@ def test_self_call_in_a_class_without_the_binding_is_not_a_caller(tmp_path):
     callers = _callers(_project(tmp_path), 'Timer')
     # Runner.__init__ is a caller; Other.__init__ (line 14) has no `Schedule = Schedule` binding.
     result = find_callers(str(tmp_path), 'Timer')
-    lines = {c['line'] for level in result['levels'] for c in level['callers']
+    lines = {c['caller_def_line'] for level in result['levels'] for c in level['callers']
              if c['caller'] == '__init__'}
     assert lines == {6}
     assert ('app.py', 'member') not in callers

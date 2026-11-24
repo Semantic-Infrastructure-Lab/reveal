@@ -621,7 +621,8 @@ class TestCallsRenderer(unittest.TestCase):
             'total_callers': 1,
             'path': '/tmp/src',
             'levels': [{'level': 1, 'callers': [
-                {'file': 'app.py', 'caller': 'main', 'line': 5, 'call_expr': 'helper', 'callee': 'helper'}
+                {'file': 'app.py', 'caller': 'main', 'caller_def_line': 5, 'call_expr': 'helper', 'call_lines': [6],
+                 'callee': 'helper'}
             ]}],
             **extra,
         }
@@ -972,7 +973,7 @@ class TestCallsRendererCallees(unittest.TestCase):
             'path': 'src/',
             'levels': [{'level': 1, 'callers': [
                 {'file': 'src/utils/helpers.py', 'caller': 'main',
-                 'line': 7, 'call_expr': 'helper', 'callee': 'helper'},
+                 'caller_def_line': 7, 'call_expr': 'helper', 'call_lines': [8], 'callee': 'helper'},
             ]}],
         }
         out = self._capture(data, 'text')
@@ -1330,12 +1331,12 @@ class TestRankRendering(unittest.TestCase):
             entries = [
                 {'name': 'validate', 'caller_count': 3,
                  'callers': [
-                     {'file': 'a.py', 'caller': 'run', 'line': 10},
-                     {'file': 'b.py', 'caller': 'process', 'line': 20},
-                     {'file': 'c.py', 'caller': 'main', 'line': 5},
+                     {'file': 'a.py', 'caller': 'run', 'caller_def_line': 10, 'call_lines': [11]},
+                     {'file': 'b.py', 'caller': 'process', 'caller_def_line': 20, 'call_lines': [21]},
+                     {'file': 'c.py', 'caller': 'main', 'caller_def_line': 5, 'call_lines': [6]},
                  ]},
                 {'name': 'parse', 'caller_count': 1,
-                 'callers': [{'file': 'd.py', 'caller': 'load', 'line': 7}]},
+                 'callers': [{'file': 'd.py', 'caller': 'load', 'caller_def_line': 7, 'call_lines': [8]}]},
             ]
         return {
             'query': 'rank_callers',
@@ -1363,7 +1364,8 @@ class TestRankRendering(unittest.TestCase):
         self.assertIn('a.py', out)
 
     def test_truncation_at_five(self):
-        callers = [{'file': f'f{i}.py', 'caller': f'fn{i}', 'line': i} for i in range(8)]
+        callers = [{'file': f'f{i}.py', 'caller': f'fn{i}', 'caller_def_line': i, 'call_lines': [i + 1]}
+                   for i in range(8)]
         data = self._ranking_data([{'name': 'foo', 'caller_count': 8, 'callers': callers}])
         out = self._capture(data)
         self.assertIn('… and 3 more', out)

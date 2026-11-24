@@ -235,7 +235,7 @@ def _index_callee(
     if bare == callee:
         canonical = alias_map.get(bare)
     else:
-        canonical = class_attribute_alias(callee, record.get('line', 0), class_aliases or [])
+        canonical = class_attribute_alias(callee, record.get('caller_def_line', 0), class_aliases or [])
     if canonical and canonical != bare:
         index.setdefault(canonical, []).append(record)
 
@@ -283,6 +283,13 @@ def _reverse_evidence(record: Dict[str, Any], frontiers: Tuple[_ReverseTarget, .
     return _resolved_reverse_evidence(resolved, frontiers)
 
 
+def _merge_call_lines(kept: Dict[str, Any], record: Dict[str, Any]) -> None:
+    """One caller reached through two spellings of one name (``target()`` and an alias ``t()``) is one
+    record carrying the lines of both (BACK-2714). *kept* is a query-time copy, never an index record."""
+    if record.get('call_lines'):
+        kept['call_lines'] = sorted({*kept.get('call_lines', ()), *record['call_lines']})
+
+
 def _bfs_level(
     index: Dict[str, List[Dict[str, Any]]],
     current_targets: Set[_ReverseTarget],
@@ -297,14 +304,18 @@ def _bfs_level(
         target = frontiers[0]
         bare = _bare_callee_name(target.name)
         records = index.get(target.name, []) + (index.get(bare, []) if bare != target.name else [])
+        kept: Dict[Tuple[str, str], Dict[str, Any]] = {}  # this name's records, by (file, caller)
         for record in records:
             key = (record['file'], record['caller'])
+            if key in kept:
+                _merge_call_lines(kept[key], record)
             if key in visited_callers:
                 continue
             evidence = _reverse_evidence(record, frontiers, resolver)
             visited_callers.add(key)
-            level_records.append({**record, 'callee': target.name, **evidence})
-            next_targets.add(_ReverseTarget(record['caller'], record['file'], record['line']))
+            kept[key] = {**record, 'callee': target.name, **evidence}
+            level_records.append(kept[key])
+            next_targets.add(_ReverseTarget(record['caller'], record['file'], record['caller_def_line']))
     return level_records, next_targets
 
 
@@ -576,10 +587,10 @@ def _scope_record_fields(elem: Dict[str, Any], callee: str) -> Dict[str, Any]:
         return {}
     sites = [site for site in elem['call_sites'] if site['callee'] == callee]
     calls = sorted({site['line'] for site in sites if site.get('relationship') != 'jsx_reference'})
-    # A module's `line` is the first site of any kind; a field keeps its own line, like a function.
+    # A module's scope starts at line 1 (BACK-2714); a field keeps its own line, like a function.
     fields: Dict[str, Any] = {'caller_kind': kind, 'call_lines': calls}
     if kind == 'module':
-        fields['line'] = min(site['line'] for site in sites)
+        fields['caller_def_line'] = 1
     return fields
 
 
@@ -591,11 +602,14 @@ def build_callers_index(path: str, structures: Optional[StructureList] = None, *
 
         {
           "validate_item": [
-              {"file": "app.py", "caller": "process_batch", "line": 42},
-              {"file": "worker.py", "caller": "run_job", "line": 17},
+              {"file": "app.py", "caller": "process_batch", "caller_def_line": 42, "call_lines": [45, 51]},
+              {"file": "worker.py", "caller": "run_job", "caller_def_line": 17, "call_lines": [20]},
           ],
           ...
         }
+
+    ``caller_def_line`` is where the caller is defined (``<module>``: 1) and ``call_lines`` the sorted
+    lines of its calls to the name (empty for a JSX use that is no call, BACK-2714).
 
     Inside a host request results are cached by a directory mtime fingerprint and
     active scope, and the request revalidates the entry against a tree stamp; outside
@@ -660,17 +674,16 @@ def build_callers_index(path: str, structures: Optional[StructureList] = None, *
             record_base = {
                 'file': to_posix(file_path),  # '/' on every OS (BACK-1586)
                 'caller': elem.get('name', ''),
-                'line': elem.get('line', 0),
+                'caller_def_line': elem.get('line', 0),
                 **_shadow_field(elem),
             }
+            call_lines = elem.get('call_lines', {})
             for callee in elem.get('calls', []):
-                record = {**record_base, 'call_expr': callee}
+                record = {**record_base, 'call_expr': callee, 'call_lines': call_lines.get(callee, [])}
                 refs = [r for r in elem.get('references', []) if r['callee'] == callee]
                 if refs:
                     record.update(relationship='jsx_reference' if callee in elem.get('reference_only_calls', []) else 'call_and_jsx_reference',
                                   reference_lines=sorted({r['line'] for r in refs}))
-                    if elem.get('call_lines', {}).get(callee):
-                        record['call_lines'] = elem['call_lines'][callee]
                 record.update(_scope_record_fields(elem, callee))
                 _index_callee(index, callee, record, alias_map, class_aliases)
 
@@ -1930,15 +1943,16 @@ def _rank_entry(callee_name: str, caller_records: List[Dict[str, Any]], include_
             return None
     if not include_test_framework and bare_callee in TEST_FRAMEWORK_CALLEE_NAMES:
         return None
-    # Deduplicate caller records by (file, caller) to count unique callers
-    seen: Set[Tuple[str, str]] = set()
-    unique_records = []
+    # Deduplicate caller records by (file, caller) to count unique callers; one caller's lines merge (BACK-2714)
+    kept: Dict[Tuple[str, str], Dict[str, Any]] = {}
     for rec in caller_records:
         key = (rec['file'], rec['caller'])
-        if key not in seen:
-            seen.add(key)
+        if key in kept:
+            _merge_call_lines(kept[key], rec)
+        else:
             # '/' on every OS, as find_callers writes it (BACK-1586): the index keeps the walker's spelling.
-            unique_records.append({**rec, 'file': to_posix(rec['file'])} if rec.get('file') else rec)
+            kept[key] = {**rec, 'file': to_posix(rec['file'])} if rec.get('file') else dict(rec)
+    unique_records = list(kept.values())
     return {'name': callee_name, 'caller_count': len(unique_records), 'callers': unique_records}
 
 
@@ -1977,8 +1991,8 @@ def rank_by_callers(
             "name": "validate_item",
             "caller_count": 5,
             "callers": [
-                {"file": "app.py", "caller": "process_batch", "line": 42,
-                 "call_expr": "validate_item"},
+                {"file": "app.py", "caller": "process_batch", "caller_def_line": 42,
+                 "call_expr": "validate_item", "call_lines": [45]},
                 ...
             ]
         }

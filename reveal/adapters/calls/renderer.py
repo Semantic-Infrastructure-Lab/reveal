@@ -177,7 +177,7 @@ def _render_text(data: Dict[str, Any]) -> None:
         for rec in callers:
             file_path = rec['file']  # relative path from project root
             caller = rec['caller']
-            line = rec['line']
+            line = _row_line(rec)
             call_expr = rec.get('call_expr', rec.get('callee', target))
             verb = {'jsx_reference': 'JSX reference to',
                     'call_and_jsx_reference': 'calls and JSX reference to'}.get(rec.get('relationship'), 'calls')
@@ -190,6 +190,13 @@ def _target_evidence_label(record: Dict[str, Any]) -> str:
     if record.get('target_resolution') == 'different_definition':
         return f" [name candidate; imported target is {record['target_file']}:{record['target_line']}, a different definition]"
     return ''
+
+
+def _row_line(rec: Dict[str, Any]) -> int:
+    """A callers row's leading line: the caller's first call to the name, else its first JSX use
+    (a name only rendered has no call). The definition line is ``caller_def_line`` in JSON (BACK-2714)."""
+    sites = rec.get('call_lines') or rec.get('reference_lines') or [rec.get('caller_def_line', 0)]
+    return min(sites)
 
 
 def _line_list(label: str, lines: List[int]) -> str:
@@ -338,10 +345,8 @@ def _render_ranking_text(data: Dict[str, Any]) -> None:
         plural = 'caller' if count == 1 else 'callers'
         print(f"  {name}  ({count} {plural})")
         for rec in callers[:5]:  # show up to 5 callers per entry
-            file_path = rec['file']
-            caller = rec['caller']
-            line = rec['line']
-            print(f"    {file_path}:{line}  {caller}")
+            # the callers row's rule: the first call line leads, further lines follow (BACK-2714)
+            print(f"    {rec['file']}:{_row_line(rec)}  {rec['caller']}{_site_locations(rec)}")
         if len(callers) > 5:
             print(f"    … and {len(callers) - 5} more")
         print()

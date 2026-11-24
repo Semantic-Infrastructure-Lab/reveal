@@ -159,8 +159,8 @@ source ownership and are outside JSX reference navigation (calls in the initiali
 name-resolution seam. Callees and trace use the same references; callees text labels a name that is only rendered
 `(JSX reference)` and a name that is both called and rendered `(includes JSX reference)`. Callers text
 names each kind of site: `[call line 3, JSX line 4]` (JSON: `call_lines` and `reference_lines`), `[JSX line 6]`,
-and `[lines 4, 6]` for a `<module>` or class-field caller that calls the name more than once (a named
-function caller is one record at its definition line, see Limitations). `--view effects --transitive` follows a
+and `[lines 4, 6]` for a caller that calls the name more than once (one record per caller, see
+Limitations). `--view effects --transitive` follows a
 render-only reference as a hop (rendering a child runs it) and labels it `(JSX render)`; the `chain` of
 the JSON findings ends in `<Child/>`. Dynamic render scheduling, Angular/HTML strings and Vue/Svelte
 navigation remain outside this relationship model. Known limit: a scope is identified by its name and line, so two same-named functions
@@ -170,12 +170,12 @@ on one line (minified or generated code) are one scope and share each other's JS
 The `calls://` adapter builds a **project-level callers index** from all code files under the given path:
 
 1. **Collect structures** — runs the same analysis as `ast://` on every code file in the directory
-2. **Build inverted index** — maps each callee name → list of (file, function, line) caller records
+2. **Build inverted index** — maps each callee name → list of (file, caller, caller_def_line, call_lines) caller records
 3. **Cache by mtime** — the index is cached per directory; any file change triggers a rebuild
 4. **BFS traversal** — for `depth > 1`, performs a breadth-first walk up to `depth` levels of callers
 
 ```
-callee → [(file, caller_func, line), ...]
+callee → [(file, caller_func, caller_def_line, call_lines), ...]
 ```
 
 **Callee normalisation**: `self.foo` is normalised to `foo` for lookup. The original call expression (`self.foo`) is preserved in the `call_expr` field of each result record.
@@ -269,7 +269,7 @@ In JS/TS a call inside an anonymous callback that no listed function, method or 
 a file that only holds such calls. The callback runs later, not at load: `<module>` here means "no named scope owns it".
 In JS/TS the initializer of a class field (`x = helper()`, `_save = debounce(async () => helper())`) is a scope of its
 own: the field is the caller, named like a method (`x`, `_save`), never `<module>`. The record has `caller_kind: class_field`,
-the field's line as `line`, and the calls inside the initializer as `call_lines`. A field that holds a function
+the field's line as `caller_def_line`, and the calls inside the initializer as `call_lines`. A field that holds a function
 (`f = () => helper()`) is a listed method as before, and a call inside a method stays that method's.
 
 ### `callees`
@@ -402,10 +402,13 @@ Callers of: validate_item
 Project:    src/
 Total:      3
 
-  src/auth/handlers.py:42  authenticate  (calls validate_item)
-  src/api/routes.py:78     process_request  (calls validate_item)
-  src/worker/jobs.py:17    run_job  (calls self.validate_item)
+  src/auth/handlers.py:45  authenticate  (calls validate_item) [lines 45, 51]
+  src/api/routes.py:80     process_request  (calls validate_item)
+  src/worker/jobs.py:20    run_job  (calls self.validate_item)
 ```
+
+Each row leads with the caller's first call to the name; a caller that calls it more than once lists every line in
+brackets. The `--sort=-callers` ranking prints its caller rows the same way.
 
 Callers match by name, so a name defined in more than one place merges the callers of every definition. When
 there are several, the answer names them under `Defined in:` (JSON `definitions`, `{file, line}` each) and says the
@@ -556,15 +559,17 @@ reveal calls src/ --callers validate_item --format=json
         {
           "file": "src/auth.py",
           "caller": "authenticate",
-          "line": 42,
+          "caller_def_line": 42,
           "call_expr": "validate_item",
+          "call_lines": [45, 51],
           "callee": "validate_item"
         },
         {
           "file": "src/worker.py",
           "caller": "run_job",
-          "line": 17,
+          "caller_def_line": 17,
           "call_expr": "self.validate_item",
+          "call_lines": [20],
           "callee": "validate_item"
         }
       ]
@@ -760,8 +765,9 @@ reveal calls . --callers fn       # use project root for full coverage
 
 **Top-level callers:** Python, JS/TS, PHP and Ruby source files include a synthetic
 `<module>` caller for calls outside named functions/methods, including script loops
-and Ruby DSL blocks. Caller JSON carries `caller_kind: module`, `line` set to the first call line (the first JSX line when
-the name is only rendered; `callees=<module>` prints the module's first call line, not 1) and every matching call in `call_lines`. Counts are unique caller scopes;
+and Ruby DSL blocks. Caller JSON carries `caller_kind: module`, `caller_def_line: 1` (a module's scope starts at line 1)
+and every matching call in `call_lines`; a name the module only renders has its JSX lines in `reference_lines`
+(`callees=<module>` prints the module's first call line, not 1). Counts are unique caller scopes;
 several sites in one module remain one caller. Deferred function bodies retain
 their own scope. Extensionless Ruby DSL files and other
 languages' top-level code remain outside this relationship scope and are disclosed; JS/TS class-field initializers are not
@@ -772,7 +778,13 @@ reveal 'calls://src?callees=<module>'
 reveal 'calls://src?callees=script.py:<module>&depth=2'
 ```
 
-**`line` in a caller record is the caller function's definition line, not the call-site line.** Each record is built per-*function*, not per-*call-expression* — repeat calls to the same target within one function collapse to a single record, and that record's `line` is where the caller function is `def`ined, not where the call itself appears in the body. Don't use it to jump to the exact call; use it to locate the calling function.
+**A caller record names both the caller and its calls.** Each record is built per caller (a function, method,
+`<module>` or class field), not per call expression: repeat calls to the same name in one caller are one record.
+`caller_def_line` is where the caller is defined (a decorated function: its first decorator line; `<module>`: 1;
+a class field: the field's line). `call_lines` is the sorted list of lines where that caller calls the name (each
+call's start line; empty for a name the caller only renders as JSX, whose lines are `reference_lines`). One caller
+that calls the name under two spellings (an import alias and the original) is one record holding both lines. Jump to
+a call with `call_lines`; locate the caller with `caller_def_line`, which later reverse hops (`--depth 2`) also use.
 
 **`called_by` in `ast://` is within-file only.** If a function has callers only in other files, `called_by` will be empty in `ast://` output. The `calls://` adapter is the authoritative source for cross-file callers.
 

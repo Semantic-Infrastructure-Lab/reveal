@@ -106,7 +106,8 @@ def test_callees_of_a_module_report_the_first_call_line(tmp_path):
     by_name = {m['file'].replace('\\', '/').rsplit('/', 1)[-1]: m['line'] for m in matches}
     assert by_name == {'s.py': 5, 'a.jsx': 6}
     callers = find_callers(str(tmp_path), 'helper')['levels'][0]['callers']
-    assert {r['file'].replace('\\', '/').rsplit('/', 1)[-1]: r['line'] for r in callers
+    # callers name the same line as the module's first call (BACK-2714: call_lines; caller_def_line is 1)
+    assert {r['file'].replace('\\', '/').rsplit('/', 1)[-1]: r['call_lines'][0] for r in callers
             if r['caller'] == '<module>'} == {'s.py': 5, 'a.jsx': 6}
 
 

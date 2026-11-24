@@ -18,7 +18,7 @@ class _Index(dict):
 
 def test_rank_by_callers_records_name_their_file_with_forward_slashes(monkeypatch):
     # A record as the index builds it on Windows: the walker's native spelling.
-    native = {'file': 'pkg\\a.py', 'caller': 'run', 'line': 3, 'call_expr': 'target'}
+    native = {'file': 'pkg\\a.py', 'caller': 'run', 'caller_def_line': 3, 'call_expr': 'target', 'call_lines': [4]}
     monkeypatch.setattr(calls_index, 'build_callers_index', lambda path: _Index({'target': [native]}))
 
     ranked = calls_index.rank_by_callers('.', top=0)
@@ -27,7 +27,7 @@ def test_rank_by_callers_records_name_their_file_with_forward_slashes(monkeypatc
 
 
 def test_rank_by_callers_keeps_a_forward_slash_file_as_it_is(monkeypatch):
-    posix = {'file': 'pkg/a.py', 'caller': 'run', 'line': 3, 'call_expr': 'target'}
+    posix = {'file': 'pkg/a.py', 'caller': 'run', 'caller_def_line': 3, 'call_expr': 'target', 'call_lines': [4]}
     monkeypatch.setattr(calls_index, 'build_callers_index', lambda path: _Index({'target': [posix]}))
 
     ranked = calls_index.rank_by_callers('.', top=0)
