@@ -21,7 +21,8 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from .defaults import DisplayDefaults
 from .utils.lines import split_lines
-from .utils.results import AnalysisCompleteness, ExecutionFacts, note_truncation, slice_items
+from .utils.results import (AnalysisCompleteness, ExecutionFacts, FailureCause, failure_execution_facts,
+                            note_truncation, slice_items)
 from .utils.path_utils import analysis_skipped_warning, failure_of
 
 logger = logging.getLogger(__name__)
@@ -76,6 +77,13 @@ def _compile(pattern: str, args: Namespace) -> 're.Pattern[str] | str':
         return re.compile(pattern, flags)
     except re.error as e:
         return f"invalid pattern '{pattern}': {e}"
+
+
+def _refuse_pattern(result: Dict[str, Any], message: str) -> Dict[str, Any]:
+    """*result* failed on its pattern: the request's own error, an invalid request (exit 2, D6; BACK-2765)."""
+    result['error'] = message
+    result['meta']['errors'] = [{'code': FailureCause.INVALID_REQUEST.value, 'message': message}]
+    return result
 
 
 def _read_lines(fpath: Path) -> List[str]:
@@ -262,8 +270,7 @@ def grep_file(path: str, pattern: str, args: Namespace) -> Dict[str, Any]:
     result = _base_result(path, pattern)
     compiled = _compile(pattern, args)
     if isinstance(compiled, str):
-        result['error'] = compiled
-        return result
+        return _refuse_pattern(result, compiled)
     file_path = Path(path)
     try:
         lines = _read_lines(file_path)
@@ -349,11 +356,13 @@ def grep_execution_facts(result: Dict[str, Any]) -> ExecutionFacts:
     """A search is complete unless it lost files it had to read (BACK-2520).
 
     An unreadable single file is a failed result that carries the same ``analysis_failed``
-    warning, so it exits 3 too (BACK-2527); any other failed result (an invalid pattern) keeps
-    its legacy exit 1 through ``conclude_outcome``.
+    warning, so it exits 3 too (BACK-2527); an invalid pattern is the request's own error, an
+    invalid request (exit 2; it exited 1, BACK-2765).
     """
-    lost = any(w.get('type') == 'analysis_failed'
-               for w in (result.get('meta') or {}).get('warnings', []))
+    meta = result.get('meta') or {}
+    if any(e.get('code') == FailureCause.INVALID_REQUEST.value for e in meta.get('errors', [])):
+        return failure_execution_facts(FailureCause.INVALID_REQUEST)
+    lost = any(w.get('type') == 'analysis_failed' for w in meta.get('warnings', []))
     return ExecutionFacts(AnalysisCompleteness.INCOMPLETE if lost else AnalysisCompleteness.COMPLETE)
 
 
@@ -364,8 +373,7 @@ def grep_directory(path: str, pattern: str, args: Namespace,
     result = _base_result(path, pattern)
     compiled = _compile(pattern, args)
     if isinstance(compiled, str):
-        result['error'] = compiled
-        return result
+        return _refuse_pattern(result, compiled)
 
     file_results, total_hits, scope = _collect_dir_results(
         Path(path), compiled, getattr(args, 'respect_gitignore', True) is not False,

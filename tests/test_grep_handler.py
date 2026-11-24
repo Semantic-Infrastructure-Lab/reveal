@@ -367,7 +367,7 @@ def test_invalid_pattern_is_a_failed_result_in_json_too(tmp_path):
     (tmp_path / 'a.py').write_text('print(1)\n', encoding='utf-8')
     for target in (str(tmp_path), str(tmp_path / 'a.py')):
         r = run_reveal(target, '--grep', 'print(', '--format', 'json')
-        assert r.returncode == 1
+        assert r.returncode == 2  # an invalid request (BACK-2765)
         assert 'invalid pattern' in json.loads(r.stdout)['error']
         assert 'invalid pattern' in r.stderr
 

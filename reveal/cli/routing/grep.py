@@ -2,10 +2,10 @@
 
 ``grep_handler`` printed its own text and JSON and exited on a bad pattern, so an invalid
 pattern under ``--format json`` printed plain text, and a cut could not be disclosed the
-shared way. It now returns a result; this emits it: a failed result's error on stderr then
-exit 1 (JSON still prints its envelope), a cut list's ``⚠ Truncated`` line after the body,
-and exit 3 for a search that could not read every file it had to: a directory (D6,
-BACK-2520) or the one file asked for (BACK-2527).
+shared way. It now returns a result; this emits it: a failed result's error on stderr (JSON
+still prints its envelope), a cut list's ``⚠ Truncated`` line after the body, exit 2 for an
+invalid pattern (BACK-2765), and exit 3 for a search that could not read every file it had to: a
+directory (D6, BACK-2520) or the one file asked for (BACK-2527).
 """
 
 import sys
@@ -21,8 +21,8 @@ from .uri import announce_outcome, conclude_outcome
 
 
 def _emit(result: Dict[str, Any], args: Namespace, label: str, answer_consumer=None) -> None:
-    """The search's Answer, emitted or handed to *answer_consumer* (the Python API, BACK-2325). Its facts say only
-    whether a file it had to read was lost (exit 3); a failed result (an invalid pattern) keeps its legacy exit 1."""
+    """The search's Answer, emitted or handed to *answer_consumer* (the Python API, BACK-2325). Its facts say whether
+    the pattern was invalid (exit 2, ``RequestValidationError`` from the API) or a file it had to read was lost (exit 3)."""
     from .uri import Answer
     facts = grep_execution_facts(result)
 
@@ -31,7 +31,7 @@ def _emit(result: Dict[str, Any], args: Namespace, label: str, answer_consumer=N
         outcome = announce_outcome(result, label)
         render_grep(result, output_format)
         code = execution_exit_code(facts)
-        if code:  # a lost source outranks a failed result's legacy exit 1 (BACK-2527)
+        if code:  # an invalid pattern (2) or a lost source (3), before conclude_outcome's legacy exit 1 (BACK-2527)
             print_result_control_notes(result, output_format)
             sys.exit(code)
         conclude_outcome(result, outcome, output_format)

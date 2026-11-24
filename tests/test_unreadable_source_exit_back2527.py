@@ -84,9 +84,9 @@ def test_control_missing_file_and_missing_element_exit_2(tree):
     assert _run_reveal_direct(str(tree / 'ok.py'), 'nope').returncode == 2
 
 
-def test_control_invalid_grep_pattern_keeps_exit_1(tree):
-    # A usage error, out of this task's scope (EXIT_CODE_CONTRACT "Not migrated").
-    assert _run_reveal_direct(str(tree / 'ok.py'), '--grep', '(').returncode == 1
+def test_control_invalid_grep_pattern_exits_2(tree):
+    # A usage error, not a lost source: exit 2 (BACK-2765), never this task's 3.
+    assert _run_reveal_direct(str(tree / 'ok.py'), '--grep', '(').returncode == 2
 
 
 def test_control_stdin_missing_file_keeps_exit_0(tree):
