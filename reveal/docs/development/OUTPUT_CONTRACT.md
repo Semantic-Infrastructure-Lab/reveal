@@ -35,7 +35,8 @@ Both raise as the noun form of `reveal.api.query` does ("Invalid requests"): a r
 CLI exits 2 on raises `RequestValidationError` with the CLI's message (a missing path
 `PathNotFoundError`, also a `FileNotFoundError`; an element that matches nothing
 `ElementNotFoundError`), a file whose parse failed raises `AnalysisFailedError` with the
-CLI's document as its `result` (exit 3), an unreadable file its `OSError`. An element read
+CLI's document as its `result` (exit 3), an unreadable file its `OSError`; an invalid `--grep`
+pattern is an invalid request (exit 2, `RequestValidationError`). An element read
 of a file whose parse failed answers that failure on every transport, exit 3 naming it,
 never "not found" (BACK-2775).
 
@@ -421,7 +422,9 @@ data: the value at (root) is an object, not a list").
 
 On an adapter without declared parameters the parser owns unknown keys (`unknown_query_param`), and
 the flag ledger names inputs that were accepted but not used by this operation (`unused_query_param`
-or `unused_flag`), as it does for global presentation flags (`--max-items`) on every noun. Each entry
+or `unused_flag`), as it does for global presentation flags (`--max-items`) on every noun, and for a
+flag a path read did not use (`reveal FILE --links --format json`, its tree, element and `--grep`
+answers, and `reveal.api.analyze`, which prints nothing on stderr). Each entry
 has a `type` and `code`, a human-readable `message`, and `fields`: the query keys or flag spellings
 concerned. On a declared noun the ledger's warning for a declared control is reachable only through a
 wrong declaration, and the test suite fails when it fires (COMMAND_MODEL "Applicability").
@@ -1202,7 +1205,9 @@ presentation impls during result assembly and records `impls_cap`; its implement
 arrays stay complete. Existing API resource splitting/decoding and host-request
 scope remain unchanged. A known typed keyword binds as its URI query key does on every declared
 noun and meets the same checks, the unread-control refusal included; deps, hotspots, pack, patches and
-testability used to drop it or raise Python's unexpected-keyword `TypeError` (BACK-2656). On a declared
+testability used to drop it or raise Python's unexpected-keyword `TypeError` (BACK-2656). The noun's own
+request checks run too, as on the CLI: `api.query('patches://P?view=pressure&tests=nope')` raises the CLI's
+`Test path not found` as a `RequestValidationError` (BACK-2325). On a declared
 noun `element_name` is refused as the CLI refuses a positional element, before the adapter is built,
 naming the URI form (BACK-2687). Plugins and undeclared adapters keep forwarding keywords and the
 element to their own methods.
