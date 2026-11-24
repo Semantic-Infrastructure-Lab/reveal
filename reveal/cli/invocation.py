@@ -764,6 +764,14 @@ def record_typed_spellings(parser: ArgumentParser, argv: Sequence[str]) -> None:
             expect_value = action.nargs not in (0, '?', '*') and not attached
 
 
+def note_path_read_flags(invocation: 'Invocation') -> None:
+    """The retired flags of the main parser's path read that no route notes where it reads them (``--search``, which
+    the parser reads as a name pattern), noted once: the CLI's path read and the Python API's (``api.analyze``) say
+    the same note (D21, BACK-2325)."""
+    if invocation.typed('--search'):
+        retirement_note('flag:--search')
+
+
 def typed_spelling(dest: str, default: str) -> str:
     """The option string the user typed for *dest*, else *default* (outside an invocation, or not typed)."""
     return (_TYPED.get() or {}).get(dest, default)

@@ -257,7 +257,7 @@ def answer_path_read(path: Any, controls: Mapping[str, Any], element: Optional[s
     from ...utils.gitignore import gitignore_scope
     from ...utils.invocation_log import answer_is_json
     from ...utils.results import execution_failed, note_incomplete
-    from ..invocation import Invocation, invocation_scope, record_typed_spellings
+    from ..invocation import Invocation, invocation_scope, note_path_read_flags, record_typed_spellings
     from ..parser import check_navigation_args, create_argument_parser
     from .declared import JsonUsageParser
     from .file import _parse_file_line_syntax, handle_file_or_directory
@@ -289,6 +289,7 @@ def answer_path_read(path: Any, controls: Mapping[str, Any], element: Optional[s
     with invocation_scope(invocation, retirements_to_stderr=False, form='python'):
         args = parser.parse_args(invocation.argv)
         record_typed_spellings(parser, invocation.argv)
+        note_path_read_flags(invocation)  # the retired flags main._prepare notes (--search)
         check_navigation_args(args)  # the one check the CLI prints (validate_navigation_args), raised
         answer_is_json(True)  # diagnostics belong in the answer, as in the CLI's JSON mode
         try:
