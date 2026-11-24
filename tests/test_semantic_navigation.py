@@ -10,7 +10,13 @@ from pathlib import Path
 import pytest
 
 from reveal.analyzers.jsonl import JsonlAnalyzer
-from reveal.api import analyze
+from reveal import api
+
+
+def analyze(path, **flags):
+    """The outline of ``reveal PATH --flags --format json``: api.analyze returns the CLI's document, the outline under
+    ``structure`` (BACK-2325)."""
+    return api.analyze(path, **flags)['structure']
 from reveal.utils.results import slice_items, slice_structure
 
 # BACK-1149: component-layer test -- single module in isolation, no subprocess/CLI/MCP/network
@@ -135,19 +141,20 @@ class TestJsonlAnalyzerNavigation(unittest.TestCase):
 
     def test_default_shows_first_10(self):
         """Default behavior shows a disclosed sample of the first 10 records."""
-        structure = analyze(self.path)
-        self.assertEqual(len(structure['records']), 10)
-        self.assertEqual(_cut(structure, 'records'), (10, 20, 'sample'))
+        document = api.analyze(self.path)
+        self.assertEqual(len(document['structure']['records']), 10)
+        self.assertEqual(_cut(document, 'records'), (10, 20, 'sample'))
 
     def test_the_analyzer_returns_every_record(self):
         self.assertEqual(len(JsonlAnalyzer(self.path).get_structure()['records']), 20)
 
     def test_head_argument(self):
-        structure = analyze(self.path, head=5)
+        document = api.analyze(self.path, head=5)
+        structure = document['structure']
         self.assertEqual(len(structure['records']), 5)
         self.assertIn('assistant #1', structure['records'][0]['name'])
         self.assertIn('assistant #5', structure['records'][4]['name'])
-        self.assertEqual(_cut(structure, 'records'), (5, 20, 'head'))
+        self.assertEqual(_cut(document, 'records'), (5, 20, 'head'))
 
     def test_tail_argument(self):
         structure = analyze(self.path, tail=3)
@@ -192,11 +199,12 @@ class TestPythonAnalyzerNavigation(unittest.TestCase):
         Path(self.test_file.name).unlink(missing_ok=True)
 
     def test_head_functions(self):
-        structure = analyze(self.test_file.name, head=3)
+        document = api.analyze(self.test_file.name, head=3)
+        structure = document['structure']
         self.assertEqual(len(structure['functions']), 3)
         self.assertIn('func1', structure['functions'][0]['name'])
         self.assertIn('func3', structure['functions'][2]['name'])
-        self.assertEqual(_cut(structure, 'functions'), (3, 10, 'head'))
+        self.assertEqual(_cut(document, 'functions'), (3, 10, 'head'))
 
     def test_tail_functions(self):
         structure = analyze(self.test_file.name, tail=3)
@@ -258,12 +266,12 @@ class TestMarkdownAnalyzerNavigation(unittest.TestCase):
         test_file2.write("# Section 3\n[Link 3](http://demo.com)\n\n")
         test_file2.close()
 
-        structure = analyze(test_file2.name, head=2, extract_links=True)
+        structure = analyze(test_file2.name, head=2, links=True)
 
         self.assertEqual(len(structure['headings']), 2)
         self.assertEqual(len(structure['links']), 2)
         # Without a walk, --links is a filter: links only.
-        self.assertNotIn('headings', analyze(test_file2.name, extract_links=True))
+        self.assertNotIn('headings', analyze(test_file2.name, links=True))
 
         Path(test_file2.name).unlink(missing_ok=True)
 

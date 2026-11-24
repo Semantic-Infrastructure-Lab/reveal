@@ -101,9 +101,10 @@ def test_no_cut_no_note(six_funcs):
 
 
 def test_api_analyze_cuts_like_the_cli(six_funcs):
-    result = api.analyze(str(six_funcs), head=2)
-    assert [f['name'] for f in result['functions']] == ['f1', 'f2']
+    result = api.analyze(str(six_funcs), head=2)  # the CLI's document: the outline under structure (BACK-2325)
+    assert [f['name'] for f in result['structure']['functions']] == ['f1', 'f2']
     assert _cuts(result) == {'functions': (2, 6, 'head')}
+    assert result == json.loads(_run_reveal_direct(six_funcs, '--head', '2', '--format', 'json').stdout)
 
 
 def test_a_flag_the_structure_has_no_list_for_says_so(tmp_path):

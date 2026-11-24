@@ -35,10 +35,11 @@ class TestAnalyze:
                 return f"Hello, {name}"
         """)
         result = analyze(str(f))
-        # Collect all names across all list-valued sections (keys vary by analyzer)
+        # Collect all names across all list-valued sections of the outline (keys vary by analyzer); analyze returns
+        # the CLI's document, the outline under "structure" (BACK-2325)
         all_names = [
             item.get("name", "")
-            for items in result.values()
+            for items in result["structure"].values()
             if isinstance(items, list)
             for item in items
             if isinstance(item, dict)
@@ -53,7 +54,7 @@ class TestAnalyze:
         result = analyze(str(f))
         all_names = [
             item.get("name", "")
-            for items in result.values()
+            for items in result["structure"].values()
             if isinstance(items, list)
             for item in items
             if isinstance(item, dict)
@@ -67,7 +68,8 @@ class TestAnalyze:
     def test_no_analyzer_raises(self, tmp_path):
         f = tmp_path / "data.unknownext12345"
         f.write_text("nothing")
-        with pytest.raises(ValueError, match="No analyzer available"):
+        # A RequestValidationError (still a ValueError) with the CLI's message (BACK-2325)
+        with pytest.raises(ValueError, match="No analyzer found for file"):
             analyze(str(f))
 
 
@@ -198,7 +200,7 @@ class TestPublicApiExports:
 
         all_names = [
             item.get("name")
-            for items in reveal.analyze(path).values()
+            for items in reveal.analyze(path)["structure"].values()
             if isinstance(items, list)
             for item in items
             if isinstance(item, dict)
