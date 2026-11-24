@@ -893,11 +893,13 @@ def check_navigation_args(args) -> None:
                 "Expected format: START-END or START- for open-ended (e.g., 10-20, 300-, 1-indexed)") from e
 
 
-def validate_navigation_args(args):
+def validate_navigation_args(args, parser: Optional[JsonUsageParser] = None):
     """Validate and parse navigation arguments (--head, --tail, --range) and the element views' variable names
     (``check_navigation_args``), printing the CLI's error.
 
     An invalid value is an invalid request: exit 2 (D6), as every other invalid invocation (BACK-2627 E5, E9).
+    *parser*: the parser that read *args*; a request that asks for JSON is answered as its usage errors are
+    (``JsonUsageParser.answer_in_json``: a path read's invalid-request document, BACK-2325 B11). Text is unchanged.
 
     Args:
         args: Parsed argument namespace
@@ -912,6 +914,8 @@ def validate_navigation_args(args):
     except NavRequestValidationError:
         raise  # the element view's refusal, answered by its owner
     except RequestValidationError as e:
+        if parser is not None:
+            parser.answer_in_json(str(e), args)  # exits 2 with the document when the request asks for JSON
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(2)
 

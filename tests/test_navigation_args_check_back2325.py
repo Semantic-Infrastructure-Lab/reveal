@@ -74,3 +74,31 @@ def test_a_valid_request_passes_and_the_range_is_stored_parsed(capsys, check):
     check(head)
     assert head.head == 0 and head.range is None
     assert capsys.readouterr() == ('', '')
+
+
+# B11: given the parser that read the request, a request that asks for JSON is answered as that parser's usage errors
+# are (``answer_in_json``); text and a reader without a parser are unchanged (the cases above).
+class _Parser:
+    def __init__(self):
+        self.answered = []
+
+    def answer_in_json(self, message, args):
+        self.answered.append(message)
+
+
+@pytest.mark.parametrize('given,stderr', _REFUSED)
+def test_the_parser_answers_first_then_the_text_prints(capsys, given, stderr):
+    parser = _Parser()
+    with pytest.raises(SystemExit) as exited:
+        validate_navigation_args(_args(**given), parser)
+    assert exited.value.code == 2
+    assert parser.answered == [stderr.removeprefix('Error: ').removesuffix('\n')]
+    assert capsys.readouterr() == ('', stderr)
+
+
+def test_a_valid_request_or_an_empty_view_variable_never_asks_the_parser(capsys):
+    parser = _Parser()
+    validate_navigation_args(_args(head=2), parser)
+    with pytest.raises(NavRequestValidationError):
+        validate_navigation_args(_args(varflow=''), parser)
+    assert parser.answered == [] and capsys.readouterr() == ('', '')

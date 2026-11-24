@@ -351,7 +351,7 @@ def _prepare(invocation: Invocation) -> Tuple[Namespace, Callable[[], None], Opt
         record_typed_spellings(parser, invocation.argv)
         if invocation.typed('--search'):
             retirement_note('flag:--search')
-        validate_navigation_args(args)
+        validate_navigation_args(args, parser)
         _apply_output_sinks(parser, args, invocation)
         return args, lambda: _main_impl(invocation, parser, args), None
 
