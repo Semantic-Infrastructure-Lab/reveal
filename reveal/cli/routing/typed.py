@@ -66,7 +66,6 @@ def _analysis_failure(answer: Any, facts: Any) -> Exception:
     """Exit 3: the analysis's cause, else ``AnalysisFailedError`` with the answer's failure warnings and the answer
     itself, built inside the request's invocation scope so it carries its notes as the CLI's document does."""
     from ...errors import AnalysisFailedError
-    from ...utils.json_utils import json_answer
     from ...utils.results import note_incomplete
     exc: Optional[Exception] = answer.exception
     if exc is not None:
@@ -80,8 +79,17 @@ def _analysis_failure(answer: Any, facts: Any) -> Exception:
     if not result:
         return AnalysisFailedError(message)
     note_incomplete(result, facts)
-    document: Dict[str, Any] = json_answer(result)
-    return AnalysisFailedError(message, result=document)
+    return AnalysisFailedError(message, result=_answer_document(answer))
+
+
+def _answer_document(answer: Any) -> Optional[Dict[str, Any]]:
+    """The JSON document *answer* prints with ``--format json``: the one its renderer builds (``Answer.document``: a
+    file's envelope, a directory listing; None when it prints no document), else ``json_answer(result)``."""
+    from ...utils.json_utils import json_answer
+    if answer.document is not None:
+        return answer.document()
+    document: Dict[str, Any] = json_answer(answer.result)
+    return document
 
 
 def _failure(answer: Any, facts: Any) -> Exception:
@@ -130,4 +138,141 @@ def answer_typed_request(noun: str, target: Optional[str], controls: Mapping[str
         answer = answers[-1]
         note_incomplete(answer.result, answer.execution_facts)
         document: Dict[str, Any] = json_answer(answer.result)
+        return document
+
+
+# --- the path read (D21, BACK-2325): api.analyze(PATH, **controls) is ``reveal PATH --flags --format json`` -------------
+
+def path_read_options(parser: argparse.ArgumentParser) -> Dict[str, Tuple[str, argparse.Action]]:
+    """keyword -> (the long flag it writes, its action), for every request control of a path read, read from the main
+    *parser*: its long flags with ``-`` as ``_``, minus what is no control of a file or directory read: the output and
+    process options (the global options, ``--breadcrumbs`` aside), the modes that read no path or no element
+    (``PATHLESS_FLAGS``, ``ELEMENT_LESS_FLAGS``), the element's own controls (the element views, ``ELEMENT_KEYS``, and
+    ``--section``, ``ELEMENT_FLAGS``: an element read) and help."""
+    from ...nav_params import ELEMENT_KEYS, ELEMENT_VIEW_SPECS
+    from ...utils.query_binding import legacy_flag_dests
+    from ..parser import _build_global_options_parser
+    from .file import ELEMENT_FLAGS, ELEMENT_LESS_FLAGS, PATHLESS_FLAGS
+    excluded = {action.dest for action in _build_global_options_parser(main_modes=True)._actions} - {'breadcrumbs'}
+    excluded |= set(PATHLESS_FLAGS) | set(ELEMENT_LESS_FLAGS) | set(ELEMENT_FLAGS) | {'help', 'help_all', 'version'}
+    excluded |= {dest for spec in ELEMENT_VIEW_SPECS if spec.name in ELEMENT_KEYS
+                 for dest in ((spec.cli.dest if spec.cli else None) or spec.name, *legacy_flag_dests(spec))}
+    options: Dict[str, Tuple[str, argparse.Action]] = {}
+    for action in parser._actions:
+        if action.dest in excluded:
+            continue
+        for flag in action.option_strings:
+            if flag.startswith('--'):
+                options.setdefault(flag[2:].replace('-', '_'), (flag, action))
+    return options
+
+
+def _analyzer_words(parser: argparse.ArgumentParser, options: Mapping[str, Tuple[str, argparse.Action]]) -> Dict[str, List[str]]:
+    """analyzer keyword -> the path read's keywords that set it, read from the CLI's one mapping
+    (``display.formatting._build_analyzer_kwargs``): the words ``api.analyze`` forwarded to ``get_structure()`` before
+    it took the path read's flags (``extract_links`` is ``links``)."""
+    from ...display.formatting import _build_analyzer_kwargs
+
+    class _EveryAnalyzer:  # the attributes _build_analyzer_kwargs asks of Markdown, HTML and nginx analyzers
+        _extract_links = _extract_metadata = _filter_structure_by_domain = None
+
+    words: Dict[str, List[str]] = {}
+    for keyword, (_flag, action) in options.items():
+        args = parser.parse_args([])
+        value: Any = True if action.nargs == 0 else (action.choices and next(iter(action.choices))) or (
+            1 if action.type is int else 'x')
+        setattr(args, action.dest, value)
+        try:
+            produced = _build_analyzer_kwargs(_EveryAnalyzer(), args)
+        except (TypeError, ValueError):  # a value of the wrong shape for a reader this probe does not model
+            continue
+        for word in produced:
+            if word not in options:
+                words.setdefault(word, []).append(keyword)
+    return words
+
+
+def path_read_words(parser: argparse.ArgumentParser, controls: Mapping[str, Any]) -> List[str]:
+    """The path read's flags for *controls* (``path_read_options``); a keyword that names none is the
+    unsupported-control error (``UnsupportedOverrideError``), raised before anything runs, naming the flag keyword for
+    an analyzer word ``api.analyze`` used to forward. A ``range`` tuple ``(A, B)`` is the flag's ``A-B``."""
+    from ...errors import UnsupportedOverrideError
+    from .canonical import _flag_words
+    options = path_read_options(parser)
+    unknown = [keyword for keyword in controls if keyword not in options]
+    if unknown:
+        renamed = _analyzer_words(parser, options)
+        taught = [f"{word!r} is the analyzer's word that {_either(renamed[word])} set{'s' if len(renamed[word]) == 1 else ''}"
+                  for word in unknown if word in renamed]
+        raise UnsupportedOverrideError(
+            f"unsupported keyword{'s' if len(unknown) > 1 else ''} {', '.join(map(repr, unknown))} for a path read; "
+            f"its keywords are the flags of reveal PATH with - as _ (reveal --help)"
+            + (f" ({'; '.join(taught)})" if taught else ''))
+    words: List[str] = []
+    for keyword, value in controls.items():
+        flag, action = options[keyword]
+        if action.dest == 'range' and isinstance(value, tuple) and len(value) == 2:
+            value = f'{value[0]}-{value[1]}'
+        words.extend(_flag_words(keyword, flag, action, value))
+    return words
+
+
+def _either(keywords: List[str]) -> str:
+    named = [f'{keyword}=' for keyword in keywords]
+    return named[0] if len(named) == 1 else f"{', '.join(named[:-1])} or {named[-1]}"
+
+
+class _Failed(Exception):
+    """The answer consumer's stop: the path read failed (exit 2 or 3); the failure is raised outside the route."""
+
+
+def answer_path_read(path: Any, controls: Mapping[str, Any]) -> Dict[str, Any]:
+    """Answer ``reveal PATH --flags`` as the CLI's JSON document carries it (a file's envelope, a directory's tree),
+    through the CLI's own path-read route (``handle_file_or_directory`` with an answer consumer), inside the caller's
+    host request and invocation log (``api.analyze``). An invalid request raises ``RequestValidationError`` (the CLI's
+    exit 2; a missing path ``PathNotFoundError``), a failed analysis raises its cause or ``AnalysisFailedError``
+    carrying the document (exit 3); an incomplete answer returns, marked in itself as on the CLI."""
+    from ... import __version__
+    from ...errors import RequestValidationError
+    from ...utils.gitignore import gitignore_scope
+    from ...utils.invocation_log import answer_is_json
+    from ...utils.results import execution_failed, note_incomplete
+    from ..invocation import Invocation, invocation_scope, record_typed_spellings
+    from ..parser import check_navigation_args, create_argument_parser
+    from .file import _parse_file_line_syntax, handle_file_or_directory
+    if not isinstance(path, (str, os.PathLike)):
+        raise TypeError(f'the path of a path read is a path string, got {type(path).__name__}')
+    target = os.fspath(path)
+    if _parse_file_line_syntax(target)[1] is not None:
+        raise RequestValidationError(f"{target} names lines of a file, an element: "
+                                     f"api.element({target.rpartition(':')[0]!r}, {':' + target.rpartition(':')[2]!r})")
+    parser = create_argument_parser(__version__)
+    parser.raise_usage_errors = True
+    words = path_read_words(parser, controls)
+    # The format words come before '--', which ends the options, so a path that starts with '-' stays the path.
+    invocation = Invocation.parse(['reveal', *words, '--format=json', '--', target])
+    answers: list = []
+
+    def consume(answer: Any) -> None:
+        answers.append(answer)
+        if answer.execution_facts is not None and execution_failed(answer.execution_facts):
+            raise _Failed()
+
+    with invocation_scope(invocation, retirements_to_stderr=False, form='python'):
+        args = parser.parse_args(invocation.argv)
+        record_typed_spellings(parser, invocation.argv)
+        check_navigation_args(args)  # the one check the CLI prints (validate_navigation_args), raised
+        answer_is_json(True)  # diagnostics belong in the answer, as in the CLI's JSON mode
+        try:
+            with gitignore_scope(getattr(args, 'respect_gitignore', None) is not False):
+                handle_file_or_directory(args.path, args, answer_consumer=consume)
+        except _Failed:
+            raise _failure(answers[-1], answers[-1].execution_facts) from None
+        if not answers:
+            raise RuntimeError(f'reveal {target} returned without an answer')
+        note_incomplete(answers[-1].result, answers[-1].execution_facts)  # as the CLI's JSON says it (a listing did)
+        document = _answer_document(answers[-1])
+        if document is None:
+            raise RequestValidationError(f'reveal {target} {" ".join(words)} prints no JSON document (its answer is '
+                                         'text: --related-flat prints paths)')
         return document
