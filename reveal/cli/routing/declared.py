@@ -688,9 +688,13 @@ def run_declared_uri_command(name: str, uri: str, element: Optional[str], args) 
     """A declared noun's URI request read by its own parser (``declared_uri_request``): the URI's spellings are noted
     as on every URI route, then the typed flags join the URI's query (``run_declared_command``)."""
     from .uri import _note_retired_spellings
-    _note_retired_spellings(uri)
+    adapter = declared_adapter_class(name)
     query = uri.partition('?')[2]
-    resource = peek(args, declared_adapter_class(name).RESOURCE_SPEC.name)
+    resource = peek(args, adapter.RESOURCE_SPEC.name)
+    try:
+        _note_retired_spellings(uri)
+    except RetiredSpellingError as exc:
+        answer_retired_spelling(exc, args, _declared_refusal(adapter, name, args, resource or '', query))
     if element:
         legacy = legacy_element_resource(name, resource, element)
         if legacy is None:
@@ -727,15 +731,26 @@ def run_declared_command(name: str, args, *, answer_consumer=None, uri_query: Op
     place of the positionals' (a URI request whose noted legacy element joins its path, ``legacy_element_resource``)."""
     from ...utils.query_binding import convert_flag_only, typed_resource
     adapter = declared_adapter_class(name)
-    _note_retired_flags(name, adapter)
-    convert_flag_only(adapter.PARAM_SPECS, args)
-    source, spelled = typed_source(
-        adapter.PARAM_SPECS, args,
-        carried=lambda spec, source, spelled: _bind_global_carried(adapter, spec, args, uri_query, source, spelled))
     if resource is None:
         resource = typed_resource(adapter.RESOURCE_SPEC, args)
-    _run_declared(name, args, resource, source, 'typed',
-                  answer_consumer=answer_consumer, spelled=spelled, uri_query=uri_query)
+    try:
+        _note_retired_flags(name, adapter)
+        convert_flag_only(adapter.PARAM_SPECS, args)
+        source, spelled = typed_source(
+            adapter.PARAM_SPECS, args,
+            carried=lambda spec, source, spelled: _bind_global_carried(adapter, spec, args, uri_query, source, spelled))
+        _run_declared(name, args, resource, source, 'typed',
+                      answer_consumer=answer_consumer, spelled=spelled, uri_query=uri_query)
+    except RetiredSpellingError as exc:  # a typed flag's row, the binder's, the request note, an owner's while it binds
+        path = resource or ('' if uri_query is not None else '.')
+        answer_retired_spelling(exc, args, _declared_refusal(adapter, name, args, path, uri_query), answer_consumer)
+
+
+def _declared_refusal(adapter, name: str, args, path: str, query: Optional[str]) -> Callable[[str], Any]:
+    """The invalid-request Answer a declared request gives a message (the binder's refusals'), for an error-stage
+    retirement (``answer_retired_spelling``): its type keeps the operation the URI's *query* selects."""
+    resource = '?' + query if query else ''
+    return lambda text: _invalid_prepared_answer(adapter, name, path, resource, text, args)
 
 
 def typed_source(specs, args, *, carried=None) -> tuple:
@@ -801,7 +816,11 @@ def run_declared_uri(uri: str, element: str | None, args, consumed=(), *, answer
             _refuse_element(name, path, element, args, answer_consumer)
             return
         path = legacy
-    _run_declared(name, args, path, query, 'uri', consumed, answer_consumer=answer_consumer)
+    try:
+        _run_declared(name, args, path, query, 'uri', consumed, answer_consumer=answer_consumer)
+    except RetiredSpellingError as exc:
+        answer_retired_spelling(exc, args, _declared_refusal(declared_adapter_class(name), name, args, path, query),
+                                answer_consumer)
 
 
 def _bind_global_all(name, adapter, args, source, spelled=None, path=None, selection=None) -> None:

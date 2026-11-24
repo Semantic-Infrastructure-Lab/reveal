@@ -31,7 +31,10 @@ CASES = {
     'path read --search': ('flag:--search', ['app.py', '--search', 'hel'], ['app.py', '--head', 'x']),
     'declared flag': ('param:calls.top', ['calls', '.', '--sort=-callers', '--top', '3'],
                       ['calls', '.', '--sort=-callers', '--limit', 'x']),
-    'declared URI key': ('param:calls.top', ['calls://.?sort=-callers&top=3'], ['calls://.?sort=-callers&limit=x']),
+    # The URI route refuses a conflict before binding, as it refuses a retired key (a malformed ?limit= is refused after
+    # binding, typed by the bound prediction: calls_ranking, where the flag form says calls_query).
+    'declared URI key': ('param:calls.top', ['calls://.?sort=-callers&top=3'],
+                         ['calls://.?sort=-callers&limit=1&limit=2']),
     'subcommand': ('subcommand:hotspots', ['hotspots', '.'], ['hotspots', '.', '--limit', 'x']),
     'declared scheme': ('scheme:hotspots', ['hotspots://.'], ['hotspots://.?limit=x']),
     'scheme on the URI route': ('scheme:stats', ['stats://.'], ['stats://.', '--limit', 'x']),
