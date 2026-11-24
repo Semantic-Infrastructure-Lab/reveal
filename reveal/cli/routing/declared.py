@@ -294,9 +294,10 @@ def path_read_refusal(target: str, text: str, args, *, exit_code: int = 2, error
     """The Answer of a path read that a site of the file route refuses (BACK-2325, ruling S4). *text* is exactly what
     the site prints on stderr, its error line then any hints; the document is the path read's invalid-request document
     (``invalid_path_read``'s facet and shape), its message the error line without its ``Error:`` label; the exit is
-    *exit_code*, 2 for an invalid request (a site with a legacy code keeps it). *error*: what the Python API raises,
-    the request's own ``RequestValidationError`` (by default one with the document's message), or with *cause*
-    ``FailureCause.ANALYSIS`` the ``OSError`` of a file that could not be read (exit 3). MCP reads the facts and *text*
+    *exit_code*: 2 for an invalid request, and for a file that could not be read the code its facts give (3; 2 for one
+    that vanished). *error*: what the Python API raises, the request's own ``RequestValidationError`` (by default one
+    with the document's message), or with *cause* ``FailureCause.ANALYSIS`` the ``OSError`` of a file that could not
+    be read (exit 3). MCP reads the facts and *text*
     (``public_diagnostic``), as the exit and stderr it read before. *diagnostic*: the refusal's own message when it is
     not *text*'s error line (an element read of a file whose structure failed says the file route's ``Error (PATH):``
     line, BACK-2775): the document's message, the API's and MCP's text (as the file structure's Answer says its cause)."""
