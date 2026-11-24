@@ -93,8 +93,9 @@ def element(
     Args:
         path: Path to the file.
         name: The element, as ``reveal PATH NAME`` names it.
-        element_type: A kind (``"function"``, ``"class"``, ...) to look *name* up as. It keeps its earlier lookup,
-            which answers None when nothing of that kind has that name.
+        element_type: Deprecated, works until 1.0: a kind (``"function"``, ``"class"``, ...) to look *name* up as,
+            with its earlier lookup (None when nothing of that kind has that name). The answer's ``meta.warnings``
+            carries the ``retired_spelling`` note; name the element as ``reveal PATH NAME`` does instead.
 
     Each call is one host request, like :func:`query`.
 
@@ -115,30 +116,35 @@ def element(
         func = element("mymodule.py", "load_config")
         print(func["content"])
     """
-    if element_type is not None:
-        return _typed_element(path, name, element_type)
     from .cli.routing.typed import answer_path_read
     from .utils.invocation_log import log_scope
     from .utils.request_cache import host_request
     with host_request(), log_scope(to_stderr=False):
+        if element_type is not None:
+            return _typed_element(path, name, element_type)
         return answer_path_read(path, {}, name)
 
 
 def _typed_element(path: str, name: str, element_type: str) -> Optional[Dict[str, Any]]:
-    """``element_type``'s earlier lookup (the analyzer's ``extract_element(type, name)``), unchanged: no element syntax
-    of the CLI names a kind and a name together, so it has no CLI request to answer through yet (BACK-2325, ruling S2:
-    its note-stage translation awaits that ruling)."""
+    """``element_type``'s earlier lookup (the analyzer's ``extract_element(type, name)``), unchanged until the cut: no
+    element syntax of the CLI names a kind and a name together, so it has no CLI request to answer through (BACK-2325,
+    ruling S2). Its RETIREMENTS row notes it in the invocation's log: in the returned document's ``meta.warnings``, and
+    for a None in the log a host (an MCP tool call, the caller's own scope) keeps; at the cut the row raises."""
+    from .cli.invocation import Invocation, invocation_scope, retirement_note
     from .registry import get_analyzer
+    from .utils.json_utils import attach_invocation_warnings
     from .utils.results import ResultBuilder
 
-    file_path = Path(path)
-    if not file_path.exists():
-        raise FileNotFoundError(f"File not found: {path}")
-    analyzer_class = get_analyzer(str(file_path))
-    if analyzer_class is None:
-        raise ValueError(f"No analyzer available for: {path}")
-    result = analyzer_class(str(file_path)).extract_element(element_type, name)
-    return dict(ResultBuilder.element(result, file_path)) if result is not None else None
+    with invocation_scope(Invocation.parse(['reveal', path]), retirements_to_stderr=False, form='python'):
+        retirement_note('python:element.element_type')
+        file_path = Path(path)
+        if not file_path.exists():
+            raise FileNotFoundError(f"File not found: {path}")
+        analyzer_class = get_analyzer(str(file_path))
+        if analyzer_class is None:
+            raise ValueError(f"No analyzer available for: {path}")
+        result = analyzer_class(str(file_path)).extract_element(element_type, name)
+        return attach_invocation_warnings(dict(ResultBuilder.element(result, file_path))) if result is not None else None
 
 
 def _noted_answer(scheme: str, uri: str, overrides: Dict[str, Any], answer):

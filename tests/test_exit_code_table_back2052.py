@@ -43,6 +43,7 @@ def test_retirement_inventory_matches_the_shipped_migrations():
     BACK-2767 adds the positional element of help:// and reveal:// (help://TOPIC, the path read of a source file).
     BACK-2774 adds the pressure report's and Testability's tests (--test-paths PATHS; --tests is the shared policy).
     BACK-2773 adds help's search and top (--match TEXT, --limit N) and the search term in the path (help://search/TERM).
+    BACK-2325 adds api.element's element_type keyword (python:element.element_type, a Python-only spelling).
     """
     generated = [f'flag:{noun}.{flag}' for noun, flags in LEGACY_CLI_MODIFIERS.items() for flag in flags]  # BACK-2673
     assert sorted(RETIREMENTS) == sorted(generated + ['flag:--also-json', 'flag:--boundary', 'flag:--calls', 'flag:--catchmap', 'flag:--check', 'flag:--deps',
@@ -51,7 +52,7 @@ def test_retirement_inventory_matches_the_shipped_migrations():
                                    'flag:--returns', 'flag:--search', 'flag:--sideeffects', 'flag:--statewrites',
                                    'flag:--verbose', 'flag:--writes', 'param:architecture.verbose', 'param:ast.callee_of', 'param:ast.calls', 'param:ast.depth', 'param:ast.show', 'param:ast.type',
                                    'param:calls.external', 'param:calls.modules', 'param:calls.rank', 'param:calls.root', 'param:calls.target', 'param:calls.top', 'param:calls.type', 'param:calls.uncalled',
-                                   'param:contracts.impls', 'param:patches.group', 'param:patches.min_categories', 'param:patches.min_patches', 'param:patches.no_suppress', 'param:patches.tests', 'param:patches.top', 'param:contracts.no_implementations', 'param:sqlite.check', 'param:xlsx.range', 'param:xlsx.search', 'param:env.show_secrets', 'param:help.search', 'param:help.top', 'param:surface.by', 'param:surface.depth', 'param:surface.source_only', 'param:surface.top', 'param:surface.type', 'param:claude.contains', 'param:claude.filter', 'param:claude.full', 'param:claude.last', 'param:claude.raw', 'param:claude.search', 'param:claude.summary', 'param:claude.tail',
+                                   'param:contracts.impls', 'param:patches.group', 'param:patches.min_categories', 'param:patches.min_patches', 'param:patches.no_suppress', 'param:patches.tests', 'param:patches.top', 'param:contracts.no_implementations', 'param:sqlite.check', 'param:xlsx.range', 'param:xlsx.search', 'param:env.show_secrets', 'param:help.search', 'param:help.top', 'param:surface.by', 'param:surface.depth', 'param:surface.source_only', 'param:surface.top', 'param:surface.type', 'python:element.element_type', 'param:claude.contains', 'param:claude.filter', 'param:claude.full', 'param:claude.last', 'param:claude.raw', 'param:claude.search', 'param:claude.summary', 'param:claude.tail',
                                    'param:codex.filter', 'param:codex.full', 'param:codex.goal', 'param:codex.last', 'param:codex.search', 'param:codex.tokens',
                                    'param:deps.verbose', 'param:git.ignore', 'param:git.no_merges', 'param:git.raw', 'param:git.type', 'param:git.verbose',
                                    'param:json.data-only', 'param:json.flatten', 'param:json.gron', 'param:json.keys', 'param:json.length', 'param:json.schema', 'param:json.type',

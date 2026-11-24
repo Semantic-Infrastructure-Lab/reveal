@@ -221,6 +221,7 @@ FINDINGS_BY_DEFAULT = ('check', 'review', 'health')
 #   flag:<--flag>                --search
 #   flag:<noun>.<--flag>         reveal ast ... --head (a main-parser flag a declared noun keeps, LEGACY_CLI_MODIFIERS)
 #   mcp:<tool>                   reveal_trace
+#   python:<function>.<keyword>  reveal.api.element(..., element_type=) (a keyword only the Python API spells)
 # A row's stage says what the spelling does now: ``note`` prints the note and answers as before,
 # ``phase7`` is recorded and prints nothing yet (MCP tool names stay until Phase 7), ``error``
 # is the cut release: exit 2 with the same text. A ``removed`` row is a spelling deleted outright
@@ -235,7 +236,8 @@ RETIREMENT_KEY = re.compile(
     r'|flag:--[a-z][a-z0-9-]*'
     r'|flag:[a-z][a-z0-9-]*\.--[a-z][a-z0-9-]*'
     r'|target:[a-z][a-z0-9-]*\.[a-z][a-z0-9-]*'  # a kind of target a subcommand stops taking
-    r'|mcp:[a-z][a-z0-9_]*)$')
+    r'|mcp:[a-z][a-z0-9_]*'
+    r'|python:[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*)$')
 
 
 @dataclass(frozen=True)
@@ -652,6 +654,11 @@ RETIREMENTS: Dict[str, Retirement] = {
     # old shapes and exit codes until the cut, which waits on a due-diligence consumer moving first (BACK-2153).
     'subcommand:deps': Retirement('reveal deps', 'reveal imports <path> --external, --circular or --unused'),
     'scheme:deps': Retirement('deps://', 'reveal imports <path> --external, --circular or --unused'),
+    # api.element's kind keyword (BACK-2325, ruling S2): no element spelling of the CLI names a kind and a name together,
+    # so it keeps its earlier lookup until the cut, noted; the cut refuses it through this row.
+    'python:element.element_type': Retirement('api.element(PATH, NAME, element_type=KIND)',
+                                              'api.element(PATH, NAME), which names the element as reveal PATH NAME '
+                                              'does (Class.method for a method)'),
     # python:// was removed outright, not moved (D4, BACK-2225, Scott 2026-10-25): no reveal scheme answers its
     # questions, so the row names the interpreter's own tools and starts at the error stage.
     'scheme:python': Retirement('python://', 'python -m site (sys.path), python -m pip list or python -m pip show NAME '

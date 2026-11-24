@@ -148,6 +148,9 @@ def _patterns(key):
         if key == 'flag:--verbose':
             return [_declared_verbose()]
         return [re.compile(rf'(?<![\w-]){re.escape(rest)}(?![\w-])')]
+    if kind == 'python':  # a keyword of a reveal.api function: element(..., element_type=...)
+        function, _, keyword = rest.partition('.')
+        return [re.compile(rf'(?<![\w]){re.escape(function)}\([^)\n]*\b{re.escape(keyword)}\s*=')]
     if kind == 'target' and key == 'target:health.code':
         return [_health_names_a_code_path]
     if kind == 'target' and key == 'target:nav.outline':
@@ -187,6 +190,9 @@ def _sample(key):
         return f'reveal {noun}://src/ {flag} 3'
     if kind == 'flag':
         return f'reveal src/app.py {rest}'
+    if kind == 'python':
+        function, _, keyword = rest.partition('.')
+        return f"api.{function}('app.py', 'NAME', {keyword}='x')"
     if key == 'target:health.code':
         return 'reveal health ./src'
     if key == 'target:nav.outline':
