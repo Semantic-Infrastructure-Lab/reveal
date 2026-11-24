@@ -445,16 +445,16 @@ def extraction_error_text(analyzer, element: str, syntax: dict) -> str:
         syntax: Parsed syntax dict
     """
     syntax_type = syntax['type']
-    path = to_posix(analyzer.path)
+    shown = to_posix(analyzer.path)
     lines: list = []
 
     if syntax_type == 'ordinal':
         element_type = syntax['element_type']
         ordinal = syntax['ordinal']
         if element_type:
-            lines.append(f"Error: No {element_type} #{ordinal} found in {path}")
+            lines.append(f"Error: No {element_type} #{ordinal} found in {shown}")
         else:
-            lines.append(f"Error: No element #{ordinal} found in {path}")
+            lines.append(f"Error: No element #{ordinal} found in {shown}")
 
     elif syntax_type == 'line':
         target_line = syntax['start_line']
@@ -462,32 +462,32 @@ def extraction_error_text(analyzer, element: str, syntax: dict) -> str:
         total = _count_lines(analyzer.path)
         span = f"{target_line}-{end_line}" if end_line else str(target_line)
         if total is not None and target_line > total:
-            lines.append(f"Error: Line {span} is past the end of {path} ({total} lines)")
+            lines.append(f"Error: Line {span} is past the end of {shown} ({total} lines)")
         elif end_line:
-            lines.append(f"Error: Invalid line range {span} in {path}")
+            lines.append(f"Error: Invalid line range {span} in {shown}")
         else:
-            lines.append(f"Error: No element found at line {target_line} in {path}")
+            lines.append(f"Error: No element found at line {target_line} in {shown}")
 
     elif syntax_type == 'hierarchical':
         parent, child = element.rsplit('.', 1)
-        lines.append(f"Error: Element '{element}' not found in {path}")
+        lines.append(f"Error: Element '{element}' not found in {shown}")
         lines.append(f"Hint: Looking for '{child}' within '{parent}'")
 
     else:
-        lines.append(f"Error: Element '{element}' not found in {path}")
+        lines.append(f"Error: Element '{element}' not found in {shown}")
         if '|' in element:
             lines.append(
                 "Hint: '|' pattern matches headings only. "
-                f"For table or body content, use: reveal {path} --grep '{element.split('|')[0].strip()}'")
+                f"For table or body content, use: reveal {shown} --grep '{element.split('|')[0].strip()}'")
         elif _is_markdown(analyzer):
             lines.append(
                 "Hint: a section name matches a heading exactly or as a substring, ignoring case. "
-                f"List the headings: reveal {path}   "
-                f"Search the text: reveal {path} --grep '{element}'")
+                f"List the headings: reveal {shown}   "
+                f"Search the text: reveal {shown} --grep '{element}'")
         elif isinstance(getattr(analyzer, 'EXTRACT_BY_NAME_HINT', None), str):
-            lines.append(f"{analyzer.EXTRACT_BY_NAME_HINT} For content search, use: reveal {path} --grep '{element}'")
+            lines.append(f"{analyzer.EXTRACT_BY_NAME_HINT} For content search, use: reveal {shown} --grep '{element}'")
         else:
-            lines.append(f"Hint: Code extraction matches exact names. For content search, use: reveal {path} --grep '{element}'")
+            lines.append(f"Hint: Code extraction matches exact names. For content search, use: reveal {shown} --grep '{element}'")
         lines.extend(_did_you_mean_lines(analyzer, element))
         lines.extend(_available_names_lines(analyzer))
     return ''.join(f'{line}\n' for line in lines)
@@ -561,7 +561,8 @@ def extract_element(analyzer: FileAnalyzer, element: str, output_format: str, co
 
 def element_document(analyzer, result) -> dict:
     """The JSON document an element read prints (``--format json``; a section outline's too): the element envelope."""
-    return attach_invocation_warnings(dict(ResultBuilder.element(result, analyzer.path)))
+    document: dict = attach_invocation_warnings(dict(ResultBuilder.element(result, analyzer.path)))
+    return document
 
 
 # A markdown section this long that has subsections is shown as its own body plus the
