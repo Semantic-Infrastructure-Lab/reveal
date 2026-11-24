@@ -27,13 +27,33 @@ Usage::
         print(f.rule_code, f.message)
 """
 
+import functools
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, TypeVar, cast
 
 logger = logging.getLogger(__name__)
 
+_Entry = TypeVar('_Entry', bound=Callable[..., Any])
 
+
+def _api_exit(entry: _Entry) -> _Entry:
+    """The API's exit for a spelling retired at the error stage (BACK-2803): the CLI exits 2 with the row's text, so the
+    caller gets ``RequestValidationError`` with that text, as for every other exit 2, the ``RetiredSpellingError`` its
+    cause. Mapped here, after the request: ``RetiredSpellingError`` is not a ``ValueError``, so no ``except ValueError``
+    inside the request (the one around ``request_note``) takes the cut for a request that may go on."""
+    @functools.wraps(entry)
+    def answer(*args: Any, **kwargs: Any) -> Any:
+        from .cli.invocation import RetiredSpellingError
+        from .errors import RequestValidationError
+        try:
+            return entry(*args, **kwargs)
+        except RetiredSpellingError as retired:
+            raise RequestValidationError(str(retired)) from retired
+    return cast(_Entry, answer)
+
+
+@_api_exit
 def analyze(path: str, **kwargs: Any) -> Dict[str, Any]:
     """The JSON document ``reveal PATH --format json`` prints, for a file or a directory.
 
@@ -61,7 +81,7 @@ def analyze(path: str, **kwargs: Any) -> Dict[str, Any]:
         PathNotFoundError: *path* does not exist (a ``RequestValidationError`` and still a ``FileNotFoundError``).
         RequestValidationError: Every request the CLI exits 2 on, with the CLI's message: no analyzer reads the file,
             a file that is not the document its type needs (a notebook that is not one, a ``.docx`` that is not a
-            zip), an invalid value.
+            zip), an invalid value, a flag retired at its cut.
         UnsupportedOverrideError: An unknown keyword (also a ``TypeError``).
         AnalysisFailedError: A file whose analysis failed (an XML or notebook parse error), where the CLI exits 3;
             its ``result`` is the CLI's document. A file that could not be read raises its ``OSError``.
@@ -79,6 +99,7 @@ def analyze(path: str, **kwargs: Any) -> Dict[str, Any]:
         return answer_path_read(path, kwargs)
 
 
+@_api_exit
 def element(
     path: str,
     name: str,
@@ -95,7 +116,8 @@ def element(
         name: The element, as ``reveal PATH NAME`` names it.
         element_type: Deprecated, works until 1.0: a kind (``"function"``, ``"class"``, ...) to look *name* up as,
             with its earlier lookup (None when nothing of that kind has that name). The answer's ``meta.warnings``
-            carries the ``retired_spelling`` note; name the element as ``reveal PATH NAME`` does instead.
+            carries the ``retired_spelling`` note; name the element as ``reveal PATH NAME`` does instead. At the cut
+            it raises ``RequestValidationError`` with the note's text.
 
     Each call is one host request, like :func:`query`.
 
@@ -301,6 +323,7 @@ def _legacy_element(adapter_class: Any, scheme: str, element_name: Optional[str]
     return legacy
 
 
+@_api_exit
 def query(
     uri: str,
     element_name: Optional[str] = None,
@@ -365,7 +388,7 @@ def query(
         RequestValidationError: A ValueError for a request a declared noun cannot answer as written: an
             element, an unread control (``UnreadControlError``) or an unsupported keyword; with a noun or a
             declared noun's URI, every request the CLI exits 2 on (a missing path is ``PathNotFoundError``, still a
-            ``FileNotFoundError``).
+            ``FileNotFoundError``; a spelling retired at its cut says its row's text, the retirement its cause).
         TypeError: If a declared noun gets an unsupported keyword (``UnsupportedOverrideError`` is both).
         AnalysisFailedError: With a noun or a declared noun's URI, a failed analysis that raised no cause of its
             own (the CLI's exit 3); its ``result`` is the answer's document.

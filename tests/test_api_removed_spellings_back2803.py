@@ -2,8 +2,8 @@
 
 The noun form reads the CLI router's one predicate (``invocation.is_command_word``): a removed ``subcommand:`` row keeps
 its word a noun, refused with the row's text instead of "neither a noun nor a URI". The URI form's unknown-scheme
-branch reads the ``scheme:`` row before "Unsupported URI scheme". The exception class is the error stage's own
-(``RetiredSpellingError``, never a ``ValueError`` subclass); mapping it to ``RequestValidationError`` is BACK-2803 (i).
+branch reads the ``scheme:`` row before "Unsupported URI scheme". The API's exit raises ``RequestValidationError``
+with the row's text, its cause the error stage's own ``RetiredSpellingError`` (never a ``ValueError`` subclass).
 """
 from dataclasses import replace
 
@@ -11,6 +11,7 @@ import pytest
 
 from reveal import api
 from reveal.cli.invocation import COMMANDS, RETIREMENTS, RetiredSpellingError
+from reveal.errors import RequestValidationError
 
 
 @pytest.fixture
@@ -29,9 +30,10 @@ def _remove(monkeypatch, noun):
 @pytest.mark.parametrize('noun', ['hotspots', 'deps', 'trace', 'architecture', 'testability'])
 def test_the_noun_form_names_a_removed_nouns_row(proj, monkeypatch, noun):
     row = _remove(monkeypatch, noun)
-    with pytest.raises(RetiredSpellingError) as caught:
+    with pytest.raises(RequestValidationError) as caught:
         api.query(noun, str(proj))
     assert str(caught.value) == row.text
+    assert isinstance(caught.value.__cause__, RetiredSpellingError)
 
 
 def test_an_unknown_noun_still_names_the_nouns(proj, monkeypatch):
@@ -47,9 +49,10 @@ def test_a_live_noun_still_answers_beside_a_removed_one(proj, monkeypatch):
 
 
 def test_a_removed_scheme_names_its_row():
-    with pytest.raises(RetiredSpellingError) as caught:
+    with pytest.raises(RequestValidationError) as caught:
         api.query('python://')
     assert str(caught.value) == RETIREMENTS['scheme:python'].text
+    assert isinstance(caught.value.__cause__, RetiredSpellingError)
 
 
 def test_an_unknown_scheme_is_still_unsupported():

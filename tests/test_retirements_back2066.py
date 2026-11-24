@@ -20,6 +20,7 @@ from reveal.adapters.base import get_adapter_class
 from reveal.cli import invocation
 from reveal.cli.invocation import (LEGACY_CLI_MODIFIERS, RETIREMENT_KEY, RETIREMENTS, STAGES, RetiredSpellingError,
                                    Retirement, uri_retirement_keys)
+from reveal.errors import RequestValidationError
 
 SOURCE = 'def auth_gate(value):\n    return value\n'
 
@@ -522,8 +523,10 @@ def test_a_python_row_notes_once_in_the_answer_and_not_on_stderr(source, capsys,
 @pytest.mark.parametrize('key', sorted(PYTHON_CASES))
 def test_a_python_row_at_the_error_stage_raises_its_text(monkeypatch, source, key):
     monkeypatch.setitem(RETIREMENTS, key, replace(RETIREMENTS[key], stage='error'))
-    with pytest.raises(RetiredSpellingError, match=re.escape(RETIREMENTS[key].text)):
+    # The API raises RequestValidationError for every exit 2, the retirement its cause (BACK-2803).
+    with pytest.raises(RequestValidationError, match=re.escape(RETIREMENTS[key].text)) as caught:
         PYTHON_CASES[key](str(source))
+    assert isinstance(caught.value.__cause__, RetiredSpellingError)
 
 
 def test_a_removed_row_says_removed_and_is_an_error_from_the_start():

@@ -3,13 +3,16 @@
 No element spelling of the CLI names a kind and a name together (``function:foo`` is a miss; ``TYPE:N`` takes a number),
 so the keyword keeps its earlier lookup unchanged until the cut and says its replacement through its RETIREMENTS row
 ``python:element.element_type``: in the returned document's ``meta.warnings``, and for a None in the invocation log a
-host keeps. Nothing is printed on stderr. At the cut the row raises.
+host keeps. Nothing is printed on stderr. At the cut the row raises ``RequestValidationError`` with its text (BACK-2803).
 """
+import re
+
 import pytest
 
 from reveal import api
 from reveal.cli import invocation
 from reveal.cli.invocation import RETIREMENTS, RetiredSpellingError, Retirement
+from reveal.errors import RequestValidationError
 from reveal.utils.invocation_log import log_scope
 
 KEY = 'python:element.element_type'
@@ -47,8 +50,9 @@ def test_a_miss_of_that_kind_is_still_none_and_the_hosts_log_keeps_the_note(fx, 
 def test_at_the_cut_the_row_raises(fx, monkeypatch):
     monkeypatch.setitem(invocation.RETIREMENTS, KEY, Retirement(RETIREMENTS[KEY].old, RETIREMENTS[KEY].replacement,
                                                                 stage='error'))
-    with pytest.raises(RetiredSpellingError):
+    with pytest.raises(RequestValidationError, match=f'^{re.escape(RETIREMENTS[KEY].text)}$') as caught:
         api.element('ok.py', 'foo', element_type='function')
+    assert isinstance(caught.value.__cause__, RetiredSpellingError)
 
 
 def test_control_the_element_read_carries_no_note(fx):
