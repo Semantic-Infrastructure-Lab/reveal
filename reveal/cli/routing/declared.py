@@ -289,7 +289,7 @@ class PathReadRefused(Exception):
         self.answer = answer
 
 
-def path_read_refusal(target: str, text: str, args, *, exit_code: int = 2, error: Optional[BaseException] = None,
+def path_read_refusal(target: str, text: str, args, *, exit_code: int = 2, error: Optional[Exception] = None,
                       cause: Any = None):
     """The Answer of a path read that a site of the file route refuses (BACK-2325, ruling S4). *text* is exactly what
     the site prints on stderr, its error line then any hints; the document is the path read's invalid-request document
@@ -304,7 +304,7 @@ def path_read_refusal(target: str, text: str, args, *, exit_code: int = 2, error
     from ...utils.results import FailureCause, ResultBuilder, failure_execution_facts
     from .uri import Answer
     cause = FailureCause.INVALID_REQUEST if cause is None else cause
-    first = text.splitlines()[0] if text else ''
+    first = text.partition('\n')[0]
     message = first.removeprefix('❌ ').removeprefix('Error: ')
     if error is None and cause is FailureCause.INVALID_REQUEST:
         error = RequestValidationError(message)
