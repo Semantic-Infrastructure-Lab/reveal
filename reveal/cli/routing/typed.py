@@ -99,6 +99,24 @@ def _failure(answer: Any, facts: Any) -> Exception:
     return _invalid_request(answer) if execution_exit_code(facts) == 2 else _analysis_failure(answer, facts)
 
 
+def answer_failure(adapter: Any, result: Any, facts: Any) -> Optional[Exception]:
+    """The exception for a declared noun's answer the CLI's declared route exits 2 or 3 on, mapped as the noun form maps
+    its own (``_failure``); None for an answer that does not fail (findings and an incomplete answer return, marked).
+    The URI form of ``api.query`` hands it the *adapter* that answered, its *result* and the owner's execution *facts*
+    (BACK-2788). The answer is the one the route builds (``uri._structure_answer``), the owner's authored diagnostic
+    (``public_diagnostic``) included."""
+    from ...utils.results import execution_failed
+    from .uri import Answer, _public_answer_diagnostic
+    if facts is None or not isinstance(result, dict) or not execution_failed(facts):
+        return None
+    diagnostic = _public_answer_diagnostic(adapter, result, facts)
+    return _failure(Answer(result, 'structure', _unprinted, execution_facts=facts, public_diagnostic=diagnostic), facts)
+
+
+def _unprinted(_answer: Any, **_options: Any) -> None:
+    """The printer of an answer the Python API raises instead of printing."""
+
+
 def answer_typed_request(noun: str, target: Optional[str], controls: Mapping[str, Any]) -> Dict[str, Any]:
     """Answer ``reveal NOUN [TARGET] --flags`` as the CLI's JSON document carries it, inside the caller's host request
     and invocation log (``api.query``). An invalid request raises ``RequestValidationError`` (the CLI's exit 2), a
