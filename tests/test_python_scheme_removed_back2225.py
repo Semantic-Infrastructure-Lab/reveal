@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from conftest import _run_reveal_direct
+from conftest import _run_reveal_direct, invalid_request_document
 
 REMOVED = 'error: python:// was removed;'
 
@@ -31,10 +31,14 @@ def test_every_python_uri_exits_2_with_one_removal_line(uri):
     assert 'no reveal scheme replaces it' in errors[0]
 
 
-def test_json_format_is_also_refused_with_no_document():
+def test_json_format_is_refused_with_the_invalid_request_document():
+    """A refusal answers JSON with the invalid-request document (BACK-2627 item 3), typed by the scheme it spelled:
+    no adapter is left to predict one."""
     result = _run_reveal_direct('python://version', '--format', 'json')
     assert result.returncode == 2
-    assert result.stdout == ''
+    document = invalid_request_document(result)
+    assert document is not None and document['error'].startswith(REMOVED.removeprefix('error: ')), result.stdout[:300]
+    assert (document['type'], document['source']) == ('python', 'version')
     assert REMOVED in result.stderr
 
 

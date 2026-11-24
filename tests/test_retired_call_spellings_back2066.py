@@ -22,7 +22,7 @@ import json
 import pytest
 
 from conftest import _run_reveal_direct as run
-from conftest import is_request_note, without_mcp_request_note, without_request_note_lines
+from conftest import invalid_request_document, is_request_note, without_mcp_request_note, without_request_note_lines
 from reveal.cli.invocation import RETIREMENTS, Retirement, request_note_covers, request_noted
 
 APP = '''\
@@ -201,7 +201,7 @@ def test_at_the_cut_each_spelling_exits_2_with_its_text(monkeypatch, project, ca
     result = run(*argv(project), '--format', 'json')
     assert result.returncode == 2
     assert f'error: {RETIREMENTS[key].text}' in result.stderr  # the patched, error-stage row's wording
-    assert result.stdout == ''
+    assert (invalid_request_document(result) or {}).get('error') == RETIREMENTS[key].text  # BACK-2627 item 3
 
 
 # --- MCP: the note is in the tool result; reveal_trace keeps its name (decision g) -------------

@@ -14,7 +14,8 @@ from pathlib import Path
 
 import pytest
 
-from conftest import _run_reveal_direct, is_request_note, without_mcp_request_note, without_request_note_lines
+from conftest import (_run_reveal_direct, invalid_request_document, is_request_note, without_mcp_request_note,
+                      without_request_note_lines)
 from reveal import api
 from reveal.adapters.base import get_adapter_class
 from reveal.cli import invocation
@@ -244,7 +245,7 @@ def test_the_error_stage_exits_2_with_the_same_text(monkeypatch, source, kind):
     result = _run_reveal_direct(*argv(str(source)), '--format', 'json')
     assert result.returncode == 2
     assert f'error: {text}' in result.stderr
-    assert result.stdout == ''
+    assert (invalid_request_document(result) or {}).get('error') == text, result.stdout[:300]  # BACK-2627 item 3
 
 
 def test_a_retirement_row_validates_itself():
@@ -613,13 +614,14 @@ def test_the_log_is_per_invocation(monkeypatch, source):
 
 @pytest.mark.parametrize('key', sorted(PRODUCTION_CASES))
 def test_a_production_row_at_the_error_stage_exits_2_with_its_text(monkeypatch, source, key):
-    """The cut release flips a row's stage and nothing else: same text, exit 2, no answer. A removed row
-    (python://) is already at the error stage and runs as it ships."""
+    """The cut release flips a row's stage and nothing else: same text, exit 2, no answer; in JSON the route's
+    invalid-request document says the text (BACK-2627 item 3). A removed row (python://) is already at the error stage
+    and runs as it ships."""
     monkeypatch.setitem(RETIREMENTS, key, replace(RETIREMENTS[key], stage='error'))
     result = _run_reveal_direct(*PRODUCTION_CASES[key](str(source)), '--format', 'json')
     assert result.returncode == 2
     assert f'error: {RETIREMENTS[key].text}' in result.stderr
-    assert result.stdout == ''
+    assert (invalid_request_document(result) or {}).get('error') == RETIREMENTS[key].text, result.stdout[:300]
 
 
 def test_declared_alias_flag_notes_the_spelling_used(monkeypatch, source):

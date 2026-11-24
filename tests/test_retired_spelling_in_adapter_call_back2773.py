@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).parent))
-from conftest import _run_reveal_direct  # noqa: E402
+from conftest import _run_reveal_direct, invalid_request_document  # noqa: E402
 from undeclared_plugin import UndeclaredPluginAdapter, undeclared_plugin  # noqa: E402,F401  (the plugin fixture)
 
 from reveal.cli.invocation import RETIREMENTS, Retirement, retirement_note  # noqa: E402
@@ -54,7 +54,7 @@ def test_an_error_stage_spelling_said_in_an_adapter_call_exits_2_with_its_text(o
     run = _run_reveal_direct(owners[which], '--format', 'json')
     assert run.returncode == 2, (run.returncode, run.stderr)
     assert f'error: {row.text}' in run.stderr
-    assert run.stdout == ''
+    assert (invalid_request_document(run) or {}).get('error') == row.text  # the route's document (BACK-2627 item 3)
 
 
 @pytest.mark.parametrize('which', [0, 1], ids=['uri-route', 'declared-route'])

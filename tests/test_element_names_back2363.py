@@ -146,7 +146,8 @@ def test_alias_text_notes_once_repeats_per_invocation_and_cut_stage_is_two(sourc
     entry = RETIREMENTS[key]
     monkeypatch.setitem(RETIREMENTS, key, Retirement(entry.old, entry.replacement, 'error'))
     rejected = run(source, 'extract', '--' + old, '--format', 'json')
-    assert rejected.returncode == 2 and rejected.stdout == ''
+    assert rejected.returncode == 2
+    assert (invalid_request_document(rejected) or {}).get('error') == RETIREMENTS[key].text  # BACK-2627 item 3
     assert RETIREMENTS[key].text in rejected.stderr  # the patched, error-stage row's wording
     assert run(source, 'extract', '--' + NAMES[old]).returncode == 0
 
