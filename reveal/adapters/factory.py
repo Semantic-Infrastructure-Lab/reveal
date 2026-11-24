@@ -133,6 +133,22 @@ def scope_path_of(adapter_class: type, path: str) -> str:
     return str(resolve(path)) if resolve is not None else path
 
 
+def check_resource_exists(adapter_class: type, path: str, scope: Optional[str] = None) -> None:
+    """A filesystem resource (``RESOURCE_SPEC.filesystem``) that does not exist is the request's error, judged before
+    the adapter is built: ``PathNotFoundError('Path not found: PATH')``, the CLI's exit 2. One that exists but cannot be
+    stat'ed raises its ``OSError``. *scope*: the path the stat reads (``scope_path_of``, the default)."""
+    spec = getattr(adapter_class, 'RESOURCE_SPEC', None)
+    if spec is None or not spec.filesystem:
+        return
+    from pathlib import Path
+    from ..errors import PathNotFoundError
+    from ..utils.posix import to_posix
+    try:
+        Path(scope_path_of(adapter_class, path) if scope is None else scope).stat()
+    except (FileNotFoundError, NotADirectoryError) as exc:
+        raise PathNotFoundError(f'Path not found: {to_posix(path)}') from exc
+
+
 def predicted_result_type(adapter_class: type, params: Any, path: Optional[str] = None) -> str:
     """The type of the answer a request selects, known before analysis: ``result_type_for(params)`` (or the noun's
     ``RESULT_TYPE``), then, once the scope *path* is known, ``result_type_at(params, path)`` for an adapter whose

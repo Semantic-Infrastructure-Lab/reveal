@@ -1133,7 +1133,7 @@ def _validate_bound_request(adapter_class, params, path, args):
 
 def _declared_answer(adapter_class, name: str, path: str, source: Any, transport: str, args, expected_type: str,
                      *, scope_path: str | None = None):
-    from ...adapters.factory import _canonical_init
+    from ...adapters.factory import _canonical_init, check_resource_exists
     from ...utils.query_binding import bind_prepared_params
     from ...utils.path_utils import to_posix
     from .uri import _answer, _call_adapter, _renderer_class_of, _structure_answer, _configure_base_path
@@ -1144,8 +1144,7 @@ def _declared_answer(adapter_class, name: str, path: str, source: Any, transport
             params = bind_prepared_params(adapter_class.PARAM_SPECS, source, transport=transport)
             _validate_bound_request(adapter_class, params, path, args)
         # stat distinguishes absence from inaccessible required work.
-        if adapter_class.RESOURCE_SPEC.filesystem:
-            Path(scope).stat()
+        check_resource_exists(adapter_class, path, scope)
     except (FileNotFoundError, NotADirectoryError):
         return _invalid_answer(adapter_class, name, scope, f'Path not found: {to_posix(path)}', args, result_type=expected_type)
     except ValueError as exc:
