@@ -11,7 +11,7 @@ from conftest import _run_reveal_direct as run
 from reveal import api
 from reveal.adapters.json import JsonAdapter
 from reveal.cli.defaults import _default_args
-from reveal.errors import RequestValidationError
+from reveal.errors import PathNotFoundError, RequestValidationError
 from reveal.cli.routing.uri import _uri_execution_facts, resolve_uri
 from reveal.utils.results import AnalysisCompleteness, FailureCause
 
@@ -99,8 +99,9 @@ def test_actual_required_open_loss_repairs_and_keeps_sibling_and_api(files, monk
 
 
 def test_api_exceptions_and_canonical_returned_errors(files):
-    with pytest.raises(FileNotFoundError, match='JSON file not found'):
+    with pytest.raises(FileNotFoundError, match='Path not found: ') as missing:  # the CLI's refusal (BACK-2788)
         api.query(uri(files / 'missing.json'))
+    assert isinstance(missing.value, PathNotFoundError)
     with pytest.raises(ValueError, match='not valid JSON'):
         api.query(uri(files / 'bad.json'))
     with pytest.raises(ValueError, match='needs a JSON file'):

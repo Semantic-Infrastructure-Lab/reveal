@@ -141,12 +141,16 @@ def check_resource_exists(adapter_class: type, path: str, scope: Optional[str] =
     if spec is None or not spec.filesystem:
         return
     from pathlib import Path
-    from ..errors import PathNotFoundError
-    from ..utils.posix import to_posix
     try:
         Path(scope_path_of(adapter_class, path) if scope is None else scope).stat()
     except (FileNotFoundError, NotADirectoryError) as exc:
-        raise PathNotFoundError(f'Path not found: {to_posix(path)}') from exc
+        raise _path_not_found(path) from exc
+
+
+def _path_not_found(path: str) -> Exception:
+    from ..errors import PathNotFoundError
+    from ..utils.posix import to_posix
+    return PathNotFoundError(f'Path not found: {to_posix(path)}')
 
 
 def predicted_result_type(adapter_class: type, params: Any, path: Optional[str] = None) -> str:
@@ -246,12 +250,18 @@ def check_bound_request(adapter_class: type, params: Any, path: str, args: Any) 
 
 def _built_with_overrides(adapter_class: type, path: str, query: Optional[str], overrides: Mapping[str, Any],
                           empty_default: str) -> Any:
-    """Typed overrides bind after validating the URI query, then reach the constructor as params."""
+    """Typed overrides bind after validating the URI query, then reach the constructor as params. The resource is judged
+    where the CLI's declared route judges it, after the request binds and before the adapter is built
+    (``check_resource_exists``: a missing path raises ``PathNotFoundError``, BACK-2788)."""
     from ..utils.query_binding import bind_declared_params, bind_resource_path
     from ..utils.query_parser import ResourceSpec
     spec = getattr(adapter_class, 'RESOURCE_SPEC', ResourceSpec(uri_default=empty_default))
-    path = bind_resource_path(spec, path, transport='uri', resolve=getattr(adapter_class, 'resource_path', None))
+    try:
+        path = bind_resource_path(spec, path, transport='uri', resolve=getattr(adapter_class, 'resource_path', None))
+    except (FileNotFoundError, NotADirectoryError) as exc:  # a resource kind (a file, a directory) stats it first
+        raise _path_not_found(path) from exc
     if getattr(adapter_class, 'SOURCE_BEFORE_CONTROLS', False):
+        check_resource_exists(adapter_class, path)  # the source binds its controls when it is read
         return _built(adapter_class, path, dict, lambda: adapter_class(path, query, overrides=overrides))
     validate = getattr(adapter_class, 'validate_original_request', None)
 
@@ -268,6 +278,7 @@ def _built_with_overrides(adapter_class: type, path: str, query: Optional[str], 
     bound = bind_declared_params(getattr(adapter_class, 'PARAM_SPECS'), query or '', transport='uri',
                                  overrides=overrides, validate=original)
     _check_typed_request(adapter_class, bound, path)
+    check_resource_exists(adapter_class, path)
     return _built(adapter_class, path, lambda: bound, lambda: adapter_class(path, params=bound))
 
 
