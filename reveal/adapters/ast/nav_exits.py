@@ -905,6 +905,7 @@ def collect_gate_chains(
     if call_node_types is None:
         from ...treesitter import CALL_NODE_TYPES  # noqa: PLC0415
         call_node_types = CALL_NODE_TYPES
+    node_types: Collection[str] = call_node_types  # the closure below reads the narrowed value
 
     results: List[Dict[str, Any]] = []
 
@@ -914,7 +915,7 @@ def collect_gate_chains(
             return
 
         if from_line <= line <= to_line:
-            found = _exit_at(node, get_text, call_node_types)
+            found = _exit_at(node, get_text, node_types)
             if found is not None:
                 kind, text, descend = found
                 results.append({'kind': kind, 'line': line, 'text': text, 'gates': gates[:]})
