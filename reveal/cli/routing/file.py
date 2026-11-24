@@ -373,13 +373,15 @@ def _listing_answer(path: str, output_format: str, build, listing: dict, failure
     from ...utils import safe_json_dumps
     from ...utils.results import AnalysisCompleteness, ExecutionFacts, execution_exit_code, note_incomplete
     from .uri import Answer
-    result = build(path, **listing)
+    built = build(path, **listing)
+    # The text listing is its own walk and rendering, a string; an Answer's result is a dict (MCP reads its type).
+    result = built if output_format == 'json' else {'text': built}
     facts = ExecutionFacts(AnalysisCompleteness.INCOMPLETE if failures else AnalysisCompleteness.COMPLETE)
     note_incomplete(result, facts)
     code = execution_exit_code(facts)
 
     def printer(_answer, **_options):
-        print(safe_json_dumps(attach_invocation_warnings(result)) if output_format == 'json' else result)
+        print(safe_json_dumps(attach_invocation_warnings(result)) if output_format == 'json' else built)
         if code:
             sys.exit(code)
     document = (lambda: attach_invocation_warnings(result)) if output_format == 'json' else None

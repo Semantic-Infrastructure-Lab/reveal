@@ -64,3 +64,13 @@ def test_sibling_a_readable_tree_exits_0_with_no_warning(trees, argv):
 
 def test_sibling_grep_on_the_same_tree_already_exits_3(trees):
     assert _run_reveal_direct('du', '--grep', 'x').returncode == 3
+
+
+@pytest.mark.parametrize('name, lost', [('d', False), ('du', True)])
+def test_mcp_reveal_structure_answers_the_tree_and_says_what_it_lost(trees, name, lost):
+    """MCP reads the listing's Answer (its facts, its result as a dict): an incomplete tree is a result that says so,
+    never a tool error (COMMAND_MODEL "Transports")."""
+    from reveal import mcp_server
+    out = mcp_server.reveal_structure(name)
+    assert not isinstance(out, mcp_server._ToolFailure)
+    assert f'{name}/' in out and ('could not be analyzed completely' in out) is lost
