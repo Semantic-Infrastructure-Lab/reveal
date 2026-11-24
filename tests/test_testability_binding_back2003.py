@@ -189,7 +189,8 @@ def test_omitted_no_tests_is_legitimate_nonapplicability_zero(tmp_path, spelling
     assert response.returncode == 0, (response.stdout, response.stderr)
 
 
-@pytest.mark.parametrize('value', ['1.9', 'true', 'NaN', 'inf', '3e0', '9007199254740993.1'])
+# A negative cap is an invalid request, as on patches (ruling S4, BACK-2774): it read as uncapped (clamped to 0).
+@pytest.mark.parametrize('value', ['1.9', 'true', 'NaN', 'inf', '3e0', '9007199254740993.1', '-2.0', '-1'])
 def test_numeric_validation_uses_exact_whole_values_and_usage_error(project, observed, value):
     src, tests = project
     response = run(f'testability://{src}?tests={tests}&top={value}', '--format', 'json')
@@ -197,8 +198,8 @@ def test_numeric_validation_uses_exact_whole_values_and_usage_error(project, obs
     assert observed['calls'] == [] and observed['builds'] == []
 
 
-@pytest.mark.parametrize('value,expected', [('9007199254740993.0', 9007199254740993), ('-2.0', 0)])
-def test_accepted_uri_whole_decimal_normalization_is_exact_and_preserves_clamps(project, observed, value, expected):
+@pytest.mark.parametrize('value,expected', [('9007199254740993.0', 9007199254740993), ('0.0', 0)])
+def test_accepted_uri_whole_decimal_normalization_is_exact(project, observed, value, expected):
     src, tests = project
     response = run(f'testability://{src}?tests={tests}&top={value}', '--format', 'json')
     assert response.returncode == 0

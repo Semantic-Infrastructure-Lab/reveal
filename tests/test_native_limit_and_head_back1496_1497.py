@@ -52,7 +52,7 @@ class TestLimitBecomesNativeTop:
 
     @pytest.mark.parametrize('scheme', NATIVE_CAP)
     def test_zero_means_no_cap(self, scheme):
-        expected = {'calls': 'limit=0', 'hotspots': 'limit=0', 'testability': 'limit=1000000'}.get(scheme, 'top=1000000')
+        expected = {'calls': 'limit=0', 'hotspots': 'limit=0', 'testability': 'limit=0'}.get(scheme, 'top=1000000')
         assert inject_query_flags(f'{scheme}://x', scheme, _args(limit=0)) == f'{scheme}://x?{expected}'
 
     def test_typed_top_and_a_different_limit_are_rejected(self):

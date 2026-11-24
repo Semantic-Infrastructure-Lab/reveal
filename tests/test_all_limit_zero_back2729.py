@@ -19,15 +19,13 @@ ALL = next(spec for spec in FLAG_SPECS if spec.dest == 'all')
 @pytest.mark.parametrize('noun,selection,fragment', [
     ('ast', '', 'limit=0'), ('git', '', 'limit=0'), ('calls', 'sort=-callers', 'limit=0'), ('metrics', '', 'limit=0'),
     ('metrics', 'view=hotspots', 'limit=0'), ('metrics', 'hotspots=true', 'top=0'), ('patches', '', 'limit=0'),
-    ('hotspots', '', 'limit=0'),
+    ('hotspots', '', 'limit=0'), ('testability', '', 'limit=0'),  # testability's zero is all since ruling S4 (BACK-2774)
 ])
 def test_all_binds_the_uncapping_zero(noun, selection, fragment):
     assert declared_flag_fragment(ALL, get_adapter_class(noun), selection) == fragment
 
 
 @pytest.mark.parametrize('noun,selection,fragment', [
-    # a cap whose zero is not declared uncapping keeps the noun's own value
-    ('testability', '', 'limit=1000000'),
     # not a cap value: overview's own all switch
     ('overview', '', 'all=true'),
     # no cap the selected answer reads: satisfied quietly

@@ -36,8 +36,9 @@ def test_hotspots_declares_top():
 def test_back1379_adapters_declare_all(scheme, fragment):
     from reveal import adapters  # noqa: F401
     assert adapters_base.get_adapter_class(scheme).CLI_QUERY_FLAGS['all'] == fragment
-    # --all binds the value --limit 0 binds where the cap's zero is every row (BACK-2729); testability's is not
-    injected = fragment if scheme in ('testability', 'overview') else 'limit=0'
+    # --all binds the value --limit 0 binds where the cap's zero is every row (BACK-2729; testability's too since
+    # ruling S4, BACK-2774); overview's --all is its own switch
+    injected = fragment if scheme == 'overview' else 'limit=0'
     assert inject_query_flags('src', scheme, _args(all=True)) == f'src?{injected}'
 
 

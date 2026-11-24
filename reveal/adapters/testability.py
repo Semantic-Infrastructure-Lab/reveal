@@ -42,10 +42,6 @@ def _whole_control(value: Any) -> int:
         raise ValueError('expected a finite whole number') from None
 
 
-def _top(value: Any) -> int:
-    return max(0, _whole_control(value))
-
-
 def _threshold(value: Any) -> int:
     return max(1, _whole_control(value))
 
@@ -138,8 +134,8 @@ PRESSURE_SPECS = (
     ParamSpec('tests', 'array', 'Test paths, trusted as the suite (omitted: default project test/support policy and candidate suite roots)', None,
               _test_roots, uri_codec='comma-percent', role='analysis',
               cli=CliBinding(('--tests',), nargs='+')),
-    ParamSpec('top', 'integer', 'Maximum groups per hotspot list; zero is unlimited', 20,
-              _top, zero_policy='unlimited', role='presentation', cli=CliBinding(('--top',))),
+    ParamSpec('top', 'integer', 'Maximum groups per hotspot list; 0 is all', 20,
+              _whole_control, minimum=0, zero_policy='all', role='presentation', cli=CliBinding(('--top',))),
     ParamSpec('min_patches', 'integer', 'Minimum patches for a target group', 3,
               _threshold, role='analysis', cli=CliBinding(('--min-patches',))),
     ParamSpec('min_categories', 'integer', 'Minimum boundary categories', 3,
