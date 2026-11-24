@@ -63,9 +63,10 @@ class Answer:
     private_diagnostic: Optional[str] = field(default=None, repr=False)
     # The JSON document this answer prints with --format json, when its renderer builds that document from more than
     # ``result`` (a file's envelope, BACK-2325): called only by a reader that wants the document (the Python API), never
-    # by emit, so a text answer never builds it. None: the document is json_answer(result). Like ``printer``, it must
-    # not close over the answer (BACK-2674).
-    document: Optional[Callable[[], Dict[str, Any]]] = field(default=None, repr=False, compare=False)
+    # by emit, so a text answer never builds it. None: the document is json_answer(result); a callable that returns None:
+    # the answer prints no JSON document (--related-flat prints paths). Like ``printer``, it must not close over the
+    # answer (BACK-2674).
+    document: Optional[Callable[[], Optional[Dict[str, Any]]]] = field(default=None, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         if self.request_error is not None:
