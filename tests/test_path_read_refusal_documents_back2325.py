@@ -23,8 +23,8 @@ SITES = [
     (['ok.py', 'foo', '--grep', 'x'], 2, 'code_element', "--grep answers for the whole of ok.py; it does not select 'foo'"),
     (['ok.py', '--hotspots'], 2, 'file_structure',
      "--hotspots is not a path option: the hotspot ranking is the metrics noun's view"),
-    (['ok.py', '--related'], 1, 'file_structure', '--related only works with markdown files'),
-    (['ok.py', '--section', 'X'], 1, 'file_structure', '--section only works with markdown files (.md, .markdown)'),
+    (['ok.py', '--related'], 2, 'file_structure', '--related only works with markdown files'),
+    (['ok.py', '--section', 'X'], 2, 'file_structure', '--section only works with markdown files (.md, .markdown)'),
     (['nginx'], 2, 'file_structure', 'nginx is a URI noun: reveal nginx://.'),
 ]
 

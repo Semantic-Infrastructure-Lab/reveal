@@ -237,10 +237,10 @@ def _guard_adapter_flags(args: 'Namespace', scheme: str, path_str: Optional[str]
     help_topic = getattr(adapter_cls, 'GUARDED_FLAG_HELP', scheme)
     for spec in adapter_cls.GUARDED_FLAGS:
         if getattr(args, spec.attr, False):
-            # Exit 1 is this refusal's legacy code; the request is invalid (the Python API raises it as one).
+            # An invalid request, exit 2 (D6; it exited 1, BACK-2765).
             _refuse(path_str or getattr(args, 'path', None) or '', args, [
                 f"❌ Error: {spec.flag} only works with {context}", '', "Examples:", spec.examples, '',
-                f"Learn more: reveal help://{help_topic}"], exit_code=1)
+                f"Learn more: reveal help://{help_topic}"])
 
 
 def _guard_nginx_flags(args: 'Namespace', path_str: str) -> None:
@@ -279,7 +279,7 @@ def _guard_related_flags(args: 'Namespace', path_str: str) -> None:
     _refuse(path_str, args, [
         f"❌ Error: {flag} only works with markdown files", '', "Examples:",
         "  reveal docs/ --related          # on a markdown directory",
-        "  reveal doc.md --related         # on a .md file", '', "Learn more: reveal help://markdown"], exit_code=1)
+        "  reveal doc.md --related         # on a .md file", '', "Learn more: reveal help://markdown"])
 
 
 def _handle_directory_path(path: Path, args: 'Namespace', answer_consumer=None) -> None:
@@ -571,7 +571,7 @@ def _handle_file_path(path: Path, element_from_path: Optional[str], args: 'Names
                 "❌ Error: --section only works with markdown files (.md, .markdown)", '', "Examples:",
                 f"  reveal {to_posix(path)}.md --section 'Heading Name'   # markdown section extraction",
                 f"  reveal {to_posix(path)} \"element_name\"                # for non-markdown, use element syntax", '',
-                "Learn more: reveal help://ux"], exit_code=1)
+                "Learn more: reveal help://ux"])
     reject_unhonored_also_json(args, 'the file view')
     handle_file(str(path), element, args.meta, args.format, args, element_request=request,
                 answer_consumer=answer_consumer)
