@@ -93,6 +93,10 @@ _OUTLINE_CACHE_NAMESPACE = "structure-outline"
 # outline namespace, so an outline can not satisfy a full request). It is private to this module:
 # _get_or_build_structure strips it from what it returns, so no get_structure() override sees it.
 _CALL_SITE_LAYER_KEY = "_call_site_layer"
+# BACK-2714: the lines of each function's calls (``function_call_lines``) ride in the full structure entry
+# under this key, private like the call-site layer: never in what _get_or_build_structure returns, never in
+# path-read JSON. A full entry stored without it predates the table and is a miss.
+_FUNCTION_CALL_LINES_KEY = "_function_call_lines"
 
 # One entry per source file (unlike I002's one-entry-per-project-root), so
 # disk_cache's default 64-entry-per-namespace prune cap would thrash on any
@@ -539,6 +543,8 @@ class TreeSitterAnalyzer(FileAnalyzer):
         self._outline_only: bool = False  # set only for the duration of get_outline()
         # BACK-1890: the call-site layer of the full structure entry this analyzer hit (None: miss)
         self._call_site_layer: Optional[Dict[str, Any]] = None
+        # BACK-2714: definition line (str) -> function name -> callee -> sorted call lines, from the walk
+        self._function_call_lines: Dict[str, Dict[str, Dict[str, List[int]]]] = {}
 
         # The parse-cache key: the stat FileAnalyzer took before it read the content, with the
         # size (a same-mtime edit that changes the size is a different file, BACK-2116). None
@@ -718,16 +724,38 @@ class TreeSitterAnalyzer(FileAnalyzer):
                        max_entries=_structure_cache_max_files())
 
     def _read_structure_entry(self, fingerprint: str, namespaces: List[str]) -> Optional[Dict[str, Any]]:
-        """The first stored entry among ``namespaces`` without its call-site layer, which a full
-        entry's hit keeps on the analyzer (``load_call_site_layer``); None on a miss."""
+        """The first stored entry among ``namespaces`` without its private keys: a full entry's hit
+        keeps its call-site layer (``load_call_site_layer``) and its call-line table
+        (``function_call_lines``) on the analyzer. A full entry without the table was stored before
+        call lines were recorded and is a miss (BACK-2714). None on a miss."""
         for namespace in namespaces:
             cached = disk_cache.get(namespace, fingerprint)
             if cached is None:
                 continue
-            if namespace == _STRUCTURE_CACHE_NAMESPACE and _CALL_SITE_LAYER_KEY in cached:
-                self._call_site_layer = cached[_CALL_SITE_LAYER_KEY]
-            return {k: v for k, v in cached.items() if k != _CALL_SITE_LAYER_KEY}
+            if namespace == _STRUCTURE_CACHE_NAMESPACE:
+                if not isinstance(cached.get(_FUNCTION_CALL_LINES_KEY), dict):
+                    continue
+                self._function_call_lines = cached[_FUNCTION_CALL_LINES_KEY]
+                if _CALL_SITE_LAYER_KEY in cached:
+                    self._call_site_layer = cached[_CALL_SITE_LAYER_KEY]
+            return {k: v for k, v in cached.items() if k not in (_CALL_SITE_LAYER_KEY, _FUNCTION_CALL_LINES_KEY)}
         return None
+
+    def function_call_lines(self) -> Dict[str, Dict[str, Dict[str, List[int]]]]:
+        """The lines of each function's calls, from the last full build or full-entry hit (BACK-2714):
+        ``{str(definition line): {function name: {callee: sorted call lines}}}``. A function is
+        identified by its name and definition line, as JSX references are: two same-named functions on
+        one line share one entry."""
+        return self._function_call_lines
+
+    def _record_call_lines(self, name: str, line: int, lines_by_callee: Dict[str, List[int]]) -> None:
+        """File one function's call lines (every call node's start line, per callee) in the table.
+        A function that calls nothing files nothing."""
+        if not lines_by_callee:
+            return
+        entry = self._function_call_lines.setdefault(str(line), {}).setdefault(name, {})
+        for callee, lines in lines_by_callee.items():
+            entry[callee] = sorted({*entry.get(callee, ()), *lines})
 
     def _get_or_build_structure(self) -> Dict[str, Any]:
         """Return the unsliced structure dict, from disk cache when possible.
@@ -752,6 +780,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         if not self.tree:  # first access here triggers the actual parse
             return {}
 
+        self._function_call_lines = {}
         structure: Dict[str, Any] = {}
         self._add_imports(structure)
         functions = self._extract_functions()
@@ -791,7 +820,9 @@ class TreeSitterAnalyzer(FileAnalyzer):
         # A failure the file's content did not cause (BACK-2136) leaves the stat key unchanged, so
         # the structure built around it is returned and disclosed but not stored (BACK-2138).
         if fingerprint is not None and not self._imports_uncacheable:
-            disk_cache.put(namespaces[-1], fingerprint, structure,
+            stored = structure if self._outline_only else {**structure,
+                                                           _FUNCTION_CALL_LINES_KEY: self._function_call_lines}
+            disk_cache.put(namespaces[-1], fingerprint, stored,
                            max_entries=_structure_cache_max_files())
         return structure
 
@@ -1035,7 +1066,8 @@ class TreeSitterAnalyzer(FileAnalyzer):
         # (same blindness _function_end_node's docstring describes).
         body_node = end_node if end_node is not bounds_node else node
 
-        complexity, depth, calls = self._complexity_depth_and_calls(body_node)
+        call_lines: Dict[str, List[int]] = {}
+        complexity, depth, calls = self._complexity_depth_and_calls(body_node, call_lines)
         # Dart signature-adjacent call sites -- a constructor's initializer
         # list (`Foo(...) : super(compute()), x = y, assert(cond) { ... }`)
         # and ANY signature's parameter DEFAULT VALUES (`{int x =
@@ -1051,8 +1083,9 @@ class TreeSitterAnalyzer(FileAnalyzer):
         # idiom, e.g. `this.duration = const Duration(seconds: 1)`) were
         # both silently absent from every affected signature's own calls
         # list even after the _function_end_node fix above. (BACK-760)
-        calls = self._dart_merge_signature_extra_calls(node, calls)
-        calls = self._decorator_extra_calls(decorated_node, calls)
+        calls = self._dart_merge_signature_extra_calls(node, calls, call_lines)
+        calls = self._decorator_extra_calls(decorated_node, calls, call_lines)
+        self._record_call_lines(name, line_start, call_lines)
         from .core.parameters import parameter_names
         result: StructureItem = {
             'parameters': parameter_names(node, self.language or '', self._get_node_text),
@@ -1692,19 +1725,23 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 return sibling
         return node
 
-    def _dart_merge_signature_extra_calls(self, node, calls: List[str]) -> List[str]:
+    def _dart_merge_signature_extra_calls(self, node, calls: List[str],
+                                          call_lines: Dict[str, List[int]]) -> List[str]:
         """Hook: merge calls found in a language's signature-adjacent
         children (e.g. Dart's constructor initializer list / parameter
-        default values, BACK-760/BACK-764) into a function's calls list.
+        default values, BACK-760/BACK-764) into a function's calls list,
+        and their lines into ``call_lines`` (BACK-2714).
         No-op by default — overridden in analyzers/dart.py (BACK-915).
 
         Safe to call unconditionally, including for any non-Dart language.
         """
         return calls
 
-    def _decorator_extra_calls(self, decorated_node, calls: List[str]) -> List[str]:
+    def _decorator_extra_calls(self, decorated_node, calls: List[str],
+                               call_lines: Dict[str, List[int]]) -> List[str]:
         """Merge calls made in a Python decorator's own arguments into the
-        decorated function's calls list.
+        decorated function's calls list, and their lines into ``call_lines``
+        (BACK-2714).
 
         `@validator(vol.Schema(...))` / `@singleton(DATA_RESOLVER)` /
         `@lru_cache(maxsize=512)` parse decorator expressions as SIBLINGS of
@@ -1734,6 +1771,8 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 dec_node = stack.pop()
                 if _zero_arg(dec_node, 'kind') in CALL_NODE_TYPES:
                     name = self._get_callee_name(dec_node)
+                    if name:
+                        call_lines.setdefault(name, []).append(_zero_arg(dec_node, 'start_position').row + 1)
                     if name and name not in seen_extra:
                         extra.append(name)
                         seen_extra.add(name)
@@ -2228,19 +2267,10 @@ class TreeSitterAnalyzer(FileAnalyzer):
 
         No-op by default — overridden in analyzers/ruby.py, where a receiver-
         less, argument-less call (`used`) parses as a bare `identifier`. Both
-        the analyzer path (names, below) and the ast:// nav path (lines) read
-        this one hook.
+        the analyzer walk (`_complexity_depth_and_calls`) and the ast:// nav
+        path read this one hook, names and lines alike.
         """
         return []
-
-    def _implicit_calls_in_function(self, func_node) -> List[str]:
-        """Unique callee names for `_implicit_call_nodes`, in source order."""
-        names: List[str] = []
-        for node in self._implicit_call_nodes(func_node):
-            name = self._get_node_text(node)
-            if name not in names:
-                names.append(name)
-        return names
 
     def _function_scope_has_own_entry(self, node) -> bool:
         """Whether a nested FUNCTION_NODE_TYPES node gets its own structure entry.
@@ -2268,8 +2298,13 @@ class TreeSitterAnalyzer(FileAnalyzer):
                     occluded.add(_zero_arg(paired_body, 'start_byte'))
         return occluded
 
-    def _complexity_depth_and_calls(self, func_node) -> Tuple[int, int, List[str]]:
+    def _complexity_depth_and_calls(self, func_node, call_lines: Optional[Dict[str, List[int]]] = None
+                                    ) -> Tuple[int, int, List[str]]:
         """Compute complexity, nesting depth, and callee names in one subtree walk.
+
+        BACK-2714: every call node's start line is recorded per callee name (``calls`` keeps one
+        entry per name, first-seen order) and merged into ``call_lines`` when the caller passes one:
+        the one owner of a function's call lines, read by ``calls --callers`` records.
 
         `_build_function_dict` used to call `calculate_complexity_and_depth`
         and a separate calls-only walker back to back — two independent full
@@ -2302,7 +2337,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         decision_count = 0
         max_depth = 0
         calls: List[str] = []
-        seen_calls: set = set()
+        lines_of: Dict[str, List[int]] = {}  # callee -> its call lines; also the walk's seen set
 
         # Stack entries: (node, parent_kind, depth). parent_kind is None only
         # for func_node's direct children — mirrors calculate_complexity_and_depth's
@@ -2316,6 +2351,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         # a class), not once per read.
         kind_of = zero_arg_getter(type(func_node), 'kind')
         child_count_of = zero_arg_getter(type(func_node), 'child_count')
+        start_of = zero_arg_getter(type(func_node), 'start_position')
         stack: List[Tuple[Any, Optional[str], int, str]] = []
         for child in _children(func_node):
             child_kind = kind_of(child)
@@ -2327,9 +2363,13 @@ class TreeSitterAnalyzer(FileAnalyzer):
 
             if kind in CALL_NODE_TYPES:
                 name = self._get_callee_name(node)
-                if name and name not in seen_calls:
-                    calls.append(name)
-                    seen_calls.add(name)
+                if name:
+                    seen = lines_of.get(name)
+                    if seen is None:
+                        calls.append(name)
+                        lines_of[name] = [start_of(node).row + 1]
+                    else:
+                        seen.append(start_of(node).row + 1)
             if is_decision(kind, parent_kind, node, self._get_node_text):
                 decision_count += 1
 
@@ -2369,8 +2409,15 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 child_depth = depth + 1 if is_nesting(child_kind, child) else depth
                 stack.append((child, kind, child_depth, child_kind))
 
-        for name in self._implicit_calls_in_function(func_node):
-            if name not in seen_calls:
+        for node in self._implicit_call_nodes(func_node):
+            name = self._get_node_text(node)
+            seen = lines_of.get(name)
+            if seen is None:
                 calls.append(name)
-                seen_calls.add(name)
+                lines_of[name] = [_zero_arg(node, 'start_position').row + 1]
+            else:
+                seen.append(_zero_arg(node, 'start_position').row + 1)
+        if call_lines is not None:
+            for name, lines in lines_of.items():
+                call_lines.setdefault(name, []).extend(lines)
         return decision_count + 1, max_depth, calls

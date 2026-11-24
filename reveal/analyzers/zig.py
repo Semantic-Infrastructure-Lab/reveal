@@ -269,7 +269,7 @@ class ZigAnalyzer(TreeSitterAnalyzer):
             'line_end': line_end,
             'name': fn_name,
             'signature': signature,
-            'calls': self._extract_calls(decl_node, line_start, line_end),
+            'calls': self._extract_calls(decl_node, line_start, line_end, fn_name),
             # Nested `fn` decls (a `fn Type() type { return struct { fn m() ... } }`
             # generic) have their own entries; do not fold them into the enclosing one.
             'complexity': calculate_complexity(decl_node, is_function_node),
@@ -278,8 +278,9 @@ class ZigAnalyzer(TreeSitterAnalyzer):
             func_info['visibility'] = 'pub'
         return func_info
 
-    def _extract_calls(self, node, line_start: int, line_end: int) -> List[str]:
-        """Callee names reachable from `node`, deduped in first-seen order.
+    def _extract_calls(self, node, line_start: int, line_end: int, name: str) -> List[str]:
+        """Callee names reachable from `node`, deduped in first-seen order. Each hit's line is
+        filed under the function or test `name` defined at `line_start` (BACK-2714).
 
         The legacy grammar has no call-expression wrapper node — `foo(x)` / `a.b.c(x)` parse
         as a single `SuffixExpr` (see `nav_calls._extract_zig_suffix_calls`),
@@ -290,14 +291,13 @@ class ZigAnalyzer(TreeSitterAnalyzer):
         covers both grammars: the 1.25 grammar's `call_expression` and `builtin_function`
         are ordinary CALL_NODE_TYPES members.
         """
-        seen: List[str] = []
-        seen_set = set()
+        lines_of: Dict[str, List[int]] = {}  # callee -> its call lines, first-seen order
         for call in range_calls(node, line_start, line_end, self._get_node_text):
             callee = call['callee']
-            if callee and callee not in seen_set:
-                seen.append(callee)
-                seen_set.add(callee)
-        return seen
+            if callee:
+                lines_of.setdefault(callee, []).append(call['line'])
+        self._record_call_lines(name, line_start, lines_of)
+        return list(lines_of)
 
     def _extract_functions(self) -> List[StructureItem]:
         """Extract function definitions."""
@@ -513,7 +513,7 @@ class ZigAnalyzer(TreeSitterAnalyzer):
                     # reported zero callers via calls:// (same failure mode
                     # as BACK-660, one hop further in) — mirrors TS/JS test
                     # callbacks, which get 'calls' via _build_function_dict.
-                    'calls': self._extract_calls(test_node, line_start, line_end),
+                    'calls': self._extract_calls(test_node, line_start, line_end, test_name),
                 })
         return tests
 

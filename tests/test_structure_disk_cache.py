@@ -124,7 +124,9 @@ def test_disk_structure_equals_fresh_scan(tmp_path):
     fp = analyzer._structure_fingerprint()
     from_disk = disk_cache.get(ts_mod._STRUCTURE_CACHE_NAMESPACE, fp)
     assert from_disk is not None
-    assert from_disk == scanned
+    # BACK-2714: the entry also holds the walk's private call-line table, which a read strips.
+    assert {k: v for k, v in from_disk.items() if k != ts_mod._FUNCTION_CALL_LINES_KEY} == scanned
+    assert from_disk[ts_mod._FUNCTION_CALL_LINES_KEY] == analyzer.function_call_lines()
 
 
 def test_edit_invalidates_cache(tmp_path):

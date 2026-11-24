@@ -1,6 +1,6 @@
 """Dart analyzer using tree-sitter."""
 
-from typing import Callable, List, Optional
+from typing import Callable, Dict, List, Optional
 
 from ..core import node_children as _children
 from ..core import node_next_sibling as _next_sibling
@@ -163,13 +163,16 @@ class DartAnalyzer(TreeSitterAnalyzer):
         return bases
 
     # ── Signature-adjacent calls (BACK-760/BACK-764) ─────────────────────────
-    def _dart_merge_signature_extra_calls(self, node, calls: List[str]) -> List[str]:
+    def _dart_merge_signature_extra_calls(self, node, calls: List[str],
+                                          call_lines: Dict[str, List[int]]) -> List[str]:
         """Merge calls found in a Dart signature node's OWN
         signature-adjacent children into its calls list: a constructor's
         initializer list (`: super(...), x = y, assert(cond)`) and ANY
         signature's `formal_parameter_list` DEFAULT VALUES (`{int x =
         paramDefault()}`) -- see `_build_function_dict`'s call site for
         why both live outside `body_node` entirely (BACK-760/BACK-764).
+        The same walk adds their lines to ``call_lines`` (BACK-2714; a
+        re-walked line is filed once).
 
         Safe to call unconditionally (including when `body_node` already
         equals `node` itself, e.g. a bodyless `const` constructor): the
@@ -185,11 +188,11 @@ class DartAnalyzer(TreeSitterAnalyzer):
         extra: List[str] = []
         for child in _children(node):
             if _zero_arg(child, 'kind') == 'formal_parameter_list':
-                _, _, param_calls = self._complexity_depth_and_calls(child)
+                _, _, param_calls = self._complexity_depth_and_calls(child, call_lines)
                 extra.extend(param_calls)
         sibling = _next_sibling(node)
         if sibling is not None and _zero_arg(sibling, 'kind') == 'initializers':
-            _, _, init_calls = self._complexity_depth_and_calls(sibling)
+            _, _, init_calls = self._complexity_depth_and_calls(sibling, call_lines)
             extra.extend(init_calls)
         if not extra:
             return calls

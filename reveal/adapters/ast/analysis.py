@@ -572,6 +572,10 @@ def _add_call_sites(result: Dict[str, Any], file_path: str, analyzer) -> None:
     persists this file's structure carries them too (BACK-1890): a hit parses nothing. Only a
     collection that finished without a recorded parse failure is stored."""
     from ...conventions import family_for_path
+    # BACK-2714: each function's call lines, from the walk that built (or the entry that cached) the
+    # structure, in every language; call_sources gives them to callers records.
+    if hasattr(analyzer, 'function_call_lines'):
+        result['function_call_lines'] = analyzer.function_call_lines()
     family = family_for_path(file_path)
     persist = family in _MODULE_CALL_FAMILIES and hasattr(analyzer, 'load_call_site_layer')
     form = analyzer.call_site_form() if persist else ''
