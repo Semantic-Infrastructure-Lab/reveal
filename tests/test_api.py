@@ -87,10 +87,11 @@ class TestElement:
         assert result is not None
         assert "add" in result.get("content", "")
 
-    def test_returns_none_for_missing_element(self, tmp_path):
+    def test_a_missing_element_raises_element_not_found(self, tmp_path):
+        from reveal.errors import ElementNotFoundError
         f = _write_py(tmp_path, "mod.py", "x = 1\n")
-        result = element(str(f), "nonexistent_function_xyz")
-        assert result is None
+        with pytest.raises(ElementNotFoundError, match="Element 'nonexistent_function_xyz' not found"):
+            element(str(f), "nonexistent_function_xyz")
 
     def test_file_not_found_raises(self):
         with pytest.raises(FileNotFoundError):
@@ -99,7 +100,7 @@ class TestElement:
     def test_no_analyzer_raises(self, tmp_path):
         f = tmp_path / "data.unknownext12345"
         f.write_text("nothing")
-        with pytest.raises(ValueError, match="No analyzer available"):
+        with pytest.raises(ValueError, match="No analyzer found for file"):  # the CLI's RequestValidationError
             element(str(f), "foo")
 
 

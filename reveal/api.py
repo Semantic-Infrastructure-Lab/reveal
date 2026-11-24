@@ -11,10 +11,9 @@ Usage::
     for fn in doc["structure"].get("functions", []):
         print(fn["name"], fn["line"])
 
-    # Extract a specific named element
+    # One element, as `reveal myfile.py my_function --format json` prints it
     func = element("myfile.py", "my_function")
-    if func:
-        print(func["content"])
+    print(func["content"])
 
     # Ask a noun, as `reveal calls myproject --callers main` does
     result = query("calls", "myproject", callers="main")
@@ -85,82 +84,61 @@ def element(
     name: str,
     element_type: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
-    """Extract a named element (function, class, section, …) from a file.
+    """The JSON document ``reveal PATH NAME --format json`` prints: one element of a file.
 
-    Equivalent to ``reveal myfile.py my_function`` at the CLI.
+    ``element("app.py", "load_config")`` is ``reveal app.py load_config --format json``, run through the CLI's own
+    element route and returned instead of printed (D21, BACK-2325), so every element syntax the CLI reads answers:
+    a name, ``Class.method``, ``:LINE`` or ``:START-END``, ``TYPE:N`` (the Nth of a kind, ``function:2``) and ``@N``.
 
     Args:
         path: Path to the file.
-        name: Name of the element to extract.
-        element_type: Optional type hint (``"function"``, ``"class"``,
-            ``"section"``, etc.).  When ``None`` the structure is searched
-            first to determine the correct type, then common types are tried.
+        name: The element, as ``reveal PATH NAME`` names it.
+        element_type: A kind (``"function"``, ``"class"``, ...) to look *name* up as. It keeps its earlier lookup,
+            which answers None when nothing of that kind has that name.
+
+    Each call is one host request, like :func:`query`.
 
     Returns:
-        An envelope whose ``"source"`` is the path and ``"content"`` the extracted code,
-        with ``"line_start"``, ``"line_end"``, etc.,
-        or ``None`` if the element was not found.
+        The element's document: ``"source"`` the path, ``"content"`` the extracted text, ``"line_start"``,
+        ``"line_end"``, ``"name"``.
 
     Raises:
-        FileNotFoundError: If *path* does not exist on disk.
-        ValueError: If no analyzer is registered for this file type.
+        ElementNotFoundError: Nothing in the file matches *name* (a ``RequestValidationError``), with the CLI's message.
+        PathNotFoundError: *path* does not exist (a ``RequestValidationError`` and still a ``FileNotFoundError``).
+        RequestValidationError: Every other request the CLI exits 2 on, with its message: no analyzer reads the file,
+            a directory, a file that is not the document its type needs (a ``.docx`` that is not a zip).
+        AnalysisFailedError: The file's parse failed (an XML or notebook parse error), where the CLI exits 3; its
+            ``result`` is the CLI's document. A file that could not be read raises its ``OSError``.
 
     Example::
 
         func = element("mymodule.py", "load_config")
-        if func:
-            print(func["content"])
+        print(func["content"])
     """
+    if element_type is not None:
+        return _typed_element(path, name, element_type)
+    from .cli.routing.typed import answer_path_read
+    from .utils.invocation_log import log_scope
+    from .utils.request_cache import host_request
+    with host_request(), log_scope(to_stderr=False):
+        return answer_path_read(path, {}, name)
+
+
+def _typed_element(path: str, name: str, element_type: str) -> Optional[Dict[str, Any]]:
+    """``element_type``'s earlier lookup (the analyzer's ``extract_element(type, name)``), unchanged: no element syntax
+    of the CLI names a kind and a name together, so it has no CLI request to answer through yet (BACK-2325, ruling S2:
+    its note-stage translation awaits that ruling)."""
     from .registry import get_analyzer
     from .utils.results import ResultBuilder
 
     file_path = Path(path)
     if not file_path.exists():
         raise FileNotFoundError(f"File not found: {path}")
-
     analyzer_class = get_analyzer(str(file_path))
     if analyzer_class is None:
         raise ValueError(f"No analyzer available for: {path}")
-
-    analyzer = analyzer_class(str(file_path))
-
-    # Fast path: caller provided the type.
-    if element_type:
-        result = analyzer.extract_element(element_type, name)
-        return dict(ResultBuilder.element(result, file_path)) if result is not None else None
-
-    # Slower path: scan the structure to discover the element's type, then
-    # use it for a precise extraction.  This avoids ambiguous matches.
-    _SECTION_TO_TYPE: Dict[str, str] = {
-        "functions": "function",
-        "classes": "class",
-        "methods": "method",
-        "structs": "struct",
-        "enums": "enum",
-        "interfaces": "interface",
-        "sections": "section",
-        "variables": "variable",
-        "tests": "test",
-    }
-    try:
-        struct = analyzer.get_structure()
-        for section_key, elem_type in _SECTION_TO_TYPE.items():
-            for item in struct.get(section_key, []):
-                if isinstance(item, dict) and item.get("name") == name:
-                    result = analyzer.extract_element(elem_type, name)
-                    if result is not None:
-                        return dict(ResultBuilder.element(result, file_path))
-    except Exception as e:  # boundary-ok: broad-except -- public element() returns None on a miss; a failing analyzer is logged at warning with the path and name rather than raised into the caller's lookup loop
-        logger.warning("element() structure lookup failed for %s %r: %s", path, name, e)
-
-    # Last resort: try common types in order.
-    for elem_type in ("function", "class", "method", "struct", "enum",
-                      "interface", "section", "variable", "test"):
-        result = analyzer.extract_element(elem_type, name)
-        if result is not None:
-            return dict(ResultBuilder.element(result, file_path))
-
-    return None
+    result = analyzer_class(str(file_path)).extract_element(element_type, name)
+    return dict(ResultBuilder.element(result, file_path)) if result is not None else None
 
 
 def _noted_answer(scheme: str, uri: str, overrides: Dict[str, Any], answer):
