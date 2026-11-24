@@ -8,7 +8,7 @@ import pytest
 from conftest import _run_reveal_direct as run
 from reveal.api import query
 from reveal.config import RevealConfig
-from reveal.errors import ConfigLoadError as ConfigFailure, NotApplicableError, RequestValidationError
+from reveal.errors import ConfigLoadError as ConfigFailure, RequestValidationError
 
 
 def _write(path, text):
@@ -89,10 +89,9 @@ def test_pressure_child_adds_declared_suite_without_expanding_boundary_populatio
 
 def test_raw_narrowing_uses_project_context_and_does_not_expand_to_declared_siblings(project):
     assert query(f'patches://{project / "suite"}')['total_uses'] == 3
-    with pytest.raises(NotApplicableError):
-        query(f'patches://{project / "src"}')
-    with pytest.raises(NotApplicableError):
-        query(f'patches://{project / "other" / "plain.py"}')
+    # Nothing to scan there: the declined answer, as the CLI and the noun form give it (BACK-2789).
+    assert query(f'patches://{project / "src"}')['applicable'] is False
+    assert query(f'patches://{project / "other" / "plain.py"}')['applicable'] is False
     # A selected test directory remains selected when narrowed below its own name.
     nested = _write(project / 'tests' / 'nested' / 'helper.py', _patch('nested.target'))
     assert query(f'patches://{nested.parent}')['total_uses'] == 1
@@ -221,8 +220,7 @@ def test_lost_default_suite_is_incomplete_and_healthy_empty_remains_distinct(pro
     bare = tmp_path / 'empty-project'
     _write(bare / 'pyproject.toml', '[project]\nname="empty"\n')
     (bare / 'src').mkdir()
-    with pytest.raises(NotApplicableError):
-        query(_pressure(bare / 'src', scheme))
+    assert query(_pressure(bare / 'src', scheme))['applicable'] is False  # declined, not raised (BACK-2789)
 
 
 def test_existing_outside_project_sibling_uses_conventions_without_its_invalid_policy(project):

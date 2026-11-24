@@ -354,7 +354,10 @@ def query(
     reused. Calls are serialized across threads.
 
     Returns:
-        The answer dict; for a noun, the CLI's JSON document for the same request.
+        The answer dict; for a noun, the CLI's JSON document for the same request. A request that does not apply to its
+        target (patches with no test files, git outside a repository) is no failure: a noun and a declared noun's URI
+        return the declined document (``applicable: false``, the reason, a ``not_applicable`` warning), as the CLI
+        exits 0 on it.
 
     Raises:
         ValueError: If the first argument is neither a noun nor a URI, or the URI's scheme is not supported.
@@ -420,9 +423,19 @@ def query(
             declared = declared_adapter_class(scheme) is not None
 
             def bound_answer(bound=bound):
+                from .errors import NotApplicableError
                 from .utils.exclusions import exclusion_scope
-                with exclusion_scope(*_walk_scope(adapter_class, resource, bound)):  # the URI's exclude (BACK-2730)
-                    result = bound.get_structure()
+                try:
+                    with exclusion_scope(*_walk_scope(adapter_class, resource, bound)):  # the URI's exclude (BACK-2730)
+                        result = bound.get_structure()
+                except NotApplicableError as error:
+                    if not declared:
+                        raise
+                    # The declined answer the noun form returns (exit 0), built as the CLI's route builds it (D21, BACK-2789).
+                    from .cli.routing.typed import answer_decline
+                    params = _bound_uri_params(scheme, uri, kwargs)
+                    result = answer_decline(bound, scheme, _scope_path(adapter_class, resource),
+                                            params[2] if params is not None else None, error)
                 facts_of = getattr(type(bound), 'execution_facts', None)
                 if callable(facts_of) and isinstance(result, dict):
                     facts = facts_of(result)
