@@ -74,3 +74,14 @@ def test_mcp_reveal_structure_answers_the_tree_and_says_what_it_lost(trees, name
     out = mcp_server.reveal_structure(name)
     assert not isinstance(out, mcp_server._ToolFailure)
     assert f'{name}/' in out and ('could not be analyzed completely' in out) is lost
+
+
+def test_sibling_an_analyzer_error_is_the_entrys_not_lost_evidence(trees):
+    """Only a file the tree could not read is lost: an office file whose metadata has no line count (the analyzer's
+    error, in the entry) leaves the listing complete, exit 0, as before."""
+    (trees / 'd' / 'notzip.docx').write_text('notzip', encoding='utf-8')
+    run = _run_reveal_direct('d', '--format', 'json')
+    assert run.returncode == 0, run.stderr
+    document = json.loads(run.stdout)
+    assert 'error' in next(e for e in document['entries'] if e['name'] == 'notzip.docx')
+    assert document['meta']['warnings'] == []

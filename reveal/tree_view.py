@@ -593,8 +593,11 @@ def _lost_files_warning(failures: List[Tuple[str, str]], root_path: Path):
 
 
 def _record_failure(path: Path, error: BaseException, failures: Optional[List[Tuple[str, str]]]) -> str:
+    """The entry's error text (``failure_of``: no errno or path); a file that could not be read (an ``OSError``) is
+    also lost evidence, recorded in *failures*. Another error is the analyzer's (an office file's metadata has no line
+    count): the entry says it, the listing is not incomplete for it."""
     cause = failure_of(error).cause
-    if failures is not None:
+    if failures is not None and isinstance(error, OSError):
         failures.append((to_posix(path), cause))
     return cause
 
