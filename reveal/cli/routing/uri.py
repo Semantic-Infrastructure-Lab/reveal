@@ -141,6 +141,10 @@ def _call_adapter(call: Callable[[], Any], scheme: str, resource: str,
     """
     try:
         return call()
+    except RetiredSpellingError:
+        # A spelling at the error stage that the owner recognizes as it binds (help://search/TERM, BACK-2773) ends the
+        # request as every retired spelling does: exit 2 with its text, no answer (main.run_contained), not a failed one.
+        raise
     except NotApplicableError as e:
         _decline(scheme, resource, e.reason, adapter_class, adapter)
     except ElementNotFoundError as e:
