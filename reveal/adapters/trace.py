@@ -126,12 +126,30 @@ def _trace_sites(file: Dict[str, Any], problems: List[Dict[str, str]]) -> None:
         file[field] = usable
 
 
+def _trace_line_table_valid(table: Any) -> bool:
+    """definition line -> caller name -> callee -> lines, each a dict level and a count list."""
+    if not isinstance(table, dict) or not all(isinstance(names, dict) for names in table.values()):
+        return False
+    callees = [by_callee for names in table.values() for by_callee in names.values()]
+    return all(isinstance(by_callee, dict) and all(isinstance(lines, list) and all(map(_trace_count, lines))
+                                                   for lines in by_callee.values()) for by_callee in callees)
+
+
+def _trace_call_lines(file: Dict[str, Any], problems: List[Dict[str, str]]) -> None:
+    """Validate the walk's call-line table call_sources reads (BACK-2714), if present; a malformed one
+    leaves the calls without lines."""
+    if 'function_call_lines' in file and not _trace_line_table_valid(file['function_call_lines']):
+        _trace_problem(problems, file['file'], 'Trace function_call_lines contains malformed call evidence')
+        file['function_call_lines'] = {}
+
+
 def _trace_file(value: Any, path: str, problems: List[Dict[str, str]]) -> Optional[Dict[str, Any]]:
     if not isinstance(value, dict) or not isinstance(value.get('file'), str) or not value['file']:
         _trace_problem(problems, path, 'Required trace file identity is missing or malformed')
         return None
     file = dict(value)
     _trace_sites(file, problems)
+    _trace_call_lines(file, problems)
     file['elements'] = _trace_elements(file.get('elements'), file['file'], problems, file.get('jsx_references', []))
     if 'parse_recovered' in file and type(file['parse_recovered']) is not bool:
         _trace_problem(problems, file['file'], 'Trace recovered-parse evidence is malformed')
