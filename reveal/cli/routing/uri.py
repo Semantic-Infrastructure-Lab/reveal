@@ -376,14 +376,21 @@ def handle_uri(uri: str, element: Optional[str], args: 'Namespace',
         args: Parsed command line arguments
         consumed: Flags the caller applied itself (``--stdin``), so the flag ledger does not
             report them as having no effect on the adapter
+
+    A spelling at the error stage (the scheme, a key or value, or one an owner says as it binds) is answered as every
+    refusal of the route (``answer_retired_spelling``, BACK-2627): in JSON with the route's invalid-request document;
+    in text mode and to a consumer it goes on to the process's one ``error:`` line (BACK-2802: this route printed its
+    own, which MCP then labelled twice).
     """
-    from .declared import declared_adapter_class, run_declared_uri
+    from .declared import answer_retired_spelling, declared_adapter_class, run_declared_uri
+
+    def refusal(text: str) -> Answer:
+        return _retired_spelling_refusal(uri, text, args)
     scheme = uri.partition('://')[0]
     try:
         _note_retired_spellings(uri)
     except RetiredSpellingError as exc:
-        print(f'error: {exc.entry.text}', file=sys.stderr)  # boundary-ok: print -- the retirement error line
-        sys.exit(2)
+        answer_retired_spelling(exc, args, refusal, answer_consumer)
     declared = declared_adapter_class(scheme)
     legacy_check = getattr(declared, 'LEGACY_CHECK_TRANSPORT', False) and peek(args, 'check', False)
     # A --stdin line is the same request as the direct command (COMMAND_MODEL 'Transports'): routing
@@ -403,11 +410,34 @@ def handle_uri(uri: str, element: Optional[str], args: 'Namespace',
                 return
             consumer = {'answer_consumer': answer_consumer} if answer_consumer is not None else {}
             handle_adapter(adapter_class, scheme, resource, element, args, **consumer)
+    except RetiredSpellingError as exc:  # an owner's row said as it binds (help://search/TERM, BACK-2773)
+        answer_retired_spelling(exc, args, refusal, answer_consumer)
     except UriUsageError as e:
         print(f"Error: {e.message}", file=sys.stderr)
         if e.hint:
             print(e.hint, file=sys.stderr)
         sys.exit(e.exit_code)
+
+
+def _retired_spelling_refusal(uri: str, text: str, args: 'Namespace') -> Answer:
+    """The URI route's invalid-request Answer saying a retired spelling's *text*: a declared noun's own (the document its
+    usage errors answer, ``invalid_uri_request``), else typed by the adapter's predicted answer, or by the scheme when
+    no adapter is left (a removed scheme: python://)."""
+    from ...adapters.base import get_adapter_class
+    from .declared import _invalid_answer, invalid_uri_request
+    declared = invalid_uri_request(uri, text, args)
+    if declared is not None:
+        return cast(Answer, declared)
+    scheme, _, resource = uri.partition('://')
+    adapter_class = get_adapter_class(scheme)
+    default = getattr(adapter_class, 'RESULT_TYPE', None) or scheme.lower()
+    select = getattr(adapter_class, 'uri_result_type', None)
+    try:
+        result_type = select(resource) if select is not None else default
+    except ValueError:  # the selector reads a query the request never got to bind: the default answer
+        result_type = default
+    return cast(Answer, _invalid_answer(adapter_class, scheme.lower(), resource.partition('?')[0], text, args,
+                                        result_type=result_type, default_fail_on='none'))
 
 
 def _uri_execution_facts(adapter_class, resource, element, args):
