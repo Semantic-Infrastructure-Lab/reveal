@@ -47,6 +47,20 @@ def test_the_noun_form_raises_with_the_clis_sentence(uri, topic, says):
     assert str(raised.value) == message
 
 
+@pytest.mark.parametrize('argv', [('help://ast/bogus',), ('help', 'ast/bogus'), ('help://ast/bogus', '--format', 'json')])
+def test_the_cli_says_the_sentence_once_as_its_error(argv):
+    """The sentence is the answer's ``error`` (the CLI's error line), said once: the label ``Invalid section`` is gone
+    from every transport, and the text page does not repeat the sentence under the error line."""
+    run = _run_reveal_direct(*argv)
+    assert run.returncode == 2
+    lines = [line for line in run.stderr.splitlines() if line.strip()]
+    assert lines[0].startswith("Error (help://): Unknown section 'bogus'. Sections of ast:")
+    assert sum("Unknown section 'bogus'" in line for line in lines) == 1 and 'Invalid section' not in run.stderr
+    if '--format' in argv:
+        document = json.loads(run.stdout)
+        assert document['error'] == document['message']
+
+
 @pytest.mark.parametrize('call', [lambda: api.query('help://ast'), lambda: api.query('help', 'ast')])
 def test_a_page_that_exists_still_answers(call):
     assert call()['type'] == 'static_guide'

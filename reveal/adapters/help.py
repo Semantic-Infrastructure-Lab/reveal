@@ -501,6 +501,16 @@ class HelpAdapter(ResourceAdapter):
         error = result.get('error') if isinstance(result, dict) else None
         cause = FailureCause.INVALID_REQUEST if error in _NAMES_NOTHING else FailureCause.ANALYSIS
         return result_execution_facts(result, completeness=AnalysisCompleteness.COMPLETE, failure_cause=cause)
+
+    @staticmethod
+    def public_diagnostic(result):
+        """The sentence a page that names nothing teaches ("Unknown section 'bogus'. Sections of ast: ..."), authored
+        here: the Python API raises with it and MCP shows it, as the CLI prints it (D21; BACK-2787, BACK-2798)."""
+        error = result.get('error') if isinstance(result, dict) else None
+        if error not in _NAMES_NOTHING:
+            return None
+        message = result.get('message')
+        return message if isinstance(message, str) and message.strip() else error
     RESOURCE_SPEC = ResourceSpec(name='topic', cli_default='', uri_default='', walks=False, filesystem=False)
 
     # Valid section names for help://adapter/section queries

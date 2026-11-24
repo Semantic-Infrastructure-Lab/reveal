@@ -653,9 +653,10 @@ def _render_error_detail(data: Dict[str, Any]) -> None:
     """The detail under a help:// error: its message and any example commands.
 
     The router has already printed the error line and exits 1 after this returns
-    (cli/routing/uri._emit_result, BACK-1059).
+    (cli/routing/uri._emit_result, BACK-1059). A page that names nothing has its message as its error (the help
+    adapter's public diagnostic, BACK-2787), which that line already said, so it is not printed twice.
     """
-    if data.get('message'):
+    if data.get('message') and data['message'] != data.get('error'):
         print(data['message'], file=sys.stderr)
     for example in data.get('examples', []):
         print(f"  {example}", file=sys.stderr)

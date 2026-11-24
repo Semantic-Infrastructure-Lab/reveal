@@ -83,7 +83,8 @@ def test_schema_menu_json_names_the_failed_get_schema(broken_schema_plugin, capl
 
 def test_unknown_adapter_did_you_mean_names_the_failed_get_schema(broken_schema_plugin):
     _run, result = _json('help://schemas/nosuchadapter')
-    assert result['error'] == 'Unknown adapter'
+    assert result['error'] == result['message']  # the page's sentence, its public diagnostic (BACK-2787)
+    assert result['error'].startswith("No adapter named 'nosuchadapter'")
     assert 'brokenx' not in result['available_adapters']
     [warning] = [w for w in _warnings(result) if w.get('field') == 'available_adapters']
     assert warning['adapters'] == ['brokenx']
