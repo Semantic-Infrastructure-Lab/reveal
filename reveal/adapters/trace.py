@@ -112,7 +112,7 @@ def _trace_site_valid(site: Any, owner: bool) -> bool:
 
 def _trace_sites(file: Dict[str, Any], problems: List[Dict[str, str]]) -> None:
     """Validate the script/JSX call fields consumed by call_sources, if present."""
-    for field in ('module_call_sites', 'jsx_references', 'jsx_call_sites'):
+    for field in ('module_call_sites', 'jsx_references'):
         if field not in file:
             continue
         values = file[field]

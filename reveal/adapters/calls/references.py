@@ -390,32 +390,6 @@ def jsx_component_references(analyzer, elements):
     return references
 
 
-def jsx_owner_call_sites(analyzer, elements, references):
-    """Call lines of the names a scope also renders (BACK-1834 F7).
-
-    A function element lists its callees without lines, so `Btn(); return <Btn/>` could only
-    show the JSX line. Each call to a rendered name is attributed through the same owner seam
-    as its JSX use; `call_sources` joins the two on (owner, owner_line, callee).
-    """
-    from ...treesitter import CALL_NODE_TYPES
-    tree = analyzer.tree
-    rendered = {r['callee'] for r in references}
-    if tree is None or not rendered:
-        return []
-    by_name, value_names = _owner_tables(analyzer, elements)
-    sites = []
-    for node in iter_tree(_zero_arg(tree, 'root_node')):
-        if _zero_arg(node, 'kind') not in CALL_NODE_TYPES:
-            continue
-        callee = analyzer._get_callee_name(node)
-        if callee not in rendered:
-            continue
-        owner, deferred_line = _jsx_owner(analyzer, node, by_name, value_names, elements)
-        sites.append({'callee': callee, 'line': _zero_arg(node, 'start_position').row + 1,
-                      **_owner_fields(owner, deferred_line)})
-    return sites
-
-
 def reflected_annotation_types(file_paths, *,
                                on_read_error: Optional[Callable[[str, OSError], None]] = None) -> Set[str]:
     """Annotation types the scan declares and some code reads through reflection (BACK-2176).

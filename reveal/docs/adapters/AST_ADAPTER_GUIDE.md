@@ -395,8 +395,8 @@ File: adapters/ast/analysis.py
            calls:     item.get, cast, _add_function_metrics
            called by: _flatten_structure
   ...
-  : 400  call_sources [20 lines, complexity: 20]
-           calls:     file_struct.get, elem.get, dict.fromkeys, _owner_call_lines, _class_field_sources, s.get
+  : 493  call_sources [16 lines, complexity: 13]
+           calls:     file_struct.get, _element_source, _with_shadows, _class_field_sources, s.get, dict.fromkeys
 ...
 
   ⚠ complexity is McCabe cyclomatic complexity (a count of decision points), not weighted by nesting depth -- ...

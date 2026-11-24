@@ -402,15 +402,6 @@ def _listed_scope_test(elements: Sequence[Dict[str, Any]]):
     return owned
 
 
-def _owner_call_lines(file_struct: Dict[str, Any], elem: Dict[str, Any]) -> Dict[str, List[int]]:
-    """callee -> lines of its calls inside *elem*, for the names the element also renders."""
-    lines: Dict[str, set] = {}
-    for site in file_struct.get('jsx_call_sites', []):
-        if site['owner'] == elem.get('name') and site['owner_line'] == elem.get('line'):
-            lines.setdefault(site['callee'], set()).add(site['line'])
-    return {callee: sorted(found) for callee, found in lines.items()}
-
-
 _SELF_QUALIFIERS = frozenset({'self', 'this', 'cls', 'super', 'Self'})
 # A bare name leaf directly inside one of these is a parameter (Python `def f(json)` has no field on it,
 # which `references._binding_kind` requires).
@@ -488,14 +479,15 @@ def _walk_call_lines(file_struct: Dict[str, Any], elem: Dict[str, Any]) -> Dict[
 
 
 def _element_source(file_struct: Dict[str, Any], elem: Dict[str, Any], refs: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """One listed element as a call source: its call lines, and the JSX names it renders when it renders any."""
+    """One listed element as a call source: its call lines (the walk's, for every callee, a rendered
+    name included), and the JSX names it renders when it renders any."""
     call_lines = _walk_call_lines(file_struct, elem)
+    source = {**elem, 'call_lines': call_lines} if call_lines else elem
     references = [r for r in refs if r['owner'] == elem.get('name') and r['owner_line'] == elem.get('line')]
     if references:
-        return {**elem, 'calls': list(dict.fromkeys([*elem.get('calls', []), *(r['callee'] for r in references)])),
-                'references': references, 'reference_only_calls': [r['callee'] for r in references if r['callee'] not in elem.get('calls', [])],
-                'call_lines': {**call_lines, **_owner_call_lines(file_struct, elem)}}
-    return {**elem, 'call_lines': call_lines} if call_lines else elem
+        return {**source, 'calls': list(dict.fromkeys([*elem.get('calls', []), *(r['callee'] for r in references)])),
+                'references': references, 'reference_only_calls': [r['callee'] for r in references if r['callee'] not in elem.get('calls', [])]}
+    return source
 
 
 def call_sources(file_struct: Dict[str, Any]):
@@ -574,7 +566,9 @@ def _call_site_layer_complete(layer: Dict[str, Any], family: Optional[str]) -> b
         return False
     if family == 'js' and not all('callable' in f for f in layer['class_field_call_sites']):
         return False  # stored before fields recorded whether they hold a function (BACK-2581)
-    return family != 'js' or all(isinstance(layer.get(k), list) for k in ('jsx_references', 'jsx_call_sites'))
+    # A layer stored while JSX call lines had their own owner also holds ``jsx_call_sites``: nothing reads
+    # it since the walk owns every call line (BACK-2714), so it neither completes nor spoils the layer.
+    return family != 'js' or isinstance(layer.get('jsx_references'), list)
 
 
 def _add_call_sites(result: Dict[str, Any], file_path: str, analyzer) -> None:
@@ -598,22 +592,19 @@ def _add_call_sites(result: Dict[str, Any], file_path: str, analyzer) -> None:
             result['shadowed_qualifiers'] = layer['shadowed_qualifiers']
             if family == 'js':
                 result['jsx_references'] = layer['jsx_references']
-                result['jsx_call_sites'] = layer['jsx_call_sites']
                 result['class_field_call_sites'] = layer['class_field_call_sites']
             return
     result['module_call_sites'] = module_call_sites(file_path, analyzer, result['elements'])
     result['shadowed_qualifiers'] = shadowed_qualifiers(file_path, analyzer, result['elements'])
     if family == 'js':
         result['class_field_call_sites'] = class_field_call_sites(file_path, analyzer)
-        from ..calls.references import jsx_component_references, jsx_owner_call_sites
+        from ..calls.references import jsx_component_references
         result['jsx_references'] = jsx_component_references(analyzer, result['elements'])
-        result['jsx_call_sites'] = jsx_owner_call_sites(analyzer, result['elements'], result['jsx_references'])
     if persist:
         stored = {'module_call_sites': result['module_call_sites'],
                   'shadowed_qualifiers': result['shadowed_qualifiers']}
         if family == 'js':
-            stored.update(jsx_references=result['jsx_references'], jsx_call_sites=result['jsx_call_sites'],
-                          class_field_call_sites=result['class_field_call_sites'])
+            stored.update(jsx_references=result['jsx_references'], class_field_call_sites=result['class_field_call_sites'])
         analyzer.store_call_site_layer(form, stored)
 
 

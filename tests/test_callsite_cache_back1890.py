@@ -79,7 +79,9 @@ def test_warm_answer_includes_jsx_extras_and_recovery_flag(project, spy):
     second, _ = _scan(project)
     assert first["app.jsx"]["jsx_references"], "fixture must exercise the JSX extras"
     assert second["app.jsx"]["jsx_references"] == first["app.jsx"]["jsx_references"]
-    assert second["app.jsx"]["jsx_call_sites"] == first["app.jsx"]["jsx_call_sites"]
+    # The call lines of App's `Btn()` come from the walk's table, which a hit serves too (BACK-2714).
+    assert second["app.jsx"]["function_call_lines"] == first["app.jsx"]["function_call_lines"]
+    assert first["app.jsx"]["function_call_lines"]["2"]["App"]["Btn"] == [2]
     assert first["broken.py"].get("parse_recovered") is True
     assert second["broken.py"].get("parse_recovered") is True  # the diagnostic travels on a hit
 
@@ -166,21 +168,40 @@ def test_layer_for_another_content_form_is_a_miss(project, spy):
     assert flipped.load_call_site_layer(flipped.call_site_form()) is None
 
 
-def test_js_layer_without_its_jsx_extras_is_a_miss(project, spy):
-    """The JSX references and call sites live in the same entry or the layer is not used (item 5)."""
-    _scan(project)
-    path = project / "app.jsx"
-    analyzer = _analyzer(path)
+def _jsx_layer(project):
+    """(key, entry, a copy of its call-site layer) of the stored app.jsx entry."""
+    analyzer = _analyzer(project / "app.jsx")
     key = analyzer._structure_fingerprint()
     entry = disk_cache.get(ts_mod._STRUCTURE_CACHE_NAMESPACE, key)
-    layer = dict(entry[ts_mod._CALL_SITE_LAYER_KEY])
-    assert "jsx_references" in layer and "jsx_call_sites" in layer
-    del layer["jsx_call_sites"]
+    return key, entry, dict(entry[ts_mod._CALL_SITE_LAYER_KEY])
+
+
+def test_js_layer_without_its_jsx_extras_is_a_miss(project, spy):
+    """The JSX references live in the same entry or the layer is not used (item 5)."""
+    _scan(project)
+    key, entry, layer = _jsx_layer(project)
+    assert "jsx_references" in layer
+    del layer["jsx_references"]
     disk_cache.put(ts_mod._STRUCTURE_CACHE_NAMESPACE, key, {**entry, ts_mod._CALL_SITE_LAYER_KEY: layer})
     spy.clear()
     after, _ = _scan(project)
     assert spy == ["app.jsx"]
-    assert after["app.jsx"]["jsx_call_sites"] is not None
+    assert after["app.jsx"]["jsx_references"]
+
+
+def test_js_layer_stored_with_the_retired_jsx_call_sites_is_still_a_hit(project, spy):
+    """BACK-2714: the walk owns every call line, so the layer no longer stores JSX owners' call sites. A
+    layer stored while it did still answers: the extra key neither completes nor spoils it, and nothing
+    reads it, so the warm answer is the cold one."""
+    first, _ = _scan(project)
+    key, entry, layer = _jsx_layer(project)
+    assert "jsx_call_sites" not in layer and "jsx_call_sites" not in first["app.jsx"]
+    layer["jsx_call_sites"] = [{"callee": "Btn", "line": 2, "owner": "App", "owner_line": 2}]
+    disk_cache.put(ts_mod._STRUCTURE_CACHE_NAMESPACE, key, {**entry, ts_mod._CALL_SITE_LAYER_KEY: layer})
+    spy.clear()
+    second, _ = _scan(project)
+    assert spy == []
+    assert second == first
 
 
 def test_outline_scan_stores_nothing_and_full_request_still_computes(project, spy):

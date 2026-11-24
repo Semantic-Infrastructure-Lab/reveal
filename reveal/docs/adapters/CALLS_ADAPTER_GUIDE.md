@@ -798,7 +798,7 @@ trigger() {
 }
 ```
 
-`reveal 'calls://.?callers=doResolve'` lists both `fn` and `trigger` as callers, since executing `trigger()` does transitively execute that call. This is intentional depth, not a bug — it doesn't cause false negatives — but it means callers counts for functions called from inline closures will be higher than a naive "innermost scope only" model expects. Plain anonymous/inline arrows (callback arguments, object-literal property values) don't get their own element at all and are attributed only to the nearest enclosing named scope, same as a Python `lambda`.
+`reveal 'calls://.?callers=doResolve'` lists both `fn` and `trigger` as callers, since executing `trigger()` does transitively execute that call. This is intentional depth, not a bug — it doesn't cause false negatives — but it means callers counts for functions called from inline closures will be higher than a naive "innermost scope only" model expects. Each credited scope's `call_lines` holds that call's line too, from the same walk, so a component that both renders `<Btn/>` and holds `const cb = () => Btn()` names the closure's line beside its own calls. Plain anonymous/inline arrows (callback arguments, object-literal property values) don't get their own element at all and are attributed only to the nearest enclosing named scope, same as a Python `lambda`.
 
 ### False Positives in `?uncalled` (retired)
 
