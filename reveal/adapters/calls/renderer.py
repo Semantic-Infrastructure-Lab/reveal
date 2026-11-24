@@ -195,7 +195,7 @@ def _target_evidence_label(record: Dict[str, Any]) -> str:
 def _row_line(rec: Dict[str, Any]) -> int:
     """A callers row's leading line: the caller's first call to the name, else its first JSX use
     (a name only rendered has no call). The definition line is ``caller_def_line`` in JSON (BACK-2714)."""
-    sites = rec.get('call_lines') or rec.get('reference_lines') or [rec.get('caller_def_line', 0)]
+    sites: List[int] = rec.get('call_lines') or rec.get('reference_lines') or [rec.get('caller_def_line', 0)]
     return min(sites)
 
 

@@ -483,7 +483,19 @@ def _class_field_sources(file_struct: Dict[str, Any]):
 def _walk_call_lines(file_struct: Dict[str, Any], elem: Dict[str, Any]) -> Dict[str, List[int]]:
     """callee -> the lines of *elem*'s calls to it, as the call walk recorded them (BACK-2714)."""
     by_name = file_struct.get('function_call_lines', {}).get(str(elem.get('line')), {})
-    return by_name.get(elem.get('name'), {})
+    lines: Dict[str, List[int]] = by_name.get(elem.get('name'), {})
+    return lines
+
+
+def _element_source(file_struct: Dict[str, Any], elem: Dict[str, Any], refs: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """One listed element as a call source: its call lines, and the JSX names it renders when it renders any."""
+    call_lines = _walk_call_lines(file_struct, elem)
+    references = [r for r in refs if r['owner'] == elem.get('name') and r['owner_line'] == elem.get('line')]
+    if references:
+        return {**elem, 'calls': list(dict.fromkeys([*elem.get('calls', []), *(r['callee'] for r in references)])),
+                'references': references, 'reference_only_calls': [r['callee'] for r in references if r['callee'] not in elem.get('calls', [])],
+                'call_lines': {**call_lines, **_owner_call_lines(file_struct, elem)}}
+    return {**elem, 'call_lines': call_lines} if call_lines else elem
 
 
 def call_sources(file_struct: Dict[str, Any]):
@@ -492,15 +504,7 @@ def call_sources(file_struct: Dict[str, Any]):
     refs = file_struct.get('jsx_references', [])
     shadowed = file_struct.get('shadowed_qualifiers', {})
     for elem in file_struct.get('elements', []):
-        elem = _with_shadows(elem, shadowed)
-        call_lines = _walk_call_lines(file_struct, elem)
-        references = [r for r in refs if r['owner'] == elem.get('name') and r['owner_line'] == elem.get('line')]
-        if references:
-            yield {**elem, 'calls': list(dict.fromkeys([*elem.get('calls', []), *(r['callee'] for r in references)])),
-                   'references': references, 'reference_only_calls': [r['callee'] for r in references if r['callee'] not in elem.get('calls', [])],
-                   'call_lines': {**call_lines, **_owner_call_lines(file_struct, elem)}}
-        else:
-            yield {**elem, 'call_lines': call_lines} if call_lines else elem
+        yield _element_source(file_struct, _with_shadows(elem, shadowed), refs)
     yield from _class_field_sources(file_struct)
     sites = [s for s in file_struct.get('module_call_sites', []) if s.get('relationship') != 'jsx_reference']
     references = [r for r in refs if r['owner'] == '<module>']

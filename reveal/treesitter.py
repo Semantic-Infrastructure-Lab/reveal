@@ -363,6 +363,25 @@ ALL_ELEMENT_NODE_TYPES = (
 )
 
 
+def _note_call(calls: List[str], lines_of: Dict[str, List[int]], name: str, line: int) -> None:
+    """One call site seen by the call walk: a new callee joins ``calls`` (first-seen order), every
+    site's line joins its callee's lines (BACK-2714)."""
+    seen = lines_of.get(name)
+    if seen is None:
+        calls.append(name)
+        lines_of[name] = [line]
+    else:
+        seen.append(line)
+
+
+def _merge_call_lines(into: Optional[Dict[str, List[int]]], lines_of: Dict[str, List[int]]) -> None:
+    """Add one walk's call lines to the caller's map, when the caller passed one."""
+    if into is None:
+        return
+    for name, lines in lines_of.items():
+        into.setdefault(name, []).extend(lines)
+
+
 def build_callers_index(functions: List[StructureItem]) -> Dict[str, List[str]]:
     """Invert the callees map to produce a within-file callers index.
 
@@ -2364,12 +2383,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
             if kind in CALL_NODE_TYPES:
                 name = self._get_callee_name(node)
                 if name:
-                    seen = lines_of.get(name)
-                    if seen is None:
-                        calls.append(name)
-                        lines_of[name] = [start_of(node).row + 1]
-                    else:
-                        seen.append(start_of(node).row + 1)
+                    _note_call(calls, lines_of, name, start_of(node).row + 1)
             if is_decision(kind, parent_kind, node, self._get_node_text):
                 decision_count += 1
 
@@ -2410,14 +2424,6 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 stack.append((child, kind, child_depth, child_kind))
 
         for node in self._implicit_call_nodes(func_node):
-            name = self._get_node_text(node)
-            seen = lines_of.get(name)
-            if seen is None:
-                calls.append(name)
-                lines_of[name] = [_zero_arg(node, 'start_position').row + 1]
-            else:
-                seen.append(_zero_arg(node, 'start_position').row + 1)
-        if call_lines is not None:
-            for name, lines in lines_of.items():
-                call_lines.setdefault(name, []).extend(lines)
+            _note_call(calls, lines_of, self._get_node_text(node), _zero_arg(node, 'start_position').row + 1)
+        _merge_call_lines(call_lines, lines_of)
         return decision_count + 1, max_depth, calls
