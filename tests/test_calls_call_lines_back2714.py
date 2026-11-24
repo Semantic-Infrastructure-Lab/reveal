@@ -533,6 +533,39 @@ def test_jsx_only_owners_and_plain_callers_keep_their_lines(tmp_path):
     assert re.search(r'p\.tsx:8  cb  \(calls Btn\)$', _row(text, 'cb')), text
 
 
+# 13. trace validates the call fields call_sources reads; the walk's table is one of them now. A malformed
+# table is reported as malformed call evidence beside the frames, as a malformed module site is, never
+# an unattributed crash with no frames.
+
+def _trace_with_malformed(tmp_path, monkeypatch, field, value):
+    root, _ = _jsx_owners(tmp_path)
+    real = analysis.collect_structures
+
+    def malformed(path, *args, **kwargs):
+        structures = real(path, *args, **kwargs)
+        for structure in structures:
+            structure[field] = value
+        return structures
+
+    monkeypatch.setattr(analysis, 'collect_structures', malformed)
+    result = _run_reveal_direct(f'trace://{root}?from=Two', '--format', 'json')
+    answer = json.loads(result.stdout)
+    return result.returncode, [e['message'] for e in answer['meta']['errors']], [f['name'] for f in answer.get('frames', [])]
+
+
+def test_trace_reports_a_malformed_call_line_table_as_call_evidence(tmp_path, monkeypatch):
+    code, errors, frames = _trace_with_malformed(tmp_path, monkeypatch, 'function_call_lines', ['not', 'a', 'table'])
+    assert code == 3 and frames == ['Two', 'Btn'], (code, errors, frames)
+    assert any('Trace function_call_lines contains malformed call evidence' in e for e in errors), errors
+
+
+def test_trace_reports_a_malformed_module_site_as_call_evidence(tmp_path, monkeypatch):
+    """Sibling: the rule trace already applies to the other call fields."""
+    code, errors, frames = _trace_with_malformed(tmp_path, monkeypatch, 'module_call_sites', ['bad'])
+    assert code == 3 and frames == ['Two', 'Btn'], (code, errors, frames)
+    assert any('Trace module_call_sites contains malformed call evidence' in e for e in errors), errors
+
+
 # Every call source's record has call lines, inside its own span, in every language the matrix covers.
 
 CONFORMANCE = os.path.join(os.path.dirname(__file__), 'fixtures', 'conformance')
