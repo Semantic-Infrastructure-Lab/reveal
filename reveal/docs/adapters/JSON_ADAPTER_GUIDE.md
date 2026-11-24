@@ -1019,7 +1019,7 @@ Ordinary navigation/query rejections below print `Error (json://): ...` and exit
 **1. Path not found**
 
 ```
-Error (json://): 'Key not found: nonexistent'
+Error (json://): Key not found: nonexistent
 ```
 
 **Cause**: Specified key doesn't exist in JSON.

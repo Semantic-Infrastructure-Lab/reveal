@@ -175,7 +175,8 @@ class JsonAdapter(ResourceAdapter):
         try:
             value = navigate_to_path(self.data, self.json_path, self.slice_spec)
         except (KeyError, IndexError, TypeError) as e:
-            return self._build_error_result(str(e))
+            # The walk's own sentence: str() of a KeyError is the repr of its text, quotes included (BACK-2790).
+            return self._build_error_result(str(e.args[0]) if isinstance(e, KeyError) and e.args else str(e))
 
         # Handle legacy query modes
         if self._is_legacy_query():
