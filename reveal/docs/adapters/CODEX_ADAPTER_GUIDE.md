@@ -539,7 +539,9 @@ Source receipts, selected UUIDs, view counts and observations remain checked
 through presentation. Indexed records are still zero-based over decoded object
 records, with negative indexing retained. A malformed index rejects before
 SQLite acquisition; source loss cannot establish clean out-of-range absence.
-The native API retains its error dictionaries and source evidence. MCP uses the
+The native API raises a failed answer as the CLI exits: a failed analysis as `AnalysisFailedError`
+carrying the document and its source evidence, an invalid request as `RequestValidationError`
+with the CLI's message (BACK-2788). MCP uses the
 same execution facts: usable partial data is returned with its disclosures;
 failed required analysis is an error using the existing private-failure wording.
 

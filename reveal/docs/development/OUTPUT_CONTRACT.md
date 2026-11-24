@@ -36,7 +36,8 @@ CLI exits 2 on raises `RequestValidationError` with the CLI's message (a missing
 `PathNotFoundError`, also a `FileNotFoundError`; an element that matches nothing
 `ElementNotFoundError`), a file whose parse failed raises `AnalysisFailedError` with the
 CLI's document as its `result` (exit 3), an unreadable file its `OSError`; an invalid `--grep`
-pattern is an invalid request (exit 2, `RequestValidationError`). An element read
+pattern is an invalid request (exit 2, `RequestValidationError`; in JSON the path read's
+invalid-request document). An element read
 of a file whose parse failed answers that failure on every transport, exit 3 naming it,
 never "not found" (BACK-2775).
 
@@ -471,6 +472,10 @@ Its noun form, `reveal.api.query('calls', 'src', callers='main')`, runs the subc
 request the subcommand exits 2 on raises `RequestValidationError` with the message above (an unknown keyword
 `UnsupportedOverrideError`), a failed analysis raises its cause or `reveal.errors.AnalysisFailedError` (exit 3,
 its `result` the JSON document), and every other answer is returned as the JSON document (BACK-2717).
+Its URI form raises the same way on a declared noun, whose URI the CLI answers by the noun's own route:
+`api.query('json://F/absent')` raises the CLI's `Key not found`, a missing path raises `PathNotFoundError`
+(BACK-2788). A scheme the CLI answers by its generic URI route (a plugin, an undeclared adapter)
+returns its answer as before.
 
 ### Retired spellings (`retired_spelling`)
 
@@ -796,7 +801,7 @@ Required acquisition/parse loss gives 3. Config replacement decoding retains
 usable partial values with source loss; settings remain strict. Scalar observations
 preserve presence, type and value (`null`, `false` and zero included). Stage receipts
 describe the existing reader, not universal document payload validation. Python
-retains its error dictionaries; corrupted presentation fully fails an MCP answer.
+raises those failures as the CLI exits (BACK-2788); corrupted presentation fully fails an MCP answer.
 Installation `info` qualifies its eight named path slots through
 `meta.info_analysis` (aliases count independently). Confirmed optional absence is
 complete; denied metadata uses `exists: null` and reports the failure. Directory

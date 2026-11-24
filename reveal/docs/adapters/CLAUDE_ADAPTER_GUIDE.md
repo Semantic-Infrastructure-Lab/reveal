@@ -2650,8 +2650,9 @@ Its error marker remains for legacy transports; qualified outcomes use the sourc
 receipt to retain usable partial entries, including in text output.
 Malformed/non-object records, decoding repair and required read/payload loss give
 exit 3, even when filters leave no rows. A genuinely empty file and disclosed
-display cuts give 0. A missing requested history file gives 2; Python retains its
-error dictionary and source receipt. Failure after opening remains analysis loss. MCP
+display cuts give 0. A missing requested history file gives 2; Python raises it as
+`RequestValidationError` with the CLI's message, whose JSON keeps the source receipt
+(BACK-2788). Failure after opening remains analysis loss. MCP
 retains usable partial entries, rejects fully failed source and returns a public
 missing-file diagnostic; follow-up requests re-read source decisions.
 
@@ -2682,7 +2683,7 @@ reveal claude://settings --key cleanupPeriodDays
 acquisition/validation stages. A missing file or missing settings key gives exit
 2 with a public diagnostic; unreadable/malformed input and loss after a successful
 selection give 3. Valid empty documents and present `null`, `false` or zero values
-give 0. Python keeps its existing error dictionaries. Receipts and observations
+give 0. Python raises those failures as the CLI exits (BACK-2788). Receipts and observations
 survive presentation, including the difference between `false` and zero. Settings
 retain strict UTF-8 decoding; stage receipts do not promise universal payload
 validation beyond the existing reader.
