@@ -521,13 +521,13 @@ For project-wide callers use the `calls://` adapter:
 
 ```bash
 # Who calls validate_token across the entire project?
-reveal 'calls://src/?callers=validate_token'
+reveal calls src/ --callers validate_token
 
 # Two levels deep (callers-of-callers)
-reveal 'calls://src/?callers=validate_token&depth=2'
+reveal calls src/ --callers validate_token --depth 2
 
 # Graphviz dot output
-reveal 'calls://src/?callers=main&format=dot' | dot -Tsvg > call_graph.svg
+reveal calls src/ --callers main --format dot   # Graphviz: | dot -Tsvg > call_graph.svg
 ```
 
 See [CALLS_ADAPTER_GUIDE.md](CALLS_ADAPTER_GUIDE.md) for full `calls://` documentation.
@@ -701,20 +701,20 @@ reveal ast ./src --kind 'class|function' --format=json | \
 
 ```bash
 # Step 1: See what a function calls
-reveal 'calls://src/?callees=authenticate'
+reveal calls src/ --callees authenticate
 
 # Step 2: Find callers of a specific function
-reveal 'calls://src/?callers=validate_token'
+reveal calls src/ --callers validate_token
 
 # Step 3: Explore callers-of-callers (who triggers the chain?)
-reveal 'calls://src/?callers=validate_token&depth=2'
+reveal calls src/ --callers validate_token --depth 2
 
 # Step 4: Extract call data for a specific function (JSON)
 reveal ast src/auth.py --where name=authenticate --format=json | \
   jq '.results[0] | {calls, called_by}'
 
 # Step 5: Generate a visual graph
-reveal 'calls://src/?callers=authenticate&format=dot' | dot -Tsvg > auth_calls.svg
+reveal calls src/ --callers authenticate --format dot   # Graphviz: | dot -Tsvg > auth_calls.svg
 ```
 
 **Expected outcome**: Complete picture of call chains — who triggers what, and how deep it goes.
@@ -1399,8 +1399,8 @@ A: Tree-sitter-based McCabe complexity for supported languages; keyword-count es
 A: Yes, with the `calls://` adapter (`ast://?calls=` is retired; see
 [Retired call filters](#retired-call-filters)):
   ```bash
-  reveal 'calls://src/?callers=validate_token'           # direct callers
-  reveal 'calls://src/?callers=validate_token&depth=2'   # callers-of-callers
+  reveal calls src/ --callers validate_token           # direct callers
+  reveal calls src/ --callers validate_token --depth 2   # callers-of-callers
   ```
 
 See [CALLS_ADAPTER_GUIDE.md](CALLS_ADAPTER_GUIDE.md) for full documentation.

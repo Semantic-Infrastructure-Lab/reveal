@@ -119,8 +119,8 @@ Reveal is very good at answering "what else will this touch?"
 The two key tools are `calls://` and `imports://?importers`:
 
 ```bash
-reveal 'calls://src/?callers=validate_token&depth=3'
-reveal 'calls://src/?sort=-callers&limit=20'
+reveal calls src/ --callers validate_token --depth 3
+reveal calls src/ --sort=-callers --limit 20
 reveal imports src/auth/tokens.py --importers
 reveal imports src --sort=-fan-in --limit 20
 ```
@@ -484,7 +484,7 @@ Reveal is good for people who like Unix-style pipelines, but want higher-level b
 
 ```bash
 reveal nginx.conf --extract domains | reveal --stdin --check
-reveal 'calls://src/?callers=main&format=dot' | dot -Tsvg > callgraph.svg
+reveal calls src/ --callers main --format dot   # Graphviz: | dot -Tsvg > callgraph.svg
 reveal imports src --importers --format dot | dot -Tsvg > imports.svg
 reveal @domains.txt --check
 ```

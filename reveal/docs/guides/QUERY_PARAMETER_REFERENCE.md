@@ -368,9 +368,9 @@ reveal metrics . --view hotspots --code-only
 - **`calls`**, **`callee_of`**, **`show=calls`** - Retired: each still answers with a replaced-by
   note. Use `calls://` instead
   ```bash
-  reveal 'calls://src?callers=validate_item'   # was ast://src?calls=validate_item
+  reveal calls src --callers validate_item   # was ast://src?calls=validate_item
   reveal src --grep 'send'                     # was ast://src?calls=*send* (a pattern)
-  reveal 'calls://src?callees=main'            # was ast://src?callee_of=main
+  reveal calls src --callees main            # was ast://src?callee_of=main
   ```
 
 - **`--view dict-heatmap`** (was `show=dict-heatmap`) - Rank untyped dicts by distinct string keys read (`x['k']`, `x.get('k')`, `'k' in x`); covers dict-annotated and unannotated params, loop variables (`for elem in structure['functions']`), and locals; suggests TypedDict names. Each result carries a `source` field.
@@ -433,7 +433,7 @@ reveal metrics . --view hotspots --code-only
 - **`callers`** - Find all callers of a function (reverse lookup). A bare name: `callers=FILE:NAME`
   exits 2. The retired **`target`** answers the same, with a replaced-by note
   ```bash
-  reveal 'calls://src?callers=validate_item'
+  reveal calls src --callers validate_item
   # Shorthand: calls://src/file.py:validate_item (only with no other mode; with one it exits 2)
   ```
 
@@ -442,46 +442,46 @@ reveal metrics . --view hotspots --code-only
   (`levels`, `definitions`, edge totals, `walk_rule`): each definition expanded once at its
   shallowest level, every call site an edge. Beyond depth 1 is not measured (W-CALLS-9)
   ```bash
-  reveal 'calls://src?callees=validate_item'
-  reveal 'calls://src?callees=validate_item&builtins=true'  # include len, str, etc.
-  reveal 'calls://src?callees=main&depth=3'                 # what that calls, 3 levels
+  reveal calls src --callees validate_item
+  reveal calls src --callees validate_item --builtins  # include len, str, etc.
+  reveal calls src --callees main --depth 3                 # what that calls, 3 levels
   ```
 
 - **`detail`** - With `callees` only: `normal` (default) or `full`, which adds `params` and `effects` to every
   definition reached (not measured, W-CALLS-9); with another mode it exits 2. The valueless `?detail` and
   `true`/`false` are deprecated: a note names `detail=full` (`normal`)
   ```bash
-  reveal 'calls://src?callees=main&detail=full'
+  reveal calls src --callees main --detail full
   ```
 
 - **`rank=callers`** - Rank the functions and classes defined under the path by number of unique callers (coupling metrics); `builtins=true` also ranks library methods and builtins
   ```bash
-  reveal 'calls://src?sort=-callers'          # top 10 most-called
-  reveal 'calls://src?sort=-callers&limit=20'   # top 20
+  reveal calls src --sort=-callers          # top 10 most-called
+  reveal calls src --sort=-callers --limit 20   # top 20
   ```
 
 - **`depth`** - Levels for `?callers` and `?callees` (default 1; the retired `?root`: 2), 1-5; a value outside it exits 2 (`depth must be 1..5, got N`)
   ```bash
-  reveal 'calls://src?callers=validate_item&depth=2'  # callers-of-callers
+  reveal calls src --callers validate_item --depth 2  # callers-of-callers
   ```
 
 - **`format`** - Output format: `text` (default), `json`, `dot` (Graphviz). `dot` draws callers, a
   callees walk (`depth=2-5` or `detail`), `root` and `modules`; callees at depth 1, `rank` and `uncalled`
   have no graph and exit 2
   ```bash
-  reveal 'calls://src?callers=main&format=dot' | dot -Tsvg > graph.svg
+  reveal calls src --callers main --format dot   # Graphviz: | dot -Tsvg > graph.svg
   ```
 
 - **`builtins`** - Include Python builtins in `?callees` (every depth), the retired `?root` and `?rank` output (default: false)
   ```bash
-  reveal 'calls://src?callees=fn&builtins=true'
+  reveal calls src --callees fn --builtins
   ```
 
 - **`root=<func>&depth=N`** - Retired: `?callees=<func>&depth=N` is the same walk (`?root` defaulted
   to depth 2) and `&detail=full` adds params and side effects. `?root` still answers, with a replaced-by note
   ```bash
-  reveal 'calls://src?callees=main&depth=2'           # was ?root=main
-  reveal 'calls://src?callees=handle_request&depth=2&format=dot' | dot -Tsvg > graph.svg
+  reveal calls src --callees main --depth 2           # was ?root=main
+  reveal calls src --callees handle_request --depth 2 --format dot   # Graphviz: | dot -Tsvg > graph.svg
   ```
 
 - **`modules=true`** - Retired: the module graph answers from `imports://<path>?importers&scope=path`, one file→file edge per import with both ends under the path, an import used without a

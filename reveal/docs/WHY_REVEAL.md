@@ -28,7 +28,7 @@ Most tools expose features as subcommands (`git log`, `git blame`). Reveal expos
 
 ```bash
 reveal ast src/ --where 'complexity>10' --sort=-complexity
-reveal 'calls://src/?callers=validate_token&depth=3'
+reveal calls src/ --callers validate_token --depth 3
 reveal ssl://api.example.com
 reveal 'mysql://prod/?type=replication'
 reveal markdown docs/ --view aggregate --field type
@@ -46,22 +46,22 @@ Who calls this function? What does it call? What are the most-coupled functions 
 
 ```bash
 # Who calls validate_token? (anywhere in the project)
-reveal 'calls://src/?callers=validate_token'
+reveal calls src/ --callers validate_token
 
 # Callers-of-callers — full impact radius before a refactor
-reveal 'calls://src/?callers=validate_token&depth=3'
+reveal calls src/ --callers validate_token --depth 3
 
 # What does process_payment call?
-reveal 'calls://src/?callees=process_payment'
+reveal calls src/ --callees process_payment
 
 # Architectural coupling: what functions are called the most?
-reveal 'calls://src/?sort=-callers&limit=20'
+reveal calls src/ --sort=-callers --limit 20
 
 # Colon shorthand — same as ?callers=
-reveal 'calls://src/auth.py:validate_token'
+reveal calls src/auth.py:validate_token
 
 # Visual call graph (pipe to graphviz)
-reveal 'calls://src/?callers=main&format=dot' | dot -Tsvg > callgraph.svg
+reveal calls src/ --callers main --format dot   # Graphviz: | dot -Tsvg > callgraph.svg
 ```
 
 **What you get:** Static cross-file call graph analysis from the CLI — no IDE, no language server, no configuration, measured against per-language oracles in [VALIDATION.md](../../VALIDATION.md). The index is name-based: it finds callers by function name, so a call to `run()` counts as a caller of every `run` in the language (the callee walk, `?callees=NAME&depth=N`, keeps definitions apart and marks ambiguous callees). Runtime dispatch (reflection, `getattr`, computed member access) won't appear. `?rank=callers` is reliably useful even with these constraints — you're looking for relative coupling, not exact provenance. For "is this function used?" ask `?callers=NAME`; it lists every caller the index sees, and an empty answer is a prompt to check dynamic use, not proof of dead code.

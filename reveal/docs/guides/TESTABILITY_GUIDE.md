@@ -144,8 +144,8 @@ reveal src/module.py function_name --view effects
 reveal ast src --where 'complexity>10' --sort=-complexity --limit 20
 
 # See cross-file calls for a function
-reveal 'calls://src?callees=function_name'
-reveal 'calls://src?callers=function_name'
+reveal calls src --callees function_name
+reveal calls src --callers function_name
 
 # Map external surfaces in the codebase
 reveal surface src
