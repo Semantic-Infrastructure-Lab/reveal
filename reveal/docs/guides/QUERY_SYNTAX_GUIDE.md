@@ -16,7 +16,7 @@ Complete reference for the unified query syntax that works consistently across a
 
 ```bash
 # Filter by field value
-reveal 'json://data.json?age>25'
+reveal json data.json --where 'age>25'
 
 # Multiple filters (AND)
 reveal markdown docs/ --where status=draft --where priority=high
@@ -188,7 +188,7 @@ reveal 'metrics://src/?lines=50..100&sort=-complexity'
 reveal git . --where author=John --sort=-date --limit 20
 
 # Paginated results (page 2, 10 items per page)
-reveal 'json://data.json?status=active&sort=name&offset=10&limit=10'
+reveal json data.json --where status=active --sort name --limit 10 --offset 10
 ```
 
 ---
@@ -199,27 +199,27 @@ reveal 'json://data.json?status=active&sort=name&offset=10&limit=10'
 
 **Numeric filters**:
 ```bash
-reveal 'json://data.json?age>25'                    # Age over 25
-reveal 'json://data.json?count>=100'                # Count 100+
-reveal 'json://data.json?score=80..95'              # Score range
+reveal json data.json --where 'age>25'                    # Age over 25
+reveal json data.json --where 'count>=100'                # Count 100+
+reveal json data.json --where score=80..95              # Score range
 ```
 
 **String filters**:
 ```bash
-reveal 'json://data.json?status=active'             # Exact match
-reveal 'json://data.json?status!=draft'             # Not draft
-reveal 'json://data.json?name~=john'                # Name contains "john" (any case)
+reveal json data.json --where status=active             # Exact match
+reveal json data.json --where 'status!=draft'             # Not draft
+reveal json data.json --where 'name~=john'                # Name contains "john" (any case)
 ```
 
 **Combined filters**:
 ```bash
-reveal 'json://data.json?role=admin&age>30&status=active'
+reveal json data.json --where role=admin --where 'age>30' --where status=active
 ```
 
 **Sorting**:
 ```bash
-reveal 'json://data.json?status=active&sort=name'
-reveal 'json://data.json?role=admin&sort=-age&limit=10'
+reveal json data.json --where status=active --sort name
+reveal json data.json --where role=admin --sort=-age --limit 10
 ```
 
 ---
@@ -505,7 +505,7 @@ Combine filters with `&` - all must match:
 
 ```bash
 # JSON: Admin users over 30
-reveal 'json://data.json?role=admin&age>30'
+reveal json data.json --where role=admin --where 'age>30'
 
 # Markdown: High-priority Python docs
 reveal markdown docs/ --where 'tags~=python' --where 'priority>=5' --where status=draft
@@ -593,13 +593,13 @@ Paginate large result sets:
 
 ```bash
 # Page 1 (first 10)
-reveal 'json://data.json?status=active&sort=name&limit=10'
+reveal json data.json --where status=active --sort name --limit 10
 
 # Page 2 (next 10)
-reveal 'json://data.json?status=active&sort=name&offset=10&limit=10'
+reveal json data.json --where status=active --sort name --limit 10 --offset 10
 
 # Page 3 (next 10)
-reveal 'json://data.json?status=active&sort=name&offset=20&limit=10'
+reveal json data.json --where status=active --sort name --limit 10 --offset 20
 ```
 
 ---
@@ -619,7 +619,7 @@ reveal 'metrics://src/?file~=\.(py|js)$'
 reveal 'ast://src/?name~=(test_|spec_)'
 
 # Admin or moderator roles
-reveal 'json://users.json?role~=(admin|moderator)'
+reveal json users.json --where 'role~=(admin|moderator)'
 ```
 
 ---
@@ -707,16 +707,16 @@ reveal git app.py --view history --sort=-date --limit 10
 
 ```bash
 # Active admin users
-reveal 'json://users.json?role=admin&status=active&sort=last_login'
+reveal json users.json --where role=admin --where status=active --sort last_login
 
 # High-value customers
-reveal 'json://customers.json?lifetime_value>10000&sort=-lifetime_value'
+reveal json customers.json --where 'lifetime_value>10000' --sort=-lifetime_value
 
 # Recent orders over $100
-reveal 'json://orders.json?total>100&date>2026-01-01&sort=-date'
+reveal json orders.json --where 'total>100' --where 'date>2026-01-01' --sort=-date
 
 # Age demographics
-reveal 'json://users.json?age=25..35&status=active'
+reveal json users.json --where age=25..35 --where status=active
 ```
 
 ---
@@ -728,8 +728,8 @@ reveal 'json://users.json?age=25..35&status=active'
 Shell may interpret `?` and `&`:
 
 ```bash
-reveal 'json://data.json?age>25'     # ✅ Correct
-reveal json://data.json?age>25        # ❌ Shell may break this
+reveal json data.json --where 'age>25'    # ✅ Correct: the quotes keep > in the value
+reveal json data.json --where age>25      # ❌ Unquoted, the shell reads >25 as a redirect to a file named 25
 ```
 
 ---
@@ -767,10 +767,10 @@ Always sort and limit large result sets:
 
 ```bash
 # Good: Top 10 results
-reveal 'json://data.json?status=active&sort=name&limit=10'
+reveal json data.json --where status=active --sort name --limit 10
 
 # Overwhelming: All results
-reveal 'json://data.json?status=active'
+reveal json data.json --where status=active
 ```
 
 ---

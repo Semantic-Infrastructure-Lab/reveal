@@ -289,12 +289,12 @@ reveal git src/app.py --view history --fields=hash,date,message --format=json
 `--head/--tail/--range` cut a value that is an array, the rows `limit` pages, and say so;
 an object value is left whole):
 ```bash
-reveal 'json://data.json?status=active&limit=100' --format=json
+reveal json data.json --where status=active --limit 100 --format=json
 ```
 
 **Field projection + filtering** (keys of each object in the array):
 ```bash
-reveal 'json://users.json?role=admin' --fields=id,name,email --format=json
+reveal json users.json --where role=admin --fields=id,name,email --format=json
 ```
 
 ---

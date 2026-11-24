@@ -234,10 +234,10 @@ reveal git . --view history --where 'author~=john' --where 'message~=fix'
   - **Syntax**: `field=value`, `field~=pattern`, `field>N`, `field<N`
   - **Examples**:
     ```bash
-    reveal 'json://data.json?type=user'           # Exact match
-    reveal 'json://data.json?name~=john'          # Regex search (any case)
-    reveal 'json://data.json?age>25'              # Numeric comparison
-    reveal 'json://data.json?status=active&role=admin'  # Multiple filters
+    reveal json data.json --where type=user           # Exact match
+    reveal json data.json --where 'name~=john'          # Regex search (any case)
+    reveal json data.json --where 'age>25'              # Numeric comparison
+    reveal json data.json --where status=active --where role=admin  # Multiple filters
     ```
 
 **Supported Operators**:
