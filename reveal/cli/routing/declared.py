@@ -8,7 +8,7 @@ import os
 import sys
 from contextlib import nullcontext
 from pathlib import Path
-from typing import Any, Dict, Optional, Sequence, TypeGuard
+from typing import Any, Callable, Dict, Optional, Sequence, TypeGuard
 
 from ..argparsing import RevealArgumentParser
 from .ledger import FlagLedger, complete, delegate, ledger_of, mark, peek
@@ -19,7 +19,7 @@ from ...utils.path_utils import to_posix
 from ...adapters.factory import predicted_result_type, scope_path_of
 from ...registry import get_markdown_extensions
 from ...utils.query_parser import ParamSpec
-from ..invocation import typed_spelling
+from ..invocation import RetiredSpellingError, typed_spelling
 
 
 def declared_adapter_class(name: str):
@@ -87,6 +87,17 @@ class JsonUsageParser(RevealArgumentParser):
         if answer is not None:
             answer.emit()
             self.exit(2)  # emit exits with the answer's outcome; this is the usage exit if it did not
+
+    def typed_request(self, argv: Sequence[str]):
+        """The request *argv* asks for, read from its words alone, as a usage error's answer falls back to
+        (``_typed_defaults``): the positionals in order and ``--format``/``--output`` over the parser's defaults, no
+        option's action run (not ``--help``, not a switch's note); its format ``json`` when it asks for JSON. For a
+        request refused before it is parsed (a retired subcommand, BACK-2627), so that no part of it runs."""
+        self._argv = list(argv)
+        args = self._typed_defaults()
+        if self._asks_for_json(args):
+            args.format = 'json'
+        return args
 
     def _asks_for_json(self, args) -> bool:
         if getattr(args, 'format', None) == 'json':
@@ -333,6 +344,24 @@ def _path_read_answer(target: str, args) -> str:
     if element:
         return 'code_element'
     return 'directory_tree' if os.path.isdir(target) else 'file_structure'
+
+
+def answer_retired_spelling(error: RetiredSpellingError, args, refusal: Callable[[str], Any], answer_consumer=None) -> None:
+    """A spelling at the error stage (*error*, a ``RetiredSpellingError``: a RETIREMENTS row, or a URI request's note)
+    answered where a route answers its refusals (BACK-2627 note #9 item 3). In a JSON request: exit 2, the row's text
+    as the process's one ``error:`` line on stderr (the line ``main.run_contained`` prints), and on stdout the route's
+    own invalid-request document saying that text (*refusal*, called with the text: the Answer the route gives its other
+    invalid requests, here without its own stderr label), so a retirement is one document shape on every route (D16).
+    Otherwise *error* goes on unchanged: in text mode to the process's ``error:`` line, and to a caller that takes the
+    answer itself (*answer_consumer*: the Python API, a ``--stdin --batch``), which keeps the error. Never answered by
+    subclassing ``ValueError``: the ``except ValueError`` around ``request_note`` would then drop the cut silently."""
+    text = error.entry.text
+    answer = refusal(text) if answer_consumer is None and getattr(args, 'format', None) == 'json' else None
+    if answer is None:
+        raise error
+    print(f'error: {text}', file=sys.stderr)  # boundary-ok: print -- the invalid-invocation error line
+    answer.emit(announce_error=False)
+    sys.exit(2)  # emit exits with the answer's outcome; this is the usage exit if it did not
 
 
 def element_request_source(path: str, element: Optional[str], args) -> tuple:
