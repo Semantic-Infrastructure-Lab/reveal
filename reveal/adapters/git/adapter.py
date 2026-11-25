@@ -199,7 +199,6 @@ class GitAdapter(ResourceAdapter):
     Requires: pip install "reveal-cli[git]"
     """
     HELP_CLUSTER = ('Code Analysis', 'Sessions & Docs')
-    QUICK_RANK = 4
 
     # path views / log view (BACK-1645); the repository and ref views nest theirs (BACK-2667)
     BUDGET_LIST_FIELD = ('commits', 'history', 'commits.recent')

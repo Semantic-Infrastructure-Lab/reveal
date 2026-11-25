@@ -382,7 +382,6 @@ class MetricsAdapter(ResourceAdapter):
     # scheme and its query-string options are retired spellings of it (D20, BACK-2716).
     ANALYSIS_ONLY = True
     HELP_CLUSTER = 'Code Analysis'
-    QUICK_RANK: Optional[int] = 2
 
     BUDGET_LIST_FIELD = 'files'
     BUDGET_COUNT_FIELDS = {'files': ('population.displayed_files',)}  # BACK-2653
@@ -1062,7 +1061,6 @@ class StatsAdapter(MetricsAdapter):
     The note naming metrics:// comes from the ``scheme:stats`` row of the RETIREMENTS table
     (cli/invocation.py), printed where the URI is parsed; nothing here prints it.
     """
-    QUICK_RANK = None
     # The opt-in is class-local (factory.uses_bound_query_call): the retired spelling binds typed
     # keywords as metrics:// does, since get_structure takes none (BACK-2621).
     BOUND_QUERY_CALL = True

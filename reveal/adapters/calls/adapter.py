@@ -637,7 +637,6 @@ class CallsAdapter(ResourceAdapter):
     # scheme and its query-string options are retired spellings of it (D20, BACK-2716).
     ANALYSIS_ONLY = True
     HELP_CLUSTER = 'Code Analysis'
-    QUICK_RANK = 1
 
     BUDGET_LIST_FIELD = ('levels', 'entries')  # ?target= depth levels; ?rank=callers / ?uncalled entries (BACK-1497)
     BUDGET_COUNT_FIELDS = {'entries': ('top',)}  # ?rank=callers: 'top' is the number shown (BACK-2653)

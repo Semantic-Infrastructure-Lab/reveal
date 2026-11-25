@@ -16,8 +16,9 @@ import test_example_recipes_run as recipes
 from conftest import _run_reveal_direct
 from test_example_recipes_run import named_harness  # noqa: F401  (the module-scoped fixture)
 
+from reveal.adapters.base import ResourceAdapter
 from reveal.adapters.help import HelpAdapter
-from reveal.adapters.registry import OPS_SCHEMES
+from reveal.adapters.registry import OPS_SCHEMES, _ADAPTER_REGISTRY
 from reveal.cli.help_screen import PATH_READS, RUNG_QUESTIONS, quick_ladder
 from reveal.cli.invocation import COMMANDS, RETIREMENTS
 
@@ -59,6 +60,12 @@ def test_the_ladder_is_every_rung_declaration_in_rung_order():
             spec = LIVE[row['noun']]
             assert (row['cmd'], row['description'], row['rung']) == (spec.starter, spec.summary, spec.rung)
     assert {0, 1, 2, 3, 4, 5} == set(rungs)  # path reads fill rungs 2 and 4, subcommands the rest
+
+
+def test_no_adapter_rank_feeds_the_page():
+    """QUICK_RANK is retired: no adapter class declares it."""
+    assert not hasattr(ResourceAdapter, 'QUICK_RANK')
+    assert [scheme for scheme, cls in _ADAPTER_REGISTRY.items() if 'QUICK_RANK' in vars(cls)] == []
 
 
 def test_a_new_command_reaches_the_ladder_from_its_declaration_alone(monkeypatch):

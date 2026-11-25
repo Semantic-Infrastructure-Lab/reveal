@@ -473,7 +473,6 @@ class OverviewAdapter(ResourceAdapter):
     # scheme and its query-string options are retired spellings of it (D20, BACK-2716).
     ANALYSIS_ONLY = True
     HELP_CLUSTER = 'Code Analysis'
-    QUICK_RANK = -1
     LEGACY_INIT = False
     BOUND_QUERY_CALL = True
     RESOURCE_IS_PATH = True

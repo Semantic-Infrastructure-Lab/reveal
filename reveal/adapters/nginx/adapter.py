@@ -873,7 +873,6 @@ class NginxUriAdapter(ResourceAdapter):
         reveal nginx://                            # overview of all enabled sites
     """
     HELP_CLUSTER = 'Infrastructure'
-    QUICK_RANK = 7
 
     # nginx CLI flags are valid on nginx config files (.conf/.ini/extensionless);
     # generic file routing rejects them on any other plain path. Example text is

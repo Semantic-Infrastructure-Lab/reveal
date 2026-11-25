@@ -229,14 +229,6 @@ class ResourceAdapter(ABC):
     # a tuple covers that without forcing a false single choice.
     HELP_CLUSTER: Optional['str | Tuple[str, ...]'] = None
 
-    # Rank hint for help://quick's top command block (lower sorts first).
-    # None = not part of the small ranked cheat-sheet — still fully
-    # discoverable via help://relationships and help://adapters, just not
-    # in the top-N. Declared here (not a satellite dict in help.py) so a
-    # new adapter's absence from the cheat-sheet is a deliberate choice,
-    # not a silent omission (BACK-1154/1155).
-    QUICK_RANK: Optional[int] = None
-
     def __init__(self, resource: str = '', query: Optional[str] = None, **kwargs: Any) -> None:
         """Canonical constructor matching the signature LEGACY_INIT already
         documents (BACK-1020). Establishes the instance state int_param()/

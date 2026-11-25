@@ -182,7 +182,6 @@ class SSLAdapter(ResourceAdapter):
         reveal ssl://example.com/issuer       # Issuer details
     """
     HELP_CLUSTER = 'Infrastructure'
-    QUICK_RANK = 5
 
     BUDGET_LIST_FIELD = 'results'
 

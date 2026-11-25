@@ -541,7 +541,6 @@ class DomainAdapter(ResourceAdapter):
         ns-audit: NS authority cross-check
     """
     HELP_CLUSTER = 'Infrastructure'
-    QUICK_RANK = 6
 
     BUDGET_LIST_FIELD = 'checks'
 

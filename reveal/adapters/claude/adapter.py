@@ -422,7 +422,6 @@ class ClaudeAdapter(ResourceAdapter):
             return error
         return None
 
-    QUICK_RANK = 3
     # --since/--until reach every claude:// view as ?since=/?until= (BACK-1549). The
     # session list and history read them in post_process from args, which nothing
     # declared, so the router also printed "--since has no effect on claude://".

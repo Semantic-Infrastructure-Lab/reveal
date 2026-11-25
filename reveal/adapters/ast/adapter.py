@@ -332,7 +332,6 @@ class AstAdapter(ResourceAdapter):
     # scheme and its query-string options are retired spellings of it (D20, BACK-2716).
     ANALYSIS_ONLY = True
     HELP_CLUSTER = ('Code Analysis', 'Self-Describing')
-    QUICK_RANK = 0
 
     STABILITY = Stability.STABLE
     BUDGET_LIST_FIELD = 'results'
