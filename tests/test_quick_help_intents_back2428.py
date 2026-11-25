@@ -63,7 +63,7 @@ def test_boundary_intent_retains_env_alongside_http(tmp_path, monkeypatch):
 
 def test_markdown_section_intent_returns_body_not_outline(tmp_path, monkeypatch):
     (tmp_path / 'README.md').write_text(
-        '# Project\n\n## Building\nUse cargo build --release.\n'
+        '# Project\n\n## Install\nUse cargo build --release.\n'
         '\n## Testing\nUse cargo test.\n', encoding='utf-8')
     monkeypatch.chdir(tmp_path)
     response = command(intent('one section of a markdown'))
@@ -74,13 +74,13 @@ def test_markdown_section_intent_returns_body_not_outline(tmp_path, monkeypatch)
 
 def test_callers_intent_is_unchanged_and_finds_the_caller(tmp_path, monkeypatch):
     row = intent('know who calls a function')
-    assert row == {  # BACK-2713: taught as the subcommand (D20), the same request as the calls:// query it replaced
+    assert row == {  # BACK-2713: taught as the subcommand (D20); BACK-1055: a name the docs fixture defines
         'want': 'know who calls a function', 'use': 'reveal calls',
-        'example': 'reveal calls src/ --callers my_fn'}
+        'example': 'reveal calls src/ --callers main', 'noun': 'calls'}
     src = tmp_path / 'src'
     src.mkdir()
     (src / 'app.py').write_text(
-        'def my_fn():\n    return 1\ndef caller():\n    return my_fn()\n',
+        'def main():\n    return 1\ndef caller():\n    return main()\n',
         encoding='utf-8')
     monkeypatch.chdir(tmp_path)
     response = command(row, '--format', 'json')

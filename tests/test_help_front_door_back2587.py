@@ -5,6 +5,8 @@ Beta adapters with their pre-retirement descriptions, while ``--adapters`` had a
 section, and the README claimed 34 adapters when 26 are live. Each view now agrees.
 """
 
+import contextlib
+import io
 import re
 import subprocess
 import sys
@@ -53,10 +55,23 @@ def test_help_adapters_summary_counts_live_adapters_only(live_count):
     assert f'# URI Adapters ({live_count} total)' in _reveal('help://adapters')
 
 
-def test_quick_help_has_one_gap_row_and_no_internal_adapter():
-    rows = [line for line in _reveal('help://quick').splitlines() if 'not named above' in line]
+def test_quick_help_has_one_gap_row_and_no_internal_adapter(monkeypatch):
+    """Every noun is on help://quick's ladder or in a row (BACK-1055), so the page prints no gap row; drop two rows
+    to force one: it is one row, and it names no internal adapter (reveal:// is unnamed in the curated rows too)."""
+    from reveal.adapters.help import HelpAdapter
+    from reveal.rendering.adapters.help import _render_help_quick
+    assert 'not named above' not in _reveal('help://quick')
+    monkeypatch.setattr(HelpAdapter, '_CURATED_DECISION_TREE',
+                        [row for row in HelpAdapter._CURATED_DECISION_TREE if row['noun'] not in ('json', 'pack')])
+    page = HelpAdapter().get_element('quick')
+    buffer = io.StringIO()
+    with contextlib.redirect_stdout(buffer):
+        _render_help_quick(page)
+    rows = [line for line in buffer.getvalue().splitlines() if 'not named above' in line]
     assert len(rows) == 1
-    assert not re.search(r'\breveal\b(?=,|\s+→|$)', rows[0].split('not named above:')[1].split('→')[0])
+    named = rows[0].split('not named above:')[1].split('→')[0]
+    assert 'json' in named and 'pack' in named
+    assert not re.search(r'\breveal\b(?=,|\s+→|$)', named)
 
 
 def test_limit_and_sort_help_name_no_retired_adapter():

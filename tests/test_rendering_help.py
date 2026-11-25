@@ -1013,14 +1013,13 @@ class TestHelpQuick(unittest.TestCase):
 
 
 class TestHelpQuickRegistryDriven(unittest.TestCase):
-    """BACK-390 M4 / BACK-1156: help://quick's top command block is derived
-    from each adapter class's own QUICK_RANK attribute (adapters/base.py),
-    not a standalone dict in help.py — so it can't drift. QUICK_RANK is now
-    an explicit opt-in for the small top-N cheat-sheet (BACK-1156 superseded
-    M4's original "unranked defaults to visible" rule); the completeness
-    guarantee for adapters with no QUICK_RANK moved to help://quick's
-    decision_tree cluster-coverage lines instead — see
-    TestDecisionTreeClusterCoverage below."""
+    """BACK-390 M4 / BACK-1055: help://quick's commands block is the ladder,
+    derived from the command registry (each live subcommand's rung, starter
+    and summary on its COMMANDS entry, plus the path reads), not from an
+    adapter rank or a standalone list — so it can't drift. Commands with no
+    rung (resources, ops, tooling, pack and help) are reached through the
+    decision tree instead — see TestDecisionTreeClusterCoverage below and
+    tests/test_help_quick_ladder_back1055.py."""
 
     def _get_quick(self):
         from reveal.adapters.help import HelpAdapter
@@ -1028,46 +1027,45 @@ class TestHelpQuickRegistryDriven(unittest.TestCase):
         return a.get_element('quick')
 
     def test_commands_include_a_ranked_adapter(self):
-        # 'ast' has QUICK_RANK = 0 and is always registered — its
-        # get_help()-derived command must appear, proving derivation happened.
+        # 'ast' declares rung 1 on its COMMANDS entry — its starter must
+        # appear, proving derivation happened.
         result = self._get_quick()
         cmds = [c['cmd'] for c in result['commands']]
         self.assertTrue(any(c.startswith('reveal ast ') for c in cmds))
 
-    def test_commands_reflect_live_get_help_description(self):
-        # The description in the quick block must match the adapter's own
-        # get_help() output, not a hardcoded copy that can drift.
-        from reveal.adapters.help import HelpAdapter
-        from reveal.adapters.registry import _ADAPTER_REGISTRY
+    def test_commands_reflect_live_command_summary(self):
+        # The description in the quick block must be the subcommand's own
+        # COMMANDS summary, not a hardcoded copy that can drift.
+        from reveal.cli.invocation import COMMANDS
         result = self._get_quick()
         ast_cmd = next(c for c in result['commands'] if c['cmd'].startswith('reveal ast '))
-        live_description = _ADAPTER_REGISTRY['ast'].get_help()['description']
-        self.assertEqual(ast_cmd['description'], live_description)
+        self.assertEqual((ast_cmd['cmd'], ast_cmd['description']),
+                         (COMMANDS['ast'].starter, COMMANDS['ast'].summary))
 
     def test_unregistered_scheme_never_appears(self):
         result = self._get_quick()
         cmds = ' '.join(c['cmd'] for c in result['commands'])
         self.assertNotIn('postgres://', cmds)
 
-    def test_unranked_adapter_absent_from_top_commands(self):
-        # QUICK_RANK = None is a deliberate "not in the small ranked
-        # cheat-sheet" choice (adapters/base.py), not an omission — confirm
-        # it's actually excluded rather than silently falling back to a
-        # default rank.
-        from reveal.adapters.registry import _ADAPTER_REGISTRY
-        json_cls = _ADAPTER_REGISTRY['json']
-        self.assertIsNone(json_cls.QUICK_RANK)
+    def test_command_without_a_rung_absent_from_the_ladder(self):
+        # A resource declares no rung (cli/invocation.py), a deliberate "off
+        # the ladder" choice — confirm it's excluded rather than given a
+        # default rung; the decision tree routes to it instead.
+        from reveal.cli.invocation import COMMANDS
+        self.assertIsNone(COMMANDS['json'].rung)
         result = self._get_quick()
         cmds = ' '.join(c['cmd'] for c in result['commands'])
         self.assertNotIn('json://', cmds)
+        self.assertNotIn('reveal json ', cmds)
+        self.assertIn('reveal json ', ' '.join(e['example'] for e in result['decision_tree']))
 
 
 class TestDecisionTreeClusterCoverage(unittest.TestCase):
     """BACK-1154/1156: every non-internal registered adapter must be
-    reachable from help://quick — either in the top-N commands (QUICK_RANK
-    set) or via a decision_tree cluster-coverage line (HELP_CLUSTER set).
+    reachable from help://quick — on the ladder (a COMMANDS rung), in a
+    decision_tree row, or via the decision_tree gap line (HELP_CLUSTER set).
     This is the completeness guarantee that replaces M4's old "unranked
-    still shows in top-N" rule now that the top-N is a deliberate opt-in."""
+    still shows in top-N" rule."""
 
     def _reachable_schemes(self):
         import re
@@ -1128,28 +1126,29 @@ class TestDecisionTreeClusterCoverage(unittest.TestCase):
                 named.update(entry['want'].rsplit(':', 1)[-1].replace(' ', '').split(','))
         self.assertEqual(named & set(retired_schemes()), set())
 
-    def test_decision_tree_gaps_dont_repeat_ranked_commands(self):
-        # A scheme already shown with a concrete example in the top-N
-        # commands block shouldn't also show up as a bare name in a
-        # decision_tree cluster-coverage line — that's noise, not new
-        # information (caught live: 'stats' had QUICK_RANK=2 but was
-        # missing from the curated decision_tree entries, so it got a
-        # redundant "other Code Analysis tooling: ..., stats, ..." line).
-        import re
+    def test_decision_tree_gaps_dont_repeat_ladder_commands(self):
+        # A noun already shown with a concrete command on the ladder
+        # shouldn't also show up as a bare name in the decision_tree gap
+        # line — that's noise, not new information (caught live: 'stats'
+        # was in the top commands but missing from the curated
+        # decision_tree entries, so it got a redundant gap line). Today every
+        # adapter is named on the ladder or in a row, so the page has no gap
+        # line: drop the curated rows to force one. Contracts and patches
+        # have no row and are named nowhere but on the ladder.
+        from unittest import mock
         from reveal.adapters.help import HelpAdapter
-        a = HelpAdapter('help://quick')
-        result = a.get_element('quick')
-        ranked_schemes = set(
-            scheme for cmd in result['commands']
-            for scheme in re.findall(r'([a-zA-Z_]+)://', cmd['cmd'])
-        )
+        with mock.patch.object(HelpAdapter, '_CURATED_DECISION_TREE', []):
+            result = HelpAdapter('help://quick').get_element('quick')
+        ladder_nouns = {row['noun'] for row in result['commands'] if row['noun']}
+        self.assertTrue({'contracts', 'patches'} <= ladder_nouns)
         gap_schemes = set()
         for entry in result['decision_tree']:
             if entry['use'] != 'help://relationships':
                 continue
             gap_schemes.update(entry['want'].rsplit(':', 1)[-1].replace(' ', '').split(','))
-        overlap = ranked_schemes & gap_schemes
-        self.assertEqual(overlap, set(), f"schemes shown in both commands and gap lines: {overlap}")
+        self.assertTrue(gap_schemes, 'no gap line to judge')
+        overlap = ladder_nouns & gap_schemes
+        self.assertEqual(overlap, set(), f"nouns shown on the ladder and in the gap line: {overlap}")
 
     def test_help_never_points_at_itself_in_decision_tree(self):
         # 'help' is the page being read — a "go see help://relationships for

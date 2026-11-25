@@ -9,7 +9,6 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from .base import ResourceAdapter, Stability, register_adapter, register_renderer, _ADAPTER_REGISTRY, list_public_schemes
 from .registry import OPS_SCHEMES, _SCAFFOLD_SCHEMES, is_internal_scheme
 from ..errors import ElementNotFoundError
-from ..utils.formatting import shell_command
 from ..utils.match_terms import TermValue, empty_term_error, match_terms
 from ..utils.query_parser import CliBinding, LegacySpelling, ParamSpec, ResourceSpec, param_schema, whole_number
 from ..utils.results import (AnalysisCompleteness, FailureCause, ResultBuilder, note_truncation, note_warning,
@@ -1553,13 +1552,10 @@ class HelpAdapter(ResourceAdapter):
         if see_also:
             data['see_also'] = see_also
 
-    # BACK-1156: rank + cluster membership used to live here as standalone
-    # dicts (_QUICK_RANK, cluster lists in _get_adapter_relationships) that
-    # could silently drift from the adapter registry (BACK-1155's bug was
-    # exactly that: a stale count, not a stale dict, but the risk is the
-    # same shape). Both now read off each adapter class's own HELP_CLUSTER /
-    # QUICK_RANK attributes (declared in adapters/base.py) — one source of
-    # truth at the definition site, can't go stale.
+    # BACK-1156: cluster membership used to live here as standalone dicts (cluster lists in
+    # _get_adapter_relationships) that could silently drift from the adapter registry. It reads
+    # each adapter class's own HELP_CLUSTER (adapters/base.py). help://quick's commands block
+    # reads the command registry (COMMANDS rung/starter, BACK-1055), not an adapter rank.
 
     @staticmethod
     def _cluster_membership() -> Dict[str, List[str]]:
@@ -1582,146 +1578,99 @@ class HelpAdapter(ResourceAdapter):
             schemes.sort()
         return membership
 
-    def _get_quick_commands(self) -> List[Dict[str, str]]:
-        """Derive the top command block from the adapter registry.
-
-        Two synthetic file-navigation entries lead (reveal isn't only URI
-        adapters) followed by the highest-ranked registered adapters (those
-        with a QUICK_RANK class attribute), each represented by its own
-        get_help() description + first example.
-        """
-        from ..cli.invocation import COMMANDS, RETIREMENTS
-        commands = [
-            {
-                'cmd': 'reveal <file.py>',
-                'description': 'Outline a Python/JS/Go/etc. file — functions, classes, imports',
-            },
-            {
-                'cmd': 'reveal <dir/>',
-                'description': 'Directory tree with file sizes and types',
-            },
-            {
-                'cmd': 'reveal FILE ELEMENT',
-                'description': 'Read one named function, class or Markdown section',
-            },
-        ]
-
-        candidates = []
-        for scheme in list_public_schemes():
-            adapter_class = _ADAPTER_REGISTRY[scheme]
-            if (scheme in (*OPS_SCHEMES, 'help', 'claude', 'codex')
-                    or f'scheme:{scheme}' in RETIREMENTS):
-                continue
-            rank = getattr(adapter_class, 'QUICK_RANK', None)
-            if rank is None:
-                continue
-            help_data = self._get_adapter_help(scheme)
-            if not help_data or 'error' in help_data:
-                continue
-            examples = help_data.get('examples') or []
-            uri = examples[0].get('uri', '') if examples else ''
-            description = help_data.get('description', '')
-            if not uri or not description:
-                continue
-            candidates.append((rank, scheme, uri, description))
-
-        candidates.sort(key=lambda c: (c[0], c[1]))
-        for _rank, scheme, uri, description in candidates:
-            command = COMMANDS[scheme].usage if scheme in COMMANDS else shell_command(uri)
-            commands.append({'cmd': command, 'description': description})
-
-        commands.append({'cmd': COMMANDS['check'].usage,
-                         'description': COMMANDS['check'].summary})
-
-        commands.append({
-            'cmd': 'reveal help://adapters',
-            'description': 'List all adapters with syntax and examples',
-        })
-        return commands
-
     # BACK-1156: curated, hand-written "if you want X, use Y" entries for the
     # most common intents. Kept as prose because the value here is the
     # *phrasing* of the intent, not the adapter list — that part can't be
-    # mechanically derived. Completeness (every adapter reachable from
-    # help://quick) is guaranteed separately, by _get_quick_help() appending
-    # one cluster-coverage line per cluster for whatever isn't already named
-    # here — see BACK-1154's original complaint (15 of 33 adapters absent).
+    # mechanically derived. Each row names the noun its example runs
+    # (``noun``: a COMMANDS entry or a resource scheme; '' for a path read),
+    # so the page's filters and its coverage read the key, never the prose
+    # (BACK-1055). Completeness (every adapter reachable from help://quick)
+    # is guaranteed separately, by _get_quick_help() appending one gap row for
+    # whatever isn't already named here or on the ladder — see BACK-1154's
+    # original complaint (15 of 33 adapters absent).
     _CURATED_DECISION_TREE: List[Dict[str, str]] = [
         {'want': 'get oriented in an unfamiliar codebase (compact map: scope, components, imports)',
-         'use': 'reveal overview', 'example': "reveal overview src/"},
+         'use': 'reveal overview', 'example': "reveal overview src/", 'noun': 'overview'},
         {'want': 'read one function or class by name',
-         'use': 'reveal FILE NAME', 'example': "reveal src/app.py load_config"},
+         'use': 'reveal FILE NAME', 'example': "reveal src/app.py load_config", 'noun': ''},
         {'want': 'query functions by complexity, size, type or decorator',
-         'use': 'reveal ast', 'example': "reveal ast src/ --where 'complexity>10' --kind function --sort=-complexity --limit 10"},
+         'use': 'reveal ast', 'example': "reveal ast src/ --where 'complexity>10' --kind function --sort=-complexity --limit 10",
+         'noun': 'ast'},
         {'want': 'find the riskiest files (quality and complexity hotspots, with a --fail-on findings gate)',
-         'use': 'reveal metrics', 'example': "reveal metrics src/ --view hotspots"},
+         'use': 'reveal metrics', 'example': "reveal metrics src/ --view hotspots", 'noun': 'metrics'},
         {'want': 'know who calls a function',
-         'use': 'reveal calls', 'example': "reveal calls src/ --callers my_fn"},
+         'use': 'reveal calls', 'example': "reveal calls src/ --callers main", 'noun': 'calls'},
         {'want': 'follow what a function calls, level by level',
-         'use': 'reveal calls', 'example': "reveal calls src/ --callees my_fn --depth 2"},
+         'use': 'reveal calls', 'example': "reveal calls src/ --callees main --depth 2", 'noun': 'calls'},
         {'want': "see a function's inputs, side effects (db/http/file/env) and exits",
-         'use': '--view boundary / --view effects', 'example': "reveal src/app.py my_fn --view boundary"},
+         'use': '--view boundary / --view effects', 'example': "reveal src/app.py load_config --view effects",
+         'noun': ''},
         {'want': 'map HTTP routes',
-         'use': 'reveal surface', 'example': "reveal surface src/ --kind http"},
+         'use': 'reveal surface', 'example': "reveal surface src/ --kind http", 'noun': 'surface'},
         {'want': 'map recognized boundary sites (env vars, network/db imports, file writes and more)',
-         'use': 'reveal surface', 'example': "reveal surface src/"},
+         'use': 'reveal surface', 'example': "reveal surface src/", 'noun': 'surface'},
         {'want': 'search text or an identifier across many files (with enclosing-function context)',
-         'use': '--grep', 'example': "reveal src/ --grep 'API_TIMEOUT'"},
+         'use': '--grep', 'example': "reveal src/ --grep 'API_TIMEOUT'", 'noun': ''},
         {'want': 'check a file or directory for quality issues (lint-style rules)',
-         'use': 'reveal check', 'example': "reveal check src/app.py"},
+         'use': 'reveal check', 'example': "reveal check src/app.py", 'noun': 'check'},
         {'want': 'check import health / circular deps',
-         'use': 'reveal imports', 'example': "reveal imports src/"},
+         'use': 'reveal imports', 'example': "reveal imports src/", 'noun': 'imports'},
         {'want': 'compare files or git revisions',
-         'use': 'reveal diff', 'example': "reveal diff git://HEAD~1/. git://HEAD/."},
+         'use': 'reveal diff', 'example': "reveal diff git://HEAD~1/. git://HEAD/.", 'noun': 'diff'},
+        {'want': 'pick the files that matter most for a token budget (context for an LLM)',
+         'use': 'reveal pack', 'example': "reveal pack src/", 'noun': 'pack'},
         {'want': 'SSL/TLS certificate status',
-         'use': 'ssl://', 'example': "reveal ssl://example.com --check"},
+         'use': 'ssl://', 'example': "reveal ssl://example.com --check", 'noun': 'ssl'},
         {'want': 'full server audit (SSL + ACL + nginx)',
-         'use': 'cpanel://', 'example': "reveal cpanel://USER/full-audit"},
+         'use': 'cpanel://', 'example': "reveal cpanel://USER/full-audit", 'noun': 'cpanel'},
         {'want': 'nginx vhost config and health',
-         'use': 'nginx://', 'example': "reveal nginx://example.com"},
+         'use': 'nginx://', 'example': "reveal nginx://example.com", 'noun': 'nginx'},
         {'want': 'domain DNS / WHOIS / email health',
-         'use': 'domain://', 'example': "reveal domain://example.com"},
+         'use': 'domain://', 'example': "reveal domain://example.com", 'noun': 'domain'},
         {'want': 'search git commit history by message, author, or date',
-         'use': 'reveal git', 'example': "reveal git . --view history --where 'message~=fix'"},
+         'use': 'reveal git', 'example': "reveal git . --view history --where 'message~=fix'", 'noun': 'git'},
         {'want': 'search markdown docs or notes by content',
-         'use': 'reveal markdown', 'example': 'reveal markdown docs/ --match keyword'},
+         'use': 'reveal markdown', 'example': 'reveal markdown docs/ --match keyword', 'noun': 'markdown'},
         {'want': 'read one section of a markdown document',
-         'use': 'reveal FILE --section HEADING', 'example': 'reveal README.md --section "Building"'},
-        {'want': 'inspect a SQLite database or Excel workbook',
-         'use': 'reveal sqlite or reveal xlsx', 'example': "reveal sqlite path/to/app.db"},
+         'use': 'reveal FILE --section HEADING', 'example': 'reveal README.md --section "Install"', 'noun': ''},
+        {'want': 'read one key of a JSON file, or its schema',
+         'use': 'reveal json', 'example': "reveal json package.json/scripts", 'noun': 'json'},
+        {'want': 'inspect a SQLite database (its tables, one table, its health)',
+         'use': 'reveal sqlite', 'example': "reveal sqlite app.db", 'noun': 'sqlite'},
+        {'want': 'read an Excel workbook (sheets, cells, a text search)',
+         'use': 'reveal xlsx', 'example': "reveal xlsx file.xlsx", 'noun': 'xlsx'},
         {'want': 'inspect environment variables',
-         'use': 'reveal env', 'example': "reveal env"},
+         'use': 'reveal env', 'example': "reveal env", 'noun': 'env'},
         {'want': 'search prior Claude sessions by topic or project',
-         'use': 'claude://', 'example': "reveal claude://sessions/ --match auth-refactor --format json"},
+         'use': 'claude://', 'example': "reveal claude://sessions/ --match auth-refactor --format json",
+         'noun': 'claude'},
         {'want': 'review a session as prompt/answer pairs, not raw messages',
-         'use': 'claude://.../exchanges', 'example': "reveal claude://session/my-session/exchanges"},
+         'use': 'claude://.../exchanges', 'example': "reveal claude://session/my-session/exchanges",
+         'noun': 'claude'},
         {'want': "search OpenAI Codex CLI sessions by content (or --where 'session~=TEXT' by title)",
-         'use': 'codex://', 'example': "reveal codex://sessions/ --match auth-refactor"},
+         'use': 'codex://', 'example': "reveal codex://sessions/ --match auth-refactor", 'noun': 'codex'},
         {'want': 'discover live project-specific adapters',
-         'use': 'help://adapters', 'example': "reveal help://adapters"},
+         'use': 'help://adapters', 'example': "reveal help://adapters", 'noun': 'help'},
     ]
 
-    def _decision_tree_coverage_gaps(self) -> List[Dict[str, str]]:
-        """One line per cluster for adapters not already reachable via the
-        curated entries above or the top-N commands block — the mechanical
+    # Rows naming these nouns stay one hop away, behind a family row (BACK-2587: code before other resources).
+    _FAMILY_ROWS: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
+        ('Other resources: hosting operations', OPS_SCHEMES),
+        ('Other resources: Claude and Codex sessions', ('claude', 'codex')),
+    )
+
+    def _decision_tree_coverage_gaps(self, shown: List[str]) -> List[Dict[str, str]]:
+        """One row for adapters not already reachable via the curated entries
+        above or the ladder (``shown``, the nouns it prints) — the mechanical
         completeness guarantee BACK-1154 asked for, without repeating an
         adapter that's already visible elsewhere on the same page."""
-        mentioned = set()
-        for entry in self._CURATED_DECISION_TREE:
-            # A row names its noun as a resource scheme (``diff://``) or as a subcommand (``reveal calls``).
-            mentioned.update(re.findall(r'([a-zA-Z_]+)://', entry['use']))
-            mentioned.update(re.findall(r'\breveal ([a-z]+)\b', entry['use']))
-        # Already shown with a concrete example in the top-N commands block
-        # (QUICK_RANK is set) — repeating it here as a bare name would be
-        # noise, not new information.
-        for scheme, adapter_class in _ADAPTER_REGISTRY.items():
-            if getattr(adapter_class, 'QUICK_RANK', None) is not None:
-                mentioned.add(scheme)
+        mentioned = {entry['noun'] for entry in self._CURATED_DECISION_TREE}
+        mentioned.update(shown)
         # 'help' is the page being read — pointing help://quick at itself
         # via help://relationships is circular, not a useful discovery path.
         mentioned.add('help')
-        mentioned.update(OPS_SCHEMES)
-        mentioned.update(('claude', 'codex'))
+        for _want, nouns in self._FAMILY_ROWS:
+            mentioned.update(nouns)
         # A retired scheme still answers but is not a tool to point a new reader at.
         from ..cli.handlers.introspection import retired_schemes
         mentioned.update(retired_schemes())
@@ -1736,15 +1685,20 @@ class HelpAdapter(ResourceAdapter):
             'want': f'other tooling not named above: {", ".join(missing)}',
             'use': 'help://relationships',
             'example': 'reveal help://relationships',
+            'noun': 'help',
         }]
 
     def _get_quick_help(self) -> Dict[str, Any]:
-        """Return a concise orientation cheat-sheet (help://quick)."""
+        """Return a concise orientation cheat-sheet (help://quick): the ladder, then the task router."""
+        from ..cli.help_screen import quick_ladder
+        ladder = quick_ladder()
+        shown = [row['noun'] for row in ladder['commands'] if row['noun']]
         return {
             'type': 'help_quick',
             'title': 'Reveal — Quick Reference',
-            'commands': self._get_quick_commands(),
-            'decision_tree': self._core_decision_tree() + self._decision_tree_coverage_gaps(),
+            'commands': ladder['commands'],
+            'rungs': ladder['rungs'],
+            'decision_tree': self._core_decision_tree() + self._decision_tree_coverage_gaps(shown),
             'next_steps': [
                 'reveal help://adapters          # full adapter list',
                 'reveal help://ast               # AST queries (every tree-sitter language)',
@@ -1762,15 +1716,10 @@ class HelpAdapter(ResourceAdapter):
 
     def _core_decision_tree(self) -> List[Dict[str, str]]:
         """Keep family discovery one step away from the core task ladder."""
-        other = set(OPS_SCHEMES) | {'claude', 'codex'}
-        rows = [row for row in self._CURATED_DECISION_TREE
-                if not (set(re.findall(r'([a-zA-Z_]+)://', row['use'])) & other)]
-        return rows + [
-            {'want': 'Other resources: hosting operations', 'use': 'help://adapters',
-             'example': 'reveal help://adapters'},
-            {'want': 'Other resources: Claude and Codex sessions', 'use': 'help://adapters',
-             'example': 'reveal help://adapters'},
-        ]
+        behind = {noun for _want, nouns in self._FAMILY_ROWS for noun in nouns}
+        rows = [row for row in self._CURATED_DECISION_TREE if row['noun'] not in behind]
+        return rows + [{'want': want, 'use': 'help://adapters', 'example': 'reveal help://adapters', 'noun': 'help'}
+                       for want, _nouns in self._FAMILY_ROWS]
 
     def _get_adapter_relationships(self) -> Dict[str, Any]:
         """Return the adapter ecosystem map (help://relationships)."""

@@ -96,15 +96,27 @@ def test_agent_help_stays_within_its_line_budget(agent_help):
     assert 20 <= len(lines) <= AGENT_HELP_BUDGET, f'--agent-help prints {len(lines)} lines'
 
 
-def test_help_quick_gap_row_names_no_noun_shown_above_it(quick_page):
-    _, page = quick_page
+def _gap_row_problems(page):
     rows = page['decision_tree']
     gaps = [row for row in rows if row['want'].startswith('other tooling not named above:')]
-    assert len(gaps) == 1, gaps
+    if len(gaps) != 1:
+        return [f'{len(gaps)} gap rows']
     named = {name.strip() for name in gaps[0]['want'].partition(':')[2].split(',')}
     shown = set().union(*(_nouns(row['cmd']) for row in page['commands']),
                         *(_nouns(f"{row['use']} {row['example']}") for row in rows if row is not gaps[0]))
-    assert not named & shown, f'the gap row names nouns the page already shows: {sorted(named & shown)}'
+    return [f'the gap row names nouns the page already shows: {sorted(named & shown)}'] if named & shown else []
+
+
+def test_help_quick_gap_row_names_no_noun_shown_above_it(quick_page, monkeypatch):
+    """The page names every noun on its ladder or in a row (BACK-1055), so it prints no gap row; a noun that loses
+    its row gets one, which names only what the page does not show."""
+    from reveal.adapters.help import HelpAdapter
+    _, page = quick_page
+    assert _gap_row_problems(page) == ['0 gap rows']
+    monkeypatch.setattr(HelpAdapter, '_CURATED_DECISION_TREE',
+                        [row for row in HelpAdapter._CURATED_DECISION_TREE if row['noun'] not in ('json', 'pack')])
+    forced = HelpAdapter('help://quick').get_element('quick')
+    assert not _gap_row_problems(forced), _gap_row_problems(forced)
 
 
 @pytest.mark.parametrize('line', [

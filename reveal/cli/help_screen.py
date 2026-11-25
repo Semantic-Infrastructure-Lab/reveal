@@ -1,12 +1,13 @@
-"""The `--agent-help` screen, generated from the command registry (BACK-1055; COMMAND_MODEL rule 6).
+"""The `--agent-help` screen and `help://quick`'s ladder, generated from the command registry (BACK-1055).
 
-`--agent-help` and `help://agent` print this one screen: the model, the path reads (rungs 0-2 and the
-element views), one entry per live subcommand from its `COMMANDS` entry (role, rung, starter, summary),
-"How options work" and the exit codes. A subcommand reaches the screen by declaring its role on its entry,
-so a new noun needs no edit here, and a retired one (no role) never appears. `help://agent/full` stays the
-long hand-written reference (reveal/docs/AGENT_HELP.md).
+`--agent-help` and `help://agent` print this one screen (COMMAND_MODEL rule 6): the model, the path reads (rungs
+0-2 and the element views), one entry per live subcommand from its `COMMANDS` entry (role, rung, starter, summary),
+"How options work" and the exit codes. A subcommand reaches the screen by declaring its role on its entry, so a new
+noun needs no edit here, and a retired one (no role) never appears. `help://agent/full` stays the long hand-written
+reference (reveal/docs/AGENT_HELP.md). `help://quick` teaches the ladder (plan 3.1) from the same declarations:
+every path read and live subcommand that declares a rung, in rung order (`quick_ladder`).
 """
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from ..nav_params import ELEMENT_VIEWS
 from ..utils.formatting import command_entry
@@ -123,3 +124,18 @@ def render_agent_help() -> str:
         exits='\n'.join(f'  {code}  {text}' for code, text in sorted(EXIT_CODES.items())),
     )
 
+
+def quick_ladder() -> Dict[str, List[Dict[str, Any]]]:
+    """help://quick's commands block: every path read and live subcommand that declares a rung, in rung order.
+
+    Within a rung the path reads come first, then the subcommands in the `--help-all` order. A subcommand row
+    names its `noun` (the COMMANDS entry); a path read names none. `rungs` gives each shown rung its question.
+    """
+    rows: List[Dict[str, Any]] = [{'cmd': command, 'description': text, 'rung': rung, 'noun': ''}
+                                  for command, rung, text in PATH_READS if rung is not None]
+    rows += [{'cmd': spec.starter, 'description': spec.summary, 'rung': spec.rung, 'noun': name}
+             for name, spec in _live() if spec.rung is not None]
+    rows.sort(key=lambda row: row['rung'])
+    return {'commands': rows,
+            'rungs': [{'rung': rung, 'question': RUNG_QUESTIONS[rung]}
+                      for rung in sorted({row['rung'] for row in rows})]}

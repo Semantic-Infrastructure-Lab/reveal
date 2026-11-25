@@ -5,7 +5,7 @@ from typing import Any, Dict, Optional
 
 from reveal.registry import FALLBACK_SUPPORT_NOTE
 from reveal.utils import print_json_result
-from reveal.utils.formatting import shell_command
+from reveal.utils.formatting import command_entry, shell_command
 from reveal.utils.warning_render import render_meta_warnings
 from reveal.adapters.base import Stability, _ADAPTER_REGISTRY
 
@@ -987,13 +987,15 @@ def _render_help_adapter_specific(data: Dict[str, Any]) -> None:
 
 
 def _render_help_quick(data: Dict[str, Any]) -> None:
-    """Render help://quick — concise orientation cheat-sheet."""
+    """Render help://quick — the ladder, one heading per rung, then the task router."""
     print(f"\n{data.get('title', 'Reveal — Quick Reference')}\n")
-    commands = data.get('commands', [])
-    if commands:
-        col_cmd = max(len(c['cmd']) for c in commands)
-        for c in commands:
-            print(f"  {c['cmd']:<{col_cmd}}  — {c['description']}")
+    questions = {row['rung']: row['question'] for row in data.get('rungs', [])}
+    heading = None
+    for c in data.get('commands', []):
+        if c.get('rung') in questions and c.get('rung') != heading:
+            heading = c['rung']
+            print(f"Rung {heading}, {questions[heading]}")
+        print('\n'.join(command_entry(c['cmd'], c['description'])))
     decision_tree = data.get('decision_tree', [])
     if decision_tree:
         print()
