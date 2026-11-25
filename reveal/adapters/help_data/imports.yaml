@@ -7,7 +7,7 @@ syntax: 'reveal imports <path> [--unused|--circular|--violations|--sort=-fan-in|
 
 examples:
   # Basic import inspection
-  - uri: "imports://src"
+  - uri: "reveal imports src/"
     description: 'List all imports in src directory with import graph'
 
   - uri: "imports://src/main.py"

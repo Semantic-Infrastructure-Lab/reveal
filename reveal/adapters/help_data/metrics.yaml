@@ -3,10 +3,10 @@
 
 name: metrics
 description: 'Analyze codebase metrics, identify file hotspots, assess code quality, and tag every file''s provenance'
-syntax: 'metrics://<path>[?<filters>]'
+syntax: 'reveal metrics <path> [--view VIEW] [--where EXPR]... [--limit N]'
 
 examples:
-  - uri: 'metrics://./src'
+  - uri: 'reveal metrics src/'
     description: 'Get overview statistics for src directory'
   - uri: 'metrics://./src?view=hotspots'
     description: 'The 10 files most in need of attention: the ranked hotspot files are the rows (reveal metrics ./src --view hotspots)'
