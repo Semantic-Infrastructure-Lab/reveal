@@ -14,8 +14,7 @@
   "reveal/checks.py": 2,
   "reveal/display/element.py": 1,
   "reveal/file_handler.py": 1,
-  "reveal/logging_setup.py": 1,
-  "reveal/nav_handlers.py": 1
+  "reveal/logging_setup.py": 1
  },
  "lazy-cycle": {
   "reveal/adapters/ast/nav_effects.py": 2,
@@ -65,9 +64,9 @@
   "reveal/checks.py": 22,
   "reveal/config.py": 2,
   "reveal/diff/architecture_diff.py": 1,
-  "reveal/file_handler.py": 4,
+  "reveal/file_handler.py": 3,
   "reveal/mcp_server.py": 1,
-  "reveal/nav_handlers.py": 20,
+  "reveal/nav_handlers.py": 19,
   "reveal/utils/breadcrumbs.py": 4,
   "reveal/utils/json_utils.py": 1,
   "reveal/utils/query_parser.py": 1,
