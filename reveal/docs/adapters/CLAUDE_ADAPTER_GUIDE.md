@@ -745,7 +745,7 @@ reveal claude://session/infernal-earth-0118/prompts
 **`?raw`**: add `?raw` to get every raw role=user record unfiltered instead — prompts, tool-result turns, and harness-injected text all included, normalized to a block list. This is a bulk forensic scan (e.g. skimming every tool-result payload in a session at once), not narrative reading; prefer plain `/prompts` unless you specifically need that. Response includes a `hint` field when tool-result-only turns are present, pointing back at plain `/prompts`.
 
 ```bash
-reveal 'claude://session/<session-name>/prompts?detail=raw'
+reveal 'claude://session/<session-name>/prompts' --detail raw
 ```
 
 ---
@@ -757,8 +757,8 @@ reveal 'claude://session/<session-name>/prompts?detail=raw'
 **Syntax**:
 ```bash
 reveal 'claude://session/<session-name>/messages'
-reveal 'claude://session/<session-name>/messages?detail=raw'     # raw, unfiltered role=assistant dump
-reveal 'claude://session/<session-name>/messages?detail=raw'   # + disable 600-char truncation
+reveal 'claude://session/<session-name>/messages' --detail raw     # raw, unfiltered role=assistant dump
+reveal 'claude://session/<session-name>/messages' --detail raw   # + disable 600-char truncation
 ```
 
 **Example**:
@@ -903,7 +903,7 @@ reveal claude://session/infernal-earth-0118/digest
 **Syntax**:
 ```bash
 reveal 'claude://session/<session-name>/exchanges'
-reveal 'claude://session/<session-name>/exchanges?detail=full'   # disable 600-char truncation on answers
+reveal 'claude://session/<session-name>/exchanges' --detail full   # disable 600-char truncation on answers
 ```
 
 **Example**:
@@ -930,7 +930,7 @@ reveal claude://session/infernal-earth-0118/exchanges
 
 **Syntax**:
 ```bash
-reveal 'claude://session/<session-name>?detail=summary'
+reveal 'claude://session/<session-name>' --detail summary
 ```
 
 **Example**:
@@ -955,7 +955,7 @@ The existing query selector returns the chronological message timeline, like
 
 **Syntax**:
 ```bash
-reveal 'claude://session/<session-name>?digest'
+reveal 'claude://session/<session-name>' --digest
 ```
 
 **Example**:
@@ -975,7 +975,7 @@ reveal claude://session/infernal-earth-0118 --digest
 
 **Syntax**:
 ```bash
-reveal 'claude://session/<session-name>?tokens'
+reveal 'claude://session/<session-name>' --tokens
 ```
 
 **Example**:
@@ -995,7 +995,7 @@ reveal claude://session/infernal-earth-0118 --tokens
 
 **Syntax**:
 ```bash
-reveal 'claude://session/<session-name>/files?patches=true'
+reveal 'claude://session/<session-name>/files' --patches true
 ```
 
 **Example**:
@@ -1015,7 +1015,7 @@ reveal claude://session/infernal-earth-0118/files --patches true
 
 **Syntax**:
 ```bash
-reveal 'claude://session/<session-name>?errors'
+reveal 'claude://session/<session-name>' --errors
 ```
 
 **Example**:
@@ -1101,9 +1101,9 @@ reveal claude://session/infernal-earth-0118/messages --match 'import pandas'
 
 **Syntax**:
 ```bash
-reveal 'claude://session/<session-name>/prompts?detail=raw'
-reveal 'claude://session/<session-name>/messages?detail=raw'
-reveal 'claude://session/<session-name>/messages?detail=raw'   # + disable 600-char truncation
+reveal 'claude://session/<session-name>/prompts' --detail raw
+reveal 'claude://session/<session-name>/messages' --detail raw
+reveal 'claude://session/<session-name>/messages' --detail raw   # + disable 600-char truncation
 ```
 
 **Examples**:
@@ -1143,7 +1143,7 @@ reveal claude://session/infernal-earth-0118/messages --limit 1 --sort=-message_i
 
 **Syntax**:
 ```bash
-reveal 'claude://session/<session-name>/messages?sort=-message_index&limit=1'
+reveal 'claude://session/<session-name>/messages' --limit 1 --sort=-message_index
 ```
 
 **Use when**: The fastest way to check "what did the assistant just say/do" — cheaper than a full session read
@@ -2219,7 +2219,7 @@ reveal claude://session/my-session/tools --format json | \
   jq '.tools | to_entries[] | select((.value.success_rate | rtrimstr("%") | tonumber) < 80)'
 
 # Extract error messages
-reveal 'claude://session/my-session?errors' --format json | \
+reveal claude://session/my-session --errors --format json | \
   jq '.errors[].content_preview'
 
 # Count specific tool usage

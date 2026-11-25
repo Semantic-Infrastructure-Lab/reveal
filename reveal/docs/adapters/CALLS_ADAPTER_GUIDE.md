@@ -631,8 +631,7 @@ reveal calls src/ --callers parse_config
 reveal calls src/ --callers parse_config --depth 3
 
 # Step 3: Extract files to review
-reveal 'calls://src/?callers=parse_config' --format=json | \
-  jq -r '.levels[0].callers[].file' | sort -u
+reveal calls src/ --callers parse_config --format=json   # then: | jq -r '.levels[0].callers[].file' | sort -u
 ```
 
 ### Workflow 2: Is This Function Used?
@@ -660,8 +659,7 @@ reveal calls src/ --callees handle_request --depth 2
 
 ```bash
 # Visual call graph for documentation
-reveal 'calls://src/?callers=main&depth=3&format=dot' | \
-  dot -Tsvg -Grankdir=TB > architecture.svg
+reveal calls src/ --callers main --depth 3 --format dot   # Graphviz: | dot -Tsvg -Grankdir=TB > architecture.svg
 
 # JSON for custom visualisation
 reveal calls src/ --callers main --depth 5 --format=json   # save it (> call_tree.json) for your own tool
@@ -726,7 +724,7 @@ replaced-by note (see [Retired spellings](#retired-spellings)).
 
 ```bash
 # JSON: get calls + called_by for a specific function
-reveal 'ast://src/auth.py?name=authenticate' --format=json | \
+reveal ast src/auth.py --where name=authenticate --format=json | \
   jq '.results[0] | {calls, called_by}'
 ```
 
@@ -881,8 +879,7 @@ reveal calls src/ --callers validate_token
 A: The index returns all files that call it. Use JSON output and filter by file if needed:
 
 ```bash
-reveal 'calls://src/?callers=process' --format=json | \
-  jq '.levels[0].callers[] | select(.file | contains("auth"))'
+reveal calls src/ --callers process --format=json   # then: | jq '.levels[0].callers[] | select(.file | contains("auth"))'
 ```
 
 **Q: Can I search for method calls like `obj.method()`?**

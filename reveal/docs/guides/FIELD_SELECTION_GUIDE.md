@@ -651,7 +651,7 @@ reveal metrics src --where 'lines>100' --sort=-complexity --max-items=20 --field
 ```bash
 # Phase 3: Filter and sort
 # Phase 4: Limit results and select fields
-reveal 'ast://src?kind=function&complexity>10&sort=-complexity' \
+reveal ast src --where 'complexity>10' --kind function --sort=-complexity \
     --max-items=10 \
     --fields=name,line,complexity \
     --format=json

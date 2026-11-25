@@ -1367,7 +1367,7 @@ reveal git requirements.txt --view history
 reveal git requirements.txt --view blame
 
 # 3. Check for security-related changes
-reveal git://requirements.txt --view history --format=json | \
+reveal git requirements.txt --view history --format=json | \
   jq '.commits[] | select(.message | test("security|cve|vuln"; "i"))'
 
 # 4. Find who last updated specific dependency
@@ -1469,22 +1469,22 @@ echo "Generating release notes since $LAST_TAG..."
 
 # Features
 echo "## Features"
-reveal git://. --view history --where 'message~=^feat:' --limit 100 --format=json | \
+reveal git . --view history --where 'message~=^feat:' --limit 100 --format=json | \
   jq -r '.history[] | "- \(.message | split("\n")[0] | sub("^feat: "; ""))"'
 
 # Fixes
 echo -e "\n## Bug Fixes"
-reveal git://. --view history --where 'message~=^fix:' --limit 100 --format=json | \
+reveal git . --view history --where 'message~=^fix:' --limit 100 --format=json | \
   jq -r '.history[] | "- \(.message | split("\n")[0] | sub("^fix: "; ""))"'
 
 # Breaking Changes
 echo -e "\n## Breaking Changes"
-reveal git://. --view history --where 'message~=BREAKING' --limit 100 --format=json | \
+reveal git . --view history --where 'message~=BREAKING' --limit 100 --format=json | \
   jq -r '.history[] | "- \(.message | split("\n")[0])"'
 
 # Contributors
 echo -e "\n## Contributors"
-reveal git://. --view history --limit 100 --format=json | \
+reveal git . --view history --limit 100 --format=json | \
   jq -r '[.history[] | .author] | unique | .[] | "- \(.)"'
 ```
 
@@ -1907,7 +1907,7 @@ reveal git src/app.py --view blame --detail full
 
 ```bash
 # Find complex functions, then blame them
-reveal 'ast://src?complexity>10' --format=json | \
+reveal ast src --where 'complexity>10' --format=json | \
   jq -r '.results[].file' | sort -u | while read file; do
     echo "=== $file ==="
     reveal "git://$file" --view blame
@@ -1985,7 +1985,7 @@ reveal git://.@suspicious_hash
 
 ```bash
 # Get branch list
-reveal git://. --format=json | jq -r '.branches.recent[].name' | \
+reveal git . --format=json | jq -r '.branches.recent[].name' | \
   while read branch; do
     echo "=== $branch ==="
     reveal "git://.@$branch" --where 'message~=search_term'

@@ -707,7 +707,7 @@ reveal json://users.json/data/users --where status=active --sort=-age
 reveal json://users.json/data/users --where status=active --sort=-age --limit 10
 
 # Step 6: Export to CSV with jq
-reveal 'json://users.json/data/users?status=active' --format=json | \
+reveal json://users.json/data/users --where status=active --format=json | \
   jq -r '.value[] | [.id, .name, .email, .age] | @csv'
 ```
 
@@ -1224,7 +1224,7 @@ reveal json://data.json/orders --format=json | \
       .items[] | select(.quantity > 5)'
 
 # Generate CSV with jq
-reveal 'json://data.json/users?status=active' --format=json | \
+reveal json://data.json/users --where status=active --format=json | \
   jq -r '.value[] | [.id, .name, .email, .age] | @csv'
 ```
 

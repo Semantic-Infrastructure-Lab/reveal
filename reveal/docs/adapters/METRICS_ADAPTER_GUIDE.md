@@ -1070,15 +1070,15 @@ reveal metrics ./src --format=json | jq '.summary.avg_complexity'
 reveal metrics ./src --format=json | jq '.summary.total_code_lines'
 
 # List files with quality <60
-reveal metrics://./src --format=json | \
+reveal metrics ./src --format=json | \
   jq -r '.files[] | select(.quality.score < 60) | .file'
 
 # Count hotspots
-reveal 'metrics://./src?view=hotspots' --format=json | \
+reveal metrics ./src --view hotspots --format=json | \
   jq '.hotspots | length'
 
 # Get worst file
-reveal 'metrics://./src?view=hotspots' --format=json | \
+reveal metrics ./src --view hotspots --format=json | \
   jq -r '.hotspots[0].file'
 ```
 
@@ -1300,7 +1300,7 @@ exit 0
 
 echo "File,Lines,Code,Functions,Classes,Complexity,Quality" > stats-report.csv
 
-reveal metrics://./src --format=json | \
+reveal metrics ./src --format=json | \
   jq -r '.files[] | [.file, .lines.total, .lines.code, .elements.functions, .elements.classes, .complexity.average, .quality.score] | @csv' \
   >> stats-report.csv
 
@@ -1680,7 +1680,7 @@ cat .reveal/stats-quality.yaml
 **Track complexity trend**:
 ```bash
 # Weekly snapshot
-reveal metrics://./src --format=json | \
+reveal metrics ./src --format=json | \
   jq -r '["Date", "Complexity", "Quality"] | @csv' > weekly-trend.csv
 echo "$(date +%Y-%m-%d),$(jq '.summary.avg_complexity' stats.json),$(jq '.summary.avg_quality_score' stats.json)" >> weekly-trend.csv
 ```
@@ -1706,7 +1706,7 @@ jq -s '.[0].summary.avg_complexity as $main | .[1].summary.avg_complexity as $fe
 **Files with extreme complexity**:
 ```bash
 # 3× the mean
-reveal metrics://./src --format=json | \
+reveal metrics ./src --format=json | \
   jq '.files | map(.complexity.average) | add / length as $mean | map(select(. > $mean * 3))'
 ```
 
@@ -1715,7 +1715,7 @@ reveal metrics://./src --format=json | \
 **Complexity heatmap** (for visualization):
 ```bash
 # Generate CSV for heatmap tools
-reveal metrics://./src --format=json | \
+reveal metrics ./src --format=json | \
   jq -r '.files[] | [.file, .complexity.average, .quality.score] | @csv' > heatmap.csv
 
 # Import to heatmap.js, seaborn, or Excel conditional formatting

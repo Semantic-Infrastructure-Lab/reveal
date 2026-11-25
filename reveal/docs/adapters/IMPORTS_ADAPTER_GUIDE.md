@@ -1392,21 +1392,21 @@ echo "✅ Refactoring did not introduce new cycles"
 
 ```bash
 # Count unused imports by directory
-reveal 'imports://src?unused' --format=json | \
+reveal imports src --unused --format=json | \
   jq -r '.unused[] | .file | split("/")[0]' | \
   sort | uniq -c
 
 # Find files with most unused imports
-reveal 'imports://src?unused' --format=json | \
+reveal imports src --unused --format=json | \
   jq -r '.unused[] | .file' | \
   sort | uniq -c | sort -rn | head -10
 
 # List unused imports from specific module
-reveal 'imports://src?unused' --format=json | \
+reveal imports src --unused --format=json | \
   jq -r '.unused[] | select(.file | startswith("api")) | "\(.file):\(.line) - \(.module)"'
 
 # Extract circular dependency chains
-reveal 'imports://src?circular' --format=json | \
+reveal imports src --circular --format=json | \
   jq -r '.cycle_paths[] | join(" -> ")'
 ```
 
@@ -1884,7 +1884,7 @@ reveal imports src --unused --detail full
 
 ```bash
 # Daily import health snapshot
-reveal imports://src --format=json | \
+reveal imports src --format=json | \
   jq '{date: now, files: .metadata.total_files, imports: .metadata.total_imports, cycles: .meta.has_cycles}' \
   >> import_metrics.jsonl
 ```
@@ -1911,7 +1911,7 @@ reveal imports src --circular
 # - Type hints (TYPE_CHECKING)
 # - Side-effect imports
 
-reveal 'imports://src?unused&detail=full' | \
+reveal imports src --unused --detail full | \
   grep -v "__all__" | \
   grep -v "TYPE_CHECKING"
 ```
@@ -1920,7 +1920,7 @@ reveal 'imports://src?unused&detail=full' | \
 
 ```bash
 # Find complex files with circular dependencies
-reveal 'ast://src?complexity>10' --format=json | \
+reveal ast src --where 'complexity>10' --format=json | \
   jq -r '.results[].file' | sort -u | while read file; do
     reveal "imports://src/$file"
   done
