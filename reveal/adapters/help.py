@@ -321,6 +321,16 @@ _SEARCH_ANSWER = ('help_search',)
 _search_term = TermValue('match', '--match TEXT')
 
 
+def _refuse_removed_noun(word: str) -> None:
+    """A noun the cut deleted is refused with its removed row's text before any page of that name is read: help://NOUN,
+    help://NOUN/SECTION and help://schemas/NOUN say what ``reveal NOUN`` says, exit 2 on every transport (BACK-2771,
+    ruling 3). A noun that is only retired still answers its pages."""
+    from ..cli.invocation import removed_noun_row, retirement_note
+    key = removed_noun_row(word)
+    if key is not None:
+        retirement_note(key)  # a removed row is at the error stage: this raises RetiredSpellingError with its text
+
+
 def _search_terms(value: Any) -> List[str]:
     """help search's terms: one string, or every repeat of a repeated --match, each nonblank; a hit holds every word."""
     return [_search_term(item) for item in value] if isinstance(value, (list, tuple)) else [_search_term(value)]
@@ -1062,6 +1072,7 @@ class HelpAdapter(ResourceAdapter):
                            heading_filter: Optional[str]) -> Optional[Dict[str, Any]]:
         """help://<guide-or-adapter>/<section>, e.g. help://ast/workflows or help://ast/full."""
         adapter_name, uri_section = topic.split('/', 1)
+        _refuse_removed_noun(adapter_name)
         is_guide = adapter_name in self.help_topics
         # Static guides support /full to bypass progressive disclosure
         if is_guide and uri_section == 'full':
@@ -1093,6 +1104,7 @@ class HelpAdapter(ResourceAdapter):
     def _get_named_topic(self, topic: str,
                          heading_filter: Optional[str]) -> Optional[Dict[str, Any]]:
         """help://<name>: a static guide, 'adapters', an adapter, or a file analyzer."""
+        _refuse_removed_noun(topic)
         # Static guides (auto-discovered + manual) win over a same-named adapter.
         if topic in self.help_topics:
             return self._load_static_help(topic, section=heading_filter)
@@ -2393,6 +2405,7 @@ class HelpAdapter(ResourceAdapter):
         Returns:
             Schema dict or error dict if adapter not found or has no schema
         """
+        _refuse_removed_noun(adapter_name)
         adapter_class: Optional[type[Any]] = _ADAPTER_REGISTRY.get(adapter_name)
         if not adapter_class:
             # BACK-1028: a CLI-only subcommand (e.g. 'check', 'review') has no
