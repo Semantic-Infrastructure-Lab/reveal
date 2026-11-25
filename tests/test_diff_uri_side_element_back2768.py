@@ -112,4 +112,4 @@ def test_whole_git_sides_still_compare(repo, uri):
     ('git://pkg/m.py@HEAD/not-a-name', ('git://pkg/m.py@HEAD/not-a-name', None)),
 ])
 def test_split_is_decided_against_the_repository(repo, right, expected):
-    assert split_trailing_element(right) == expected
+    assert split_trailing_element(right, 'git://pkg/m.py@HEAD~1') == expected  # a file left

@@ -124,7 +124,7 @@ def test_a_missing_child_of_a_directory_pair_is_an_element_miss(dirs):
 
 
 @pytest.mark.xfail(strict=True, reason="BACK-2813: api.query(URI, ELEMENT) answers through get_element beside the CLI's "
-                                       "owner (no contract_version, source or source_type, no row note)")
+                                       "owner (no contract_version, source or source_type)")
 def test_api_positional_element_equals_the_cli(dirs):
     code, cli, stderr = _run('diff://dA:dB', 'h')
     assert code == 0, stderr

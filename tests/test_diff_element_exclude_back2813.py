@@ -41,7 +41,7 @@ def test_api_element_form_applies_exclude(dirs, uri, keywords):
         api.query(uri, 'h', **keywords)
 
 
-@pytest.mark.xfail(strict=True, reason=WHY + ' (no contract_version, source or source_type, no row note)')
+@pytest.mark.xfail(strict=True, reason=WHY + ' (no contract_version, source or source_type)')
 def test_api_element_form_equals_the_cli_on_a_file_pair(dirs):
     run = _run_reveal_direct('diff://a.py:b.py', 'f', '--format', 'json')
     assert run.returncode == 0, run.stderr

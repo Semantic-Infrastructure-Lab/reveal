@@ -74,10 +74,10 @@ class DiffAdapter(ResourceAdapter):
     def uri_result_type(cls, resource: str) -> str:
         """The element's diff when the resource names one after its right side, else the comparison."""
         try:
-            _, right = parse_diff_uris(resource.partition('?')[0])
+            left, right = parse_diff_uris(resource.partition('?')[0])
         except ValueError:
             return cls.RESULT_TYPE
-        return cls.ELEMENT_RESULT_TYPE if split_trailing_element(right)[1] else cls.RESULT_TYPE
+        return cls.ELEMENT_RESULT_TYPE if split_trailing_element(right, left)[1] else cls.RESULT_TYPE
 
     @classmethod
     def resource_path(cls, resource: str) -> str:
@@ -88,7 +88,7 @@ class DiffAdapter(ResourceAdapter):
             left, right = parse_diff_uris(resource.partition('?')[0])
         except ValueError:
             return resource
-        right = split_trailing_element(right)[0]
+        right = split_trailing_element(right, left)[0]
         local = [side.removeprefix('file://') for side in (left, right)]
         local = [os.path.expanduser(side) for side in local if '://' not in side]
         if not local:
@@ -133,7 +133,7 @@ class DiffAdapter(ResourceAdapter):
         parts: Tuple[str, ...] = getattr(resource, 'parts', ())
         try:
             self.left_uri, self.right_uri = (parts[0], parts[1]) if len(parts) == 2 else parse_diff_uris(resource)
-            self.right_uri, self.embedded_element = split_trailing_element(self.right_uri)
+            self.right_uri, self.embedded_element = split_trailing_element(self.right_uri, self.left_uri)
         except ValueError:
             raise ValueError(
                 "diff requires 'left:right' format (reveal diff LEFT RIGHT). "

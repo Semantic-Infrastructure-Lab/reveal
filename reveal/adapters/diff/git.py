@@ -103,19 +103,20 @@ def read_git_text(resource: str) -> Optional[str]:
         return None
 
 
-def names_git_file(resource: str) -> bool:
-    """Whether a ``git://`` diff resource (``path@REF`` or ``REF/path``) names a file at its ref: False for a
-    directory, a ref or path that does not resolve, outside a repository and without pygit2. The embedded element's
-    split asks it (``parsing.split_trailing_element``, BACK-2768)."""
+def git_entry_kind(resource: str) -> Optional[str]:
+    """What a ``git://`` diff resource (``path@REF`` or ``REF/path``) names at its ref: ``'blob'`` for a file,
+    ``'tree'`` for a directory (``.`` and the empty path are the root); None for a bare ref, a ref or path that does not
+    resolve, outside a repository and without pygit2. The embedded element's split asks it
+    (``parsing.split_trailing_element``, BACK-2768, BACK-2812)."""
     parts = _ref_and_path(resource)
     if parts is None:
-        return False
+        return None
     git_ref, path = parts
     try:
-        entry = _resolve_commit(_open_repo(), git_ref).tree[path]
+        commit = _resolve_commit(_open_repo(), git_ref)
+        return 'tree' if path in ('', '.') else str(commit.tree[path].type_str)
     except (ValueError, ImportError, KeyError):
-        return False
-    return bool(entry.type_str == 'blob')
+        return None
 
 
 def resolve_git_ref(git_ref: str, path: str) -> Dict[str, Any]:

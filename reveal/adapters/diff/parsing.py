@@ -3,42 +3,58 @@
 
 import os
 import re
-from typing import Callable, Optional, Tuple
+from typing import Optional, Tuple
 
-from .git import names_git_file
+from .git import git_entry_kind
 
 _ELEMENT_NAME = re.compile(r'^[A-Za-z_][\w.]*$')
 _GIT = 'git://'
+_FILE = 'file://'
 
 
-def split_trailing_element(right: str) -> Tuple[str, Optional[str]]:
+def split_trailing_element(right: str, left: str) -> Tuple[str, Optional[str]]:
     """Split ``old.py/handle_request`` into (``old.py``, ``handle_request``).
 
     The documented ``diff://a.py:b.py/element`` form glues the element onto the right
     path, and a path can legitimately contain ``/``, so the suffix is an element only
-    when the whole string is not an existing path but its parent is an existing file.
-    A ``git://`` right side is split the same way against the repository, since a ref
-    may contain ``/`` too: ``m.py@HEAD/ok`` is not a file at a ref but ``m.py@HEAD`` is
-    (BACK-2768). Other URI right sides are never split.
+    when the whole string is not an existing path but its parent is an existing file,
+    or an existing directory when *left* is a directory too: ``dA:dB/h`` is element ``h``
+    of a directory pair (BACK-2812). A file left keeps a directory child whole, so
+    ``a.py:sub/missing.py`` is still a missing file. A ``git://`` side is split the same
+    way against the repository, since a ref may contain ``/`` too: ``m.py@HEAD/ok`` is
+    not a path at a ref but ``m.py@HEAD`` is a file (BACK-2768); a ``file://`` side is
+    split as its local path. Other URI right sides are never split.
     """
-    if right.startswith(_GIT):
-        def at_ref(side: str) -> bool:  # a directory side is no file, so its last word is tried: it never names a file
-            return names_git_file(side[len(_GIT):])
-        return _split(right, names_file=at_ref, exists=at_ref)
-    if '://' in right:
-        return right, None
-    return _split(right, names_file=os.path.isfile, exists=os.path.exists)
-
-
-def _split(right: str, *, names_file: Callable[[str], bool],
-           exists: Callable[[str], bool]) -> Tuple[str, Optional[str]]:
-    """``(side, element)`` when ``right`` does not exist but its parent names a file, else ``(right, None)``."""
-    if '/' not in right or exists(right):
+    if right.startswith(_FILE):
+        side, element = split_trailing_element(right[len(_FILE):], left)
+        return _FILE + side, element
+    if ('://' in right and not right.startswith(_GIT)) or '/' not in right or _exists(right):
         return right, None
     parent, _, element = right.rpartition('/')
-    if _ELEMENT_NAME.match(element) and names_file(parent):
+    if not _ELEMENT_NAME.match(element):
+        return right, None
+    parent_kind = _side_kind(parent)
+    if parent_kind == 'blob' or (parent_kind == 'tree' and _side_kind(left) == 'tree'):
         return parent, element
     return right, None
+
+
+def _exists(side: str) -> bool:
+    """Whether a local path, or a ``git://`` side at its ref, names anything (a file or a directory)."""
+    if side.startswith(_GIT):
+        return git_entry_kind(side[len(_GIT):]) is not None
+    return os.path.exists(side)
+
+
+def _side_kind(side: str) -> Optional[str]:
+    """``'blob'`` for a file, ``'tree'`` for a directory: a local or ``file://`` path, or a ``git://`` side at its
+    ref; None for anything else (a missing path, another URI)."""
+    if side.startswith(_GIT):
+        return git_entry_kind(side[len(_GIT):])
+    side = side.removeprefix(_FILE)
+    if '://' in side:
+        return None
+    return 'blob' if os.path.isfile(side) else 'tree' if os.path.isdir(side) else None
 
 
 def _find_separator_colon(resource: str) -> int:

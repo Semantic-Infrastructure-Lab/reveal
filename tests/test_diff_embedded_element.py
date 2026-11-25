@@ -34,19 +34,25 @@ def run_reveal(cwd, *args):
 
 class TestSplitTrailingElement:
     def test_file_then_element(self, two_files):
-        assert split_trailing_element("b.py/foo") == ("b.py", "foo")
+        assert split_trailing_element("b.py/foo", "a.py") == ("b.py", "foo")
 
     def test_dotted_method_element(self, two_files):
-        assert split_trailing_element("b.py/Cls.method") == ("b.py", "Cls.method")
+        assert split_trailing_element("b.py/Cls.method", "a.py") == ("b.py", "Cls.method")
 
     def test_existing_path_is_never_split(self, two_files):
-        assert split_trailing_element("sub/c.py") == ("sub/c.py", None)
+        assert split_trailing_element("sub/c.py", "a.py") == ("sub/c.py", None)
 
     def test_directory_child_is_not_an_element(self, two_files):
-        assert split_trailing_element("sub/missing.py") == ("sub/missing.py", None)
+        """With a file left the child stays a path; with a directory left it is the element (BACK-2812, below)."""
+        assert split_trailing_element("sub/missing.py", "a.py") == ("sub/missing.py", None)
+
+    def test_directory_child_of_a_directory_pair_is_an_element(self, two_files):
+        (two_files / "left").mkdir()
+        assert split_trailing_element("sub/missing.py", "left") == ("sub", "missing.py")
+        assert split_trailing_element("sub/c.py", "left") == ("sub/c.py", None)  # an existing child stays a path
 
     def test_uri_right_side_is_left_alone(self, two_files):
-        assert split_trailing_element("git://b.py@HEAD~1/foo") == ("git://b.py@HEAD~1/foo", None)
+        assert split_trailing_element("git://b.py@HEAD~1/foo", "a.py") == ("git://b.py@HEAD~1/foo", None)
 
 
 class TestAdapterEmbeddedElement:
