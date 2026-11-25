@@ -27,8 +27,11 @@ query string, at least one flag after it), is rewritten to ``reveal NOUN PLAIN -
 says so (``plain_path``) and the subcommand round-trips; a resource line naming an address is no example at all.
 
 Only the URI word changes: words before it, flags after it (BACK-2673: flags after a URI are the subcommand's flags),
-pipes and comments stay as written. An example is left, with the reason counted, when the doc shows it failing, it names
-its spelling as deprecated, it is not one line of the file, a control it gives has no flag (``UnrenderableRequest``),
+pipes and comments stay as written. A command continued with backslashes over several lines is rewritten on the physical
+line that holds its URI word, its first, and the joined command's words must be the old ones with that word replaced
+(``_continued_first_line``). An example is left, with the reason counted, when the doc shows it failing, it names
+its spelling as deprecated, it is not on one line of the file (an argument quoted across lines, or a URI word after the
+first physical line), a control it gives has no flag (``UnrenderableRequest``),
 the binder rejects it, a flag after the URI gives a control the URI gives too, the rendered line does not parse with
 the noun's parser, the replacement would spell a word that itself retires, or its scheme says no request note (a retired
 twin with its own ``scheme:`` row). An ops scheme's query string is no retiring request at all (D13), so it is no
@@ -69,7 +72,7 @@ SHOWN_FAILING = 'the doc shows it failing'
 NAMES_DEPRECATED = 'its line names the spelling as deprecated'
 SHOWS_THE_URI = 'its comment presents it as the URI spelling of a neighbouring line: by hand'
 OTHER_NOUN = 'its noun is outside --noun'
-NOT_ONE_LINE = 'not one line of the file (a continuation or multi-line argument)'
+NOT_ONE_LINE = 'not on one line of the file (a multi-line argument, or a URI after the first physical line)'
 NOT_LOCATED = 'the URI word is not spelled as one quoted or bare word'
 PLACEHOLDER = 'a <placeholder> or $VARIABLE in the URI'
 NO_REQUEST_NOTE_TWIN = 'retired twin scheme: its own scheme: row is the note, not a request note'
@@ -242,6 +245,17 @@ class Example:
     form: str = ''  # a rewrite's form: 'subcommand' | 'resource'
     origin: str = 'query'  # 'query': a retiring URI request; 'resource': an already-written resource line (step 7)
     fell_back: bool = False  # a subcommand rendering that did not round-trip: the resource form was kept
+    physical: str = ''  # a continued command: its first physical line (stripped), which holds the URI word
+    new_physical: str = ''  # ... and that line rewritten
+
+    @property
+    def key(self) -> str:
+        """The text of the file's line that a rewrite replaces: the command, or a continued command's first line."""
+        return self.physical or self.line
+
+    @property
+    def new_key(self) -> str:
+        return self.new_physical or self.new_line
 
 
 def _literal_spellings(word: str) -> List[str]:
@@ -256,6 +270,17 @@ def _located(line: str, word: str) -> Optional[Tuple[int, str]]:
             if (start == 0 or line[start - 1].isspace()) and (end == len(line) or line[end].isspace()):
                 return start, literal
     return None
+
+
+def _continued_first_line(line: str, text: str) -> Optional[str]:
+    """The first physical line (stripped, ending in its backslash) of the backslash-continued command *line*, which the
+    extractor reads with each backslash-newline joined to a space; None when *line* is no such command of *text* (an
+    argument quoted across lines keeps a newline in *line*)."""
+    if '\n' in line:
+        return None
+    found = {raw.strip() for raw in text.split('\n')
+             if raw.strip().endswith('\\') and line.startswith(raw.strip()[:-1])}
+    return found.pop() if len(found) == 1 else None
 
 
 def resource_line_index(tokens: Sequence[str]) -> Optional[int]:
@@ -321,8 +346,11 @@ def classify(source: str, line: str, tokens: List[str], failing: bool, text: str
         return left(PLACEHOLDER)
     if nouns is not None and example.scheme not in nouns:
         return left(OTHER_NOUN)
-    if '\n' in line or not any(raw.strip() == line for raw in text.split('\n')):
-        return left(NOT_ONE_LINE)
+    physical = None
+    if not any(raw.strip() == line for raw in text.split('\n')):
+        physical = _continued_first_line(line, text)
+        if physical is None:
+            return left(NOT_ONE_LINE)
     stage = _stage(tokens, 1)
     if 'reveal' in tokens[len(stage) + 1:]:
         return left(SEVERAL_COMMANDS)
@@ -339,16 +367,20 @@ def classify(source: str, line: str, tokens: List[str], failing: bool, text: str
         return left(f'{BINDER_REJECTS}: {exc}')
     if origin == 'resource' and form != 'subcommand':
         return left(NO_ROUND_TRIP)
-    found = _located(line, uri)
+    first = line if physical is None else physical[:-1]  # the continued line without its backslash
+    found = _located(first, uri)
     if found is None:
-        return left(NOT_LOCATED)
+        return left(NOT_LOCATED if physical is None else NOT_ONE_LINE)
     start, literal = found
-    new_line = line[:start] + rendered[len('reveal '):] + line[start + len(literal):]
-    # The rewrite changes the URI word only: the new line's words are the old ones with that word replaced.
+    new_first = first[:start] + rendered[len('reveal '):] + first[start + len(literal):]
+    new_line = new_first + line[len(first):]
+    # The rewrite changes the URI word only: the new command's words are the old ones with that word replaced.
     expected = [*tokens[:index], *shlex.split(rendered)[1:], *tokens[index + 1:]]
     if shlex.split(new_line, comments=True) != expected:
         return left(NOT_LOCATED)
     example.kind, example.new_line, example.form, example.fell_back = 'rewrite', new_line, form, fell_back
+    if physical is not None:
+        example.physical, example.new_physical = physical, new_first + '\\'
     return example
 
 
@@ -371,10 +403,10 @@ def plan(sources: Optional[Sequence[str]] = None, nouns: Optional[Sequence[str]]
         if example is not None:
             out[base].append(example)
     for examples in out.values():  # lines are rewritten by text: a copy left anywhere keeps every copy
-        kept = {e.line for e in examples if e.kind == 'left'}
+        kept = {e.key for e in examples if e.kind == 'left'}
         for e in examples:
-            if e.kind == 'rewrite' and e.line in kept:
-                e.kind, e.reason, e.new_line = 'left', COPY_LEFT, ''
+            if e.kind == 'rewrite' and e.key in kept:
+                e.kind, e.reason, e.new_line, e.new_physical = 'left', COPY_LEFT, '', ''
     return out
 
 
@@ -385,11 +417,11 @@ def prose_uri_count(text: str) -> Counter:
 
 
 def rewrite_text(text: str, examples: Sequence[Example]) -> Tuple[str, int]:
-    """*text* with each planned rewrite applied to every line that is exactly its command (indentation kept), inside the
-    bash/sh/shell fences the extractor reads. A command left anywhere in the file (the doc shows that copy failing) is
-    left everywhere: lines are matched by text."""
-    kept = {e.line for e in examples if e.kind != 'rewrite'}
-    swaps = {e.line: e.new_line for e in examples if e.kind == 'rewrite' and e.line not in kept}
+    """*text* with each planned rewrite applied to every line that is exactly its command, or a continued command's
+    first line (indentation kept), inside the bash/sh/shell fences the extractor reads. A command left anywhere in the
+    file (the doc shows that copy failing) is left everywhere: lines are matched by text."""
+    kept = {e.key for e in examples if e.kind != 'rewrite'}
+    swaps = {e.key: e.new_key for e in examples if e.kind == 'rewrite' and e.key not in kept}
     lines, done = text.split('\n'), 0
     shell = False
     for i, raw in enumerate(lines):
@@ -467,7 +499,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     baseline = expected_baseline(names, args.nouns) if args.baseline else None
     if args.format == 'json':
         detail = {name: [{'line': e.line, 'kind': e.kind, 'reason': e.reason, 'new_line': e.new_line, 'scheme': e.scheme,
-                          'form': e.form, 'fell_back': e.fell_back, 'origin': e.origin}
+                          'form': e.form, 'fell_back': e.fell_back, 'origin': e.origin, 'physical': e.physical,
+                          'new_physical': e.new_physical}
                          for e in examples] for name, examples in planned.items()} if args.show else None
         print(json.dumps({'files': report, 'not_extractor_sources': unread, 'detail': detail,
                           'baseline': None if baseline is None else {'now': baseline[0], 'after': baseline[1]}},

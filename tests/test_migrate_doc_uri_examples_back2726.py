@@ -162,7 +162,7 @@ def test_lines_the_script_cannot_place_or_should_not_touch_are_left(tmp_path):
     pair = "reveal 'metrics://src?view=hotspots'   # the same answer as a URI"
     placeholder, variable = "reveal 'calls://src?callers=<name>'", 'reveal "metrics://$DIR?view=hotspots"'
     both = "reveal 'calls://src?sort=-callers' --sort name"
-    continued = "reveal 'calls://src?callers=main' --format=json | \\\n    jq '.levels'"
+    continued = "reveal 'calls://src?callers=main' --format=json | jq '\n    .levels'"  # an argument quoted across lines
     planned, _ = _planned(tmp_path, _fenced(shown, several, pair, placeholder, variable, both, continued))
     reasons = {line.split(' ', 2)[1]: e.reason for line, e in planned.items()}
     assert planned[shown].reason == migrate.SHOWN_FAILING
