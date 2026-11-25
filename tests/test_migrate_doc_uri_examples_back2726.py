@@ -174,6 +174,45 @@ def test_lines_the_script_cannot_place_or_should_not_touch_are_left(tmp_path):
     assert all(e.kind == 'left' for e in planned.values())
 
 
+def _joined(*physical):
+    """The command the extractor reads from backslash-continued *physical* lines."""
+    return '\n'.join(physical).replace('\\\n', ' ')
+
+
+def test_a_continued_example_is_rewritten_on_the_physical_line_that_holds_its_uri(tmp_path):
+    """A backslash continuation is one command on several lines: the URI word is rewritten on its own physical line,
+    and the joined command's words are the old ones with that word replaced (the rest of the lines stay as written)."""
+    piped = ("reveal 'metrics://src?view=hotspots' --format=json | \\", "    jq '.hotspots | length'")
+    flagged = ("reveal 'ast://src?kind=function&complexity>10' \\", '  --max-items=10 \\', '  --format=json')
+    resource = ("reveal git://. --view history --limit 5 --format=json | \\", "    jq -r '.history[].author'")
+    body = _fenced(*piped) + _fenced(*flagged) + _fenced(*resource)
+    planned, docs = _planned(tmp_path, body)
+    assert {line: e.kind for line, e in planned.items()} == {
+        _joined(*piped): 'rewrite', _joined(*flagged): 'rewrite', _joined(*resource): 'rewrite'}
+    assert shlex.split(planned[_joined(*piped)].new_line) == [
+        'reveal', 'metrics', 'src', '--view', 'hotspots', '--format=json', '|', 'jq', '.hotspots | length']
+    assert shlex.split(planned[_joined(*flagged)].new_line) == [
+        'reveal', 'ast', 'src', '--where', 'complexity>10', '--kind', 'function', '--max-items=10', '--format=json']
+    text, done = migrate.rewrite_text(body, planned.values())
+    assert done == 3
+    assert text == (_fenced('reveal metrics src --view hotspots --format=json | \\', piped[1])
+                    + _fenced("reveal ast src --where 'complexity>10' --kind function \\", *flagged[1:])
+                    + _fenced('reveal git . --view history --limit 5 --format=json | \\', resource[1]))
+    (docs / 'guides' / 'G.md').write_text(text, encoding='utf-8')
+    assert migrate.plan(['guides/G.md'], docs=docs)['guides/G.md'] == []
+
+
+def test_a_command_the_script_cannot_place_on_one_physical_line_is_left(tmp_path):
+    """Negative controls: an argument quoted across lines, and a URI that is not on the command's first physical line,
+    stay as written with the reason counted."""
+    quoted = ("reveal 'calls://src?callers=main' --format=json | jq '", "  .levels'")
+    later = ('reveal \\', "  'calls://src?callers=main'")
+    body = _fenced(*quoted) + _fenced(*later)
+    planned, docs = _planned(tmp_path, body)
+    assert sorted((e.kind, e.reason) for e in planned.values()) == [('left', migrate.NOT_ONE_LINE)] * 2
+    assert migrate.rewrite_text(body, planned.values()) == (body, 0)
+
+
 def test_a_regex_anchor_is_a_value_not_a_shell_variable(tmp_path):
     line = "reveal 'metrics://src?file~=\\.(py|js)$'"
     planned, _ = _planned(tmp_path, _fenced(line))
@@ -276,13 +315,19 @@ def _planned_rewrites(planned):
     return {shlex.join(e.tokens) for examples in planned.values() for e in examples if e.kind == 'rewrite'}
 
 
+def _reveal_stage(tokens):
+    """The reveal command's own words: what ``_answer`` and ``_text`` run. A pipe into jq or sort reads that same
+    output, so a rewrite whose reveal stage the fixture runs is proven even when its pipeline is not."""
+    return tokens[:tokens.index('|')] if '|' in tokens else list(tokens)
+
+
 def _doc_rewrites(planned=None):
-    """(original, rewritten) once each, for the rewrites in *planned* (default: the shipped docs) that the named
-    fixture runs."""
+    """(original, rewritten) once each, for the rewrites in *planned* (default: the shipped docs) whose reveal stage the
+    named fixture runs."""
     names, seen = _fixture_names(), {}
     for examples in (migrate.plan() if planned is None else planned).values():
         for e in examples:
-            if e.kind == 'rewrite' and _named_fixture_skip(e.tokens, names) is None:
+            if e.kind == 'rewrite' and _named_fixture_skip(_reveal_stage(e.tokens), names) is None:
                 seen.setdefault(shlex.join(e.tokens), shlex.split(e.new_line, comments=True))
     return sorted(seen.items())
 
