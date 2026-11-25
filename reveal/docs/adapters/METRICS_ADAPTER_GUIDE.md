@@ -990,7 +990,7 @@ Top Hotspots (10):
    ```bash
    # For each changed file, get stats
    while read file; do
-     reveal metrics://"$file" --format=json
+     reveal metrics "$file" --format=json
    done < changed-files.txt > changed-stats.json
    ```
 
@@ -1029,7 +1029,7 @@ Top Hotspots (10):
    FILE="./src/$(jq -r '.hotspots[0].file' hotspots-baseline.json)"   # hotspot paths are relative to the scanned path
 
    # Get detailed stats
-   reveal metrics://"$FILE"
+   reveal metrics "$FILE"
 
    # Review code
    reveal "$FILE"
@@ -1042,7 +1042,7 @@ Top Hotspots (10):
    ```bash
    # Before/after comparison
    BEFORE=$(jq --arg f "$FILE" '.files[] | select(.file==$f) | .quality.score' hotspots-baseline.json)
-   AFTER=$(reveal metrics://"$FILE" --format=json | jq '.files[0].quality.score')
+   AFTER=$(reveal metrics "$FILE" --format=json | jq '.files[0].quality.score')
 
    echo "Quality improved: $BEFORE → $AFTER"
    ```
@@ -1262,7 +1262,7 @@ fi
 FAILED=0
 for file in $FILES; do
   # Get file stats
-  STATS=$(reveal metrics://"$file" --format=json 2>/dev/null)
+  STATS=$(reveal metrics "$file" --format=json 2>/dev/null)
 
   if [ $? -ne 0 ]; then
     echo "⚠️  Cannot analyze $file (skipping)"
@@ -1819,7 +1819,7 @@ CHANGED=$(git log --since="1 month ago" --name-only --pretty=format: | sort -u |
 
 # Analyze each file
 for file in $CHANGED; do
-  QUALITY=$(reveal metrics://"$file" --format=json 2>/dev/null | jq '.files[0].quality.score')
+  QUALITY=$(reveal metrics "$file" --format=json 2>/dev/null | jq '.files[0].quality.score')
   if [ "$QUALITY" != "null" ] && (( $(echo "$QUALITY < 70" | bc -l) )); then
     echo "⚠️  $file - Quality: $QUALITY"
   fi

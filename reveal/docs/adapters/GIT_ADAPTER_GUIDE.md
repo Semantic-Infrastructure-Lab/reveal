@@ -1910,7 +1910,7 @@ reveal git src/app.py --view blame --detail full
 reveal ast src --where 'complexity>10' --format=json | \
   jq -r '.results[].file' | sort -u | while read file; do
     echo "=== $file ==="
-    reveal "git://$file" --view blame
+    reveal git "$file" --view blame
   done
 ```
 

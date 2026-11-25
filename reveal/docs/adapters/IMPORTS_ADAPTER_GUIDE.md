@@ -1922,7 +1922,7 @@ reveal imports src --unused --detail full | \
 # Find complex files with circular dependencies
 reveal ast src --where 'complexity>10' --format=json | \
   jq -r '.results[].file' | sort -u | while read file; do
-    reveal "imports://src/$file"
+    reveal imports "src/$file"
   done
 ```
 
@@ -2062,7 +2062,7 @@ reveal imports . --unused
 reveal imports src --unused
 
 # Bad: Include tests (often have many unused test fixtures)
-reveal 'imports://src?unused' && reveal 'imports://tests?unused'
+reveal imports src --unused && reveal imports tests --unused
 ```
 
 ### Q: Can I get diffs between branches?

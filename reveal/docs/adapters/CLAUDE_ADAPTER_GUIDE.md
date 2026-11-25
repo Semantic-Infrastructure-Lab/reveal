@@ -327,7 +327,7 @@ reveal claude://session/my-session/files      # File operations
 reveal claude://session/my-session/workflow   # Chronological flow
 
 # Level 3: Deep analysis
-reveal 'claude://session/my-session?errors'     # Error debugging
+reveal claude://session/my-session --errors     # Debug a session's errors
 reveal claude://session/my-session/thinking   # Token analysis
 reveal claude://session/my-session --tools Bash # Tool-specific
 ```
@@ -565,9 +565,9 @@ Combine filters for precise analysis:
 reveal claude://session/my-session --errors --tools Bash
 
 # Assistant narrative turns containing specific text
-reveal 'claude://session/my-session/messages?match=reveal'
+reveal claude://session/my-session/messages --match reveal
 
-# Error list (the summary already carries per-tool failure counts)
+# List the errors (the summary already carries per-tool failure counts)
 reveal claude://session/my-session --errors
 ```
 
@@ -1035,7 +1035,7 @@ reveal claude://session/infernal-earth-0118 --errors
 
 **Syntax**:
 ```bash
-reveal 'claude://session/<session-name>?tools=<ToolName>'
+reveal 'claude://session/<session-name>' --tools '<ToolName>'
 ```
 
 **Examples**:
@@ -1057,7 +1057,7 @@ reveal claude://session/infernal-earth-0118 --tools Edit
 
 **Syntax**:
 ```bash
-reveal 'claude://session/<session-name>?match=<term>'
+reveal 'claude://session/<session-name>' --match '<term>'
 ```
 
 **Examples**:
@@ -1079,7 +1079,7 @@ reveal claude://session/infernal-earth-0118 --match credential
 
 **Syntax**:
 ```bash
-reveal 'claude://session/<session-name>/messages?match=<text>'
+reveal 'claude://session/<session-name>/messages' --match '<text>'
 ```
 
 **Examples**:
@@ -1124,7 +1124,7 @@ reveal claude://session/infernal-earth-0118/messages --detail raw
 
 **Syntax**:
 ```bash
-reveal 'claude://session/<session-name>/messages?sort=-message_index&limit=N'
+reveal 'claude://session/<session-name>/messages' --limit N --sort=-message_index
 ```
 
 **Examples**:
@@ -1159,7 +1159,7 @@ Combine multiple query parameters:
 reveal claude://session/my-session --errors --tools Bash
 
 # Assistant narrative turns about reveal
-reveal 'claude://session/my-session/messages?match=reveal'
+reveal claude://session/my-session/messages --match reveal
 
 # Read operations with errors
 reveal claude://session/my-session --errors --tools Read
@@ -1583,7 +1583,7 @@ echo "=== Session Overview ==="
 reveal claude://session/$SESSION
 
 echo -e "\n=== Errors ==="
-reveal "claude://session/$SESSION?errors"
+reveal "claude://session/$SESSION" --errors
 
 echo -e "\n=== Tool Usage ==="
 reveal claude://session/$SESSION/tools
@@ -2392,12 +2392,12 @@ reveal claude://session/$SESSION/tools --format json | \
 
 # Error count
 echo -e "\n## Errors"
-ERROR_COUNT=$(reveal "claude://session/$SESSION?errors" --format json | jq -r '.error_count // 0')
+ERROR_COUNT=$(reveal "claude://session/$SESSION" --errors --format json | jq -r '.error_count // 0')
 echo "Total errors: $ERROR_COUNT"
 
 if [ "$ERROR_COUNT" -gt 0 ]; then
   echo "Error details:"
-  reveal "claude://session/$SESSION?errors" --format json | \
+  reveal "claude://session/$SESSION" --errors --format json | \
     jq -r '.errors[] | "  - [\(.context.tool_name)] \(.content_preview)"'
 fi
 
@@ -2512,7 +2512,7 @@ SESSION="$1"
 WEBHOOK_URL="https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
 
 SUCCESS_RATE=$(reveal claude://session/$SESSION/tools --format json | jq -r '([.tools[] | .success] | add) / ([.tools[] | .count] | add) * 100')
-ERROR_COUNT=$(reveal "claude://session/$SESSION?errors" --format json | jq -r '.error_count // 0')
+ERROR_COUNT=$(reveal "claude://session/$SESSION" --errors --format json | jq -r '.error_count // 0')
 
 if (( $(echo "$SUCCESS_RATE < 70" | bc -l) )) || [ "$ERROR_COUNT" -gt 10 ]; then
   MESSAGE="{
@@ -3067,7 +3067,7 @@ A: `reveal claude://session/my-session/files` - Look for `access_count > 3`
 A: Yes:
 ```bash
 reveal claude://session/my-session --errors --tools Bash
-reveal 'claude://session/my-session/messages?match=reveal'
+reveal claude://session/my-session/messages --match reveal
 ```
 
 ---

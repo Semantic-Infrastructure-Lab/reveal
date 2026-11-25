@@ -508,7 +508,7 @@ done | jq -s '.'
 ```bash
 # Search for functions matching pattern, limit per file
 for file in $(find src -name "*.py"); do
-    reveal "ast://$file?kind=function&name~=.*handler.*" \
+    reveal ast "$file" --kind function --where 'name~=.*handler.*' \
         --max-items=20 \
         --fields=name,line,complexity \
         --format=json
