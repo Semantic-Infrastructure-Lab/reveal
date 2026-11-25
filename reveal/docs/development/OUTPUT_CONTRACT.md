@@ -493,10 +493,13 @@ Any other answer prints one stderr line after the answer: `note: <old> is deprec
 two entries. `reveal.api.query` returns the same entry in the answer's `meta.warnings` on every declared noun
 (BACK-2654; earlier versions omitted it on most nouns). The MCP server never writes the note to stderr: a JSON
 result carries the same entry, and a text result ends with a `[note: ...]` line. At the `error` stage (the cut release) the
-same text is an error and the exit code is 2. A spelling deleted outright rather than renamed is a
-`removed` row: it is at the `error` stage from the start and prints
-`error: <old> was removed; use <replacement>.` (`python://`, BACK-2225). A `phase7` row is recorded
-and prints nothing yet.
+same text is an error and the exit code is 2: stderr says `error: <text>`, and `--format json` stdout is the
+invalid-request document every other refusal of that route answers (one `meta.errors` entry with code `invalid_request`,
+the text as its message and as `error`; BACK-2627). A command that is not a declared noun (`check`, `health`) answers no
+refusal with that document, so its own retired spellings print the stderr line only. A spelling deleted outright rather
+than renamed is a `removed` row: it is at the `error` stage from the start and prints
+`error: <old> was removed; use <replacement>.` (`python://`, BACK-2225), its JSON document typed by the scheme. A
+`phase7` row is recorded and prints nothing yet.
 
 ### Configuration warnings (`config_warning`)
 
