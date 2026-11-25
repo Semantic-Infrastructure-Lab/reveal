@@ -8,7 +8,9 @@ help_category: feature_guides
 
 # Query Syntax Guide
 
-Complete reference for the unified query syntax that works consistently across all of Reveal's query-capable adapters. All operators use the same underlying comparison logic (`compare_values()` in `reveal/utils/query_eval.py`), ensuring consistent behavior across adapters.
+Complete reference for the filter expressions (`--where 'FIELD OP VALUE'`) and result controls (`--sort`, `--limit`, `--offset`) that work the same way on every noun that filters rows. All operators use the same underlying comparison logic (`compare_values()` in `reveal/utils/query_eval.py`), ensuring consistent behavior across nouns.
+
+Options are flags: `reveal NOUN TARGET --where ... --sort ...`, and a resource URI takes the same flags (`reveal git://app.py@main --view history --limit 5`). The older query-string spelling (`reveal 'ast://src?complexity>10&sort=-lines'`) still answers until 1.0 with a note naming its flag form, then exits 2; the operators below are the same in both.
 
 ---
 
@@ -33,34 +35,34 @@ reveal git . --where 'message~=bug.*fix'
 
 ---
 
-## Convenience Flags vs URI Syntax (NEW - v0.47.3)
+## File Flags vs the `ast` Noun
 
-**For simple within-file queries, use convenience flags instead of URI syntax.**
+**For simple within-file queries, use the file read's own flags; for filters, use `reveal ast`.**
 
 ### Ergonomic Flags for Common Operations
 
 ```bash
 # Search by name pattern
 reveal file.py --name connection
-# Equivalent to: reveal 'ast://file.py?name~=connection'
+# Equivalent to: reveal ast file.py --where 'name~=connection'
 
 # Filter by element type
 reveal file.py --type function
-# Equivalent to: reveal 'ast://file.py?kind=function'
+# Equivalent to: reveal ast file.py --kind function
 
 # Sort results
-reveal file.py --sort complexity          # Ascending
-reveal file.py --sort=-complexity         # Descending
-# Equivalent to: reveal 'ast://file.py?sort=complexity' or 'ast://file.py?sort=-complexity'
+reveal file.py --sort complexity    # Ascending
+reveal file.py --sort=-complexity   # Descending
+# Equivalent to: reveal ast file.py --sort complexity (or --sort=-complexity)
 
 # Combine flags
 reveal file.py --name test --type function --sort=-line_count
-# Equivalent to: reveal 'ast://file.py?name~=test&kind=function&sort=-line_count'
+# Equivalent to: reveal ast file.py --where 'name~=test' --kind function --sort=-line_count
 ```
 
-### When to Use Convenience Flags
+### When to Use File Flags
 
-**Use flags for** (80% of queries):
+**Use the file read's flags for** (80% of queries):
 - ✅ Searching within a single file
 - ✅ Simple name pattern matching
 - ✅ Basic type filtering
@@ -68,28 +70,28 @@ reveal file.py --name test --type function --sort=-line_count
 - ✅ Quick grep-like workflows
 - ✅ File target options (`--links` on markdown, `--diagnose` on nginx files)
 
-**Use URI syntax for** (20% of queries):
-- ✅ Multiple conditions: `?complexity>10&lines>50`
-- ✅ Range queries: `?lines=10..50`
-- ✅ Boolean logic: `?type=function|method`
-- ✅ Cross-directory queries: `ast://./src?name=*test*`
-- ✅ Adapter-specific params: `git://.?author=John&since=2024-01-01`
-- ✅ Batch/pipeline workflows where options must travel with the URI
+**Use a noun (`reveal ast`, `reveal git`, ...) with `--where` for** (20% of queries):
+- ✅ Multiple conditions: `--where 'complexity>10' --where 'lines>50'`
+- ✅ Range queries: `--where lines=10..50`
+- ✅ Either of two kinds: `--kind 'function|method'`
+- ✅ Directory-wide queries: `reveal ast ./src --where 'name=*test*'`
+- ✅ A noun's own controls: `reveal git . --where author=John --since 2024-01-01`
+- ✅ Batch/pipeline workflows: each `--stdin` line is a whole request, flags included (`ast src --where 'complexity>10'`)
 
-> **Architectural note**: For URI adapters (`cpanel://`, `ssl://`, `domain://`, etc.), adapter-specific options belong in the URI query string — not as CLI flags. File target options (`--diagnose`, `--links`, `--frontmatter`) stay as CLI flags. See [ADAPTER_CONSISTENCY.md](../development/ADAPTER_CONSISTENCY.md#adapter-specific-flags-vs-query-parameters).
+> **Architectural note**: options are flags on every noun: `reveal NOUN TARGET --option value`. A URI names a resource (`git://app.py@main`, `claude://session/NAME`, `json://data.json/users`) and takes the same flags, with the same answer and exit code. A query string (`?option=value`) is the retiring spelling: it answers with a note naming the flag form until 1.0, then exits 2. The hosting-ops adapters (`cpanel://`, `ssl://`, `domain://`, ...) are outside this rule: they are moving to a separate package and keep their query options.
 
 ### Comparison Table
 
-| Task | Convenience Flag | URI Syntax |
-|------|-----------------|------------|
-| Find by name | `reveal file.py --name pattern` | `reveal 'ast://file.py?name~=pattern'` |
-| Filter type | `reveal file.py --type function` | `reveal 'ast://file.py?kind=function'` |
-| Sort | `reveal file.py --sort complexity` | `reveal 'ast://file.py?sort=complexity'` |
-| Complex filter | ❌ (not supported) | `reveal 'ast://src/?complexity>10&lines>50&kind=function&sort=-complexity'` |
+| Task | File flag | `ast` noun |
+|------|-----------|------------|
+| Find by name | `reveal file.py --name pattern` | `reveal ast file.py --where 'name~=pattern'` |
+| Filter type | `reveal file.py --type function` | `reveal ast file.py --kind function` |
+| Sort | `reveal file.py --sort complexity` | `reveal ast file.py --sort complexity` |
+| Complex filter | ❌ (not supported) | `reveal ast src/ --where 'complexity>10' --where 'lines>50' --kind function --sort=-complexity` |
 
 ### Progressive Escalation
 
-Start simple (flags), escalate to URI syntax when needed:
+Start simple (file flags), escalate to the `ast` noun when needed:
 
 ```bash
 # Step 1: Simple search
@@ -101,47 +103,47 @@ reveal file.py --name authenticate --type function
 # Step 3: Add sorting
 reveal file.py --name authenticate --type function --sort=-complexity
 
-# Step 4: Need complex conditions? Use URI syntax
-# Note: --name <pattern> becomes ?name~=<pattern> in URI form (intentional rename)
+# Step 4: Need complex conditions? Use the ast noun
+# Note: --name PATTERN becomes --where 'name~=PATTERN' (a filter on the name field)
 reveal ast file.py --where 'name~=authenticate' --where 'complexity>10' --where 'lines>50' --kind function --sort=-complexity
 ```
 
 ---
 
-## Query-Capable Adapters
+## Nouns with Field Filters
 
-These 5 adapters support the unified query syntax:
+These 5 nouns take the filter expressions and result controls below:
 
-| Adapter | Query Fields | Example |
-|---------|--------------|---------|
-| **json://** | Any JSON field | `json://data.json?age>25&role=admin` |
-| **markdown://** | Frontmatter fields | `markdown://docs/?status=draft&tags~=python` |
-| **metrics://** | File metrics | `metrics://src/?complexity>10&lines<100` |
-| **ast://** | Code elements | `ast://src/?kind=function&lines>50` |
-| **git://** | Commit metadata | `git://.?author=John&message~=fix` |
+| Noun | Filter fields | Example |
+|------|---------------|---------|
+| **json** | Any JSON field | `reveal json data.json --where 'age>25' --where role=admin` |
+| **markdown** | Frontmatter fields | `reveal markdown docs/ --where status=draft --where 'tags~=python'` |
+| **metrics** | File metrics | `reveal metrics src/ --where 'complexity>10' --where 'lines<100'` |
+| **ast** | Code elements | `reveal ast src/ --kind function --where 'lines>50'` |
+| **git** | Commit metadata | `reveal git . --where author=John --where 'message~=fix'` |
 
 ---
 
 ## Universal Operators
 
-All 5 adapters support these operators through the unified `compare_values()` function:
+All 5 nouns support these operators in `--where` through the unified `compare_values()` function:
 
 ### Comparison Operators
 
 | Operator | Description | Example | Matches |
 |----------|-------------|---------|---------|
-| `=` or `==` | Exact match (case-insensitive on json:// and git://; case-sensitive on markdown:// and ast://) | `status=active` | "active", "Active", "ACTIVE" (json://) |
+| `=` or `==` | Exact match (case-insensitive on json and git; case-sensitive on markdown and ast) | `status=active` | "active", "Active", "ACTIVE" (json) |
 | `!=` | Not equal | `status!=draft` | Anything except "draft" |
 | `>` | Greater than | `lines>50` | 51, 100, 200... |
 | `<` | Less than | `complexity<10` | 1, 5, 9... |
 | `>=` | Greater or equal | `priority>=5` | 5, 6, 10... |
 | `<=` | Less or equal | `functions<=20` | 1, 10, 20 |
-| `~=` | Regex match (ignores case; case-sensitive on ast://) | `message~=bug.*fix` | "Bug fix", "fixed bug fix" |
+| `~=` | Regex match (ignores case; case-sensitive on ast) | `message~=bug.*fix` | "Bug fix", "fixed bug fix" |
 | `!~` | Regex does not match | `email!~@company.com` | any email not at company.com |
 | `..` | Range (inclusive) | `lines=50..200` | 50, 100, 200 |
 
-`~=` and `!~` ignore case on json://, markdown://, git:// and metrics://, and are case-sensitive on
-ast:// (code is case-sensitive; start the pattern with `(?i)` there to ignore case). The negated regex is `!~` (not `!~=`, which is mis-parsed and
+`~=` and `!~` ignore case on json, markdown, git and metrics, and are case-sensitive on
+ast (code is case-sensitive; start the pattern with `(?i)` there to ignore case). The negated regex is `!~` (not `!~=`, which is mis-parsed and
 filters everything out).
 
 ### Type Coercion
@@ -151,7 +153,7 @@ filters everything out).
 - Non-numeric strings fail gracefully (no match)
 
 **String comparison**:
-- `=` is case-insensitive on json:// and git://, case-sensitive on markdown:// and ast://
+- `=` is case-insensitive on json and git, case-sensitive on markdown and ast
 - git: `author=John` matches "john", "John", "JOHN" (the whole author name)
 
 **Boolean coercion**:
@@ -164,15 +166,15 @@ filters everything out).
 
 Control how results are sorted and paginated:
 
-| Parameter | Description | Example |
-|-----------|-------------|---------|
-| `sort=field` | Sort ascending | `sort=lines` |
-| `sort=-field` | Sort descending | `sort=-complexity` |
-| `limit=N` | Limit to N results | `limit=20` |
-| `offset=M` | Skip first M results | `offset=10` (pagination) |
+| Flag | Description | Example |
+|------|-------------|---------|
+| `--sort FIELD` | Sort ascending | `--sort lines` |
+| `--sort=-FIELD` | Sort descending | `--sort=-complexity` |
+| `--limit N` | Limit to N results (`0` = no cap) | `--limit 20` |
+| `--offset M` | Skip first M results | `--offset 10` (pagination) |
 
-`null` and missing values sort last in both directions on `json://`, `ast://`, `markdown://`,
-`metrics://` and `git://`, in their source order, so `sort=-age` lists the largest ages first and
+`null` and missing values sort last in both directions on `json`, `ast`, `markdown`,
+`metrics` and `git`, in their source order, so `--sort=-age` lists the largest ages first and
 the people with no age at the end. A missing value is not sorted as a zero.
 
 ### Examples
@@ -195,20 +197,20 @@ reveal json data.json --where status=active --sort name --limit 10 --offset 10
 
 ## Adapter-by-Adapter Examples
 
-### json:// - JSON Data Filtering
+### json - JSON Data Filtering
 
 **Numeric filters**:
 ```bash
-reveal json data.json --where 'age>25'                    # Age over 25
-reveal json data.json --where 'count>=100'                # Count 100+
-reveal json data.json --where score=80..95              # Score range
+reveal json data.json --where 'age>25'       # Age over 25
+reveal json data.json --where 'count>=100'   # Count 100+
+reveal json data.json --where score=80..95   # Score range
 ```
 
 **String filters**:
 ```bash
-reveal json data.json --where status=active             # Exact match
-reveal json data.json --where 'status!=draft'             # Not draft
-reveal json data.json --where 'name~=john'                # Name contains "john" (any case)
+reveal json data.json --where status=active     # Exact match
+reveal json data.json --where 'status!=draft'   # Not draft
+reveal json data.json --where 'name~=john'      # Name contains "john" (any case)
 ```
 
 **Combined filters**:
@@ -224,18 +226,18 @@ reveal json data.json --where role=admin --sort=-age --limit 10
 
 ---
 
-### markdown:// - Frontmatter Queries
+### markdown - Frontmatter Queries
 
 **Status filtering**:
 ```bash
-reveal markdown docs/ --where status=draft              # Draft documents
-reveal markdown docs/ --where 'status!=archived'          # Not archived
+reveal markdown docs/ --where status=draft         # Draft documents
+reveal markdown docs/ --where 'status!=archived'   # Not archived
 ```
 
 **Tag filtering**:
 ```bash
-reveal markdown docs/ --where 'tags~=python'              # Tagged "python" (any case)
-reveal markdown docs/ --where 'tags~=api' --where status=complete # Python APIs, complete
+reveal markdown docs/ --where 'tags~=python'                        # Tagged "python" (any case)
+reveal markdown docs/ --where 'tags~=api' --where status=complete   # Tagged "api" and complete
 ```
 
 **Date filtering**:
@@ -253,15 +255,15 @@ bounds both work. A short bound such as `2026-02` excludes every February date
 reveal markdown docs/ --where 'priority>=5' --limit 10
 ```
 
-markdown:// filters on any frontmatter key but sorts only on the fields it puts in each result
-(`path`, `relative_path`, `modified`, `mtime`, `status`, `has_frontmatter`); `sort=-priority`
+markdown filters on any frontmatter key but sorts only on the fields it puts in each result
+(`path`, `relative_path`, `modified`, `mtime`, `status`, `has_frontmatter`); `--sort=-priority`
 leaves the results unsorted with a warning.
 
 **Body text search** (markdown-specific):
 ```bash
-reveal markdown docs/ --match nginx                     # Body mentions "nginx"
-reveal markdown docs/ --match nginx --match ssl   # Body mentions both (AND)
-reveal markdown docs/ --where type=guide --match nginx --limit 5  # Combine with frontmatter + limit
+reveal markdown docs/ --match nginx                                # Body mentions "nginx"
+reveal markdown docs/ --match nginx --match ssl                    # Body mentions both (AND)
+reveal markdown docs/ --where type=guide --match nginx --limit 5   # Combine with frontmatter + limit
 ```
 
 **Field existence** (markdown-specific):
@@ -271,28 +273,28 @@ reveal markdown docs/ --where '!published'                # No published date
 
 ---
 
-### metrics:// - File Metrics Filtering
+### metrics - File Metrics Filtering
 
 **Complexity filtering**:
 ```bash
-reveal metrics src/ --where 'complexity>10'                 # Complex files
-reveal metrics src/ --where complexity=5..15              # Medium complexity
+reveal metrics src/ --where 'complexity>10'    # Complex files
+reveal metrics src/ --where complexity=5..15   # Medium complexity
 ```
 
-A metrics:// range (`field=a..b`) is inclusive and returns the same files as
-`field>=a&field<=b`.
+A metrics range (`--where field=a..b`) is inclusive and returns the same files as
+`--where 'field>=a' --where 'field<=b'`.
 
 **Size filtering**:
 ```bash
-reveal metrics src/ --where 'lines>500'                     # Large files
-reveal metrics src/ --where 'lines<50'                      # Small files
-reveal metrics src/ --where lines=100..500                # Medium files
+reveal metrics src/ --where 'lines>500'      # Large files
+reveal metrics src/ --where 'lines<50'       # Small files
+reveal metrics src/ --where lines=100..500   # Medium files
 ```
 
 **Quality filtering**:
 ```bash
-reveal metrics src/ --where 'quality<50'                    # Low quality
-reveal metrics src/ --where 'functions>20'                  # Many functions
+reveal metrics src/ --where 'quality<50'     # Low quality
+reveal metrics src/ --where 'functions>20'   # Many functions
 ```
 
 **Hotspot analysis**:
@@ -309,30 +311,30 @@ reveal metrics src/ --where 'lines<100' --where 'complexity>15'
 
 ---
 
-### ast:// - Code Element Filtering
+### ast - Code Element Filtering
 
 **Type filtering** (AST-specific `in` operator):
 ```bash
-reveal ast src/ --kind function                   # Functions only
-reveal ast src/ --kind class                      # Classes only
+reveal ast src/ --kind function   # Functions only
+reveal ast src/ --kind class      # Classes only
 ```
 
 **Complexity filtering**:
 ```bash
-reveal ast src/ --where 'complexity>10'                   # Complex elements
-reveal ast src/ --where 'complexity<=5'                   # Simple elements
+reveal ast src/ --where 'complexity>10'   # Complex elements
+reveal ast src/ --where 'complexity<=5'   # Simple elements
 ```
 
 **Size filtering**:
 ```bash
-reveal ast src/ --where 'lines>50'                        # Long functions
-reveal ast src/ --where lines=20..50                    # Medium functions
+reveal ast src/ --where 'lines>50'     # Long functions
+reveal ast src/ --where lines=20..50   # Medium functions
 ```
 
 **Name filtering** (glob support):
 ```bash
-reveal ast src/ --where 'name=test_*'                     # Test functions
-reveal ast src/ --where 'name~=^get_'                     # Getters (regex)
+reveal ast src/ --where 'name=test_*'   # Test functions
+reveal ast src/ --where 'name~=^get_'   # Getters (regex)
 ```
 
 **Quality queries**:
@@ -349,20 +351,20 @@ reveal ast src/ --where 'lines<30' --where 'complexity>10'
 
 ---
 
-### git:// - Commit Filtering
+### git - Commit Filtering
 
 **Author filtering**:
 ```bash
-reveal git . --where author=John                        # Exact full-name match (use author~= for part of a name)
-reveal git . --where 'author~=john'                       # Contains "john" (any case)
-reveal git . --where 'email~=@example.com'                # Company emails
+reveal git . --where author=John             # Exact full-name match (use author~= for part of a name)
+reveal git . --where 'author~=john'          # Contains "john" (any case)
+reveal git . --where 'email~=@example.com'   # Company emails
 ```
 
 **Message filtering**:
 ```bash
-reveal git . --where 'message~=bug'                       # Bug fixes
-reveal git . --where 'message~=^feat:'                    # Features (conventional commits)
-reveal git . --where 'message~=(fix|bug)'                 # Fixes or bugs
+reveal git . --where 'message~=bug'         # Bug fixes
+reveal git . --where 'message~=^feat:'      # Features (conventional commits)
+reveal git . --where 'message~=(fix|bug)'   # Fixes or bugs
 ```
 
 **Combined filters**:
@@ -384,11 +386,11 @@ reveal git . --where hash=a1b2c3                        # Commit by prefix
 
 **Date filtering**:
 ```bash
-reveal git . --where 'date>2026-02-01'                    # After 1 Feb (1 Feb itself excluded)
-reveal git . --where 'date>=2026-02-01'                   # From 1 Feb on (1 Feb included)
-reveal git . --since 2026-01-01 --until 2026-01-31  # All of January
-reveal git . --where date=2026-02-06                    # Any commit on 6 Feb
-reveal git . --where 'date>2026-10-27T22:00:00Z'          # After 22:00 UTC (zone converted)
+reveal git . --where 'date>2026-02-01'               # After 1 Feb (1 Feb itself excluded)
+reveal git . --where 'date>=2026-02-01'              # From 1 Feb on (1 Feb included)
+reveal git . --since 2026-01-01 --until 2026-01-31   # All of January
+reveal git . --where date=2026-02-06                 # Any commit on 6 Feb
+reveal git . --where 'date>2026-10-27T22:00:00Z'     # After 22:00 UTC (zone converted)
 ```
 
 A year, month or day bound names the whole period: `date=P` is any time in P, `date!=P` any time
@@ -400,9 +402,9 @@ written in the local time of the machine running reveal with its UTC offset (`20
 and a bound compares the clock part; a bound with a zone
 (`Z`, `+02:00`) is converted to that local time first, and `+` is written as itself.
 
-A filter on a field no commit has (`git://.?authr~=Scott`, bare or in `where=`) is an invalid request: exit 2,
+A filter on a field no commit has (`reveal git . --where 'authr~=Scott'`) is an invalid request: exit 2,
 naming the supported controls and the commit fields (`hash`, `author`, `email`, `date`, `timestamp`, `message` and
-`content`), as on metrics://. Git and Metrics have a fixed field list; json:// and markdown://, whose fields come from
+`content`), as on metrics. Git and Metrics have a fixed field list; json and markdown, whose fields come from
 the data, answer instead with an `unknown_filter_field` warning (exit 0).
 
 **File history**:
@@ -464,7 +466,7 @@ matches nothing (no lexicographic fallback): `name>m` returns no rows. Use a ran
 
 **Pattern matching**:
 - Uses Python `re` module (a search, not a full match)
-- Ignores case except on ast:// (prefix `(?i)` there to ignore case)
+- Ignores case except on ast (prefix `(?i)` there to ignore case)
 - `message~=bug.*fix` matches "Bug fix for login"
 
 **Common patterns**:
@@ -501,7 +503,7 @@ matches nothing (no lexicographic fallback): `name>m` returns no rows. Use a ran
 
 ## Multiple Filters (AND Logic)
 
-Combine filters with `&` - all must match:
+Repeat `--where` - every filter must match:
 
 ```bash
 # JSON: Admin users over 30
@@ -510,7 +512,7 @@ reveal json data.json --where role=admin --where 'age>30'
 # Markdown: High-priority Python docs
 reveal markdown docs/ --where 'tags~=python' --where 'priority>=5' --where status=draft
 
-# Stats: Large, complex files
+# Metrics: Large, complex files
 reveal metrics src/ --where 'lines>200' --where 'complexity>10'
 
 # Git: John's bug fixes this year
@@ -523,8 +525,9 @@ reveal ast src/ --where 'lines>100' --where 'complexity>15' --kind function
 **Behavior**:
 - Filters are ANDed together
 - Each filter narrows results
-- A key may repeat and every condition applies: `ast://src/?kind=function&kind!=method`, `json://data.json?age>30&age<40`
-- No general OR operator: ast:// accepts `type=a|b`; elsewhere use a regex `~=(foo|bar)`
+- A field may repeat and every condition applies: `reveal ast src/ --kind function --where 'kind!=method'`,
+  `reveal json data.json --where 'age>30' --where 'age<40'`
+- No general OR operator: ast's `--kind` accepts `'function|method'`; elsewhere use a regex `~=(foo|bar)`
 
 ---
 
@@ -630,13 +633,13 @@ The `compare_values()` function accepts options to configure behavior per adapte
 
 | Adapter | List Matching | Case Sensitive (`=`) | Numeric Coercion | Null != |
 |---------|---------------|----------------|------------------|---------|
-| **json://** | ✅ Any | ❌ No | ✅ Yes | ✅ Yes |
-| **markdown://** | ✅ Any | ✅ Yes | ✅ Yes | ✅ Yes |
-| **metrics://** | ❌ No | ❌ No | ✅ Yes | ❌ No |
-| **ast://** | ❌ No | ✅ Yes | ✅ Yes | ❌ No |
-| **git://** | ❌ No | ❌ No | ✅ Yes | ✅ Yes |
+| **json** | ✅ Any | ❌ No | ✅ Yes | ✅ Yes |
+| **markdown** | ✅ Any | ✅ Yes | ✅ Yes | ✅ Yes |
+| **metrics** | ❌ No | ❌ No | ✅ Yes | ❌ No |
+| **ast** | ❌ No | ✅ Yes | ✅ Yes | ❌ No |
+| **git** | ❌ No | ❌ No | ✅ Yes | ✅ Yes |
 
-The column is about `=` and wildcards. `~=` and `!~` follow the same setting, except on markdown://:
+The column is about `=` and wildcards. `~=` and `!~` follow the same setting, except on markdown:
 there `=` and wildcards are case-sensitive (a plain `field=value` filter) but `~=`/`!~` ignore case.
 
 **Rationale**:
@@ -725,11 +728,11 @@ reveal json users.json --where age=25..35 --where status=active
 
 ### 1. Use Quotes
 
-Shell may interpret `?` and `&`:
+Quote a filter whose value holds a shell character (`>`, `<`, `|`, `&`, `*`, `$`, `!`, `(`):
 
 ```bash
-reveal json data.json --where 'age>25'    # ✅ Correct: the quotes keep > in the value
-reveal json data.json --where age>25      # ❌ Unquoted, the shell reads >25 as a redirect to a file named 25
+reveal json data.json --where 'age>25'   # ✅ Correct: the quotes keep > in the value
+reveal json data.json --where age>25     # ❌ Unquoted, the shell reads >25 as a redirect to a file named 25
 ```
 
 ---
@@ -794,7 +797,7 @@ reveal git . --where author=John --where 'message~=bug' --sort=-date --limit 10
 
 ## See Also
 
-- [Query Parameter Reference](QUERY_PARAMETER_REFERENCE.md) - Adapter-specific parameters
+- [Query Parameter Reference](QUERY_PARAMETER_REFERENCE.md) - Each noun's own options
 - [Adapter Authoring Guide](../development/ADAPTER_AUTHORING_GUIDE.md) - Add query support to custom adapters
 - [Agent Help](../AGENT_HELP.md) - AI agent integration guide
 - [Output Contract](../development/OUTPUT_CONTRACT.md) - Adapter output specification
