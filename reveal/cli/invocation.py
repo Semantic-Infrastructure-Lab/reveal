@@ -50,6 +50,13 @@ class CommandSpec(NamedTuple):
     # Whether the command writes the --also-json artifact. The one declaration: a command that
     # does not rejects the flag with exit 2 and leaves it out of its --help (BACK-2094).
     also_json: bool = False
+    # Where `--agent-help` teaches the command (BACK-1055; COMMAND_MODEL rule 6): its COMMAND_ROLES
+    # entry, its rung on the plan's ladder (0 orient .. 5 judgment inputs; None: not a ladder rung)
+    # and one runnable subcommand-form starter, which the executable-docs harness runs. A retired
+    # command declares none of the three, so no generated screen teaches it.
+    role: str = ''
+    rung: Optional[int] = None
+    starter: str = ''
 
     def load(self) -> Tuple[ArgumentParser, Callable[[Namespace], None]]:
         if self.declared_adapter:
@@ -62,14 +69,24 @@ class CommandSpec(NamedTuple):
 
 
 def _spec(name: str, usage: str, summary: str, formats: Optional[Tuple[str, ...]] = None,
-          help_guide: str = '', also_json: bool = False) -> CommandSpec:
+          help_guide: str = '', also_json: bool = False,
+          role: str = '', rung: Optional[int] = None, starter: str = '') -> CommandSpec:
     return CommandSpec(f'reveal.cli.commands.{name}', f'create_{name}_parser', f'run_{name}',
-                       formats, usage, summary, help_guide, also_json=also_json)
+                       formats, usage, summary, help_guide, also_json=also_json,
+                       role=role, rung=rung, starter=starter)
 
 
-def _declared(name: str, usage: str, summary: str, help_guide: str = '') -> CommandSpec:
+def _declared(name: str, usage: str, summary: str, help_guide: str = '',
+              role: str = '', rung: Optional[int] = None, starter: str = '') -> CommandSpec:
     """A noun the same-named adapter declares: no module of its own, `load()` builds both from the declaration."""
-    return CommandSpec('', '', '', None, usage, summary, help_guide, declared_adapter=name, also_json=True)
+    return CommandSpec('', '', '', None, usage, summary, help_guide, declared_adapter=name, also_json=True,
+                       role=role, rung=rung, starter=starter)
+
+
+# What a command is on the `--agent-help` screen (COMMAND_MODEL rule 1): a code noun answers on the ladder,
+# a verb acts on any target, a resource reads a data or session store, ops probes hosts, tooling maintains
+# reveal itself. The screen renders the roles in this order (BACK-1055).
+COMMAND_ROLES: Tuple[str, ...] = ('noun', 'verb', 'resource', 'ops', 'tooling')
 
 
 _SUBCOMMANDS_GUIDE = 'guides/SUBCOMMANDS_GUIDE.md'
@@ -80,70 +97,89 @@ _SUBCOMMANDS_GUIDE = 'guides/SUBCOMMANDS_GUIDE.md'
 # runners render only these formats (measured: grep/typed output matched text byte for byte).
 COMMANDS: Dict[str, CommandSpec] = {
     'ast':         _declared('ast', 'reveal ast [path] [--where EXPR] [--kind KIND]',
-                     'Find code elements by properties; repeated --where expressions are ANDed'),
+                     'Find code elements by properties; repeated --where expressions are ANDed',
+                     role='noun', rung=1, starter="reveal ast src/ --where 'complexity>10' --sort=-complexity --limit 10"),
     'architecture': _declared('architecture',
                      'reveal architecture [path] [--against REF]',
                      'Retired: use reveal overview [path] [--against REF]'),
     'calls':        _declared('calls',
                      'reveal calls --callers FUNC',
-                     'Call graph: callers, callees (--depth N, --detail full), --sort=-callers'),
+                     'Call graph: callers, callees (--depth N, --detail full), --sort=-callers',
+                     role='noun', rung=3, starter='reveal calls src/ --callers main'),
     'check':        _spec('check',
                      'reveal check <path>',
                      'Run quality rules on a file or directory',
                      ('text', 'json', 'grep'),  # also PATH --check (BACK-1644)
-                     help_guide=_SUBCOMMANDS_GUIDE, also_json=True),
+                     help_guide=_SUBCOMMANDS_GUIDE, also_json=True,
+                     role='verb', rung=5, starter='reveal check src/'),
     'claude':       _declared('claude', 'reveal claude [RESOURCE] [--view VIEW] [--match TEXT]',
-                     'Inspect Claude sessions and installation resources through declared controls'),
+                     'Inspect Claude sessions and installation resources through declared controls',
+                     role='resource', starter='reveal claude sessions --match auth'),
     'codex':        _declared('codex', 'reveal codex [RESOURCE] [--since DATE] [--limit N]',
-                     'Inspect Codex CLI sessions and installation resources through declared controls'),
+                     'Inspect Codex CLI sessions and installation resources through declared controls',
+                     role='resource', starter='reveal codex sessions'),
     'contracts':    _declared('contracts',
                      'reveal contracts [path]',
-                     'Architectural seams: ABCs, Protocols/interfaces, TypedDicts, dataclasses'),
+                     'Architectural seams: ABCs, Protocols/interfaces, TypedDicts, dataclasses',
+                     role='noun', rung=5, starter='reveal contracts src/'),
     'deps':         _declared('deps',
                      'reveal deps [path]',
                      'Retired: use reveal imports <path> --external, --circular or --unused (one graph build); '
                      'dependency health: external packages, circular deps, unused imports'),
     'diff':         _declared('diff', 'reveal diff LEFT RIGHT[/ELEMENT]',
-                     'Compare the structure of two files, directories or git versions, or one element across them'),
+                     'Compare the structure of two files, directories or git versions, or one element across them',
+                     role='verb', rung=5, starter='reveal diff v1.py v2.py'),
     'help':         _declared('help', 'reveal help [TOPIC] [--match TEXT] [--limit N]',
-                     "Reveal's own help: a guide, an adapter or a topic (help://TOPIC), or a full-text search with --match"),
+                     "Reveal's own help: a guide, an adapter or a topic (help://TOPIC), or a full-text search with --match",
+                     role='verb', starter='reveal help quick'),
     'dev':          _spec('dev',
                      'reveal dev <command>',
                      'Scaffold adapters/analyzers/rules; inspect effective `.reveal.yaml` config',
-                     help_guide=_SUBCOMMANDS_GUIDE),
+                     help_guide=_SUBCOMMANDS_GUIDE,
+                     role='tooling', starter='reveal dev inspect-config'),
     'health':       _spec('health',
                      'reveal health [URI...]',
                      'Ops health: SSL + databases + DNS + nginx',
-                     ('text', 'json'), help_guide=_SUBCOMMANDS_GUIDE),
+                     ('text', 'json'), help_guide=_SUBCOMMANDS_GUIDE,
+                     role='ops', starter='reveal health sqlite://app.db'),
     'hotspots':     _declared('hotspots',
                      'reveal hotspots [path]',
                      'Retired: use reveal metrics <path> --view hotspots (files, --fail-on findings) and reveal ast '
                      '<path> --sort=-complexity (functions); high-complexity files and functions'),
     'imports':      _declared('imports',
                      'reveal imports [path]',
-                     'Import graph: who imports what (--importers), fan-in, cycles, unused imports, layer violations'),
+                     'Import graph: who imports what (--importers), fan-in, cycles, unused imports, layer violations',
+                     role='noun', rung=3, starter='reveal imports src/ --importers src/validators.py'),
     'git':          _declared('git', 'reveal git [path[@REF]] [--view VIEW] [--where EXPR]',
-                             'Inspect repository history and historical files'),
+                             'Inspect repository history and historical files',
+                     role='noun', rung=3, starter='reveal git src/app.py --view history'),
     'json':         _declared('json', 'reveal json FILE[/KEY] [--where EXPR] [--view VIEW]',
-                     'Navigate JSON data, filter array elements or inspect schema, keys and types'),
+                     'Navigate JSON data, filter array elements or inspect schema, keys and types',
+                     role='resource', starter='reveal json package.json/scripts'),
     'markdown':     _declared('markdown', 'reveal markdown [path] [--where EXPR] [--match TEXT]',
-                     'Find documents by frontmatter/body; inspect links and aggregate fields'),
+                     'Find documents by frontmatter/body; inspect links and aggregate fields',
+                     role='noun', rung=3, starter='reveal markdown docs/ --backlinks docs/auth.md'),
     'metrics':      _declared('metrics',
                      'reveal metrics [path]',
-                     'Per-file lines, complexity and quality; --view hotspots ranks files; --view provenance tags every file'),
+                     'Per-file lines, complexity and quality; --view hotspots ranks files; --view provenance tags every file',
+                     role='noun', rung=5, starter='reveal metrics src/ --view hotspots'),
     'offline':      _spec('offline',
                      'reveal offline',
-                     'Pre-download tree-sitter grammars for offline/air-gapped use'),
+                     'Pre-download tree-sitter grammars for offline/air-gapped use',
+                     role='tooling', starter='reveal offline --help'),
     'overview':     _declared('overview',
                      'reveal overview [path]',
-                     'Compact project map: scope, components, import relationships'),
+                     'Compact project map: scope, components, import relationships',
+                     role='noun', rung=0, starter='reveal overview src/'),
     'pack':         _declared('pack',
                      'reveal pack <path>',
                      'Token-budgeted context snapshot for LLM consumption',
-                     help_guide=_SUBCOMMANDS_GUIDE),  # pack:// guide is a pointer stub
+                     help_guide=_SUBCOMMANDS_GUIDE,
+                     role='verb', starter='reveal pack src/'),  # pack:// guide is a pointer stub
     'patches':      _declared('patches',
                      'reveal patches [path]',
-                     'Mock/patch pressure in tests, grouped by target; --view pressure joins it with production boundary fan-out'),
+                     'Mock/patch pressure in tests, grouped by target; --view pressure joins it with production boundary fan-out',
+                     role='noun', rung=5, starter='reveal patches tests/'),
     'review':       _spec('review',
                      'reveal review <path>',
                      'Retired: use reveal check --changed RANGE and reveal diff',
@@ -153,14 +189,18 @@ COMMANDS: Dict[str, CommandSpec] = {
                      'Retired: use `reveal dev new-*`',
                      help_guide=_SUBCOMMANDS_GUIDE),
     'env':          _declared('env', 'reveal env [NAME]',
-                     'Inspect environment variables, or one variable, with sensitive values redacted'),
+                     'Inspect environment variables, or one variable, with sensitive values redacted',
+                     role='resource', starter='reveal env PATH'),
     'sqlite':       _declared('sqlite', 'reveal sqlite DB[/TABLE] [--view health]',
-                     'Inspect a SQLite database, a table or view, or its integrity through declared controls'),
+                     'Inspect a SQLite database, a table or view, or its integrity through declared controls',
+                     role='resource', starter='reveal sqlite app.db'),
     'xlsx':         _declared('xlsx', 'reveal xlsx FILE [--sheet NAME] [--match TEXT] [--powerpivot MODE] ...',
-                     'Inspect an Excel workbook: sheets, cells, search, Power Pivot, Power Query, names, connections'),
+                     'Inspect an Excel workbook: sheets, cells, search, Power Pivot, Power Query, names, connections',
+                     role='resource', starter='reveal xlsx file.xlsx'),
     'surface':      _declared('surface',
                      'reveal surface [path]',
-                     'External surfaces: CLI commands, HTTP routes, env vars, network calls, FS writes, subprocess calls'),
+                     'External surfaces: CLI commands, HTTP routes, env vars, network calls, FS writes, subprocess calls',
+                     role='noun', rung=5, starter='reveal surface src/'),
     'testability':  _declared('testability',
                      'reveal testability [path]',
                      'Retired: use reveal patches <path> --view pressure (the same answer); '
