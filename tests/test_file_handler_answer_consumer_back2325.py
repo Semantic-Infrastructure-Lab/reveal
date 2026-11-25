@@ -172,3 +172,23 @@ def test_sibling_without_a_consumer_an_element_view_prints_as_before(nav, flags,
         assert json.loads(run.stdout)['type'] == 'element_view'
     else:
         assert run.stdout.strip() and not run.stdout.lstrip().startswith('{')
+
+
+def test_a_view_miss_under_a_host_that_does_not_print_says_nothing_and_raises_its_line(nav, capsys):
+    """A navigation failure (an element no view resolves) is raised with its line; a host whose log does not print (the
+    Python API, MCP) reports it from there, so nothing reaches stderr (BACK-2627 note #10)."""
+    from reveal.utils.invocation_log import log_scope
+    from reveal.utils.results import NavSourceFailure
+    args = create_argument_parser('test').parse_args(['nav.py', 'Store.nope', '--view', 'boundary', '--format', 'json'])
+    with log_scope(to_stderr=False), pytest.raises(NavSourceFailure) as caught:
+        handle_file('nav.py', 'Store.nope', False, 'json', args, answer_consumer=lambda answer: None)
+    assert capsys.readouterr() == ('', '')
+    assert caught.value.code == 2
+    assert caught.value.public_diagnostic.startswith("Error: could not find function or method 'Store.nope' in nav.py")
+
+
+@pytest.mark.parametrize('fmt', ['text', 'json'])
+def test_sibling_the_cli_prints_a_view_miss_line(nav, fmt):
+    run = _run_reveal_direct('nav.py', 'Store.nope', '--view', 'boundary', '--format', fmt)
+    assert run.returncode == 2 and run.stdout == ''
+    assert run.stderr.startswith("Error: could not find function or method 'Store.nope' in nav.py")
