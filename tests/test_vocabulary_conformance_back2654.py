@@ -71,7 +71,7 @@ control whatever its value type; 1b, 1d and 6 read every spelling (aliases and n
       ``?k=A``; a scalar ``?k=A --flag B`` exits 2 naming the flag and ``k=A``; a repeatable one answers as
       ``?k=A&k=B``. stats is ruled exempt (rule 9); codex has no subcommand until BACK-2618.
   28  help shows the one spelling (Scott 2026-11-22, BACK-2755): a declared noun's usage and ``--help`` name no option
-      that a note-stage RETIREMENTS row spells (the key typing it notes: a declared control's ``flag:NOUN.FLAG`` or
+      that a note- or error-stage RETIREMENTS row spells (BACK-2801; the key typing it notes: a declared control's ``flag:NOUN.FLAG`` or
       ``param:NOUN.WORD``, a global flag's ``flag:FLAG``; a short option goes with its argument's long ones), and each
       such option still parses (rules 2, 1b, 1c and 23 hold its note and answer); every canonical control's flag is still
       listed. Measured on the usage line and the help's argument lines: prose (a description or epilog that explains a
@@ -2196,9 +2196,10 @@ def _noted_key(noun, option, specs):
     return f'flag:{option}'
 
 
-def _note_stage(key):
+def _retired_stage(key):
+    """A row that retires its spelling: it notes, or from the cut refuses (BACK-2801); a phase7 row only records."""
     row = RETIREMENTS.get(key)
-    return row is not None and row.stage == 'note'
+    return row is not None and row.stage != 'phase7'
 
 
 def _named_in(text, option):
@@ -2221,7 +2222,7 @@ def probe_help_one_spelling(noun):
     cases = []
     for action in parser._actions:
         longs = [option for option in action.option_strings if option.startswith('--')]
-        legacy = [option for option in longs if _note_stage(_noted_key(noun, option, specs))]
+        legacy = [option for option in longs if _retired_stage(_noted_key(noun, option, specs))]
         # An argument all of whose long flags retire takes its short spellings along (-v is --verbose).
         spelled = action.option_strings if longs and legacy == longs else legacy
         for option in spelled:
@@ -2231,7 +2232,7 @@ def probe_help_one_spelling(noun):
             cases.append(Case(f'{option} still parses', parser._option_string_actions.get(option) is action,
                               f'{option} is no longer an option of `reveal {noun}`'))
     for spec in specs:  # the positive control: what the rule keeps
-        own = [flag for flag in (spec.cli.flags if spec.cli else ()) if not _note_stage(_noted_key(noun, flag, specs))]
+        own = [flag for flag in (spec.cli.flags if spec.cli else ()) if not _retired_stage(_noted_key(noun, flag, specs))]
         if own:
             cases.append(Case(f'{own[0]} listed', _listed_in(text, own[0]), f'`reveal {noun} -h` hides {own[0]}'))
     return cases
