@@ -349,7 +349,8 @@ def test_unread_modifier_is_a_tool_error_on_reveal_run(copies):
     from reveal.mcp_server import reveal_nav, reveal_run
     path, element = _python(copies)
     _tool_error(reveal_run([path, element, '--exits', '--transitive', '--format', 'json']), 'transitive')
-    _tool_error(reveal_nav(path, element, 'boundary', transitive=True), 'effects')  # sibling: typed controls refuse
+    # sibling: reveal_nav runs the same command line, so its typed controls refuse as the CLI does (BACK-2627 X13)
+    _tool_error(reveal_nav(path, element, view='exits', transitive=True), 'transitive')
 
 
 # -- E13: an element view on a directory -------------------------------------------------------------------------

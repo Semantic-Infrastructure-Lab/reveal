@@ -41,7 +41,8 @@ def _sdk(arguments):
 
 
 def _diagnostic(text, missing):
-    phrase = 'cannot read' if missing else 'could not find function or method'
+    # A missing path is refused before the command line runs, as reveal_element refuses it (BACK-2627 X13).
+    phrase = 'path not found' if missing else 'could not find function or method'
     assert text.count(phrase) == 1, text
     assert 'Traceback' not in text and 'Internal error' not in text
     if not missing:
@@ -78,7 +79,7 @@ def test_authored_facts_win_over_stdout_and_numeric_code(code):
 
 
 def test_bare_exit_and_literal_strings_remain_unclassified(source, monkeypatch):
-    import reveal.file_handler as file_handler
+    import reveal.cli.routing.file as file_route  # the file route's handle_file, which reveal_nav's command line reaches
     from reveal.mcp_server import _run_and_capture, _ToolFailure
 
     literal = '[reveal error: literal]\n[reveal exited with code 1]'
@@ -89,8 +90,8 @@ def test_bare_exit_and_literal_strings_remain_unclassified(source, monkeypatch):
 
     result = _run_and_capture(ordinary)
     assert not isinstance(result, _ToolFailure) and result.strip() == literal
-    monkeypatch.setattr(file_handler, 'handle_file', ordinary)
-    answer = _sdk(_arguments(source))
+    monkeypatch.setattr(file_route, 'handle_file', ordinary)
+    answer = _sdk(_arguments(source, flag='', view='effects'))  # the canonical view: no retirement note to add
     assert not answer.is_error and _text(answer).strip() == literal
 
 
@@ -188,6 +189,10 @@ mcp_server.main()
 
 
 def test_stdio_source_failures_recovery_ranges_and_private_masking(tmp_path, source):
+    # The server's stubbed analyzer fails these two by name; they exist, so the CLI's route reaches it (BACK-2627 X13).
+    for name in ('denied.py', 'crash.py'):
+        (source.parent / name).write_text('def empty():\n    return 1\n', encoding='utf-8')
+
     async def scenario(session):
         for flag in FLAGS:
             missing = await session.call_tool('reveal_nav', _arguments(source.parent / 'missing.py', flag=flag))
@@ -195,8 +200,8 @@ def test_stdio_source_failures_recovery_ranges_and_private_masking(tmp_path, sou
             _diagnostic(_text(missing), True)
             empty = await session.call_tool('reveal_nav', _arguments(source, flag=flag))
             assert not empty.is_error and 'cannot read' not in _text(empty)
-            if flag != 'sideeffects':
-                assert 'deprecated' not in _text(empty)
+            # flag is the CLI's flag: --effects, --sideeffects and --boundary say their rows' notes, --inputs none
+            assert _text(empty).count('deprecated') == (flag != 'inputs')
             absent = await session.call_tool('reveal_nav', _arguments(source, 'absent', flag))
             assert absent.is_error
             _diagnostic(_text(absent), False)

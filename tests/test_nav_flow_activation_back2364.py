@@ -171,8 +171,9 @@ def test_registered_mcp_flow_values_and_invalid_selector(tmp_path):
         assert not union.is_error
         assert 'IF' in _text(union)
         assert 'RETURN' not in _text(union)
+        # The CLI judges the selector (reveal_nav runs its command line, BACK-2627 X13); a missing path is refused first.
         bad = await session.call_tool('reveal_nav', {
-            'path': str(tmp_path / 'missing.py'), 'element': 'work', 'flag': 'flow', 'flag_value': 'if,'})
+            'path': str(path), 'element': 'work', 'flag': 'flow', 'flag_value': 'if,'})
         assert bad.is_error
         assert 'selector' in _text(bad)
         sibling = await session.call_tool('reveal_nav', {

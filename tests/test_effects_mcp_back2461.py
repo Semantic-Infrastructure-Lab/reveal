@@ -1,4 +1,8 @@
-"""Typed effects controls cross direct, registered SDK and actual stdio boundaries."""
+"""Typed effects controls cross direct, registered SDK and actual stdio boundaries.
+
+Since BACK-2627 X13 reveal_nav runs the CLI's command line: ``flag='effects'`` is the CLI's legacy ``--effects`` (its
+answer with its row's note) and the typed controls are the CLI's flags, judged by the CLI; each answer equals
+``reveal_run`` over that command line (D21)."""
 import asyncio
 
 import pytest
@@ -6,7 +10,6 @@ import pytest
 pytest.importorskip('mcp')
 from mcp.types import CallToolRequestParams
 
-from conftest import _run_reveal_direct
 from test_effects_activation_back2461 import project
 from test_mcp_expected_errors_back1992 import _run as _stdio, _text
 
@@ -27,6 +30,12 @@ def _arguments(project, controls):
     return {'path': str(project), 'element': 'entry', 'flag': 'effects', **controls}
 
 
+def _cli(project, *flags, element='entry'):
+    """``reveal PROJECT ENTRY FLAGS`` through the MCP transport's command-line tool."""
+    from reveal.mcp_server import reveal_run
+    return reveal_run(['--format', 'text', *flags, '--', str(project), element])
+
+
 def _sdk(arguments):
     from reveal.mcp_server import mcp
 
@@ -39,13 +48,13 @@ def _sdk(arguments):
 def test_direct_and_registered_sdk_match_cli_text(project, controls, flags):
     from reveal.mcp_server import reveal_nav
 
-    expected = _run_reveal_direct(str(project), 'entry', '--effects', *flags)
-    assert expected.returncode == 0, expected.stderr
+    expected = _cli(project, '--effects', *flags)
+    assert expected.count('deprecated') == 1, expected  # the legacy --effects row's note, as on the CLI
     direct = reveal_nav(**_arguments(project, controls))
-    assert direct.rstrip() == expected.stdout.rstrip()
+    assert direct == expected
     answer = _sdk(_arguments(project, controls))
     assert not answer.is_error, _text(answer)
-    assert _text(answer).rstrip() == expected.stdout.rstrip()
+    assert _text(answer) == expected
 
 
 @pytest.mark.parametrize('controls', INVALID)
@@ -55,11 +64,17 @@ def test_invalid_typed_requests_are_authored_sdk_errors(project, controls):
     assert 'Traceback' not in _text(answer) and 'internal error' not in _text(answer).lower()
 
 
-@pytest.mark.parametrize('controls', [{'mode': 'ordinary'}, {'transitive': True}, {'depth': 1}])
-def test_controls_on_other_flags_are_errors(project, controls):
+@pytest.mark.parametrize('controls,flags', [({'mode': 'ordinary'}, ()), ({'transitive': True}, ('--transitive',)),
+                                            ({'depth': 1}, ('--depth', '1')), ({'mode': 'loops'}, ('--in-loops',))])
+def test_controls_on_other_flags_are_the_clis(project, controls, flags):
+    """The CLI judges a control on another view: --boundary reads --transitive, refuses --depth without it and
+    --in-loops (an effects switch); ordinary is no switch at all."""
+    from reveal.mcp_server import _ToolFailure
+
+    expected = _cli(project, '--boundary', *flags)
     answer = _sdk({**_arguments(project, controls), 'flag': 'boundary'})
-    assert answer.is_error, _text(answer)
-    assert 'effects' in _text(answer)
+    assert answer.is_error == isinstance(expected, _ToolFailure), _text(answer)
+    assert expected.removeprefix('[reveal error: ').removesuffix(']') in _text(answer)
 
 
 @pytest.mark.parametrize('controls', [{'depth': True}, {'depth': '2'}, {'depth': 2.0}, {'transitive': 1}, {'transitive': 0}, {'transitive': 'false'}, {'mode': ['loops', 'state']}])
@@ -71,22 +86,24 @@ def test_direct_calls_also_validate_exact_types(project, controls):
 
 
 def test_mcp_invocation_records_only_controls_actually_supplied(project, monkeypatch):
+    """The recorded invocation is the command line the tool ran: the supplied controls only, each its CLI flag."""
     from reveal.mcp_server import reveal_nav
     from reveal.cli.invocation import current_invocation
-    import reveal.file_handler as file_handler
+    import reveal.cli.routing.file as file_route
 
-    real_handle = file_handler.handle_file
+    real_handle = file_route.handle_file
     invocations = []
 
     def handle(*args, **kwargs):
         invocations.append(current_invocation().argv)
         return real_handle(*args, **kwargs)
 
-    monkeypatch.setattr(file_handler, 'handle_file', handle)
+    monkeypatch.setattr(file_route, 'handle_file', handle)
     for controls, flags in CASES:
         result = reveal_nav(**_arguments(project, controls))
         assert '[reveal error:' not in result
-        assert invocations[-1] == ('--effects', *flags, '--', str(project), 'entry')
+        spelled = ' '.join(flags).replace('--depth ', '--depth=').split()
+        assert invocations[-1] == ('--format', 'text', '--effects', *spelled, '--', str(project), 'entry')
 
 
 def test_legacy_mcp_defaults_keep_answer_and_add_only_correction(project):
@@ -94,7 +111,7 @@ def test_legacy_mcp_defaults_keep_answer_and_add_only_correction(project):
 
     for old, mode in [('sideeffects', 'ordinary'), ('fanout', 'loops'), ('statewrites', 'state')]:
         old_text = reveal_nav(str(project), 'entry', old)
-        new_text = reveal_nav(str(project), 'entry', 'effects', mode=mode)
+        new_text = reveal_nav(str(project), 'entry', view='effects', mode=mode)
         assert old_text.startswith(new_text.rstrip())
         assert old_text.count('deprecated') == 1
         registered = _sdk({'path': str(project), 'element': 'entry', 'flag': old})
@@ -108,9 +125,7 @@ def test_stdio_valid_modes_strict_errors_and_sibling_recovery(tmp_path, project)
         for controls, flags in CASES:
             answer = await session.call_tool('reveal_nav', _arguments(project, controls))
             assert not answer.is_error, _text(answer)
-            assert 'deprecated' not in _text(answer)
-            expected = _run_reveal_direct(str(project), 'entry', '--effects', *flags)
-            assert _text(answer).rstrip() == expected.stdout.rstrip()
+            assert _text(answer) == _cli(project, '--effects', *flags)  # the --effects row's note included
         for controls in INVALID:
             answer = await session.call_tool('reveal_nav', _arguments(project, controls))
             assert answer.is_error, (controls, _text(answer))
@@ -131,9 +146,9 @@ def test_registered_schema_preserves_positional_fields_and_adds_typed_controls()
     tools = asyncio.run(mcp.list_tools())
     tool = next(tool for tool in tools if tool.name == 'reveal_nav')
     schema = tool.input_schema
-    assert schema['required'] == ['path', 'element', 'flag']
+    assert schema['required'] == ['path', 'element']  # flag is optional since the view is typed (BACK-2627 X13)
     properties = schema['properties']
-    assert properties['flag_value']['default'] == ''
+    assert properties['flag']['default'] == properties['flag_value']['default'] == ''
     assert properties['mode']['default'] is None
     assert properties['mode']['anyOf'] == [{'enum': ['ordinary', 'loops', 'state'], 'type': 'string'}, {'type': 'null'}]
     assert properties['transitive']['type'] == 'boolean' and properties['transitive']['default'] is False

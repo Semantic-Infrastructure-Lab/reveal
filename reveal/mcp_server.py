@@ -18,6 +18,7 @@ Configuration example (Claude Code settings.json):
 """
 
 import functools
+import inspect
 import io
 import json
 import logging
@@ -27,13 +28,13 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Annotated, Any, Literal, Optional
 
 try:
     from mcp.server import MCPServer
     from mcp.server.mcpserver.exceptions import ToolError
     from mcp.types import ToolAnnotations
-    from pydantic import StrictBool, StrictInt
+    from pydantic import Field, StrictBool, StrictInt, StrictStr, TypeAdapter, ValidationError
 except ImportError:
     # BACK-1247: `mcp` lives in its own dedicated extra (reveal-cli[mcp]),
     # not reveal-cli's base dependencies -- a plain `pip install reveal-cli`
@@ -115,15 +116,15 @@ mcp = MCPServer(
         "1. reveal_structure(dir) — understand what's in a directory (~100-3,000 tokens, by size)\n"
         "2. reveal_structure(file) — see all functions/classes (~150-750 tokens; ~1,300 for a 1,000-line module)\n"
         "3. reveal_element(file, fn) — read one function's implementation (~100-600 tokens)\n"
-        "4. reveal_nav(file, fn, flag) — deep-dive analysis without reading source:\n"
-        "   boundary    — INPUTS + ENVIRONMENT + EFFECTS in one report\n"
-        "   inputs      — candidate undefined reads, with builtins distinguished\n"
-        "   outputs     — variables written in a range and read later\n"
-        "   callsites   — call sites within the selected element or range\n"
-        "   effects     — ordinary calls, loop groups (mode=loops), persistent writes (mode=state)\n"
-        "   flow        — recognized structural skeleton; optional if,loop,try selectors\n"
-        "   exits       — static exit sites with recorded syntactic gates\n"
-        "   varflow     — trace one variable's reads and writes\n"
+        "4. reveal_nav(file, fn, view='boundary') — deep-dive analysis without reading source:\n"
+        "   view='boundary'  — INPUTS + ENVIRONMENT + EFFECTS in one report\n"
+        "   view='effects'   — ordinary calls, loop groups (mode='loops'), persistent writes (mode='state')\n"
+        "   view='flow'      — recognized structural skeleton; kind=['if', 'loop', 'try'] selects\n"
+        "   view='exits'     — static exit sites with recorded syntactic gates\n"
+        "   flag='inputs'    — candidate undefined reads, with builtins distinguished\n"
+        "   flag='outputs'   — variables written in a range and read later\n"
+        "   flag='callsites' — call sites within the selected element or range\n"
+        "   flag='varflow', flag_value='VAR' — trace one variable's reads and writes\n"
         "5. reveal_grep(path, pattern) — \"where is X used?\" cross-file "
         "search grouped by enclosing function (use instead of shell grep).\n"
         "6. reveal_run(['calls', '<dir>', '--callees', 'FN', '--depth', '2', '--detail', 'full']) — \"what "
@@ -502,163 +503,130 @@ def reveal_element(path: str, element: str) -> str:
     return _run_command(['--format', 'text', '--', path, element])
 
 
-# Nav flags that take no value (boolean), derived from the element declarations (nav_params; BACK-457, BACK-2627):
-# this set cannot drift from what the binder accepts.
-from .nav_handlers import NAV_BOOLEAN_FLAG_NAMES as _NAV_BOOLEAN_FLAGS  # noqa: I006
-
-# Nav flags that require a variable-name flag_value, mapped to an example name for the error message (BACK-457).
-_NAV_VAR_NAME_FLAGS = {
-    'varflow': 'result',
-    'keys': 'config',
-    'narrow': 'x',
-}
+# reveal_nav's mode is the MCP spelling of the effects view's two switches (D10; P1 ruling 6 keeps it): each mode
+# names the declared switch it turns on, ``ordinary`` none.
+_NAV_MODES = {'ordinary': None, 'loops': 'in-loops', 'state': 'state'}
+# A declared control's value type as the MCP schema states it (strict: a direct call is judged as a registered one).
+_NAV_VALUE_TYPES: dict[str, Any] = {'boolean': StrictBool, 'integer': StrictInt, 'string': StrictStr}
 
 
-def _nav_effects_controls(controls: dict, flag_value, mode, transitive, depth) -> None:
-    """The typed effects controls as the element declarations' own (a switch enters only when on: a typed False is not
-    given): the binder then applies D10's rules, as on the CLI."""
-    if flag_value:
-        raise NavRequestValidationError('effects does not accept flag_value; use typed mode, transitive and depth controls.')
-    if type(transitive) is not bool:  # a direct call skips the SDK's strict types
-        raise NavRequestValidationError('effects --transitive must be a boolean.')
-    if depth is not None and type(depth) is not int:
-        raise NavRequestValidationError('effects --depth must be an integer, not a boolean or other value.')
-    if not isinstance(mode, (str, type(None))) or mode not in (None, 'ordinary', 'loops', 'state'):
-        raise NavRequestValidationError('effects mode must be ordinary, loops or state.')
-    if mode in ('loops', 'state'):
-        controls['in-loops' if mode == 'loops' else 'state'] = True
-    if transitive:
-        controls['transitive'] = True
-    if depth is not None:  # structural with loops (D10: positive, default 3), else graph hops (1..5)
-        controls['nesting-depth' if mode == 'loops' else 'depth'] = depth
+def _nav_view_specs() -> tuple:
+    """The element views' declared controls reveal_nav takes as typed parameters: the view and every control an
+    element view reads (``answers`` names ``view`` or ``view=V``), less the switches ``mode`` spells."""
+    from .nav_params import ELEMENT_VIEW_SPECS, VIEW
+    switches = {name for name in _NAV_MODES.values() if name}
+    return tuple(spec for spec in ELEMENT_VIEW_SPECS if spec.name not in switches and (
+        spec is VIEW or any(answer == 'view' or answer.startswith('view=') for answer in spec.answers)))
 
 
-def _nav_controls(flag, flag_value, mode, transitive, depth) -> dict:
-    """reveal_nav's flag as the element declarations' controls (``nav_params``): a view name selects ``view``, an old
-    word is its legacy key, an operation its own control. Raises NavRequestValidationError for a request the tool
-    shape itself cannot carry; the binder judges the rest."""
-    from .nav_params import ELEMENT_VIEWS
-
-    if flag != 'effects' and (mode is not None or transitive is not False or depth is not None):
-        raise NavRequestValidationError('mode, transitive and depth controls apply only to flag=effects.')
-    if flag in ELEMENT_VIEWS:
-        return _nav_view_controls(flag, flag_value, mode, transitive, depth)
-    if flag in _NAV_BOOLEAN_FLAGS:
-        return _nav_word_controls(flag)
-    return _nav_value_controls(flag, flag_value)
+def _nav_view_parameter(spec) -> inspect.Parameter:
+    """One declared control as a keyword parameter: its name with ``-`` as ``_``, its type (a list when it repeats),
+    its description; absent by default (a switch off), so only what the caller gives reaches the command line."""
+    value = _NAV_VALUE_TYPES[spec.type]
+    if spec.repeatable:
+        value = list[value]  # type: ignore[valid-type]
+    if spec.type == 'boolean':
+        return inspect.Parameter(spec.name.replace('-', '_'), inspect.Parameter.KEYWORD_ONLY, default=False,
+                                 annotation=Annotated[value, Field(description=spec.description)])
+    return inspect.Parameter(spec.name.replace('-', '_'), inspect.Parameter.KEYWORD_ONLY, default=None,
+                             annotation=Annotated[Optional[value], Field(description=spec.description)])
 
 
-def _nav_view_controls(flag, flag_value, mode, transitive, depth) -> dict:
-    from .nav_params import parse_flow_selectors
-    controls: dict = {'view': flag}
-    if flag == 'flow' and flag_value:
+def _with_nav_view_parameters(fn):
+    """*fn*'s signature with its ``**controls`` replaced by the element views' declared controls (before ``mode``):
+    the SDK builds reveal_nav's input schema from it, so the schema is the declarations (BACK-2627 X13)."""
+    signature = inspect.signature(fn, eval_str=True)
+    own = [param for param in signature.parameters.values() if param.kind is not inspect.Parameter.VAR_KEYWORD]
+    at = next(index for index, param in enumerate(own) if param.name == 'mode')
+    fn.__signature__ = signature.replace(
+        parameters=[*own[:at], *(_nav_view_parameter(spec) for spec in _nav_view_specs()), *own[at:]])
+    fn.nav_types = {param.name: TypeAdapter(param.annotation) for param in fn.__signature__.parameters.values()
+                    if param.name not in ('path', 'element')}
+    return fn
+
+
+def _nav_flag_words(flag: str, flag_value: str, options) -> list[str]:
+    """``flag`` as the CLI flag it names (every spelling of an element control, ``ELEMENT_KEYS``), with ``flag_value``
+    as its value: ``--FLAG`` for a flag that takes none, ``--FLAG=VALUE`` otherwise (an optional value may be left
+    out). Raises NavRequestValidationError for what the flag parameter cannot carry; the CLI judges the rest."""
+    from .nav_params import ELEMENT_KEYS
+    if flag not in ELEMENT_KEYS:
+        raise NavRequestValidationError(f"unknown nav flag '{flag}'. Valid flags: {sorted(ELEMENT_KEYS)}")
+    option, action = options[flag.replace('-', '_')]
+    if action.nargs == 0 and flag_value:
+        raise NavRequestValidationError(f'{flag} takes no flag_value')
+    if action.nargs == 0 or (action.nargs == '?' and not flag_value):
+        return [option]
+    return [f'{option}={flag_value}']
+
+
+def _nav_words(flag: str, flag_value: str, mode, controls: dict) -> list[str]:
+    """reveal_nav's request as the CLI's words: ``flag`` first, then ``mode``'s switch and the typed controls, each
+    the flag of its declaration, spelled by the element read's one keyword-to-flag mapping (``path_read_words``, as
+    ``api.element``). Raises NavRequestValidationError for a value of the wrong type or an unknown parameter."""
+    from .version import __version__
+    from .cli.parser import create_argument_parser
+    from .cli.routing.typed import path_read_options, path_read_words
+    types = reveal_nav.nav_types  # type: ignore[attr-defined]
+    unknown = sorted(set(controls) - set(types))
+    if unknown:
+        raise NavRequestValidationError(f"reveal_nav has no parameter {', '.join(map(repr, unknown))}; "
+                                        f"its parameters: path, element, {', '.join(types)}")
+    for name, value in {'flag': flag, 'flag_value': flag_value, 'mode': mode, **controls}.items():
         try:
-            controls['kind'] = list(parse_flow_selectors(flag_value))
-        except ValueError as exc:
-            raise NavRequestValidationError(str(exc)) from None
-    if flag == 'effects':
-        _nav_effects_controls(controls, flag_value, mode, transitive, depth)
-    return controls
-
-
-def _nav_word_controls(flag) -> dict:
-    """A no-value word: its own legacy key (the contextual outline included), else the control it spells."""
-    from .nav_params import ELEMENT_VIEW_SPECS
-    from .utils.query_binding import legacy_flag_dests
-    if flag == 'outline' or any(flag in legacy_flag_dests(spec) for spec in ELEMENT_VIEW_SPECS):
-        return {flag: True}
-    return {next(spec.name for spec in ELEMENT_VIEW_SPECS if flag in spec.spellings): True}
-
-
-def _nav_value_controls(flag, flag_value) -> dict:
-    if flag in _NAV_VAR_NAME_FLAGS:
-        if not flag_value:
-            raise NavRequestValidationError(
-                f"{flag} requires flag_value (variable name, e.g. '{_NAV_VAR_NAME_FLAGS[flag]}')")
-        return {flag: flag_value}
-    if flag in ('callsites', 'calls'):
-        return {'callsites': flag_value or 'FULL'}
-    if flag == 'around':
-        try:
-            return {'around': int(flag_value) if flag_value else 20}
-        except ValueError:
-            raise NavRequestValidationError(f"around requires an integer flag_value, got '{flag_value}'") from None
-    valid = sorted(_NAV_BOOLEAN_FLAGS | set(_NAV_VAR_NAME_FLAGS) | {'callsites', 'calls', 'around', 'flow'})
-    raise NavRequestValidationError(f"unknown nav flag '{flag}'. Valid flags: {valid}")
-
-
-def _nav_invocation(path, element, flag, flag_value, controls):
-    """The CLI equivalent of the controls actually supplied to reveal_nav."""
-    from .cli.invocation import Invocation
-
-    option = '--' + flag
-    if flag_value and flag not in _NAV_BOOLEAN_FLAGS and flag != 'effects':
-        option += '=' + flag_value
-    options = [option]
-    if flag == 'effects':
-        options = ['--effects', *(['--in-loops'] if controls.get('in-loops') else []),
-                   *(['--state'] if controls.get('state') else []),
-                   *(['--transitive'] if controls.get('transitive') else [])]
-        for name in ('depth', 'nesting-depth'):
-            if name in controls:
-                options += ['--depth', str(controls[name])]
-    return Invocation.parse(['reveal', *options, '--', path, element])
+            types[name].validate_python(value)
+        except ValidationError as exc:
+            raise NavRequestValidationError(f"{name}: {exc.errors()[0]['msg']}, got {value!r}") from None
+    parser = create_argument_parser(__version__)
+    words = _nav_flag_words(flag, flag_value, path_read_options(parser, element=True)) if flag else []
+    switch = _NAV_MODES.get(mode)
+    given = {switch.replace('-', '_'): True} if switch else {}
+    given.update((name, value) for name, value in controls.items() if value is not None and value is not False)
+    return words + path_read_words(parser, given, element=True)
 
 
 @mcp_tool(annotations=_LOCAL_READONLY, title='Reveal: Deep-Dive Nav Analysis')
-def reveal_nav(path: str, element: str, flag: str, flag_value: str = '', *,
-               mode: Optional[Literal['ordinary', 'loops', 'state']] = None,
-               transitive: StrictBool = False, depth: Optional[StrictInt] = None) -> str:
-    """Run a nav analysis flag on a function or line range — the deep-dive layer.
+@_with_nav_view_parameters
+def reveal_nav(path: str, element: str, flag: str = '', flag_value: str = '', *,
+               mode: Optional[Literal['ordinary', 'loops', 'state']] = None, **controls: Any) -> str:
+    """Run an element view on a function or line range — the deep-dive layer.
 
     Use after reveal_structure + reveal_element to analyse the internals of
-    a specific function without reading its full source. Highest-value flags:
+    a specific function without reading its full source. The answer is
+    ``reveal PATH ELEMENT --view VIEW``'s, with the CLI's outcome: views are
     boundary (inputs+environment+effects), effects (db/http/cache/log/file
-    calls), inputs (candidate reads), outputs (read-after-write hazards),
-    callsites (calls within the element), varflow (trace one variable).
+    calls; mode=loops groups them per loop, mode=state lists persistent
+    writes), flow (structural skeleton; kind=['if', 'loop'] selects) and
+    exits (exit sites with their gates).
 
-    Full flag catalog + examples: reveal_query('help://nav')
+    The operations outside the views go in ``flag``: inputs (candidate reads),
+    outputs (read-after-write hazards), callsites (calls within the element),
+    varflow, keys and narrow (flag_value names the variable), scope and
+    around (a :LINE element). ``flag`` is the CLI's flag without its dashes
+    and answers as that flag does, a retiring one with its replacement note.
+
+    Full catalog + examples: reveal_query('help://nav')
 
     Args:
         path:        File containing the element (absolute or relative to cwd)
         element:     Function/method name (e.g. 'process_order') or line ref
                      (e.g. ':120-340' for flat/procedural files)
-        flag:        Nav analysis to run — see reveal_query('help://nav') for
-                     the full list. Boolean flags need no flag_value; value
-                     flags (varflow, keys, narrow) require one.
-        flag_value:  Required for varflow, keys, and narrow (variable name). Optional for
-                     flow (comma-separated if,loop,try selectors), callsites (range string)
-                     and around (integer context lines).
-
-        mode:        For effects only: ordinary (default), loops or state.
-        transitive:  For ordinary effects only: follow project-local callees.
-        depth:       For transitive effects: 1..5 (default 2); loops: positive (default 3).
+        flag:        An operation or other element flag, without '--'
+        flag_value:  The flag's value (a variable name for varflow, keys and narrow)
+        mode:        Effects view: ordinary (default), loops or state
 
     Example:
-        reveal_nav('app.py', 'process_order', 'boundary')
+        reveal_nav('app.py', 'process_order', view='boundary')
     """
-    from .file_handler import element_request_of, handle_file  # noqa: I006
-    from .cli.invocation import RetiredSpellingError, invocation_scope, retirement_note
-    from .nav_params import ELEMENT_VIEWS
-
     try:
-        controls = _nav_controls(flag, flag_value, mode, transitive, depth)
+        words = _nav_words(flag, flag_value, mode, controls)
     except NavRequestValidationError as exc:
         return _tool_failure(str(exc))
-    args = _default_args(**controls)
-    # This tool promises text; REVEAL_FORMAT controls CLI defaults only.
-    args.format = 'text'
-    invocation = _nav_invocation(path, element, flag, flag_value, controls)
-    with _capture_lock, invocation_scope(invocation, retirements_to_stderr=False, form='mcp'):
-        try:
-            request = element_request_of(path, element, args)  # the one binder, as the CLI route binds
-            if flag not in ELEMENT_VIEWS:  # the view names' replacement (--view) is not spellable on this tool
-                retirement_note('flag:--' + flag)
-        except RetiredSpellingError as exc:
-            return _tool_failure(str(exc))
-        except NavRequestValidationError as exc:
-            return _tool_failure(str(exc))
-        return _run_and_capture(handle_file, path, element, False, 'text', args, element_request=request)
+    # As reveal_element: `path` is a filesystem path, never a URI or a command word, this tool promises text
+    # (REVEAL_FORMAT sets the CLI's default only), and `--` keeps an element spelled like a flag an element.
+    if not Path(path).exists():
+        return _tool_failure(f"path not found: {path}")
+    return _run_command(['--format', 'text', *words, '--', os.fspath(path), element])
 
 
 @mcp_tool(annotations=_OPEN_WORLD_READONLY, title='Reveal: URI Query')

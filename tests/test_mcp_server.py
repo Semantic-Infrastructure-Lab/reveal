@@ -191,9 +191,10 @@ class TestRevealNavTool(unittest.TestCase):
         self.assertNotIn('[reveal error', result)
 
     def test_varflow_requires_flag_value(self):
+        # The CLI's refusal of an empty --varflow (reveal_nav runs its command line, BACK-2627 X13).
         result = self.reveal_nav('reveal/adapters/ast/nav_effects.py', 'collect_effects', 'varflow')
         self.assertIn('[reveal error', result)
-        self.assertIn('flag_value', result)
+        self.assertIn('--varflow takes a variable name', result)
 
     def test_varflow_with_value(self):
         result = self.reveal_nav('reveal/adapters/ast/nav_effects.py', 'collect_effects', 'varflow', 'results')
@@ -216,9 +217,10 @@ class TestRevealNavTool(unittest.TestCase):
         self.assertNotIn('[reveal error', result)
 
     def test_narrow_requires_flag_value(self):
+        # The CLI's refusal of an empty --narrow (reveal_nav runs its command line, BACK-2627 X13).
         result = self.reveal_nav('reveal/adapters/ast/nav_effects.py', 'collect_effects', 'narrow')
         self.assertIn('[reveal error', result)
-        self.assertIn('flag_value', result)
+        self.assertIn('--narrow takes a variable name', result)
 
     def test_narrow_with_value(self):
         result = self.reveal_nav('reveal/adapters/ast/nav_effects.py', 'collect_effects', 'narrow', 'results')
