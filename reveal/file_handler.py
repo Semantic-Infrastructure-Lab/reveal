@@ -146,7 +146,7 @@ def _get_analyzer_or_exit(path: str, allow_fallback: bool, unreadable_exit_code:
         # a findings gate (BACK-2527).
         code = execution_exit_code(facts) if unreadable_exit_code is None else unreadable_exit_code
         if nav_source:
-            print(diagnostic, file=sys.stderr)
+            _say_nav_failure(diagnostic)
             raise NavSourceFailure(code, execution_facts=facts, public_diagnostic=diagnostic) from e
         _refuse_or_exit(path, diagnostic, code, refusal_args, error=e if cause is FailureCause.ANALYSIS else None,
                         cause=cause)
@@ -396,8 +396,17 @@ def _require_selected_lines(analyzer, element: str, request) -> None:
 
 def _fail_nav(code: int, cause: 'FailureCause', diagnostic: str) -> 'NoReturn':
     """Print a nav diagnostic and raise the authored failure CLI and MCP both report."""
-    print(diagnostic, file=sys.stderr)
+    _say_nav_failure(diagnostic)
     raise NavSourceFailure(code, execution_facts=failure_execution_facts(cause), public_diagnostic=diagnostic)
+
+
+def _say_nav_failure(diagnostic: str) -> None:
+    """A navigation failure's line, on stderr where the CLI prints it; a host whose log does not print (MCP, the Python
+    API) reports the failure from the NavSourceFailure it raises, so nothing reaches the caller's stderr."""
+    from .utils.invocation_log import current_log
+    log = current_log()
+    if log is None or log.to_stderr:
+        print(diagnostic, file=sys.stderr)
 
 
 def _run_nav_handler(handler, ctx) -> Optional[dict]:
