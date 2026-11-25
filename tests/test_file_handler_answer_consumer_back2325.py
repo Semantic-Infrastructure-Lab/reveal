@@ -1,6 +1,7 @@
 """file_handler.handle_file(..., answer_consumer=): the file structure's Answer and a refusal's (no analyzer, an
-unreadable file) go to the consumer instead of being printed, as handle_uri hands its answers (BACK-2325). The
-document an Answer carries is the one ``--format json`` prints. Without a consumer nothing changes for the text CLI."""
+unreadable file) go to the consumer instead of being printed, as handle_uri hands its answers (BACK-2325), and so does
+an element view's JSON answer (BACK-2627 note #10). The document an Answer carries is the one ``--format json`` prints.
+Without a consumer nothing changes for the text CLI."""
 import json
 import os
 import sys
@@ -70,8 +71,8 @@ def test_sibling_without_a_consumer_the_text_cli_is_unchanged(fx, argv, code):
 
 # --- the element read (BACK-2325, BACK-2775): an Answer too ----------------------------------------------------------------
 
-def _consume_element(path, element):
-    args = create_argument_parser('test').parse_args([path, element, '--format', 'json'])
+def _consume_element(path, element, *flags):
+    args = create_argument_parser('test').parse_args([path, element, *flags, '--format', 'json'])
     answers = []
     handle_file(path, element, False, 'json', args, answer_consumer=answers.append)
     return answers
@@ -118,3 +119,56 @@ def test_sibling_without_a_consumer_the_element_text_is_unchanged(fx, argv, code
         assert run.stdout.startswith(f'{argv[0]}:')
     else:
         assert run.stdout == '' and run.stderr.startswith("Error: Element 'nosuch' not found in ok.py")
+
+
+# --- the element views (BACK-2627 note #10): the JSON answer is an Answer too, so api.element can take views -----------
+
+NAV = """class Store:
+    def save(self, items, cfg):
+        total = 0
+        for item in items:
+            if item.ok:
+                print(item)
+                self.count = total
+                total += 1
+        return total
+"""
+
+VIEWS = [['--view', 'boundary'], ['--view', 'effects'], ['--view', 'effects', '--in-loops'], ['--view', 'effects', '--state'],
+         ['--view', 'flow', '--kind', 'if'], ['--view', 'exits'], ['--inputs'], ['--outputs'], ['--callsites'],
+         ['--varflow', 'total'], ['--keys', 'cfg'], ['--boundary']]
+
+
+@pytest.fixture
+def nav(fx):
+    (fx / 'nav.py').write_text(NAV, encoding='utf-8')
+    return fx
+
+
+@pytest.mark.parametrize('flags', VIEWS, ids=' '.join)
+def test_an_element_view_answer_goes_to_the_consumer_with_the_printed_document(nav, capsys, flags):
+    from reveal.cli.routing.typed import _answer_document
+    [answer] = _consume_element('nav.py', 'Store.save', *flags)
+    assert capsys.readouterr() == ('', '')
+    assert answer.kind == 'element' and execution_exit_code(answer.execution_facts) == 0
+    assert _answer_document(answer) == json.loads(
+        _run_reveal_direct('nav.py', 'Store.save', *flags, '--format', 'json').stdout)
+
+
+@pytest.mark.parametrize('element, flags', [(':5', ['--scope']), (':5', ['--around', '1'])])
+def test_a_line_view_answer_goes_to_the_consumer(nav, capsys, element, flags):
+    from reveal.cli.routing.typed import _answer_document
+    [answer] = _consume_element('nav.py', element, *flags)
+    assert capsys.readouterr() == ('', '')
+    assert _answer_document(answer) == json.loads(_run_reveal_direct('nav.py', element, *flags, '--format', 'json').stdout)
+
+
+@pytest.mark.parametrize('flags', [['--view', 'boundary'], ['--varflow', 'total']], ids=' '.join)
+@pytest.mark.parametrize('fmt', ['text', 'json'])
+def test_sibling_without_a_consumer_an_element_view_prints_as_before(nav, flags, fmt):
+    run = _run_reveal_direct('nav.py', 'Store.save', *flags, '--format', fmt)
+    assert run.returncode == 0 and run.stderr == ''
+    if fmt == 'json':
+        assert json.loads(run.stdout)['type'] == 'element_view'
+    else:
+        assert run.stdout.strip() and not run.stdout.lstrip().startswith('{')
