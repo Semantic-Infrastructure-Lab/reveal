@@ -357,8 +357,9 @@ def _prepare(invocation: Invocation) -> Tuple[Namespace, Callable[[], None], Opt
         try:
             note_path_read_flags(invocation)
         except RetiredSpellingError as exc:  # --search: the path read's or the URI's own refusal (BACK-2627)
-            from .cli.routing.declared import answer_retired_spelling
-            answer_retired_spelling(exc, args, lambda text: parser.invalid_request(text, args))
+            from .cli.routing.declared import JsonUsageParser, answer_retired_spelling
+            main_parser = cast(JsonUsageParser, parser)  # the main parser is one (cli/parser.py)
+            answer_retired_spelling(exc, args, lambda text: main_parser.invalid_request(text, args))
         validate_navigation_args(args, parser)
         _apply_output_sinks(parser, args, invocation)
         return args, lambda: _main_impl(invocation, parser, args), None
@@ -409,7 +410,7 @@ def _answer_retired_command(name: str, invocation: Invocation, error: RetiredSpe
     if isinstance(parser, JsonUsageParser):
         declared = parser.typed_request(invocation.command_argv)
         answer_retired_spelling(error, declared, lambda text: parser.invalid_request(text, declared))
-    args = create_argument_parser(__version__).typed_request(invocation.command_argv)
+    args = cast(JsonUsageParser, create_argument_parser(__version__)).typed_request(invocation.command_argv)
     answer_retired_spelling(error, args, lambda text: _invalid_answer(
         None, name, getattr(args, 'path', None) or '.', text, args, result_type=name, default_fail_on='none'))
 
