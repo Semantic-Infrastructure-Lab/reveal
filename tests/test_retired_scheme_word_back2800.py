@@ -27,10 +27,11 @@ def test_a_word_naming_a_retired_scheme_teaches_its_row(tmp_path, scheme):
 @pytest.mark.parametrize('scheme', RETIRED_URI_ONLY)
 def test_json_answers_the_path_reads_document_with_the_rows_text(tmp_path, scheme):
     row = RETIREMENTS[f'scheme:{scheme}']
-    result = _run_reveal_in(tmp_path, scheme, '.', '--format', 'json')
-    document = invalid_request_document(result)
-    assert document is not None, result.stdout[:300]
-    assert (document['type'], document['source'], document['error']) == ('file_structure', scheme, row.text)
+    for argv, facet in (([scheme], 'file_structure'), ([scheme, '.'], 'code_element')):  # the path read's facets
+        result = _run_reveal_in(tmp_path, *argv, '--format', 'json')
+        document = invalid_request_document(result)
+        assert document is not None, result.stdout[:300]
+        assert (document['type'], document['source'], document['error']) == (facet, scheme, row.text)
 
 
 def test_control_an_unretired_uri_only_noun_keeps_its_hint(tmp_path):

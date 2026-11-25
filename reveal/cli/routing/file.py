@@ -60,6 +60,10 @@ def _validate_path_exists(path: Path, path_str: str, element: Optional[str] = No
     (``PathReadRefused``: this text, exit 2, its document in JSON; ``PathNotFoundError`` for the Python API)."""
     if not path.exists():
         from ...adapters.registry import list_supported_schemes
+        from ..invocation import RETIREMENTS
+        retired = RETIREMENTS.get(f'scheme:{path_str}')
+        if retired is not None:  # its row names the answer that replaces the scheme, which itself retires (BACK-2800)
+            _refuse(path_str, args, [f'Error: {retired.text}'], missing=True)
         if path_str in list_supported_schemes():
             target = shlex.quote(f'{path_str}://{element or "."}')
             _refuse(path_str, args, [f'Error: {path_str} is a URI noun: reveal {target}'], missing=True)
