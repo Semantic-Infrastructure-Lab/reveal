@@ -498,8 +498,9 @@ invalid-request document every other refusal of that route answers (one `meta.er
 the text as its message and as `error`; BACK-2627). A command that is not a declared noun (`check`, `health`) answers no
 refusal with that document, so its own retired spellings print the stderr line only. A spelling deleted outright rather
 than renamed is a `removed` row: it is at the `error` stage from the start and prints
-`error: <old> was removed; use <replacement>.` (`python://`, BACK-2225), its JSON document typed by the scheme. A
-`phase7` row is recorded and prints nothing yet.
+`error: <old> was removed; use <replacement>.` (`python://`, BACK-2225), its JSON document typed by the scheme. The
+help topics of a removed noun (`help://NOUN`, `help://NOUN/SECTION`, `help://schemas/NOUN`) are the same refusal with
+the same text (BACK-2771). A `phase7` row is recorded and prints nothing yet.
 
 ### Configuration warnings (`config_warning`)
 
