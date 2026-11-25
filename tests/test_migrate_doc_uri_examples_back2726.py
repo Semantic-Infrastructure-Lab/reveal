@@ -213,6 +213,25 @@ def test_a_command_the_script_cannot_place_on_one_physical_line_is_left(tmp_path
     assert migrate.rewrite_text(body, planned.values()) == (body, 0)
 
 
+def test_a_placeholder_in_the_address_stays_and_the_query_becomes_flags(tmp_path):
+    """A <placeholder> in a URI's address part names which resource, a part the binder reads as an opaque name: a
+    sentinel stands in for it while the request binds and renders, and it comes back quoted as one shell word. A
+    placeholder in a query value is bound and typed by the noun (`limit=<N>`, a callee name), and a shell variable must
+    stay expandable, so those are left for a hand edit."""
+    written = ("reveal 'claude://session/<session-name>?detail=summary'",
+               "reveal 'claude://session/<session-name>/messages?detail=raw'   # raw dump")
+    value, variable = "reveal 'claude://session/<session-name>?tools=<ToolName>'", 'reveal "claude://session/$SESSION?errors"'
+    callee, bare_n = "reveal 'calls://src?callees=<module>'", "reveal 'claude://session/<session-name>/messages?limit=N'"
+    planned, docs = _planned(tmp_path, _fenced(*written, value, variable, callee, bare_n))
+    assert [planned[line].new_line for line in written] == [
+        "reveal 'claude://session/<session-name>' --detail summary",
+        "reveal 'claude://session/<session-name>/messages' --detail raw   # raw dump"]
+    assert planned[value].reason == planned[variable].reason == planned[callee].reason == migrate.PLACEHOLDER
+    assert planned[bare_n].reason.startswith(f'{migrate.BINDER_REJECTS}: ')  # the binder's own refusal of limit=N
+    text, done = migrate.rewrite_text((docs / 'guides' / 'G.md').read_text(encoding='utf-8'), planned.values())
+    assert done == 2 and all(planned[line].new_line in text for line in written)
+
+
 def test_a_regex_anchor_is_a_value_not_a_shell_variable(tmp_path):
     line = "reveal 'metrics://src?file~=\\.(py|js)$'"
     planned, _ = _planned(tmp_path, _fenced(line))
@@ -321,14 +340,25 @@ def _reveal_stage(tokens):
     return tokens[:tokens.index('|')] if '|' in tokens else list(tokens)
 
 
+# An address placeholder the script keeps -> the named fixture's resource it stands for in the proof (both sides).
+FIXTURE_ADDRESSES = {'<session-name>': 'my-session'}  # claude_session_fixture.SESSION_NAMES
+
+
+def _filled(tokens):
+    for placeholder, value in FIXTURE_ADDRESSES.items():
+        tokens = [t.replace(placeholder, value) for t in tokens]
+    return tokens
+
+
 def _doc_rewrites(planned=None):
     """(original, rewritten) once each, for the rewrites in *planned* (default: the shipped docs) whose reveal stage the
-    named fixture runs."""
+    named fixture runs, an address placeholder filled with the fixture's resource on both sides."""
     names, seen = _fixture_names(), {}
     for examples in (migrate.plan() if planned is None else planned).values():
         for e in examples:
-            if e.kind == 'rewrite' and _named_fixture_skip(_reveal_stage(e.tokens), names) is None:
-                seen.setdefault(shlex.join(e.tokens), shlex.split(e.new_line, comments=True))
+            original = _filled(e.tokens)
+            if e.kind == 'rewrite' and _named_fixture_skip(_reveal_stage(original), names) is None:
+                seen.setdefault(shlex.join(original), _filled(shlex.split(e.new_line, comments=True)))
     return sorted(seen.items())
 
 
