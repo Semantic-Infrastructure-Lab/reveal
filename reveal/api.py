@@ -188,14 +188,16 @@ def _typed_element(path: str, name: str, element_type: str) -> Optional[Dict[str
         return attach_invocation_warnings(dict(ResultBuilder.element(result, file_path))) if result is not None else None
 
 
-def _noted_answer(scheme: str, uri: str, overrides: Dict[str, Any], answer):
+def _noted_answer(scheme: str, uri: str, overrides: Dict[str, Any], answer, element_note: Optional[str] = None):
     """Answer inside an invocation scope that notes every retired spelling the request uses, as the CLI does:
     RETIREMENTS is the one source (its scheme, parameters, values and typed keywords), and the notes reach the
     result's ``meta.warnings`` as the CLI's JSON carries them (BACK-2654; it used to note declared aliases only).
     A URI request that retires says it once, as the Python call that replaces it (BACK-2716): that note covers the
     per-key notes of the controls it renders. A request that says no request note (a resource URI with no query string)
     says each legacy keyword's own row: nothing else would. The answer carries what the request's query-key log
-    recorded too (a parser's ``unknown_query_param``), as the CLI's JSON and the noun form do (``json_answer``)."""
+    recorded too (a parser's ``unknown_query_param``), as the CLI's JSON and the noun form do (``json_answer``).
+    *element_note*: the row of a legacy element joined onto the URI (``_declared_element_uri``), said after the URI's
+    own keys and before the request note, the CLI's order (BACK-2813)."""
     from .cli.invocation import (Invocation, invocation_scope, note_uri_spelling, request_noted, retirement_note,
                                  uri_retirement_keys)
     from .utils.json_utils import json_answer
@@ -205,6 +207,8 @@ def _noted_answer(scheme: str, uri: str, overrides: Dict[str, Any], answer):
     with invocation_scope(Invocation.parse(['reveal', uri]), retirements_to_stderr=False, form='python'):
         for key in keys:
             (note_uri_spelling if by_request and says_request else retirement_note)(key)
+        if element_note:
+            retirement_note(element_note)
         _note_retired_where_fields(scheme, uri, overrides)
         if by_request:
             _note_uri_request(scheme, uri, overrides)
@@ -345,8 +349,8 @@ def _legacy_element(adapter_class: Any, scheme: str, element_name: Optional[str]
     """The RETIREMENTS row of a positional element a declared noun still answers until the cut, or None. A declared
     noun reads no positional element: the CLI's refusal, before the adapter is built, never in get_element (V020: a
     missing element is None there); plugin subclasses keep forwarding (BACK-2687). A scheme whose element is a legacy
-    spelling (``target:SCHEME.element``: help://, reveal://, and the unbound diff://) answers it through get_element
-    with its note (BACK-2767, BACK-2768)."""
+    spelling (``target:SCHEME.element``) answers it with its note (BACK-2767, BACK-2768): help:// and diff:// through
+    the URI the CLI joins (``_declared_element_uri``, BACK-2813), reveal:// through get_element."""
     if not element_name:
         return None
     from .adapters.factory import uses_bound_query_call
@@ -357,6 +361,30 @@ def _legacy_element(adapter_class: Any, scheme: str, element_name: Optional[str]
         from .errors import RequestValidationError
         raise RequestValidationError(unread_element_message(adapter_class, scheme, element_name))
     return legacy
+
+
+def _declared_element_uri(scheme: str, uri: str, element_name: str) -> Optional[str]:
+    """The URI a declared noun's legacy positional element names, joined as the CLI's declared route joins it
+    (``legacy_element_resource``: ``diff://L:R`` and ``NAME`` are ``diff://L:R/NAME``, ``help://`` and ``quick`` are
+    ``help://quick``), its query kept, so the request is answered by the route that answers the joined URI, as at the
+    CLI: its walk exclusion, decline, failure mapping and envelope (D21, BACK-2813). None for a scheme the CLI answers
+    otherwise (reveal://, whose element its get_element reads)."""
+    from .cli.routing.declared import declared_adapter_class, legacy_element_resource
+    if declared_adapter_class(scheme) is None:
+        return None
+    head, separator, query = uri.partition('?')
+    joined = legacy_element_resource(scheme, head.partition('://')[2], element_name)
+    return None if joined is None else f'{scheme}://{joined}{separator}{query}'
+
+
+def _join_legacy_element(scheme: str, uri: str, element_name: Optional[str], legacy_element: Optional[str]):
+    """(uri, element, legacy element row, element note) the request answers by: a declared noun's legacy element
+    joined onto its URI (``_declared_element_uri``), no element left and its row the note the bound route says;
+    otherwise the request as given."""
+    joined = _declared_element_uri(scheme, uri, element_name) if legacy_element and element_name else None
+    if joined is None:
+        return uri, element_name, legacy_element, None
+    return joined, None, None, legacy_element
 
 
 @_api_exit
@@ -381,7 +409,9 @@ def query(
         element_name: With a noun, its target, the CLI's positional (``"src"``; omitted, the noun's default,
             usually ``"."``). With a URI, an element for an adapter whose ``get_element`` reads one (plugins and
             undeclared adapters); a declared noun reads no element and refuses it as an invalid request
-            (``RequestValidationError``) naming the URI form, as at the CLI.
+            (``RequestValidationError``) naming the URI form, as at the CLI. A legacy element a noun still answers
+            until the cut is noted and answered as the CLI answers it: ``query("help://", "quick")`` is
+            ``help://quick``, ``query("diff://a.py:b.py", "f")`` is ``diff://a.py:b.py/f``.
         **kwargs: With a noun, its flags as keywords (above): an unknown keyword raises
             ``UnsupportedOverrideError``; an invalid request (a value outside its choices, a control the
             answer does not read, a target that matches nothing, a path that does not exist) raises
@@ -460,6 +490,10 @@ def query(
     _refuse_removed_controls(scheme, uri, kwargs)
     from .adapters.factory import _canonical_init, uses_bound_query_call
     legacy_element = _legacy_element(adapter_class, scheme, element_name)
+    # A declared noun's legacy element joins its URI as on the CLI and takes the bound route below (its row noted by
+    # _noted_answer).
+    uri, element_name, legacy_element, element_note = _join_legacy_element(scheme, uri, element_name, legacy_element)
+    resource, respect_gitignore = split_respect_gitignore(uri.split("://", 1)[1])
 
     from .utils.request_cache import host_request
     from .utils.invocation_log import answer_is_json, log_scope
@@ -513,7 +547,7 @@ def query(
                     from .utils.results import note_incomplete
                     note_incomplete(result, facts)
                 return result
-            bound_result: Dict[str, Any] = _noted_answer(scheme, uri, kwargs, bound_answer)
+            bound_result: Dict[str, Any] = _noted_answer(scheme, uri, kwargs, bound_answer, element_note)
             return _spelled(bound_result)
         # Only a class's own declaration adopts the check, as with BOUND_QUERY_CALL: a plugin subclass that inherits
         # PARAM_SPECS keeps forwarding its keywords to its own structure call.

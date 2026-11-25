@@ -73,6 +73,21 @@ def test_diff_file_left_directory_right_element_is_refused_alike(pair):
         api.query('diff://a.py:dB', 'h')
 
 
+@pytest.mark.parametrize('scheme,uri,element,joined', [
+    ('help', 'help://', 'quick', 'help://quick'),
+    ('diff', 'diff://dA:dB', 'h', 'diff://dA:dB/h'),
+    ('diff', 'diff://dA/:dB/', 'h', 'diff://dA/:dB/h'),
+    ('diff', 'diff://dA:dB?exclude=skip.py', 'h', 'diff://dA:dB/h?exclude=skip.py'),
+    ('diff', 'diff://env://:env://', 'PATH', 'diff://env://:env:///PATH'),
+    ('reveal', 'reveal://adapters/env.py', 'EnvAdapter', None),
+])
+def test_the_join_is_the_clis(scheme, uri, element, joined):
+    """The API's join is the CLI's (``legacy_element_resource``) on the path, the query kept; none off the declared
+    route (reveal://)."""
+    from reveal.api import _declared_element_uri
+    assert _declared_element_uri(scheme, uri, element) == joined
+
+
 # --- control: green before and after ---------------------------------------------------------------------------------
 
 def test_reveal_element_still_answers_through_get_element_alike():

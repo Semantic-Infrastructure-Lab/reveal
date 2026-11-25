@@ -10,8 +10,8 @@ it (``env://:env:///PATH``), diff does not split a non-git URI side, and the pai
 Shared owner: ``cli/routing/declared.py`` (``legacy_element_resource``). Effect on other nouns: only a noun with a
 ``target:NOUN.element`` row joins (diff, help, reveal), and help's and reveal's paths never end in ``://``.
 
-The API's element form still answers through its own ``get_element`` route, which raises NotApplicableError: held as a
-strict xfail for BACK-2813, the step that moves ``api.query``'s legacy element onto the CLI's join.
+The API's element form answered through its own ``get_element`` route, which raised NotApplicableError; since BACK-2813
+it takes the CLI's join and returns the decline.
 """
 import json
 
@@ -20,7 +20,6 @@ import pytest
 from conftest import _run_reveal_direct
 from reveal import api
 from reveal.cli.routing.declared import legacy_element_resource
-from reveal.errors import NotApplicableError
 
 pytestmark = [pytest.mark.component]
 
@@ -85,9 +84,6 @@ def test_mcp_positional_element_on_an_env_pair_declines():
     _declined(json.loads(shown))
 
 
-@pytest.mark.xfail(strict=True, raises=NotApplicableError,
-                   reason="BACK-2813: api.query's legacy element calls get_element itself, outside the CLI's join "
-                          "and the decline seam; it raises where the CLI declines")
 def test_api_positional_element_on_an_env_pair_declines():
     doc = api.query('diff://env://:env://', 'PATH')
     _declined(doc)

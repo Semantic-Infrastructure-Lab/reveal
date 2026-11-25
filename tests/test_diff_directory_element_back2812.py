@@ -11,8 +11,8 @@ The rule now (ruling A2 on the diff F1 inventory): ``RIGHT/NAME`` is an element 
 ``file://`` side splits as a local path does. Accepted costs: a missing child of a directory pair answers "Element
 'NAME' not found" (still exit 2), and a file left with a directory right is not spellable (it stays "File not found").
 
-The API's own element route (``api.query(URI, ELEMENT)``) answers through ``get_element`` beside the CLI's owner; its
-answer equals the CLI's only once BACK-2813 moves it onto the CLI's join, held as a strict xfail here.
+The API's element form (``api.query(URI, ELEMENT)``) answers through the CLI's join since BACK-2813, so its answer
+equals the CLI's.
 """
 import json
 import os
@@ -123,8 +123,6 @@ def test_a_missing_child_of_a_directory_pair_is_an_element_miss(dirs):
     assert doc['error'] == "Element 'nosuch' not found", doc
 
 
-@pytest.mark.xfail(strict=True, reason="BACK-2813: api.query(URI, ELEMENT) answers through get_element beside the CLI's "
-                                       "owner (no contract_version, source or source_type)")
 def test_api_positional_element_equals_the_cli(dirs):
     code, cli, stderr = _run('diff://dA:dB', 'h')
     assert code == 0, stderr

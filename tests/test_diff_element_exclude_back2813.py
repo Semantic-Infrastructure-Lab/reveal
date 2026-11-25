@@ -1,11 +1,11 @@
 """``api.query('diff://A:B', NAME, exclude=P)`` applies ``exclude`` as ``reveal diff A B/NAME --exclude P`` does (BACK-2813).
 
-The API's element form (a ``target:diff.element`` row: ``api.query(URI, ELEMENT)``) does not take the CLI's join of the
-element onto the pair; it calls the adapter's ``get_element`` itself, outside the declared route's ``exclusion_scope``,
-decline seam and envelope. So ``exclude`` is accepted and never applied (h is only in the excluded skip.py, and the
-API still answers it), and a file pair's element answer lacks the CLI's ``contract_version``, ``source`` and
-``source_type``. The fix is ``reveal/api.py``'s legacy-element route (the api-parity lane's file until its P5 lands):
-the reds are strict xfails until then. The siblings below pass today and must keep passing.
+The API's element form (a ``target:diff.element`` row: ``api.query(URI, ELEMENT)``) did not take the CLI's join of the
+element onto the pair; it called the adapter's ``get_element`` itself, outside the declared route's ``exclusion_scope``,
+decline seam and envelope. So ``exclude`` was accepted and never applied (h is only in the excluded skip.py, and the
+API still answered it), and a file pair's element answer lacked the CLI's ``contract_version``, ``source`` and
+``source_type``. ``api.query`` now joins a declared noun's legacy element as the CLI does and answers the joined URI
+through the bound route (``reveal/api.py`` ``_declared_element_uri``). The siblings passed before and still pass.
 """
 import json
 
@@ -16,9 +16,6 @@ from reveal import api
 from reveal.errors import ElementNotFoundError
 
 pytestmark = [pytest.mark.component]
-
-WHY = "BACK-2813: api.query's legacy element calls get_element itself, outside the CLI's join and exclusion scope"
-
 
 @pytest.fixture
 def dirs(tmp_path, monkeypatch):
@@ -33,7 +30,6 @@ def dirs(tmp_path, monkeypatch):
     return tmp_path
 
 
-@pytest.mark.xfail(strict=True, reason=WHY)
 @pytest.mark.parametrize('uri,keywords', [('diff://dA:dB', {'exclude': 'skip.py'}),
                                           ('diff://dA:dB?exclude=skip.py', {})], ids=['keyword', 'uri-query'])
 def test_api_element_form_applies_exclude(dirs, uri, keywords):
@@ -41,14 +37,13 @@ def test_api_element_form_applies_exclude(dirs, uri, keywords):
         api.query(uri, 'h', **keywords)
 
 
-@pytest.mark.xfail(strict=True, reason=WHY + ' (no contract_version, source or source_type)')
 def test_api_element_form_equals_the_cli_on_a_file_pair(dirs):
     run = _run_reveal_direct('diff://a.py:b.py', 'f', '--format', 'json')
     assert run.returncode == 0, run.stderr
     assert api.query('diff://a.py:b.py', 'f') == json.loads(run.stdout)
 
 
-# --- siblings: green before and after ------------------------------------------------------------------------------
+# --- siblings: green before and after the fix ------------------------------------------------------------------------------
 
 def test_api_element_form_answers_without_exclude(dirs):
     doc = api.query('diff://dA:dB', 'h')

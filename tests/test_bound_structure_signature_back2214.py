@@ -14,7 +14,7 @@ from reveal import api
 from reveal.adapters.base import get_adapter_class
 from reveal.adapters.factory import _canonical_init, uses_bound_query_call
 from reveal.adapters.registry import BUILTIN_SCHEMES
-from reveal.errors import NotApplicableError, UnsupportedOverrideError
+from reveal.errors import UnsupportedOverrideError
 
 BOUND_SCHEMES = [scheme for scheme in BUILTIN_SCHEMES if uses_bound_query_call(get_adapter_class(scheme))]
 
@@ -72,11 +72,10 @@ def test_a_direct_structure_keyword_is_refused(project, scheme, resource):
 
 
 def test_diff_does_not_hand_its_keywords_to_a_side():
-    # A side that takes no keyword crashed with a raw TypeError; it declines as it does without the keyword.
-    with pytest.raises(NotApplicableError):
-        api.query('diff://env://:env://', 'PATH')
-    with pytest.raises(NotApplicableError):
-        api.query('diff://env://:env://', 'PATH', exclude='x')
+    # A side that takes no keyword crashed with a raw TypeError; it declines as it does without the keyword (the
+    # declined document, as the CLI's exit 0, since the element form takes the CLI's join: BACK-2813).
+    assert api.query('diff://env://:env://', 'PATH')['applicable'] is False
+    assert api.query('diff://env://:env://', 'PATH', exclude='x')['applicable'] is False
 
 
 def test_diff_element_answers_with_an_api_keyword(project):
