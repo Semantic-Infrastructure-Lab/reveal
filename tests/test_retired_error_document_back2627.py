@@ -8,8 +8,8 @@ the row with its own invalid-request document, the row's text as its message, th
 (stormy-rainbow-1124 retire ruling 4); the text line on stderr is unchanged.
 
 Each case is compared with a refusal the same route already answers (an invalid value): the two documents have one
-shape, type and source, and differ in the message only. Text mode and the Python API are the unchanged controls (the
-API's class for the error stage is BACK-2803's).
+shape, type and source, and differ in the message only. Text mode is the unchanged control; the Python API raises
+``RequestValidationError`` with the row's text (BACK-2803).
 """
 import json
 import re
@@ -144,10 +144,14 @@ def test_mcp_reveal_run_returns_the_document_as_the_tool_failure(proj, monkeypat
     assert doc['error'] == row.text and doc['type'] == 'element_view', shown
 
 
-def test_the_python_api_still_raises_the_rows_error(proj, monkeypatch):
-    """Control: the API raises what it raised (``RetiredSpellingError`` with the row; its class is BACK-2803's)."""
+def test_the_python_api_raises_the_request_error_with_the_rows_text(proj, monkeypatch):
+    """The API takes the error itself, not the document: ``RequestValidationError`` with the row's text, as for every
+    other exit 2, the retirement its cause (BACK-2803, ``api._api_exit``)."""
     from reveal import api
+    from reveal.errors import RequestValidationError
     row = _at_error(monkeypatch, 'param:calls.top')
     monkeypatch.chdir(proj)
-    with pytest.raises(RetiredSpellingError, match=re.escape(row.text)):
+    with pytest.raises(RequestValidationError) as raised:
         api.query('calls', '.', sort='-callers', top=3)
+    assert str(raised.value) == row.text
+    assert isinstance(raised.value.__cause__, RetiredSpellingError) and raised.value.__cause__.entry == row

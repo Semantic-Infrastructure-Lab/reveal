@@ -121,7 +121,7 @@ def test_run_declared_command_answers_a_retired_flag_where_the_binder_refuses(mo
 
 
 def test_run_declared_command_hands_a_consumer_the_error(monkeypatch, tmp_path, capsys):
-    """The Python API's noun form passes a consumer: it keeps the error it raised (BACK-2803 maps its class)."""
+    """The Python API's noun form passes a consumer: it keeps the error, which the API's exit maps (BACK-2803)."""
     from reveal.cli.routing.declared import run_declared_command
     row, scope, parser, argv = _declared_request(monkeypatch, tmp_path,
                                                  ['calls', '.', '--sort=-callers', '--top', '3', '--format', 'json'])
