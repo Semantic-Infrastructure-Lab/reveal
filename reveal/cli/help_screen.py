@@ -6,10 +6,10 @@ element views), one entry per live subcommand from its `COMMANDS` entry (role, r
 so a new noun needs no edit here, and a retired one (no role) never appears. `help://agent/full` stays the
 long hand-written reference (reveal/docs/AGENT_HELP.md).
 """
-import textwrap
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 from ..nav_params import ELEMENT_VIEWS
+from ..utils.formatting import command_entry
 from ..version import __version__
 from .invocation import COMMAND_ROLES, COMMANDS, EPILOG_ORDER, EXIT_CODES, CommandSpec
 
@@ -23,11 +23,19 @@ ROLE_HEADINGS = {'verb': 'Verbs off the ladder (any target):',
                  'resource': 'Resources (data and session stores; a URI names one, e.g. sqlite://app.db/users):',
                  'ops': 'Ops probes (the hosting family: reveal help adapters):',
                  'tooling': 'Tooling:'}
-WIDTH = 120
-COLUMN = 36  # the command column; a longer starter puts its summary on the next line
+# The path reads, their one copy: (command, rung, what it answers). A rung of None is a tip off the ladder, which
+# --agent-help prints and help://quick's ladder leaves out. Each runs as written in the executable-docs fixture.
+PATH_READS: Tuple[Tuple[str, Optional[int], str], ...] = (
+    ('reveal src/', 0, 'the directory tree (reveal docs/ --ext md: one file type)'),
+    ('reveal src/app.py', 1, "the file's outline (functions, classes, imports)"),
+    ('reveal src/app.py load_config', 2, 'one element (also Class.method, :120-160)'),
+    ('reveal docs/guide.md "API guide"', 2, 'one section of a document'),
+    ('reveal src/ --grep validate_item', 2, 'matching lines, grouped by their enclosing function'),
+    ('reveal src/app.py :180 --scope', None, "the element enclosing a line; --outline nests a file's outline"),
+    ('reveal src/app.py load_config --view boundary', 4, 'inputs, environment and effects in one report'),
+)
 
-# The screen's prose, its one copy. The path reads share the entries' column; "How options work" is
-# COMMAND_MODEL's text of record.
+# The screen's prose, its one copy. "How options work" is COMMAND_MODEL's text of record.
 AGENT_HELP_PROSE = """\
 Reveal {version}: structure first, then read only what the question needs.
 
@@ -39,14 +47,7 @@ reveal VERB TARGET...             act on any target: {verbs}
 SCHEME://RESOURCE [--option]      a resource by its address, with the noun's flags
 
 Paths read (start here; quote every --where expression and URI: > < & | are shell operators):
-  reveal src/                           0 orient: the directory tree (reveal docs/ --ext md: one file type)
-  reveal src/app.py                     1 structure: the file's outline (functions, classes, imports)
-  reveal src/app.py load_config         2 content: one element (also Class.method, :120-160)
-  reveal docs/guide.md "API guide"      2 content: one section of a document
-  reveal src/ --grep validate_item      2 content: matching lines, grouped by their enclosing function
-  reveal src/app.py :180 --scope        the element enclosing a line; --outline nests a file's outline
-  reveal src/app.py load_config --view boundary
-                                        4 behaviour: inputs, environment and effects in one report
+{path_reads}
 
 {commands}
 
@@ -81,11 +82,16 @@ def _live() -> List[Tuple[str, CommandSpec]]:
 
 def _entry(spec: CommandSpec) -> List[str]:
     """One subcommand: its starter, then its summary wrapped at the command column."""
-    indent = ' ' * (COLUMN + 4)
-    summary = textwrap.wrap(spec.summary, WIDTH - len(indent)) or ['']
-    if len(spec.starter) > COLUMN:
-        return [f'  {spec.starter}'] + [indent + part for part in summary]
-    return [f'  {spec.starter:<{COLUMN}}  {summary[0]}'] + [indent + part for part in summary[1:]]
+    return command_entry(spec.starter, spec.summary)
+
+
+def _path_read_lines() -> List[str]:
+    """Each path read with its rung and the rung's word (`0 orient: ...`); a tip has neither."""
+    lines: List[str] = []
+    for command, rung, text in PATH_READS:
+        label = text if rung is None else f"{rung} {RUNG_QUESTIONS[rung].split(':')[0]}: {text}"
+        lines += command_entry(command, label)
+    return lines
 
 
 def _command_lines(live: List[Tuple[str, CommandSpec]]) -> List[str]:
@@ -112,6 +118,8 @@ def render_agent_help() -> str:
         version=__version__,
         views=' | '.join(ELEMENT_VIEWS),
         verbs=' | '.join(name for name, spec in live if spec.role == 'verb'),
+        path_reads='\n'.join(_path_read_lines()),
         commands='\n'.join(_command_lines(live)),
         exits='\n'.join(f'  {code}  {text}' for code, text in sorted(EXIT_CODES.items())),
     )
+

@@ -3,7 +3,8 @@
 import os
 import re
 import shlex
-from typing import Any
+import textwrap
+from typing import Any, List
 
 
 def lines_label(count: Any, grouped: bool = False) -> str:
@@ -63,3 +64,16 @@ def cwd_path(root: str, name: str) -> str:
     except ValueError:  # another drive on Windows
         return path
     return path if rel.startswith('..') else rel
+
+
+def command_entry(command: str, text: str, column: int = 36, width: int = 120) -> List[str]:
+    """One help entry: a command in its column, then what it answers wrapped to ``width`` (BACK-1055).
+
+    A command longer than the column takes its own line and its text starts on the next, so no line passes
+    ``width``. ``--agent-help`` and ``help://quick`` print their command entries through this one layout.
+    """
+    indent = ' ' * (column + 4)
+    parts = textwrap.wrap(text, width - len(indent)) or ['']
+    if len(command) > column:
+        return [f'  {command}'] + [indent + part for part in parts]
+    return [f'  {command:<{column}}  {parts[0]}'] + [indent + part for part in parts[1:]]

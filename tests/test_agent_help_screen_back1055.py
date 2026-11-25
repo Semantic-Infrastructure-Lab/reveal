@@ -133,3 +133,21 @@ def test_the_screen_prints_concrete_commands_beyond_the_starters(screen):
 @pytest.mark.parametrize('command', _commands(render_agent_help()))
 def test_every_command_on_the_screen_runs_as_written(named_harness, command):  # noqa: F811
     recipes._assert_text_as_written(named_harness, command, literal=True)
+
+
+def test_command_entry_keeps_the_column_and_wraps_long_text():
+    """The one entry layout --agent-help and help://quick share (reveal/utils/formatting.py)."""
+    from reveal.utils.formatting import command_entry
+    assert command_entry('reveal x', 'short') == ['  ' + 'reveal x'.ljust(36) + '  short']
+    assert command_entry('reveal ' + 'y' * 40, 'text') == ['  reveal ' + 'y' * 40, ' ' * 40 + 'text']
+    wrapped = command_entry('reveal x', 'word ' * 30)
+    assert len(wrapped) == 2 and max(map(len, wrapped)) <= 120 and wrapped[1].startswith(' ' * 40 + 'word')
+
+
+def test_the_path_reads_render_from_their_one_table(screen):
+    """Each path read prints with its rung's word; the tip off the ladder prints without one."""
+    from reveal.cli.help_screen import PATH_READS
+    for command, rung, text in PATH_READS:
+        assert command in screen and text in screen
+    assert '  reveal src/app.py' + ' ' * 21 + '1 structure: the file' in screen
+    assert '  reveal src/app.py :180 --scope        the element enclosing a line' in screen
