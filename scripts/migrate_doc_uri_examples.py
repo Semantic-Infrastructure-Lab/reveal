@@ -29,9 +29,11 @@ says so (``plain_path``) and the subcommand round-trips; a resource line naming 
 Only the URI word changes: words before it, flags after it (BACK-2673: flags after a URI are the subcommand's flags),
 pipes and comments stay as written. A command continued with backslashes over several lines is rewritten on the physical
 line that holds its URI word, its first, and the joined command's words must be the old ones with that word replaced
-(``_continued_first_line``). An example is left, with the reason counted, when the doc shows it failing, it names
+(``_continued_first_line``). A ``<placeholder>`` in the URI's address part (``claude://session/<session-name>``) binds
+as a plain stand-in name and comes back quoted in the rendered line (``address_slots``). An example is left, with the reason counted, when the doc shows it failing, it names
 its spelling as deprecated, it is not on one line of the file (an argument quoted across lines, or a URI word after the
-first physical line), a control it gives has no flag (``UnrenderableRequest``),
+first physical line), it holds a shell variable or a placeholder in a query value, a control it gives has no flag
+(``UnrenderableRequest``),
 the binder rejects it, a flag after the URI gives a control the URI gives too, the rendered line does not parse with
 the noun's parser, the replacement would spell a word that itself retires, or its scheme says no request note (a retired
 twin with its own ``scheme:`` row). An ops scheme's query string is no retiring request at all (D13), so it is no
@@ -74,7 +76,7 @@ SHOWS_THE_URI = 'its comment presents it as the URI spelling of a neighbouring l
 OTHER_NOUN = 'its noun is outside --noun'
 NOT_ONE_LINE = 'not on one line of the file (a multi-line argument, or a URI after the first physical line)'
 NOT_LOCATED = 'the URI word is not spelled as one quoted or bare word'
-PLACEHOLDER = 'a <placeholder> or $VARIABLE in the URI'
+PLACEHOLDER = 'a $VARIABLE in the URI, or a <placeholder> in a query value: by hand'
 NO_REQUEST_NOTE_TWIN = 'retired twin scheme: its own scheme: row is the note, not a request note'
 UNRENDERABLE = 'no canonical form'  # + the renderer's reason
 BINDER_REJECTS = 'the binder rejects the request'  # + the binder's message
@@ -91,7 +93,9 @@ NO_ROUND_TRIP = 'the subcommand rendering does not round-trip: the resource line
 URI_COMMENT = re.compile(r'\bURI\b|\bsame (?:answer|request|result)\b|query[- ]param', re.IGNORECASE)
 # The extractor's placeholder shape (tests/test_example_recipes_run.py ``_named_fixture_skip``), and shell variables
 # ($file, ${x}, $(cmd)); a regex anchor (name~=Manager$) is a value.
-PLACEHOLDER_WORD = re.compile(r'<[A-Za-z_-]+>|\$[A-Za-z_{(]')
+ANGLE_PLACEHOLDER = re.compile(r'<[A-Za-z_-]+>')
+SHELL_VARIABLE = re.compile(r'\$[A-Za-z_{(]')
+SLOT = 'revealslot{}'  # an address placeholder's stand-in while the request binds and renders: a plain name
 PROSE_URI = re.compile(r'\b([a-z]+)://[^\s`\'")\]|]*\?[^\s`\'")\]|]*')
 _SHELL_WORDS = {'|', '||', '&&', ';', '>', '>>', '2>&1', '2>/dev/null'}
 
@@ -283,6 +287,24 @@ def _continued_first_line(line: str, text: str) -> Optional[str]:
     return found.pop() if len(found) == 1 else None
 
 
+def address_slots(uri: str) -> Optional[Dict[str, str]]:
+    """{stand-in: placeholder} for the ``<placeholder>`` words in *uri*'s address part (before ``?``), the part the binder
+    reads as an opaque resource name; {} when *uri* has none. None when *uri* holds a shell variable (rendering would
+    quote it and stop the shell expanding it) or a placeholder in a query value (the noun binds and types values:
+    ``limit=<N>``, a callee name), which are left for a hand edit."""
+    address, _, query = uri.partition('?')
+    if SHELL_VARIABLE.search(uri) or ANGLE_PLACEHOLDER.search(query):
+        return None
+    words = list(dict.fromkeys(ANGLE_PLACEHOLDER.findall(address)))
+    return {SLOT.format(i): word for i, word in enumerate(words)}
+
+
+def _filled(text: str, slots: Dict[str, str], back: bool = False) -> str:
+    for slot, word in slots.items():
+        text = text.replace(word, slot) if not back else text.replace(slot, word)
+    return text
+
+
 def resource_line_index(tokens: Sequence[str]) -> Optional[int]:
     """The index of the URI word when *tokens* is an already-written resource line: its first word that is not a flag is
     a URI to a known scheme that is not analysis-only and spells no query string (``retiring_uri_index`` reads the
@@ -342,7 +364,8 @@ def classify(source: str, line: str, tokens: List[str], failing: bool, text: str
         return left(EMBEDDED)
     if not request_noted(example.scheme):  # a twin: retiring_uri_index reads no scheme that neither notes nor retires
         return left(NO_REQUEST_NOTE_TWIN)
-    if PLACEHOLDER_WORD.search(uri):
+    slots = address_slots(uri)
+    if slots is None:
         return left(PLACEHOLDER)
     if nouns is not None and example.scheme not in nouns:
         return left(OTHER_NOUN)
@@ -356,7 +379,9 @@ def classify(source: str, line: str, tokens: List[str], failing: bool, text: str
         return left(SEVERAL_COMMANDS)
     others = [w for i, w in enumerate(stage, 1) if i != index]
     try:
-        rendered, form, fell_back = render(uri, others)
+        rendered, form, fell_back = render(_filled(uri, slots), others)
+        if slots:  # each placeholder back in its word, the word quoted as the shell needs
+            rendered = shlex.join(_filled(word, slots, back=True) for word in shlex.split(rendered))
     except _Left as exc:
         return left(str(exc))
     except ValueError as exc:  # UnrenderableRequest is a ValueError; the binder raises ValueError too
