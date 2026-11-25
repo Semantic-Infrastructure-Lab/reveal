@@ -185,6 +185,8 @@ def _emit_depth_navigation(ctx: _NavCtx, flag: str, from_line: int, to_line: int
                        'structure_scope': structure_scope}}
     if flag == 'flow':
         result['meta']['flow_selectors'] = list(ctx.request.kind)
+    else:  # the effects view's loops mode
+        result['meta']['mode'] = ctx.request.mode
     if limited:
         note_warning(result, {
             'type': 'depth_limited', 'field': 'findings', 'cause': 'max_depth',
@@ -394,7 +396,9 @@ def _nav_sideeffects(ctx: _NavCtx) -> Optional[Dict[str, Any]]:
             for e in effects if e['kind'] is not None
         ]
         note = skipped_files_note(effects.skipped) if transitive else None
-        return _nav_json('sideeffects', ctx.analyzer.path, ctx.element, from_line, to_line, findings,
+        # The view's name and its mode, never the old flags' words (BACK-2796): every spelling answers one document.
+        return _nav_json('effects', ctx.analyzer.path, ctx.element, from_line, to_line, findings,
+                         extra_meta={'mode': ctx.request.mode},
                          warnings=[n for n in (note, _traversal_note(effects.traversal_failures),
                                                ambiguous_hops_note(effects.ambiguous)) if n])
     elif transitive:
@@ -414,7 +418,7 @@ def _nav_fanout(ctx: _NavCtx) -> Optional[Dict[str, Any]]:
         language=getattr(ctx.analyzer, 'language', None), max_depth=ctx.depth,
         depth_evidence=evidence,
     )
-    return _emit_depth_navigation(ctx, 'fanout', from_line, to_line, loops, evidence,
+    return _emit_depth_navigation(ctx, 'effects', from_line, to_line, loops, evidence,
                                   lambda: render_fanout(loops, from_line, to_line))
 
 
@@ -426,7 +430,8 @@ def _nav_statewrites(ctx: _NavCtx) -> Optional[Dict[str, Any]]:
         language=getattr(ctx.analyzer, 'language', None),
     )
     if ctx.as_json:
-        return _nav_json('statewrites', ctx.analyzer.path, ctx.element, from_line, to_line, writes)
+        return _nav_json('effects', ctx.analyzer.path, ctx.element, from_line, to_line, writes,
+                         extra_meta={'mode': ctx.request.mode})
     else:
         print(render_statewrites(writes, from_line, to_line))
 

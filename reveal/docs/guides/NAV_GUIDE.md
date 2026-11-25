@@ -84,8 +84,8 @@ element flags `--boundary`, `--effects`, `--flow[=SEL]` and `--exits` (replaced 
 `--catchmap`, `--returns`, `--flowto` and the code-element `--outline`; `--deps`,
 `--mutations`/`--writes` and `--calls` (replaced by `--inputs`, `--outputs`, `--callsites`).
 On these old flags `--depth` keeps its old meaning (the structural depth, or the transitive
-depth, 1–5 as on `--view`: a value outside it exits 2). JSON `meta.flag` keeps its value on either spelling (`flow`, `exits`,
-`boundary`, `sideeffects`, `fanout`, `statewrites`, `inputs`, ...); an old spelling adds a
+depth, 1–5 as on `--view`: a value outside it exits 2). JSON `meta.flag` names the view or operation on either spelling
+(`flow`, `exits`, `boundary`, `effects` with `meta.mode` `ordinary`, `loops` or `state`, `inputs`, ...); an old spelling adds a
 `retired_spelling` diagnostic in `meta.warnings`. `meta.flow_selectors` records the
 normalized `--kind` union (empty for bare flow). `--view exits` reports static sites and
 recorded gates rather than the retired `--flowto` reachability verdict.

@@ -486,7 +486,7 @@ class TestNavJsonOutput(unittest.TestCase):
 
     def test_sideeffects_json_envelope(self):
         result = self._run('collect_deps', {'sideeffects': True})
-        self._assert_envelope(result, 'sideeffects')
+        self._assert_envelope(result, 'effects')  # the view's name on every spelling (BACK-2796)
 
     def test_returns_json_envelope(self):
         result = self._run('collect_deps', {'returns': True})
@@ -498,7 +498,7 @@ class TestNavJsonOutput(unittest.TestCase):
 
     def test_fanout_json_envelope(self):
         result = self._run('collect_deps', {'fanout': True})
-        self._assert_envelope(result, 'fanout')
+        self._assert_envelope(result, 'effects')  # the view's name on every spelling (BACK-2796)
 
     def test_fanout_findings_have_effects_key(self):
         result = self._run('collect_deps', {'fanout': True})
@@ -508,7 +508,7 @@ class TestNavJsonOutput(unittest.TestCase):
 
     def test_statewrites_json_envelope(self):
         result = self._run('collect_deps', {'statewrites': True})
-        self._assert_envelope(result, 'statewrites')
+        self._assert_envelope(result, 'effects')  # the view's name on every spelling (BACK-2796)
 
     def test_statewrites_findings_have_kind_line_target(self):
         result = self._run('collect_deps', {'statewrites': True})
