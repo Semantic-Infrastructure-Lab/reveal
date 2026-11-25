@@ -918,11 +918,7 @@ def _named_fixture_commands(docs=None):
 
 # command -> task naming why it fails today. Strict xfail: a fix fails the run until deleted.
 # Untracked entries name the defect; the manager files them (wave1-c-docgate report).
-NAMED_KNOWN_VIOLATIONS: dict = {
-    "reveal 'ast://src?sort=name' --sort complexity": (
-        "the no-effect note says ast:// does not support --sort, but it does: the URI's sort= "
-        "wins (UX_GUIDE.md) (untracked)"),
-}
+NAMED_KNOWN_VIOLATIONS: dict = {}
 
 
 @pytest.fixture(scope='module')
