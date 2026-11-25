@@ -142,6 +142,7 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 - Help search takes the shared match flag: `reveal help --match TERM` or `reveal help://search --match TERM` (repeat to require every term), `--limit N` caps hits, and `reveal help [TOPIC]` is a subcommand. `?search=`, `--search`, `?top=`, `--top` and `help://search/TERM` answer with a note until 1.0; `--search TERM` answered "No search term". An empty term or a page that names nothing (`help://ast/bogus`) exits 2 (BACK-2773), saying the page's sentence (`Unknown section 'bogus'. Sections of ast: ...`) on every transport (`api.query` said `Invalid section`, MCP `Internal error executing tool`) (BACK-2787, BACK-2798).
 
 - `reveal calls PATH --callees NAME --detail full` (or `normal`, the default) takes a level as every noun does; the valueless `--detail`, `?detail`, `detail=True` and `--detail true|false` answer as `full`/`normal` with a note until 1.0, and other values (`yes`, `1`) exit 2 naming the levels (BACK-2774).
+- `reveal --agent-help` (also `reveal help agent`) prints one screen of at most 150 lines built from the command list: the command model, the path reads, one line per current command with a runnable example, grouped by ladder rung or role, how options work and the exit codes. It replaces the agent guide's hand-written "About This Guide" and "Before You Read This" sections, which leave `reveal help agent/full`; a missing guide file no longer makes `--agent-help` exit 1 (BACK-1055).
 
 ### Added
 
