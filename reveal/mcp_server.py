@@ -299,8 +299,10 @@ def _trace_absence_compatibility(answer) -> bool:
 
 
 def _declared_failure(answer) -> str | None:
-    """Consume owner facts and diagnostic origin, never rendered result text."""
-    from .utils.results import FailureCause, execution_failed
+    """Consume owner facts and diagnostic origin, never rendered result text. A failed analysis (exit 3) with no
+    authored public diagnostic is given in reveal's own words, the text the Python API raises for the same answer
+    (``analysis_failure_text``, BACK-2786); a failure with no authored text stays masked."""
+    from .utils.results import FailureCause, analysis_failure_text, execution_exit_code, execution_failed
     facts = answer.execution_facts
     if facts is None:
         return None
@@ -317,6 +319,9 @@ def _declared_failure(answer) -> str | None:
         return _tool_failure(str(exc), public=isinstance(exc, (OSError, ConfigLoadError)), exception=exc)
     if answer.public_diagnostic is not None:
         return _tool_failure(answer.public_diagnostic)
+    authored = analysis_failure_text(answer.result) if execution_exit_code(facts) == 3 else None
+    if authored is not None:
+        return _tool_failure(authored)
     return _tool_failure(answer.private_diagnostic or 'Required analysis or output failed', public=False)
 
 

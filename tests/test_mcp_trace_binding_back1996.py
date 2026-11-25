@@ -159,9 +159,10 @@ mcp_server.main()
         assert answer.is_error
         assert 'usable evidence follows' not in _text(answer)
         assert 'PRIVATE_INPUT_LOSS' not in json.dumps(answer.model_dump(mode='json'))
+        # reveal's own analysis_failed sentence (the cause's class, never its text), as the API raises it (BACK-2786)
+        assert '1 file(s) could not be analyzed completely (PermissionError)' in _text(answer)
 
     _run(tmp_path, scenario, code)
-    assert 'analysis_failed' in (tmp_path / 'server-stderr.txt').read_text(encoding='utf-8')
 
 
 def test_qualified_json_does_not_silence_ignored_query_warning(tmp_path):
