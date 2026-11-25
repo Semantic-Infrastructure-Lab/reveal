@@ -161,3 +161,16 @@ def test_sibling_the_bare_element_and_element_type_are_unchanged(fx):
 def test_control_analyze_still_refuses_an_elements_controls(fx):
     with pytest.raises(UnsupportedOverrideError, match="'view'"):
         api.analyze('m.py', view='boundary')
+
+
+@pytest.mark.parametrize('controls, flags', [({'scope': True}, ['--scope']), ({'around': 2}, ['--around', '2'])])
+def test_a_range_given_to_a_line_view_raises_the_clis_refusal(fx, capfd, controls, flags):
+    """``reveal F :A-B --scope`` exits 2 (BACK-2272); the library raises it as RequestValidationError with the CLI's text
+    and prints nothing, instead of the SystemExit the CLI's exit was."""
+    run = _run_reveal_direct('m.py', ':12-14', *flags)
+    assert run.returncode == 2 and run.stdout == ''
+    capfd.readouterr()
+    with pytest.raises(RequestValidationError) as caught:
+        api.element('m.py', ':12-14', **controls)
+    assert f'error: {caught.value}' == run.stderr.strip()
+    assert capfd.readouterr() == ('', '')
