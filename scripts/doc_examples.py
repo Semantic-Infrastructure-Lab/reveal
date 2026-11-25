@@ -86,15 +86,21 @@ def documented_commands(docs: Optional[Path] = None) -> Iterator[Tuple[str, str,
 
 def retiring_uri_index(tokens: Sequence[str]) -> Optional[int]:
     """The index of the URI word when *tokens* is a command whose first word that is not a flag is a URI request that
-    retires: an analysis-only scheme, or any URI spelling a query string (BACK-2716). None otherwise."""
+    retires: an analysis-only scheme, or any URI spelling a query string (BACK-2716), of a scheme that retires: it says
+    the request note (``request_noted``) or is a retired twin whose own ``scheme:`` row is its note. An ops scheme says
+    neither and never retires (D13), so its query string is no retiring request. None otherwise."""
     from reveal.adapters.base import get_adapter_class
+    from reveal.cli.invocation import RETIREMENTS, request_noted
     words = [(i, w) for i, w in enumerate(tokens[1:], 1) if not w.startswith('-')]
     if not words or '://' not in words[0][1]:
         return None
     index, word = words[0]
     scheme, _, rest = word.partition('://')
-    adapter = get_adapter_class(scheme.lower())
-    if adapter is not None and (getattr(adapter, 'ANALYSIS_ONLY', False) or '?' in rest):
+    scheme = scheme.lower()
+    adapter = get_adapter_class(scheme)
+    if adapter is None or not (request_noted(scheme) or f'scheme:{scheme}' in RETIREMENTS):
+        return None
+    if getattr(adapter, 'ANALYSIS_ONLY', False) or '?' in rest:
         return index
     return None
 

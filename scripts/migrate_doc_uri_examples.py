@@ -30,8 +30,9 @@ Only the URI word changes: words before it, flags after it (BACK-2673: flags aft
 pipes and comments stay as written. An example is left, with the reason counted, when the doc shows it failing, it names
 its spelling as deprecated, it is not one line of the file, a control it gives has no flag (``UnrenderableRequest``),
 the binder rejects it, a flag after the URI gives a control the URI gives too, the rendered line does not parse with
-the noun's parser, the replacement would spell a word that itself retires, or its scheme says no request note (a retired twin with its own ``scheme:`` row, or a noun with no
-declared subcommand yet). Prose is never edited: inline backtick commands and other URI mentions outside executable
+the noun's parser, the replacement would spell a word that itself retires, or its scheme says no request note (a retired
+twin with its own ``scheme:`` row). An ops scheme's query string is no retiring request at all (D13), so it is no
+example. Prose is never edited: inline backtick commands and other URI mentions outside executable
 blocks are counted as ``prose`` for the report only.
 
 Usage:
@@ -72,7 +73,6 @@ NOT_ONE_LINE = 'not one line of the file (a continuation or multi-line argument)
 NOT_LOCATED = 'the URI word is not spelled as one quoted or bare word'
 PLACEHOLDER = 'a <placeholder> or $VARIABLE in the URI'
 NO_REQUEST_NOTE_TWIN = 'retired twin scheme: its own scheme: row is the note, not a request note'
-NO_REQUEST_NOTE_UNDECLARED = 'no declared subcommand yet: the URI says no request note'
 UNRENDERABLE = 'no canonical form'  # + the renderer's reason
 BINDER_REJECTS = 'the binder rejects the request'  # + the binder's message
 BOTH_SPELL = 'a flag after the URI gives a control the URI gives too'
@@ -293,7 +293,7 @@ def classify(source: str, line: str, tokens: List[str], failing: bool, text: str
              nouns: Optional[Sequence[str]] = None) -> Optional[Example]:
     """The plan for one documented command, or None when it is no retiring URI request. *nouns*: rewrite only these
     schemes' requests (the rest are left, counted)."""
-    from reveal.cli.invocation import RETIREMENTS, request_noted
+    from reveal.cli.invocation import request_noted
     from scripts.check_retired_names import REPLACED_BY_CONTEXT
     index, origin = retiring_uri_index(tokens), 'query'
     if index is None:
@@ -315,9 +315,8 @@ def classify(source: str, line: str, tokens: List[str], failing: bool, text: str
         return left(SHOWS_THE_URI)
     if source.endswith('#embedded-md'):
         return left(EMBEDDED)
-    if not request_noted(example.scheme):
-        twin = f'scheme:{example.scheme}' in RETIREMENTS
-        return left(NO_REQUEST_NOTE_TWIN if twin else NO_REQUEST_NOTE_UNDECLARED)
+    if not request_noted(example.scheme):  # a twin: retiring_uri_index reads no scheme that neither notes nor retires
+        return left(NO_REQUEST_NOTE_TWIN)
     if PLACEHOLDER_WORD.search(uri):
         return left(PLACEHOLDER)
     if nouns is not None and example.scheme not in nouns:
