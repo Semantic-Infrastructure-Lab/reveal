@@ -1079,6 +1079,18 @@ def is_command_word(word: str) -> bool:
     return entry is not None and entry.removed
 
 
+def removed_noun_row(word: str) -> Optional[str]:
+    """The key of *word*'s ``scheme:`` or ``subcommand:`` row when that row is marked removed (the scheme's first), or
+    None: a noun the cut deleted. Every address of it, ``help://NOUN`` and ``help://schemas/NOUN`` included, is refused
+    with that row's text through ``retirement_note`` (BACK-2771, ruling 3), whether or not a page of that name is left.
+    A row that is only retired (note or error stage, its code still answering) is not this: its pages still answer."""
+    for key in (f'scheme:{word}', f'subcommand:{word}'):
+        entry = RETIREMENTS.get(key)
+        if entry is not None and entry.removed:
+            return key
+    return None
+
+
 def _find_command(tokens: Tuple[str, ...]) -> Optional[int]:
     """Index of the subcommand name, or None for the path/URI form.
 

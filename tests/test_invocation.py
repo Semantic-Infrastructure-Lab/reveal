@@ -59,6 +59,26 @@ def test_a_command_word_is_a_command_or_a_removed_subcommand_row(monkeypatch):
     assert is_command_word('deps')
 
 
+def test_a_removed_noun_row_is_a_removed_scheme_or_subcommand_row_scheme_first(monkeypatch):
+    """BACK-2771 ruling 3: the row a removed noun's help topic answers with. Only a row marked removed counts: a
+    retired noun whose code still answers (note or error stage) has none, nor an unknown word or a removed row of
+    another kind (``param:env.show_secrets``)."""
+    from dataclasses import replace
+
+    from reveal.cli.invocation import RETIREMENTS, removed_noun_row
+    assert removed_noun_row('python') == 'scheme:python'  # shipped: removed outright
+    assert removed_noun_row('stats') is None and removed_noun_row('review') is None  # retired, still answering
+    assert removed_noun_row('nosuchnoun') is None and removed_noun_row('env') is None
+    monkeypatch.setitem(RETIREMENTS, 'subcommand:review', replace(RETIREMENTS['subcommand:review'], stage='error'))
+    assert removed_noun_row('review') is None  # the error stage alone is not removed
+    monkeypatch.setitem(RETIREMENTS, 'subcommand:review', replace(RETIREMENTS['subcommand:review'], removed=True,
+                                                                  stage='error'))
+    assert removed_noun_row('review') == 'subcommand:review'
+    for key in ('subcommand:hotspots', 'scheme:hotspots'):
+        monkeypatch.setitem(RETIREMENTS, key, replace(RETIREMENTS[key], stage='error', removed=True))
+    assert removed_noun_row('hotspots') == 'scheme:hotspots'  # both rows removed: the scheme's, what help:// names
+
+
 def test_a_removed_command_word_is_still_the_command_and_dot_slash_still_the_path(monkeypatch):
     """BACK-2771: the router reads the predicate, so a removed word stays in command position (global options before
     it included) and is refused from its row; ``./deps`` stays the path form (BACK-1112)."""
