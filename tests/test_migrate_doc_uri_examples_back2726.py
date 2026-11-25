@@ -138,6 +138,24 @@ def test_twin_and_undeclared_schemes_and_other_nouns_are_left_with_their_reason(
     assert planned[ast].new_line == 'reveal ast src --kind function'
 
 
+def test_the_doc_uri_count_holds_the_spellings_that_retire_and_no_ops_scheme(tmp_path):
+    """The ratchet counts a URI request whose scheme retires: one that says the request note, or a retired twin whose
+    own scheme: row is its note. An ops scheme says no note and never retires (D13: outside D20 and the freeze), so its
+    query string is no retiring request (manager ruling 2, stormy-rainbow-1124)."""
+    from scripts.doc_examples import documented_uri_requests, retiring_uri_index
+    assert retiring_uri_index(['reveal', 'ast://src?kind=function']) == 1  # a noted noun's query string
+    assert retiring_uri_index(['reveal', 'claude://session/abc?errors', '--format', 'json']) == 1
+    assert retiring_uri_index(['reveal', 'metrics://src']) == 1  # an analysis-only scheme without a query
+    assert retiring_uri_index(['reveal', 'stats://src?hotspots=true']) == 1  # a twin: its scheme: row notes
+    assert retiring_uri_index(['reveal', 'claude://session/abc']) is None  # a resource with no query string
+    for ops in ("letsencrypt://?check-orphans", 'cpanel://user?check', 'ssl://example.com?expiring-within=30',
+                'mysql://localhost?view=health'):
+        assert retiring_uri_index(['reveal', ops]) is None, ops
+    docs = _docs(tmp_path, _fenced("reveal 'ast://src?kind=function'", "reveal 'letsencrypt://?check-orphans'",
+                                   "reveal 'cpanel://user?check'"))
+    assert documented_uri_requests(docs) == {"reveal 'ast://src?kind=function'"}
+
+
 def test_lines_the_script_cannot_place_or_should_not_touch_are_left(tmp_path):
     shown = 'reveal \'calls://src?callers=main\'   # not valid'
     several = "reveal 'imports://src?unused' && reveal 'imports://tests?unused'"
