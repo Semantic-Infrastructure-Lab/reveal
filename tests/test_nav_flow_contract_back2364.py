@@ -191,10 +191,12 @@ def _context(language, depth, bounds=None, kind=()):
 
 
 def _answer(ctx, handler):
+    # A JSON context's handler returns its answer, which the route prints or hands on (BACK-2627 note #10).
     out = StringIO()
     with redirect_stdout(out):
-        handler(ctx)
-    return json.loads(out.getvalue())['findings']
+        answer = handler(ctx)
+    assert out.getvalue() == ''
+    return answer['findings']
 
 
 @pytest.mark.parametrize('language', sorted(ROWS))

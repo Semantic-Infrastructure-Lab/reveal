@@ -3,6 +3,8 @@
 This module owns the per-view handler functions and the ELEMENT_HANDLERS lookup.
 file_handler.py orchestrates: it parses the file, builds a _NavCtx, then
 delegates to the handler of the bound request's answer (ELEMENT_HANDLERS).
+A handler prints its text answer and returns None, or returns its JSON answer
+(``_nav_json``), which the route prints or hands to its answer consumer.
 
 Imports from adapters.ast.nav are deferred inside each handler to avoid the
 cli/adapters circular import at module-load time (see file_handler.py header).
@@ -98,9 +100,9 @@ def _require_variable(ctx: '_NavCtx', var_name: str, from_line: int, to_line: in
 
 def _nav_json(flag: str, path: str, element: str, from_line: int, to_line: int,
               findings, extra_meta: Optional[dict] = None,
-              warnings: Optional[List[str]] = None) -> None:
-    """Serialize nav findings as a JSON envelope and print to stdout."""
-    from .utils.json_utils import print_json_result  # noqa: I006
+              warnings: Optional[List[str]] = None) -> Dict[str, Any]:
+    """Nav findings as their JSON envelope: the answer the route (``file_handler._dispatch_nav``) prints, or hands to
+    the path read's answer consumer (the Python API, BACK-2627 note #10)."""
     from .utils.results import ResultBuilder
     from .reveal_types import CONTRACT_VERSION
     meta: Dict[str, Any] = {'flag': flag, 'file': to_posix(path), 'element': element,
@@ -111,9 +113,10 @@ def _nav_json(flag: str, path: str, element: str, from_line: int, to_line: int,
                         {'type': 'navigation_warning', 'message': warning}
                         for warning in warnings or []]
     meta['warnings'] = [*meta.get('warnings', []), *extra_warnings]
-    print_json_result(ResultBuilder.create(
+    result: Dict[str, Any] = ResultBuilder.create(
         'element_view', to_posix(path), source_type='file', contract_version=CONTRACT_VERSION,
-        meta=meta, data={'findings': findings, 'warnings': warnings or []}))
+        meta=meta, data={'findings': findings, 'warnings': warnings or []})
+    return result
 
 
 def _varflow_trust_warning(analyzer) -> Optional[str]:
@@ -168,8 +171,8 @@ class _NavCtx:
     get_text: Callable
 
 
-def _emit_depth_navigation(ctx: _NavCtx, flag: str, from_line: int, to_line: int,
-                           findings: list, evidence: OutlineDepth, render: Callable[[], str]) -> None:
+def _emit_depth_navigation(ctx: _NavCtx, flag: str, from_line: int, to_line: int, findings: list,
+                           evidence: OutlineDepth, render: Callable[[], str]) -> Optional[Dict[str, Any]]:
     """Expose the structural budget and regions not expanded by it."""
     from .utils.results import note_warning
     from .utils.warning_render import render_meta_warnings
@@ -190,8 +193,8 @@ def _emit_depth_navigation(ctx: _NavCtx, flag: str, from_line: int, to_line: int
                        'regions overlapping this selection were not expanded. Increase --nesting-depth to expand them.',
         })
     if ctx.as_json:
-        _nav_json(flag, ctx.analyzer.path, ctx.element, from_line, to_line,
-                  findings, extra_meta=result['meta'])
+        return _nav_json(flag, ctx.analyzer.path, ctx.element, from_line, to_line,
+                         findings, extra_meta=result['meta'])
     else:
         print(f'Navigation depth {ctx.depth}')
         print(render())
@@ -199,7 +202,7 @@ def _emit_depth_navigation(ctx: _NavCtx, flag: str, from_line: int, to_line: int
         _print_rules(result, fields=('meta.structure_scope.rule', 'meta.structure_scope.exit_sites'))
 
 
-def _nav_flow(ctx: _NavCtx) -> None:
+def _nav_flow(ctx: _NavCtx) -> Optional[Dict[str, Any]]:
     from .adapters.ast.nav import OutlineDepth, element_outline, render_outline, LOOP_KEYWORDS
 
     from_line, to_line = _resolve_range(ctx.request, ctx.func_start, ctx.func_end)
@@ -212,12 +215,12 @@ def _nav_flow(ctx: _NavCtx) -> None:
     items = [item for item in items
              if from_line <= item['line_start'] <= to_line
              and (not selectors or item['keyword'] in keywords)]
-    _emit_depth_navigation(ctx, 'flow', from_line, to_line, items, evidence,
-                           lambda: render_outline(ctx.element, ctx.func_start, ctx.func_end,
-                                                  items, depth=ctx.depth))
+    return _emit_depth_navigation(ctx, 'flow', from_line, to_line, items, evidence,
+                                  lambda: render_outline(ctx.element, ctx.func_start, ctx.func_end,
+                                                         items, depth=ctx.depth))
 
 
-def _nav_varflow(ctx: _NavCtx) -> None:
+def _nav_varflow(ctx: _NavCtx) -> Optional[Dict[str, Any]]:
     from .adapters.ast.nav import (  # noqa: I006
         var_flow, render_var_flow, cross_var_flow, render_cross_var_flow,
     )
@@ -235,9 +238,9 @@ def _nav_varflow(ctx: _NavCtx) -> None:
                 {**frame, 'events': [{'kind': e['kind'], 'line': e['line']} for e in frame['events']]}
                 for frame in frames
             ]
-            _nav_json('cross_varflow', ctx.analyzer.path, ctx.element, from_line, to_line, json_frames,
-                      extra_meta={'var': var_name},
-                      warnings=[trust_warning] if trust_warning else None)
+            return _nav_json('cross_varflow', ctx.analyzer.path, ctx.element, from_line, to_line, json_frames,
+                             extra_meta={'var': var_name},
+                             warnings=[trust_warning] if trust_warning else None)
         else:
             print(render_cross_var_flow(var_name, frames, split_lines(ctx.analyzer.content)))
             _print_standing_warning(trust_warning)
@@ -246,15 +249,15 @@ def _nav_varflow(ctx: _NavCtx) -> None:
     _require_variable(ctx, var_name, from_line, to_line, '--varflow', events)
     if ctx.as_json:
         findings = [{'kind': e['kind'], 'line': e['line']} for e in events]
-        _nav_json('varflow', ctx.analyzer.path, ctx.element, from_line, to_line, findings,
-                  extra_meta={'var': var_name},
-                  warnings=[trust_warning] if trust_warning else None)
+        return _nav_json('varflow', ctx.analyzer.path, ctx.element, from_line, to_line, findings,
+                         extra_meta={'var': var_name},
+                         warnings=[trust_warning] if trust_warning else None)
     else:
         print(render_var_flow(var_name, events, split_lines(ctx.analyzer.content)))
         _print_standing_warning(trust_warning)
 
 
-def _nav_narrow(ctx: _NavCtx) -> None:
+def _nav_narrow(ctx: _NavCtx) -> Optional[Dict[str, Any]]:
     from .adapters.ast.nav import collect_narrowing, render_narrowing  # noqa: I006
     var_name = ctx.request.value
     from_line, to_line = _resolve_range(ctx.request, ctx.func_start, ctx.func_end)
@@ -268,8 +271,8 @@ def _nav_narrow(ctx: _NavCtx) -> None:
         ]
         # No annotation is a decline, not a zero: the JSON says the text's sentence (BACK-2627 E2, X14).
         decline = [render_narrowing(var_name, None, [])] if events is None else None
-        _nav_json('narrow', ctx.analyzer.path, ctx.element, from_line, to_line,
-                  findings, extra_meta={'var': var_name}, warnings=decline)
+        return _nav_json('narrow', ctx.analyzer.path, ctx.element, from_line, to_line,
+                         findings, extra_meta={'var': var_name}, warnings=decline)
     else:
         print(render_narrowing(var_name, events, split_lines(ctx.analyzer.content)))
 
@@ -281,7 +284,7 @@ def _implicit_nodes(ctx: _NavCtx) -> list:
     return hook(ctx.func_node) if hook else []
 
 
-def _nav_calls(ctx: _NavCtx) -> None:
+def _nav_calls(ctx: _NavCtx) -> Optional[Dict[str, Any]]:
     from .adapters.ast.nav import range_calls, render_range_calls  # noqa: I006
     # The value is 'FULL' (bare --callsites) or a range string (--callsites 89-120), validated by callsites_lines; bare,
     # the request's --range selects the lines, as every line-reading view's does (X9, BACK-2627 F1).
@@ -291,13 +294,13 @@ def _nav_calls(ctx: _NavCtx) -> None:
     calls = range_calls(ctx.func_node, from_line, to_line, ctx.get_text,
                         implicit_nodes=_implicit_nodes(ctx), include_jsx=True)
     if ctx.as_json:
-        _nav_json('callsites', ctx.analyzer.path, ctx.element, from_line, to_line, calls)
+        return _nav_json('callsites', ctx.analyzer.path, ctx.element, from_line, to_line, calls)
     else:
         print(render_range_calls(calls, from_line, to_line))
 
 
-def _emit_exit_navigation(ctx: _NavCtx, flag: str, from_line: int, to_line: int,
-                          findings: list, ownership: ExitOwnership, render: Callable[[], str]) -> None:
+def _emit_exit_navigation(ctx: _NavCtx, flag: str, from_line: int, to_line: int, findings: list,
+                          ownership: ExitOwnership, render: Callable[[], str]) -> Optional[Dict[str, Any]]:
     from .utils.results import note_warning
     from .utils.warning_render import render_meta_warnings
 
@@ -305,8 +308,8 @@ def _emit_exit_navigation(ctx: _NavCtx, flag: str, from_line: int, to_line: int,
     for warning in ownership.warnings():
         note_warning(result, dict(warning))
     if ctx.as_json:
-        _nav_json(flag, ctx.analyzer.path, ctx.element, from_line, to_line,
-                  findings, extra_meta=result['meta'])
+        return _nav_json(flag, ctx.analyzer.path, ctx.element, from_line, to_line,
+                         findings, extra_meta=result['meta'])
     else:
         label = ('selected callable execution regions' if ownership.mode == 'selected_callable'
                  else 'source inventory; may include multiple callable owners')
@@ -316,18 +319,18 @@ def _emit_exit_navigation(ctx: _NavCtx, flag: str, from_line: int, to_line: int,
         _print_rules(result, fields=('meta.exit_scope.rule', 'meta.exit_scope.implicit_tail_rule'))
 
 
-def _nav_exits(ctx: _NavCtx) -> None:
+def _nav_exits(ctx: _NavCtx) -> Optional[Dict[str, Any]]:
     from .adapters.ast.nav import collect_gate_chains, render_gate_chains  # noqa: I006
     from .adapters.ast.nav_exits import ExitOwnership
     from_line, to_line = _resolve_range(ctx.request, ctx.func_start, ctx.func_end)
     ownership = ExitOwnership(getattr(ctx.analyzer, 'language', ''), ctx.func_node)
     exits = collect_gate_chains(ctx.func_node, from_line, to_line, ctx.get_text, ownership=ownership)
-    _emit_exit_navigation(ctx, 'exits', from_line, to_line,
-                          exits, ownership,
-                          lambda: render_gate_chains(exits, from_line, to_line))
+    return _emit_exit_navigation(ctx, 'exits', from_line, to_line,
+                                 exits, ownership,
+                                 lambda: render_gate_chains(exits, from_line, to_line))
 
 
-def _nav_deps(ctx: _NavCtx) -> None:
+def _nav_deps(ctx: _NavCtx) -> Optional[Dict[str, Any]]:
     from .adapters.ast.nav import collect_deps, render_deps  # noqa: I006
     from_line, to_line = _resolve_range(ctx.request, ctx.func_start, ctx.func_end)
     deps = collect_deps(ctx.func_node, from_line, to_line, ctx.get_text,
@@ -339,12 +342,12 @@ def _nav_deps(ctx: _NavCtx) -> None:
              'first_write_line': d['first_write_line']}
             for d in deps
         ]
-        _nav_json('inputs', ctx.analyzer.path, ctx.element, from_line, to_line, findings)
+        return _nav_json('inputs', ctx.analyzer.path, ctx.element, from_line, to_line, findings)
     else:
         print(render_deps(deps, from_line, to_line))
 
 
-def _nav_mutations(ctx: _NavCtx) -> None:
+def _nav_mutations(ctx: _NavCtx) -> Optional[Dict[str, Any]]:
     from .adapters.ast.nav import collect_mutations, render_mutations  # noqa: I006
     from_line, to_line = _resolve_range(ctx.request, ctx.func_start, ctx.func_end)
     mutations = collect_mutations(ctx.func_node, from_line, to_line, ctx.get_text)
@@ -354,12 +357,12 @@ def _nav_mutations(ctx: _NavCtx) -> None:
              'next_read_line': m['next_read_line']}
             for m in mutations
         ]
-        _nav_json('outputs', ctx.analyzer.path, ctx.element, from_line, to_line, findings)
+        return _nav_json('outputs', ctx.analyzer.path, ctx.element, from_line, to_line, findings)
     else:
         print(render_mutations(mutations, from_line, to_line))
 
 
-def _nav_sideeffects(ctx: _NavCtx) -> None:
+def _nav_sideeffects(ctx: _NavCtx) -> Optional[Dict[str, Any]]:
     from .adapters.ast.nav import (  # noqa: I006
         collect_effects, collect_effects_transitive, render_effects, render_effects_transitive,
     )
@@ -392,9 +395,9 @@ def _nav_sideeffects(ctx: _NavCtx) -> None:
             for e in effects if e['kind'] is not None
         ]
         note = skipped_files_note(effects.skipped) if transitive else None
-        _nav_json('sideeffects', ctx.analyzer.path, ctx.element, from_line, to_line, findings,
-                  warnings=[n for n in (note, _traversal_note(effects.traversal_failures),
-                                        ambiguous_hops_note(effects.ambiguous)) if n])
+        return _nav_json('sideeffects', ctx.analyzer.path, ctx.element, from_line, to_line, findings,
+                         warnings=[n for n in (note, _traversal_note(effects.traversal_failures),
+                                               ambiguous_hops_note(effects.ambiguous)) if n])
     elif transitive:
         note = skipped_files_note(effects.skipped)
         print(render_effects_transitive(effects, ctx.element, depth)
@@ -403,7 +406,7 @@ def _nav_sideeffects(ctx: _NavCtx) -> None:
         print(render_effects(effects, from_line, to_line))
 
 
-def _nav_fanout(ctx: _NavCtx) -> None:
+def _nav_fanout(ctx: _NavCtx) -> Optional[Dict[str, Any]]:
     from .adapters.ast.nav import OutlineDepth, collect_fanout, render_fanout  # noqa: I006
     from_line, to_line = _resolve_range(ctx.request, ctx.func_start, ctx.func_end)
     evidence = OutlineDepth()
@@ -412,11 +415,11 @@ def _nav_fanout(ctx: _NavCtx) -> None:
         language=getattr(ctx.analyzer, 'language', None), max_depth=ctx.depth,
         depth_evidence=evidence,
     )
-    _emit_depth_navigation(ctx, 'fanout', from_line, to_line, loops, evidence,
-                           lambda: render_fanout(loops, from_line, to_line))
+    return _emit_depth_navigation(ctx, 'fanout', from_line, to_line, loops, evidence,
+                                  lambda: render_fanout(loops, from_line, to_line))
 
 
-def _nav_statewrites(ctx: _NavCtx) -> None:
+def _nav_statewrites(ctx: _NavCtx) -> Optional[Dict[str, Any]]:
     from .adapters.ast.nav import collect_statewrites, render_statewrites  # noqa: I006
     from_line, to_line = _resolve_range(ctx.request, ctx.func_start, ctx.func_end)
     writes = collect_statewrites(
@@ -424,20 +427,20 @@ def _nav_statewrites(ctx: _NavCtx) -> None:
         language=getattr(ctx.analyzer, 'language', None),
     )
     if ctx.as_json:
-        _nav_json('statewrites', ctx.analyzer.path, ctx.element, from_line, to_line, writes)
+        return _nav_json('statewrites', ctx.analyzer.path, ctx.element, from_line, to_line, writes)
     else:
         print(render_statewrites(writes, from_line, to_line))
 
 
-def _nav_keys(ctx: _NavCtx) -> None:
+def _nav_keys(ctx: _NavCtx) -> Optional[Dict[str, Any]]:
     from .adapters.ast.nav import collect_keys, render_keys  # noqa: I006
     var_name = ctx.request.value
     from_line, to_line = _resolve_range(ctx.request, ctx.func_start, ctx.func_end)
     _require_variable(ctx, var_name, from_line, to_line, '--keys')
     events = collect_keys(ctx.func_node, var_name, from_line, to_line, ctx.get_text)
     if ctx.as_json:
-        _nav_json('keys', ctx.analyzer.path, ctx.element, from_line, to_line, events,
-                  extra_meta={'var': var_name})
+        return _nav_json('keys', ctx.analyzer.path, ctx.element, from_line, to_line, events,
+                         extra_meta={'var': var_name})
     else:
         print(render_keys(var_name, events, from_line, to_line))
 
@@ -462,7 +465,7 @@ def _boundary_warnings(boundary: Dict[str, Any], transitive: bool) -> List[str]:
     return [n for n in notes if n]
 
 
-def _nav_boundary(ctx: _NavCtx) -> None:
+def _nav_boundary(ctx: _NavCtx) -> Optional[Dict[str, Any]]:
     from .adapters.ast.nav import (  # noqa: I006
         collect_boundary, collect_boundary_transitive, render_boundary, render_boundary_transitive,
     )
@@ -496,8 +499,8 @@ def _nav_boundary(ctx: _NavCtx) -> None:
                for e in boundary['effects'] if e['kind'] is not None]
         )
         warnings = _boundary_warnings(boundary, transitive)
-        _nav_json('boundary', ctx.analyzer.path, ctx.element, from_line, to_line, findings,
-                  extra_meta={'depth': depth} if transitive else None, warnings=warnings)
+        return _nav_json('boundary', ctx.analyzer.path, ctx.element, from_line, to_line, findings,
+                         extra_meta={'depth': depth} if transitive else None, warnings=warnings)
     elif transitive:
         print(render_boundary_transitive(boundary, ctx.element, from_line, to_line, depth))
     else:
@@ -507,7 +510,7 @@ def _nav_boundary(ctx: _NavCtx) -> None:
 # Each element answer's handler, keyed by the bound request's ``ElementRequest.answer`` (the view, effects by its mode,
 # or the standalone operation). The declarations decide which answer a request selects (one answer per request), so
 # this is a lookup, not a precedence; --scope and --around answer on a line reference before it (_dispatch_nav).
-ELEMENT_HANDLERS: Dict[str, Callable[[_NavCtx], None]] = {
+ELEMENT_HANDLERS: Dict[str, Callable[[_NavCtx], Optional[Dict[str, Any]]]] = {
     'boundary': _nav_boundary, 'flow': _nav_flow, 'exits': _nav_exits,
     'effects:ordinary': _nav_sideeffects, 'effects:loops': _nav_fanout, 'effects:state': _nav_statewrites,
     'inputs': _nav_deps, 'outputs': _nav_mutations, 'callsites': _nav_calls,
@@ -554,20 +557,20 @@ def _single_line_ref(element: Optional[str], flag: str) -> int:
     return start
 
 
-def _nav_scope(analyzer, element: str, as_json: bool) -> None:
+def _nav_scope(analyzer, element: str, as_json: bool) -> Optional[Dict[str, Any]]:
     """Handle --scope: show lexical scope chain for a line reference."""
     from .adapters.ast.nav import scope_chain, render_scope_chain  # noqa: I006
     line_no = _single_line_ref(element, '--scope')
     chain = scope_chain(tree_root(analyzer.tree), line_no, analyzer._get_node_text)
     if as_json:
-        _nav_json('scope', analyzer.path, element, line_no, line_no, chain)
+        return _nav_json('scope', analyzer.path, element, line_no, line_no, chain)
     else:
         content_lines = split_lines(analyzer.content)
         line_text = content_lines[line_no - 1].strip() if 0 < line_no <= len(content_lines) else ''
         print(render_scope_chain(line_no, chain, line_text))
 
 
-def _nav_around(analyzer, element: str, as_json: bool, n: int) -> None:
+def _nav_around(analyzer, element: str, as_json: bool, n: int) -> Optional[Dict[str, Any]]:
     """Handle --around N: show N lines of context around a line reference."""
     from .errors import NavRequestValidationError
     if n < 0:  # used to print nothing, exit 0, with from_line after to_line (BACK-2627 E10)
@@ -582,8 +585,8 @@ def _nav_around(analyzer, element: str, as_json: bool, n: int) -> None:
             {'line': i + 1, 'text': content_lines[i], 'is_target': (i + 1) == line_no}
             for i in range(start - 1, end)
         ]
-        _nav_json('around', analyzer.path, element, start, end, findings,
-                  extra_meta={'target_line': line_no, 'context': n})
+        return _nav_json('around', analyzer.path, element, start, end, findings,
+                         extra_meta={'target_line': line_no, 'context': n})
     else:
         for i in range(start - 1, end):
             prefix = '▶' if (i + 1) == line_no else ' '

@@ -1,5 +1,4 @@
 """Source receipts share the output path boundary on every host."""
-import json
 from pathlib import PureWindowsPath
 
 import pytest
@@ -43,9 +42,8 @@ def test_source_receipts_publish_portable_paths(kind):
     assert value == expected
 
 
-def test_element_view_metadata_uses_the_same_path_as_its_source(capsys):
+def test_element_view_metadata_uses_the_same_path_as_its_source():
     from reveal.nav_handlers import _nav_json
-    _nav_json('boundary', r'C:\project\file.py', 'main', 1, 2, [])
-    answer = json.loads(capsys.readouterr().out)
+    answer = _nav_json('boundary', r'C:\project\file.py', 'main', 1, 2, [])
     assert answer['source'] == 'C:/project/file.py'
     assert answer['meta']['file'] == answer['source']

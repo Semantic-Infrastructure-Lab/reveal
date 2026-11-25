@@ -136,7 +136,7 @@ NAV = """class Store:
 
 VIEWS = [['--view', 'boundary'], ['--view', 'effects'], ['--view', 'effects', '--in-loops'], ['--view', 'effects', '--state'],
          ['--view', 'flow', '--kind', 'if'], ['--view', 'exits'], ['--inputs'], ['--outputs'], ['--callsites'],
-         ['--varflow', 'total'], ['--keys', 'cfg'], ['--boundary']]
+         ['--varflow', 'total'], ['--keys', 'cfg']]  # a legacy flag's note needs the invocation: api.element's tests
 
 
 @pytest.fixture

@@ -270,11 +270,12 @@ def _resolve_func_node(analyzer, element: str):
     return func_node, func_start, func_end
 
 
-def _dispatch_nav(analyzer, element: str, output_format: str, args, request=None) -> None:
+def _dispatch_nav(analyzer, element: str, output_format: str, args, request=None, answer_consumer=None) -> None:
     """Answer the bound element request (*request*, or the one *args* give) with its handler.
 
     Requires a TreeSitterAnalyzer with a parsed tree.  Exits with an error
-    message if the file type is not tree-sitter analysable.
+    message if the file type is not tree-sitter analysable. A JSON answer is an Answer (``_answer_nav``), printed or
+    handed to *answer_consumer* as the element read's is; a text answer is printed by its handler.
     """
     from .treesitter import TreeSitterAnalyzer  # noqa: I006
     if request is None:
@@ -301,10 +302,10 @@ def _dispatch_nav(analyzer, element: str, output_format: str, args, request=None
 
     # --scope and --around operate on a line reference, not a func node.
     if request.operation == 'scope':
-        _nav_scope(analyzer, element, as_json)
+        _answer_nav(_nav_scope(analyzer, element, as_json), answer_consumer)
         return
     if request.operation == 'around':
-        _nav_around(analyzer, element, as_json, request.value)
+        _answer_nav(_nav_around(analyzer, element, as_json, request.value), answer_consumer)
         return
 
     func_node, func_start, func_end = _resolve_func_node(analyzer, element)
@@ -325,7 +326,24 @@ def _dispatch_nav(analyzer, element: str, output_format: str, args, request=None
     )
 
     if handler is not None:
-        _run_nav_handler(handler, ctx)
+        _answer_nav(_run_nav_handler(handler, ctx), answer_consumer)
+
+
+def _answer_nav(document: Optional[dict], answer_consumer) -> None:
+    """An element view's JSON *document* (None: its handler printed the text answer) as the element read's Answer,
+    emitted (printed) or handed to *answer_consumer*: the Python API's ``api.element(PATH, NAME, view=...)`` gets the
+    document the CLI prints (BACK-2627 note #10)."""
+    if document is None:
+        return
+    from .cli.routing.uri import Answer  # noqa: I006 — circular avoidance
+    from .utils.results import AnalysisCompleteness, ExecutionFacts
+    _answered(Answer(document, 'element', _print_nav_json, execution_facts=ExecutionFacts(AnalysisCompleteness.COMPLETE)),
+              answer_consumer)
+
+
+def _print_nav_json(answer, **_options) -> None:
+    from .utils.json_utils import print_json_result  # noqa: I006
+    print_json_result(answer.result)
 
 
 def _note_untested_tier(analyzer) -> None:
@@ -382,10 +400,11 @@ def _fail_nav(code: int, cause: 'FailureCause', diagnostic: str) -> 'NoReturn':
     raise NavSourceFailure(code, execution_facts=failure_execution_facts(cause), public_diagnostic=diagnostic)
 
 
-def _run_nav_handler(handler, ctx) -> None:
-    """Run one element-flag handler; an analysis too deeply nested to follow fails with exit 3."""
+def _run_nav_handler(handler, ctx) -> Optional[dict]:
+    """Run one element-flag handler (its JSON answer, None when it printed text); an analysis too deeply nested to
+    follow fails with exit 3."""
     try:
-        handler(ctx)
+        return handler(ctx)
     except RecursionError:
         # BACK-2529: the variable-flow walkers recurse once per syntax level, so a few hundred
         # nested calls (generated parsers) exhaust the interpreter's limit. D6: the request was
@@ -547,8 +566,9 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
         args: Full argument namespace (for filter options)
         element_request: The bound element request (the file route binds it at its entry); a caller that passes only
             a namespace has it bound here (``element_request_of``).
-        answer_consumer: Receives the file structure's Answer and a refusal's (no analyzer, an unreadable file)
-            instead of their being emitted, as ``handle_uri`` hands its answers (the Python API, BACK-2325).
+        answer_consumer: Receives the file structure's Answer, an element's, an element view's JSON answer
+            (BACK-2627 note #10) and a refusal's (no analyzer, an unreadable file) instead of their being emitted, as
+            ``handle_uri`` hands its answers (the Python API, BACK-2325).
     """
     from .cli.routing.declared import PathReadRefused  # noqa: I006 — circular avoidance
     try:
@@ -610,7 +630,7 @@ def _handle_element(analyzer, path: str, element: str, output_format: str, args,
     """An element read: the bound element request's view, else the element's extraction, answered as an Answer."""
     from .display import extract_element  # noqa: I006 — circular avoidance
     if request is not None:
-        _dispatch_nav(analyzer, element, output_format, args, request)
+        _dispatch_nav(analyzer, element, output_format, args, request, answer_consumer)
         return
     emit = _element_emitter(analyzer, path, element, output_format, args, answer_consumer)
     # A Markdown section has no control flow; its outline is its headings.
