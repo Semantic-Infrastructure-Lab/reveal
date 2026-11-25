@@ -74,7 +74,8 @@ def _within(claimed: int, actual: int) -> bool:
 def test_claims_are_found():
     # Positive control: the scan still sees the claims it is meant to check.
     refs = {ref for _, ref, _ in _claims()}
-    assert {'help://quick', 'help://ast/full'} <= refs
+    # help://ast/full's claim left with AGENT_HELP's first sections (BACK-1055); the generated screen has none.
+    assert {'help://quick', 'help://agent/full', '--agent-help'} <= refs
 
 
 @pytest.mark.parametrize('where, ref, claimed', _claims(), ids=lambda v: str(v))

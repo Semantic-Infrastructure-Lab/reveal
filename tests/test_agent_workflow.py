@@ -2,7 +2,7 @@
 
 reveal's product thesis is agent-readable progressive disclosure: an agent with
 no hardcoded knowledge of reveal's URI syntax should be able to *discover* the
-right surface (`--agent-help` -> `help://quick` / `--discover` / `help://schemas`)
+right surface (`--agent-help` -> `help quick` / `help schemas/NOUN`)
 and turn that discovery into commands that actually *execute*.
 
 Every other test suite proves reveal's analysis is correct (conformance matrix,
@@ -101,7 +101,8 @@ def test_agent_help_routes_to_discovery():
     result = _run("--agent-help")
     _assert_sane(result, "--agent-help")
     out = result.stdout
-    for pointer in ("help://quick", "--discover", "help://schemas"):
+    # The generated screen (BACK-1055) teaches help as the verb (`reveal help TOPIC` is help://TOPIC, D12).
+    for pointer in ("reveal help quick", "reveal help schemas/", "help://TOPIC"):
         assert pointer in out, (
             f"--agent-help does not route agents to {pointer!r}; discovery chain "
             f"is broken at the entry point"

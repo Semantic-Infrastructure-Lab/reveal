@@ -24,7 +24,7 @@ Next: reveal python/sample.py <function>   # Extract by name
       reveal python/sample.py --check      # Check code quality
       reveal python/sample.py --outline    # Nested structure
 [stderr]
-New here? reveal --agent-help  (~1,900 tokens: how to use reveal well)
+New here? reveal --agent-help  (~1,700 tokens: how to use reveal well)
 Tip: Permanently disable navigation hints with: reveal --disable-breadcrumbs
 [exit 0]
 
@@ -47,7 +47,7 @@ Next: reveal python/sample.py <function>   # Extract specific element
       reveal python/sample.py              # See flat structure
       reveal python/sample.py --check      # Check code quality
 [stderr]
-New here? reveal --agent-help  (~1,900 tokens: how to use reveal well)
+New here? reveal --agent-help  (~1,700 tokens: how to use reveal well)
 Tip: Permanently disable navigation hints with: reveal --disable-breadcrumbs
 [exit 0]
 
@@ -69,7 +69,7 @@ Extracted process_order (10 lines)
   → Back: reveal python/sample.py          # See full structure
   → Nearby: reveal python/sample.py :24  # Next element
 [stderr]
-New here? reveal --agent-help  (~1,900 tokens: how to use reveal well)
+New here? reveal --agent-help  (~1,700 tokens: how to use reveal well)
 Tip: Permanently disable navigation hints with: reveal --disable-breadcrumbs
 [exit 0]
 
@@ -84,7 +84,7 @@ Extracted lines:12-14 (3 lines)
   → Back: reveal python/sample.py          # See full structure
   → Nearby: reveal python/sample.py :24  # Next element
 [stderr]
-New here? reveal --agent-help  (~1,900 tokens: how to use reveal well)
+New here? reveal --agent-help  (~1,700 tokens: how to use reveal well)
 Tip: Permanently disable navigation hints with: reveal --disable-breadcrumbs
 [exit 0]
 

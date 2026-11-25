@@ -6,7 +6,8 @@ README that teaches them. This reads the one ``RETIREMENTS`` table (reveal/cli/i
 when a teaching surface names a retired spelling outside a sentence that says it is retired:
 
 - ``README.md`` and ``ROADMAP.md`` (minus its release history),
-- the first section of ``reveal/docs/AGENT_HELP.md`` (everything before "Common Tasks"),
+- the first section of ``reveal/docs/AGENT_HELP.md`` (everything before "Common Tasks") and the generated
+  ``--agent-help`` screen,
 - ``help://quick`` and every ``help://examples/<task>`` recipe.
 
 A new ``RETIREMENTS`` row is covered the day it lands: the patterns are derived from the key's kind
@@ -293,6 +294,14 @@ def _help_quick():
     return out.stdout
 
 
+def _agent_help():
+    """The `--agent-help` screen, generated from COMMANDS (BACK-1055)."""
+    out = subprocess.run([sys.executable, '-m', 'reveal', '--agent-help'], capture_output=True, text=True,
+                         encoding='utf-8', cwd=ROOT, check=False)
+    assert out.returncode == 0, out.stderr
+    return out.stdout
+
+
 def _cli_help():
     out = subprocess.run([sys.executable, '-m', 'reveal', '--help'], capture_output=True,
                          text=True, encoding='utf-8', cwd=ROOT, check=False)
@@ -315,6 +324,7 @@ SURFACES = {
     'README.md': lambda: _read('README.md'),
     'ROADMAP.md (without release history)': _roadmap_without_release_history,
     'AGENT_HELP.md (first section)': _agent_help_first_section,
+    '--agent-help': _agent_help,
     'help://quick': _help_quick,
     '--help': _cli_help,
     'help://examples': _example_recipes,

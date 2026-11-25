@@ -176,15 +176,15 @@ class TestHelpRegistry(unittest.TestCase):
                          'Short guides must not have a truncation footer')
 
     def test_agent_topic_progressively_disclosed(self):
-        """help://agent follows the same progressive disclosure as every other guide."""
+        """help://agent is the generated first screen (BACK-1055), bounded, pointing at the full guide."""
         adapter = HelpAdapter()
         result = adapter.get_element('agent')
         self.assertIsNotNone(result, 'help://agent must resolve')
         content = result['content']
-        self.assertIn('── Full guide: reveal help://agent/full', content,
-                      'help://agent must truncate with a pointer to the full guide')
-        self.assertLess(len(content.splitlines()), 200,
-                        'help://agent preview must be bounded like other guides')
+        self.assertIn('reveal help agent/full', content,
+                      'help://agent must point to the full guide')
+        self.assertLessEqual(len(content.splitlines()), 150,
+                             'help://agent is the 150-line screen (COMMAND_MODEL rule 6)')
 
     def test_agent_full_topic_returns_complete_guide(self):
         """help://agent/full bypasses truncation and returns the complete guide."""

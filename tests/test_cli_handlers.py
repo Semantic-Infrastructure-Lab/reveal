@@ -558,26 +558,24 @@ class TestHandleAgentHelp(unittest.TestCase):
 
     @patch('sys.exit')
     @patch('sys.stdout', new_callable=StringIO)
-    @patch('builtins.open', new_callable=unittest.mock.mock_open, read_data="Agent help content")
-    def test_handle_agent_help_success(self, mock_open, mock_stdout, mock_exit):
-        """Test --agent-help reads and displays AGENT_HELP.md."""
+    def test_handle_agent_help_success(self, mock_stdout, mock_exit):
+        """--agent-help prints the screen generated from the command registry (BACK-1055)."""
         handle_agent_help()
 
         output = mock_stdout.getvalue()
-        self.assertIn('Agent help content', output)
+        self.assertIn('How options work (every noun):', output)
+        self.assertIn('reveal overview src/', output)
         mock_exit.assert_called_once_with(0)
 
-    @patch('sys.stderr', new_callable=StringIO)
+    @patch('sys.exit')
+    @patch('sys.stdout', new_callable=StringIO)
     @patch('builtins.open', side_effect=FileNotFoundError)
-    def test_handle_agent_help_missing_file(self, mock_open, mock_stderr):
-        """Test --agent-help handles missing AGENT_HELP.md."""
-        with self.assertRaises(SystemExit) as cm:
-            handle_agent_help()
+    def test_handle_agent_help_needs_no_guide_file(self, mock_open, mock_stdout, mock_exit):
+        """The screen is generated, so an unreadable AGENT_HELP.md does not stop --agent-help (it was exit 1)."""
+        handle_agent_help()
 
-        error = mock_stderr.getvalue()
-        self.assertIn('AGENT_HELP.md not found', error)
-        self.assertIn('bug', error.lower())
-        self.assertEqual(cm.exception.code, 1)
+        self.assertIn('How options work (every noun):', mock_stdout.getvalue())
+        mock_exit.assert_called_once_with(0)
 
 
 class TestHandleSchema(unittest.TestCase):

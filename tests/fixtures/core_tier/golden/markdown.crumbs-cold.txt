@@ -24,7 +24,7 @@ Next: reveal guide.md <section>   # Extract by name
       reveal guide.md --links      # Extract links
       reveal guide.md --code       # Extract code blocks
 [stderr]
-New here? reveal --agent-help  (~1,900 tokens: how to use reveal well)
+New here? reveal --agent-help  (~1,700 tokens: how to use reveal well)
 Tip: Permanently disable navigation hints with: reveal --disable-breadcrumbs
 [exit 0]
 
@@ -51,7 +51,7 @@ Next: reveal guide.md <section>   # Extract specific element
       reveal guide.md --section 'Name'  # Extract section by heading
       reveal guide.md --links      # Extract links
 [stderr]
-New here? reveal --agent-help  (~1,900 tokens: how to use reveal well)
+New here? reveal --agent-help  (~1,700 tokens: how to use reveal well)
 Tip: Permanently disable navigation hints with: reveal --disable-breadcrumbs
 [exit 0]
 
@@ -81,6 +81,6 @@ Extracted Setup (18 lines)
   → Back: reveal guide.md          # See full structure
   → Check: reveal guide.md --check # Quality analysis
 [stderr]
-New here? reveal --agent-help  (~1,900 tokens: how to use reveal well)
+New here? reveal --agent-help  (~1,700 tokens: how to use reveal well)
 Tip: Permanently disable navigation hints with: reveal --disable-breadcrumbs
 [exit 0]

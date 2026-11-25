@@ -54,17 +54,17 @@ and the usage block, not disabled. `--help-all` renders everything.
 
 **Usage:**
 ```bash
-reveal --agent-help           # Orientation section (~1,900 tokens); reveal help://agent/full for the complete guide (~49,000 tokens)
+reveal --agent-help           # The first screen (~1,700 tokens); reveal help://agent/full for the complete guide (~49,000 tokens)
 ```
 
 **Audience:** AI agents (Claude Code, Copilot, Cursor, etc.)
 
-**Content:**
-- Common tasks → reveal commands
-- Concrete, working examples
-- Real-world scenarios
-- Quick reference card
-- Troubleshooting patterns
+**Content:** one screen of at most 150 lines, generated at runtime from the command registry
+(`reveal/cli/help_screen.py`, BACK-1055): the command model, the path reads, one line per live
+subcommand (its `COMMANDS` entry's `role`, `rung`, `starter` and summary, grouped by ladder rung and role),
+"How options work" and the exit codes. A new subcommand reaches it by declaring those fields; the
+starters run in the executable-docs fixture. `help://agent/full` is the hand-written reference
+(`AGENT_HELP.md`): task patterns, adapter reference, troubleshooting.
 
 **Philosophy:** "When you need to do X, use Y" (not "explore to discover")
 
@@ -86,7 +86,7 @@ reveal --agent-help           # Orientation section (~1,900 tokens); reveal help
 reveal help://                # List all topics
 reveal help://ast             # Learn about ast:// adapter
 reveal help://adapters        # Summary of all adapters
-reveal help://agent           # Same as --agent-help (static guide)
+reveal help://agent           # Same as --agent-help (the generated first screen)
 reveal help://schemas         # Machine-readable adapter schemas (AI agents)
 reveal help://schemas/ast     # Schema for ast:// (query params, output types)
 reveal help://schemas/ast/ast_query    # One output type's full JSON-Schema
@@ -136,7 +136,7 @@ reveal help://anti-patterns      # Common mistakes
 ### For AI Agents:
 ```bash
 # Bootstrap understanding
-reveal --agent-help              # Get agent orientation (~1,900 tokens; help://agent/full for the complete guide)
+reveal --agent-help              # Get agent orientation (~1,700 tokens; help://agent/full for the complete guide)
 
 # Discover adapter capabilities programmatically
 reveal help://schemas            # List all adapters with schemas
@@ -156,7 +156,7 @@ reveal help://examples/security  # Recipes for security analysis
 ### Directory Structure
 ```
 reveal/docs/
-├── AGENT_HELP.md                          # --agent-help content (complete reference)
+├── AGENT_HELP.md                          # help://agent/full (complete reference; --agent-help is generated)
 ├── QUICK_START.md
 ├── WHY_REVEAL.md
 ├── INDEX.md
@@ -187,12 +187,13 @@ reveal/docs/
 - Auto-updates when new adapters registered
 
 **Static Content** (Markdown Files):
-- AI agent guide (`help://agent`)
+- AI agent guide (`help://agent/full`)
 - Feature guides (`help://reveal-guide`, `help://markdown`)
 - Best practices (`help://tricks`, `help://anti-patterns`)
 - Development (`help://adapter-authoring`)
 
 **Generated Content**:
+- `--agent-help` / `help://agent` - The first screen, from the command registry
 - `help://adapters` - Summary of all URI adapters
 - `help://` - Main index with categorization
 
@@ -202,7 +203,7 @@ All help topics show where content comes from:
 
 **For static guides:**
 ```markdown
-<!-- Source: AGENT_HELP.md | Type: Static Guide | Access: reveal help://agent or --agent-help -->
+<!-- Source: guides/RECIPES.md | Type: Static Guide | Access: reveal help://tricks -->
 ```
 
 **For adapters:**
@@ -303,7 +304,7 @@ Start broad, drill down as needed. Don't force users to load everything.
 ```bash
 reveal help://examples/quality  # A task's recipes (~350 tokens)
 reveal help://quick             # Intent router (~1,600 tokens) — cheapest orientation
-reveal --agent-help             # Agent orientation (~1,900 tokens)
+reveal --agent-help             # Agent orientation (~1,700 tokens)
 reveal help://schemas/ast       # One adapter's query syntax (~1,030 tokens)
 ```
 
@@ -318,7 +319,7 @@ Every expensive tier has a cheaper default with a drill-down beneath it:
 |-------|-----------|
 | `--help` (~3,300) | `--help-all` (~8,300) |
 | `help://schemas/<adapter>` | `help://schemas/<adapter>/<output_type>`, `/full` |
-| `--agent-help` (~2,250) | `help://agent/full` (~44,000) |
+| `--agent-help` (~1,700) | `help://agent/full` (~49,000) |
 | `help://<guide>` | `help://<guide>/full`, `--section NAME` |
 
 Costs above measured on v0.110.0. They drift as adapters and guides are added —

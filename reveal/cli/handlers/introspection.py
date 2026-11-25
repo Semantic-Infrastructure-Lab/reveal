@@ -6,7 +6,6 @@ and related informational flags.
 """
 
 import sys
-from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Dict, List, Any
 
 from ...utils.formatting import shell_command
@@ -209,20 +208,13 @@ def handle_language_info(language: str):
 def handle_agent_help():
     """Handle --agent-help flag.
 
-    Delegates to the same progressive-disclosure path as `help://agent`
-    (HelpAdapter._load_static_help) instead of dumping the raw file, so the
-    two doors to the agent guide behave identically.
+    Renders the same screen as `help://agent` (HelpAdapter's generated agent screen, BACK-1055), so the
+    two doors behave identically. The screen comes from the command registry, not from AGENT_HELP.md.
     """
     from ...adapters.help import HelpAdapter
     from ...rendering.adapters.help import _render_help_static_guide
 
-    result = HelpAdapter().get_element('agent')
-    if not result or 'error' in result:
-        agent_help_path = Path(__file__).parent.parent.parent / 'docs' / 'AGENT_HELP.md'
-        print(f"Error: AGENT_HELP.md not found at {agent_help_path}", file=sys.stderr)
-        print("This is a bug - please report it at https://github.com/Semantic-Infrastructure-Lab/reveal/issues", file=sys.stderr)
-        sys.exit(1)
-    _render_help_static_guide(result)
+    _render_help_static_guide(HelpAdapter.agent_screen())
     sys.exit(0)
 
 

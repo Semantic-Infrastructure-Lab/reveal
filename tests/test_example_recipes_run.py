@@ -1043,21 +1043,23 @@ def test_next_step_hints_in_recipe_output_run(harness):
 
 
 
-@pytest.mark.parametrize('task,target,kind,field', [
-    ('Files importing FILE', 'proj/cycle_b.py', 'module_importers', 'importers'),
-    ('Documents linking to FILE', 'proj/auth.md', 'markdown_backlinks', 'linked_by'),
-    ('Abstract interfaces / contracts', '', 'contracts', 'abcs'),
+@pytest.mark.parametrize('noun,kind,field', [
+    ('imports', 'module_importers', 'importers'),
+    ('markdown', 'markdown_backlinks', 'linked_by'),
+    ('contracts', 'contracts', 'abcs'),
 ])
-def test_agent_help_routing_rows_execute(harness, task, target, kind, field):
-    """Execute the shipped screen's commands with positive DIR/FILE bindings (BACK-2640)."""
-    code, screen, err, _ = harness.run_subcommand('--agent-help')
+def test_agent_help_routing_rows_execute(named_harness, noun, kind, field):
+    """The shipped screen's entry for a relation noun answers positively, as written (BACK-2640; the screen is
+    generated from each noun's COMMANDS starter since BACK-1055, which names the named fixture's paths)."""
+    code, screen, err, _ = named_harness.run_subcommand('--agent-help')
     assert code == 0 and not err
     assert len(screen.splitlines()) <= 150
-    row = next(line for line in screen.splitlines() if line.startswith(f'| {task} |'))
-    template = re.search(r'`([^`]+)`', row).group(1)
-    command = template.replace('DIR', 'proj').replace('FILE', target)
-    _assert_text_as_written(harness, command, literal=True)
-    payload = _assert_runs_as_written(harness, command, kind)
+    command = next(re.split(r'\s{2,}', line.strip())[0] for line in screen.splitlines()
+                   if line.startswith(f'  reveal {noun} '))
+    _assert_text_as_written(named_harness, command, literal=True)
+    code, out, err, _ = named_harness.run_subcommand(*shlex.split(command)[1:], '--format', 'json')
+    payload = json.loads(out)
+    assert code == 0 and payload.get('type') == kind, (command, code, payload.get('type'), err)
     assert payload[field], f'{command}: route failed to return a positive answer'
 
 

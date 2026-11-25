@@ -1979,6 +1979,8 @@ class HelpAdapter(ResourceAdapter):
         Returns:
             Help content dict or None if file not found
         """
+        if topic == 'agent' and not full and section is None:
+            return self.agent_screen()  # generated; needs no guide file
         entry = self.help_topics.get(topic)
         if not entry:
             return None
@@ -2080,6 +2082,15 @@ class HelpAdapter(ResourceAdapter):
                 'message': str(e),
                 'next': ['reveal help://'],
             }
+
+    @staticmethod
+    def agent_screen() -> Dict[str, Any]:
+        """help://agent and --agent-help: the screen generated from the command registry (BACK-1055).
+
+        AGENT_HELP.md is the reference behind help://agent/full; its first screen is not cut from it.
+        """
+        from ..cli.help_screen import render_agent_help
+        return {'type': 'static_guide', 'topic': 'agent', 'file': 'generated', 'content': render_agent_help()}
 
     def _own_section(self, entry: GuideEntry, lines: list[str]) -> Optional[str]:
         """The section an alias topic names in a shared guide, with a footer.
