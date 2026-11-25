@@ -29,7 +29,6 @@ Usage::
 
 import functools
 import logging
-import sys
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterator, List, Optional, TypeVar, cast
@@ -200,20 +199,15 @@ def _query_key_log() -> Iterator[None]:
     """The URI form's query-key log, as the CLI's dispatch (``ledger.dispatching``) and the noun form open one
     (BACK-2792): the reads it records let a declined answer name the given controls it never read
     (``control_unread_by_data``, BACK-2696), and a query parser's warning is kept for the answer, which carries it as
-    the CLI's JSON does (``_noted_answer``). A request that raises has no document, so a warning no answer carried is
-    printed, as the CLI prints one its JSON did not carry (``ledger.report``). A request inside a caller's log joins it,
-    as one inside a host request does: that log records the reads and owns its warnings."""
+    the CLI's JSON does (``_noted_answer``). Nothing is printed: the library API returns what it recorded in its result,
+    as with its invocation warnings (``log_scope(to_stderr=False)``, BACK-2799). A request inside a caller's log joins
+    it, as one inside a host request does: that log records the reads and owns its warnings."""
     from .utils.query_parser import collect_query_keys, query_key_recorder
     if query_key_recorder() is not None:
         yield
         return
-    with collect_query_keys(warnings_to_stderr=False) as log:
-        try:
-            yield
-        finally:
-            if not log.structured_emitted:
-                for warning in log.warnings:
-                    print(warning['message'], file=sys.stderr)
+    with collect_query_keys(warnings_to_stderr=False):
+        yield
 
 
 def _bound_uri_params(scheme: str, uri: str, overrides: Dict[str, Any]):

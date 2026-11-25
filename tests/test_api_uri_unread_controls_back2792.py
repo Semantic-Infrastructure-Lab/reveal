@@ -6,7 +6,8 @@ outside every repository for ``git``) names the given controls it never read in 
 query-key log, which the CLI's dispatch and the noun form of ``api.query`` open; the URI form opened none, so its
 declines (a typed keyword, the ``?limit=`` spelling, ``git://``) said nothing about the control. The same log carries a
 query parser's ``unknown_query_param`` warning, which the CLI's JSON answer carries in ``meta.warnings``; the URI form
-printed it on stderr instead. A request that raises has no document, so its parser warning stays on stderr.
+printed it on stderr instead. The library API prints nothing (BACK-2799): a request that raises has no document, and
+its parser warning is not printed either, as the API's invocation warnings are not.
 """
 import json
 
@@ -111,10 +112,8 @@ def test_control_a_known_key_answers_quietly_on_both(fx, capfd):
     assert capfd.readouterr() == ('', '')
 
 
-def test_control_a_request_that_raises_keeps_its_parser_warning_on_stderr(fx, capfd):
-    """No document carries it, so the warning is not dropped: it is printed, as before."""
+def test_a_request_that_raises_prints_nothing(fx, capfd):
+    """The raise is the answer, as on the noun form and for every other API diagnostic (BACK-2799)."""
     with pytest.raises(FileNotFoundError, match='nope.py'):
         api.query('classify://nope.py?bogus=1')
-    out, err = capfd.readouterr()
-    assert out == ''
-    assert "Unknown query param 'bogus' for classify://" in err
+    assert capfd.readouterr() == ('', '')
