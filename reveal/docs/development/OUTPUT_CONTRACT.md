@@ -29,8 +29,9 @@ The Python API answers these documents through the CLI's own path-read route (D2
 BACK-2325): `reveal.api.analyze(PATH, **flags)` returns the document
 `reveal PATH --format json` prints (a file's envelope with its outline under
 `structure`, or a directory's `directory_tree`), its keywords the flags of `reveal PATH`
-with `-` as `_` (`head=2`, `range='2-4'`); `reveal.api.element(PATH, NAME)` returns the
-document `reveal PATH NAME --format json` prints, for every element spelling the CLI takes.
+with `-` as `_` (`head=2`, `range='2-4'`); `reveal.api.element(PATH, NAME, **flags)` returns the
+document `reveal PATH NAME --flags --format json` prints, for every element spelling the CLI takes,
+its keywords the flags of `reveal PATH NAME` (`view='effects'`, `in_loops=True`; BACK-2627).
 Both raise as the noun form of `reveal.api.query` does ("Invalid requests"): a request the
 CLI exits 2 on raises `RequestValidationError` with the CLI's message (a missing path
 `PathNotFoundError`, also a `FileNotFoundError`; an element that matches nothing

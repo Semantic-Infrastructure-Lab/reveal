@@ -6,6 +6,8 @@ no element syntax of the CLI names a kind and a view); a legacy element keyword 
 an invalid request raises RequestValidationError with the CLI's exit-2 message.
 """
 import json
+import os
+import sys
 
 import pytest
 
@@ -113,12 +115,29 @@ def test_an_invalid_request_raises_the_clis_exit_2_message(fx, controls, flags):
     assert f'error: {caught.value}' == run.stderr.strip()
 
 
-def test_a_view_of_an_element_that_is_not_there_raises_element_not_found(fx):
+def test_a_view_of_an_element_that_is_not_there_raises_element_not_found(fx, capfd):
     run = _run_reveal_direct('m.py', 'Store.nope', '--view', 'boundary')
     assert run.returncode == 2
+    capfd.readouterr()
     with pytest.raises(ElementNotFoundError) as caught:
         api.element('m.py', 'Store.nope', view='boundary')
-    assert str(caught.value) in run.stderr
+    assert str(caught.value) == "could not find function or method 'Store.nope' in m.py"
+    assert str(caught.value) in run.stderr and caught.value.element == 'Store.nope'
+    assert capfd.readouterr() == ('', ''), 'the library API prints nothing; the exception carries the line'
+
+
+@pytest.mark.skipif(sys.platform == 'win32', reason='chmod 000 has no effect on Windows')
+@pytest.mark.skipif(hasattr(os, 'geteuid') and os.geteuid() == 0, reason='root reads a mode-000 file')
+def test_a_view_of_a_file_that_cannot_be_read_raises_its_os_error(fx, capfd):
+    os.chmod(fx / 'm.py', 0)
+    try:
+        assert _run_reveal_direct('m.py', 'Store.save', '--view', 'boundary').returncode == 3
+        capfd.readouterr()
+        with pytest.raises(PermissionError):
+            api.element('m.py', 'Store.save', view='boundary')
+    finally:
+        os.chmod(fx / 'm.py', 0o644)
+    assert capfd.readouterr() == ('', '')
 
 
 @pytest.mark.parametrize('keywords', [{'bogus': 1}, {'format': 'json'}, {'check': True}])

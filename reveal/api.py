@@ -105,12 +105,15 @@ def element(
     path: str,
     name: str,
     element_type: Optional[str] = None,
+    **kwargs: Any,
 ) -> Optional[Dict[str, Any]]:
-    """The JSON document ``reveal PATH NAME --format json`` prints: one element of a file.
+    """The JSON document ``reveal PATH NAME --format json`` prints: one element of a file, or one view of it.
 
     ``element("app.py", "load_config")`` is ``reveal app.py load_config --format json``, run through the CLI's own
     element route and returned instead of printed (D21, BACK-2325), so every element syntax the CLI reads answers:
     a name, ``Class.method``, ``:LINE`` or ``:START-END``, ``TYPE:N`` (the Nth of a kind, ``function:2``) and ``@N``.
+    ``element("app.py", "load_config", view="boundary")`` is ``reveal app.py load_config --view boundary --format
+    json`` (BACK-2627).
 
     Args:
         path: Path to the file.
@@ -118,7 +121,15 @@ def element(
         element_type: Deprecated, works until 1.0: a kind (``"function"``, ``"class"``, ...) to look *name* up as,
             with its earlier lookup (None when nothing of that kind has that name). The answer's ``meta.warnings``
             carries the ``retired_spelling`` note; name the element as ``reveal PATH NAME`` does instead. At the cut
-            it raises ``RequestValidationError`` with the note's text.
+            it raises ``RequestValidationError`` with the note's text. Given beside any other keyword it raises
+            ``UnsupportedOverrideError``: no element syntax of the CLI names a kind and a view.
+        **kwargs: The flags of ``reveal PATH NAME`` with ``-`` as ``_``, as :func:`analyze` takes the path read's:
+            the element views (``view="effects"``, ``in_loops=True``, ``kind=["if", "loop"]``, ``transitive=True``,
+            ``depth=3``, ``nesting_depth=1``, ``range="9-14"``), the standalone operations (``inputs=True``,
+            ``varflow="total"``, ``callsites="10-14"``, ``around=2`` on a ``:LINE``) and the element's slices
+            (``head=2``). A flag that takes no value takes True. An old flag's keyword (``boundary=True``) answers with
+            its replaced-by note in ``meta.warnings``, as the flag does. An unknown keyword raises
+            ``UnsupportedOverrideError``, and so do the output options (``format``) and the modes that read no element.
 
     Each call is one host request, like :func:`query`.
 
@@ -130,7 +141,9 @@ def element(
         ElementNotFoundError: Nothing in the file matches *name* (a ``RequestValidationError``), with the CLI's message.
         PathNotFoundError: *path* does not exist (a ``RequestValidationError`` and still a ``FileNotFoundError``).
         RequestValidationError: Every other request the CLI exits 2 on, with its message: no analyzer reads the file,
-            a directory, a file that is not the document its type needs (a ``.docx`` that is not a zip).
+            a directory, a file that is not the document its type needs (a ``.docx`` that is not a zip), an invalid
+            or unread control (``view="nope"``, ``head=2`` beside a view).
+        UnsupportedOverrideError: An unknown keyword (also a ``TypeError``), or ``element_type`` beside a keyword.
         AnalysisFailedError: The file's parse failed (an XML or notebook parse error), where the CLI exits 3; its
             ``result`` is the CLI's document. A file that could not be read raises its ``OSError``.
 
@@ -140,12 +153,17 @@ def element(
         print(func["content"])
     """
     from .cli.routing.typed import answer_path_read
+    from .errors import UnsupportedOverrideError
     from .utils.invocation_log import log_scope
     from .utils.request_cache import host_request
+    if element_type is not None and kwargs:
+        raise UnsupportedOverrideError(
+            f"element_type does not combine with {', '.join(map(repr, kwargs))}: no element syntax of reveal PATH NAME "
+            'names a kind and a view; drop element_type (deprecated) and name the element as reveal PATH NAME does')
     with host_request(), log_scope(to_stderr=False):
         if element_type is not None:
             return _typed_element(path, name, element_type)
-        return answer_path_read(path, {}, name)
+        return answer_path_read(path, kwargs, name)
 
 
 def _typed_element(path: str, name: str, element_type: str) -> Optional[Dict[str, Any]]:
