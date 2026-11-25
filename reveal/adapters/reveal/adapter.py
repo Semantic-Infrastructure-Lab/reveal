@@ -110,7 +110,7 @@ class RevealAdapter(ResourceAdapter):
 
         return root
 
-    def get_structure(self, **kwargs: Any) -> RevealResult:
+    def get_structure(self) -> RevealResult:
         """Get reveal's internal structure.
 
         Returns:
@@ -119,7 +119,7 @@ class RevealAdapter(ResourceAdapter):
         """
         if self.component and self.component.lower() not in SECTIONS:
             self._unknown_section()
-        result = structure.get_structure(self.reveal_root, self.component, **kwargs)
+        result = structure.get_structure(self.reveal_root, self.component)
         return ResultBuilder.create(
             result_type='reveal_structure',
             source=f'reveal://{self.component or "."}',

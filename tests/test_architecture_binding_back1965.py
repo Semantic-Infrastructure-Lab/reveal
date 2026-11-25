@@ -56,14 +56,15 @@ def test_diff_population_preserves_existing_multiplier(tmp_path, monkeypatch, to
     assert seen == [expected]
 
 
-# verbose is the legacy word of all (BACK-2654 note #17): it reaches the owner as the query, not a keyword.
-@pytest.mark.parametrize('query,keywords', [('top=0', {'all': True}), ('top=0&verbose=true', {})])
-def test_expansion_changes_only_the_canonical_map(tmp_path, query, keywords):
+# verbose is the legacy word of all (BACK-2654 note #17): it reaches the owner as the query, not a keyword. all binds at
+# construction like every control: the structure call takes no keywords (BACK-2214).
+@pytest.mark.parametrize('query,params', [(None, {'top': 0, 'all': True}), ('top=0&verbose=true', None)])
+def test_expansion_changes_only_the_canonical_map(tmp_path, query, params):
     for number in range(7):
         folder = tmp_path / f'part{number}'
         folder.mkdir()
         (folder / 'value.py').write_text('VALUE=1\n', encoding='utf-8')
-    result = ArchitectureAdapter(str(tmp_path), query).get_structure(**keywords)
+    result = ArchitectureAdapter(str(tmp_path), query, params=params).get_structure()
     assert result['map']['components']['returned'] == 7
 
 

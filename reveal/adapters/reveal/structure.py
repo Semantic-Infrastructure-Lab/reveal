@@ -7,13 +7,12 @@ from ..base import _ADAPTER_REGISTRY
 from ...utils.path_utils import to_posix
 
 
-def get_structure(reveal_root: Path, component: Optional[str] = None, **kwargs: Any) -> Dict[str, Any]:
+def get_structure(reveal_root: Path, component: Optional[str] = None) -> Dict[str, Any]:
     """Get reveal's internal structure.
 
     Args:
         reveal_root: Path to reveal's root directory
         component: Optional component to filter by (analyzers, adapters, rules, config)
-        **kwargs: Additional arguments (unused)
 
     Returns:
         Dict containing analyzers, adapters, rules, etc.

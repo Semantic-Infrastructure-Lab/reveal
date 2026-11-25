@@ -877,7 +877,7 @@ class HelpAdapter(ResourceAdapter):
             sorted(best_by_file.values(), key=lambda e: e.topic)
         ]
 
-    def get_structure(self, **kwargs) -> Dict[str, Any]:
+    def get_structure(self) -> Dict[str, Any]:
         """The list of available topics, or the topic the resource names (help://quick), as the CLI answers it.
 
         The CLI router reads the resource as the topic (``ELEMENT_NAMESPACE_ADAPTER``); a structure call answers it the

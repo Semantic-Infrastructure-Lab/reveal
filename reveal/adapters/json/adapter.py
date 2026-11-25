@@ -165,7 +165,7 @@ class JsonAdapter(ResourceAdapter):
             self.query_filters = _parse_filters_safe(self._filter_query)
         self.query_string = self._filter_query or ('view=' + self.view if self.view != 'value' else '')
 
-    def get_structure(self, **kwargs) -> Dict[str, Any]:
+    def get_structure(self) -> Dict[str, Any]:
         """Get JSON data with optional query processing.
 
         Returns:

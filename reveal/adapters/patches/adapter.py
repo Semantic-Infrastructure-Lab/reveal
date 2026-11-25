@@ -272,7 +272,7 @@ class PatchesAdapter(ResourceAdapter):
             ],
         }
 
-    def get_structure(self, **kwargs: Any) -> Dict[str, Any]:
+    def get_structure(self) -> Dict[str, Any]:
         if _VIEW.read(self.query_params) == 'pressure':
             return testability_report(self.path, self.query_params, _LIMIT, pressure_thresholds(self.query_params))
         # BACK-1250: scan_patches() silently accepted a nonexistent path and

@@ -2,20 +2,10 @@
  "argv": {},
  "bare-get-structure-kwargs": {
   "reveal/adapters/classify.py": 1,
-  "reveal/adapters/claude/adapter.py": 1,
-  "reveal/adapters/codex/adapter.py": 1,
   "reveal/adapters/demo.py": 1,
   "reveal/adapters/depends.py": 1,
-  "reveal/adapters/deps.py": 1,
-  "reveal/adapters/diff/adapter.py": 1,
   "reveal/adapters/domain/adapter.py": 1,
-  "reveal/adapters/git/adapter.py": 1,
-  "reveal/adapters/help.py": 1,
-  "reveal/adapters/json/adapter.py": 1,
-  "reveal/adapters/markdown/adapter.py": 1,
-  "reveal/adapters/mysql/adapter.py": 1,
-  "reveal/adapters/patches/adapter.py": 1,
-  "reveal/adapters/reveal/adapter.py": 1
+  "reveal/adapters/mysql/adapter.py": 1
  },
  "broad-except": {},
  "display-path": {},

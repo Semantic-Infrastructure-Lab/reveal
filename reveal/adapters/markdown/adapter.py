@@ -247,7 +247,7 @@ class MarkdownQueryAdapter(ResourceAdapter):
         self.extra_fields = FIELDS.read(params)
         self.explain = EXPLAIN.read(params)
 
-    def get_structure(self, **kwargs) -> Dict[str, Any]:
+    def get_structure(self) -> Dict[str, Any]:
         """Query markdown files and return matching results.
 
         Returns:

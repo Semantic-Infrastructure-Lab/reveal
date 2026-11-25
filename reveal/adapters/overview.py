@@ -615,7 +615,7 @@ class OverviewAdapter(ResourceAdapter):
                 'notes': ['Ordinary overview is a bounded static import map, not a quality assessment.',
                           'Comparison uses the live working tree and retains required snapshot losses.']}
 
-    def get_structure(self, all: bool = False, **kwargs: Any) -> RevealResult:
+    def get_structure(self) -> RevealResult:
         with self.composition_run():
             path = Path(self.path)
             # Direct API calls do not pass through the CLI's existing resource stat.
@@ -625,7 +625,7 @@ class OverviewAdapter(ResourceAdapter):
             if self.result_type_for(self.query_params) == 'overview_diff':
                 return self._comparison(path, _AGAINST.read(self.query_params), population)
             no_imports = not _IMPORTS.read(self.query_params)
-            top = UNLIMITED_TOP if all or _ALL.read(self.query_params) else top
+            top = UNLIMITED_TOP if _ALL.read(self.query_params) else top
             scope = _run_scope(self, path)
             facts, status = ((None, 'not_requested') if no_imports else _run_imports_analysis(
                 self, path, top, scope_usable=bool(scope.get('total_code_files'))))

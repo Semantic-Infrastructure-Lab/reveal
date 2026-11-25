@@ -7,7 +7,6 @@ adapters:
     all:
       via:
       - declared
-      - structure-param
       - routing-special
     code_only:
       reason: 'metrics'' own switch (BACK-2621): no other adapter has a data/config
@@ -793,7 +792,6 @@ adapters:
     all:
       via:
       - declared
-      - structure-param
       - routing-special
     code_only:
       reason: 'metrics'' own switch (BACK-2621): no other adapter has a data/config

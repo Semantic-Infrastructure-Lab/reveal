@@ -177,7 +177,7 @@ class DiffAdapter(ResourceAdapter):
         """
         return _get_help()
 
-    def get_structure(self, **kwargs) -> Dict[str, Any]:
+    def get_structure(self) -> Dict[str, Any]:
         """Get diff summary between two resources.
 
         Returns:

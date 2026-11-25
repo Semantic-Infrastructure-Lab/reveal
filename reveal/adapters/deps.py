@@ -437,7 +437,7 @@ class DepsAdapter(ResourceAdapter):
             ],
         }
 
-    def get_structure(self, **kwargs: Any) -> Dict[str, Any]:
+    def get_structure(self) -> Dict[str, Any]:
         with self.composition_run():
             self._clear_request_evidence()
             try:

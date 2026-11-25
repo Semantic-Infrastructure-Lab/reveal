@@ -264,7 +264,7 @@ class CodexAdapter(ResourceAdapter):
     # memories/pipeline is a sub-path of memories — routed before generic memories
     _MEMORIES_PIPELINE = 'memories/pipeline'
 
-    def get_structure(self, **kwargs) -> Dict[str, Any]:
+    def get_structure(self) -> Dict[str, Any]:
         """Route codex:// resource to the appropriate handler, then page a list answer (--limit/--offset)."""
         return page_result(self._read_structure(), self.query_params)
 

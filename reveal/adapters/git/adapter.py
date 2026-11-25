@@ -622,14 +622,14 @@ class GitAdapter(ResourceAdapter):
             git_subpath = os.path.relpath(abs_file, repo_root).replace(os.sep, '/')
         return git_subpath
 
-    def get_structure(self, **kwargs) -> Dict[str, Any]:
+    def get_structure(self) -> Dict[str, Any]:
         """The view of :meth:`_view_structure`, with the filter fields no commit has."""
-        result = self._view_structure(**kwargs)
+        result = self._view_structure()
         note_warning(result, self._unknown_filter_field_warning())
         result = qualify_source_evidence(portable_repository_paths(result, self.path))
         return apply_aggregate_rows(result, self.aggregate_control)
 
-    def _view_structure(self, **kwargs) -> Dict[str, Any]:
+    def _view_structure(self) -> Dict[str, Any]:
         """
         Get repository structure using progressive disclosure.
 

@@ -785,14 +785,14 @@ class ClaudeAdapter(ResourceAdapter):
                 return getattr(self, method_name)
         return None
 
-    def get_structure(self, **kwargs) -> Dict[str, Any]:
+    def get_structure(self) -> Dict[str, Any]:
         """Read the selected answer, then apply declared answer-row controls."""
         from .qualification import validate_resource
         from .pagination import page_result
         validate_resource(self.resource, _parse_session_identifier, tuple(p for p, _ in self._RESOURCE_DISPATCH))
-        return page_result(self._read_structure(**kwargs), self.query_params)
+        return page_result(self._read_structure(), self.query_params)
 
-    def _read_structure(self, **kwargs) -> Dict[str, Any]:
+    def _read_structure(self) -> Dict[str, Any]:
         """Existing analysis/resource dispatch, independent of answer-row controls."""
         # Bare claude://, sessions/, '.', '' → session list or cross-session search.
         if self._is_session_list_resource():

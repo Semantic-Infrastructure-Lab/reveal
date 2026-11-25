@@ -1191,9 +1191,9 @@ checked once, before analysis ("Ignored inputs"); `validate_request(params, args
 keeps the request checks a declaration does not express.
 
 Constructor-bound structure calls explicitly declare class-local
-`BOUND_QUERY_CALL = True`. Surface is the initial adopter; Contracts and Trace also
-adopt this protocol. Each actual
-`get_structure(self)` takes no query keywords; canonical construction owns declared
+`BOUND_QUERY_CALL = True`, or own `PARAM_SPECS` with the canonical constructor; every core
+noun adopts this protocol (the retired classify and depends and the ops schemes do not). Each
+adopter's `get_structure(self)` takes no keywords, and one raises `TypeError` (BACK-2214); canonical construction owns declared
 controls, and the structure boundary bypasses signature-name forwarding for that
 class. Subclasses declare adoption themselves, preserving unadopted custom plugin
 `from_uri` behavior. Check and element dispatch retain their existing contracts.

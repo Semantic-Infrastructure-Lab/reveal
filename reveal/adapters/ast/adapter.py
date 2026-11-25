@@ -529,15 +529,8 @@ class AstAdapter(ResourceAdapter):
                 structures.append(struct)
         return structures
 
-    def get_structure(self, structures: Optional[List[Dict[str, Any]]] = None, **kwargs) -> Dict[str, Any]:
+    def get_structure(self) -> Dict[str, Any]:
         """Get filtered AST structure based on query.
-
-        Args:
-            structures: Optional pre-collected structure list, bypassing this
-                method's own `collect_structures(self.path)` walk+parse. Lets a
-                caller that already walked and parsed the same files for
-                another purpose (`reveal architecture`, BACK-489) share that
-                work instead of triggering a second full-repo walk.
 
         Returns:
             Dict containing query results with metadata
@@ -551,10 +544,8 @@ class AstAdapter(ResourceAdapter):
         if self.reveal_type_var:
             return self._reveal_type_result()
 
-        # Collect all structures from path (file or directory), unless the
-        # caller already collected them (see `structures` param docstring above)
-        if structures is None:
-            structures = self._collect_structures()
+        # Collect all structures from path (file or directory)
+        structures = self._collect_structures()
 
         filtered = apply_filters(structures, self.query)
 
