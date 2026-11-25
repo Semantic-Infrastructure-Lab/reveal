@@ -1467,15 +1467,23 @@ def _render_structure(adapter, renderer_class: type[Any], args: 'Namespace',
 
 
 def _answer_diagnostic(result: dict, previous: Optional[str] = None) -> Optional[str]:
-    """Retain distinct server-only diagnostics before presentation drops fields."""
+    """Retain distinct server-only diagnostics before presentation drops fields: the answer's error, else the messages
+    of its errors, else of its warnings (each entry's ``message``, never the repr of the list, BACK-2786)."""
     meta = result.get('meta', {})
-    message = result.get('error') or meta.get('errors') or meta.get('warnings')
+    message = result.get('error') or _entry_messages(meta.get('errors')) or _entry_messages(meta.get('warnings'))
     if not message:
         return previous
     diagnostic = str(message)
     if previous and previous != diagnostic:
         return f'{previous}\n{diagnostic}'
     return diagnostic
+
+
+def _entry_messages(entries: Any) -> str:
+    """The ``message`` of each ``meta.errors``/``meta.warnings`` entry (its ``type`` when it has none), joined."""
+    texts = [str(entry.get('message') or entry.get('type') or '') if isinstance(entry, dict) else str(entry)
+             for entry in entries or ()]
+    return '; '.join(text for text in texts if text)
 
 
 def _public_answer_diagnostic(adapter, result: dict, facts) -> Optional[str]:
