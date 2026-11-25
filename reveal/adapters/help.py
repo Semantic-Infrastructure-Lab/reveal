@@ -1105,6 +1105,8 @@ class HelpAdapter(ResourceAdapter):
                          heading_filter: Optional[str]) -> Optional[Dict[str, Any]]:
         """help://<name>: a static guide, 'adapters', an adapter, or a file analyzer."""
         _refuse_removed_noun(topic)
+        if topic == 'agent' and heading_filter is None:
+            return self.agent_screen()  # generated from COMMANDS; help://agent/full is the guide
         # Static guides (auto-discovered + manual) win over a same-named adapter.
         if topic in self.help_topics:
             return self._load_static_help(topic, section=heading_filter)
@@ -1979,8 +1981,6 @@ class HelpAdapter(ResourceAdapter):
         Returns:
             Help content dict or None if file not found
         """
-        if topic == 'agent' and not full and section is None:
-            return self.agent_screen()  # generated; needs no guide file
         entry = self.help_topics.get(topic)
         if not entry:
             return None
