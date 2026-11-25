@@ -567,7 +567,7 @@ def _nav_words(flag: str, flag_value: str, mode, controls: dict) -> list[str]:
     from .version import __version__
     from .cli.parser import create_argument_parser
     from .cli.routing.typed import path_read_options, path_read_words
-    types = reveal_nav.nav_types  # type: ignore[attr-defined]
+    types = reveal_nav.nav_types
     unknown = sorted(set(controls) - set(types))
     if unknown:
         raise NavRequestValidationError(f"reveal_nav has no parameter {', '.join(map(repr, unknown))}; "
