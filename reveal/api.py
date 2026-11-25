@@ -29,8 +29,10 @@ Usage::
 
 import functools
 import logging
+import sys
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, TypeVar, cast
+from typing import Any, Callable, Dict, Iterator, List, Optional, TypeVar, cast
 
 logger = logging.getLogger(__name__)
 
@@ -175,10 +177,11 @@ def _noted_answer(scheme: str, uri: str, overrides: Dict[str, Any], answer):
     result's ``meta.warnings`` as the CLI's JSON carries them (BACK-2654; it used to note declared aliases only).
     A URI request that retires says it once, as the Python call that replaces it (BACK-2716): that note covers the
     per-key notes of the controls it renders. A request that says no request note (a resource URI with no query string)
-    says each legacy keyword's own row: nothing else would."""
+    says each legacy keyword's own row: nothing else would. The answer carries what the request's query-key log
+    recorded too (a parser's ``unknown_query_param``), as the CLI's JSON and the noun form do (``json_answer``)."""
     from .cli.invocation import (Invocation, invocation_scope, note_uri_spelling, request_noted, retirement_note,
                                  uri_retirement_keys)
-    from .utils.json_utils import attach_invocation_warnings
+    from .utils.json_utils import json_answer
     by_request = request_noted(scheme)
     says_request = _says_request_note(scheme, uri)
     keys = uri_retirement_keys(uri) + [f'param:{scheme}.{key}' for key in overrides]
@@ -188,8 +191,29 @@ def _noted_answer(scheme: str, uri: str, overrides: Dict[str, Any], answer):
         _note_retired_where_fields(scheme, uri, overrides)
         if by_request:
             _note_uri_request(scheme, uri, overrides)
-        # The retirement notes and every config_warning this invocation recorded (BACK-2659).
-        return attach_invocation_warnings(answer())
+        # The parser warnings, the retirement notes and every config_warning this invocation recorded (BACK-2659).
+        return json_answer(answer())
+
+
+@contextmanager
+def _query_key_log() -> Iterator[None]:
+    """The URI form's query-key log, as the CLI's dispatch (``ledger.dispatching``) and the noun form open one
+    (BACK-2792): the reads it records let a declined answer name the given controls it never read
+    (``control_unread_by_data``, BACK-2696), and a query parser's warning is kept for the answer, which carries it as
+    the CLI's JSON does (``_noted_answer``). A request that raises has no document, so a warning no answer carried is
+    printed, as the CLI prints one its JSON did not carry (``ledger.report``). A request inside a caller's log joins it,
+    as one inside a host request does: that log records the reads and owns its warnings."""
+    from .utils.query_parser import collect_query_keys, query_key_recorder
+    if query_key_recorder() is not None:
+        yield
+        return
+    with collect_query_keys(warnings_to_stderr=False) as log:
+        try:
+            yield
+        finally:
+            if not log.structured_emitted:
+                for warning in log.warnings:
+                    print(warning['message'], file=sys.stderr)
 
 
 def _bound_uri_params(scheme: str, uri: str, overrides: Dict[str, Any]):
@@ -438,7 +462,8 @@ def query(
     # indexes among them) are reset or revalidated against the tree first (BACK-2093).
     # One invocation log for the whole call, so a config problem met while the adapter is
     # built reaches the answer as the CLI's JSON carries it (BACK-2659).
-    with host_request(), log_scope(to_stderr=False), gitignore_scope(respect_gitignore):
+    # One query-key log, as the CLI's dispatch opens: what the answer read and what its parsers warned (BACK-2792).
+    with host_request(), log_scope(to_stderr=False), gitignore_scope(respect_gitignore), _query_key_log():
         # The answer is a JSON document, so its diagnostics are in it and a per-file stderr line is not printed, as
         # with --format json and the noun form (BACK-2799).
         answer_is_json(True)

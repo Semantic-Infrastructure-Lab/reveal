@@ -97,10 +97,9 @@ def test_a_typed_keyword_on_a_declined_uri_returns_the_decline(fx):
     assert declined['type'] == 'patches_scan'
 
 
-@pytest.mark.xfail(strict=True, reason='BACK-2789: the URI form records no reads, so a decline cannot name the given '
-                                        'controls it never read (control_unread_by_data) as the CLI dispatch does')
 def test_a_declines_unread_keyword_is_named_alike_in_both_forms(fx):
-    """A keyword the declined answer never read is named by the one shared warning on the noun form (BACK-2696)."""
+    """A keyword the declined answer never read is named by the one shared warning on both forms (BACK-2696, BACK-2792:
+    the URI form opens the query-key log the noun form's dispatch opens)."""
     assert _answer(api.query('patches://notests', limit=3)) == _answer(api.query('patches', 'notests', limit=3))
 
 
