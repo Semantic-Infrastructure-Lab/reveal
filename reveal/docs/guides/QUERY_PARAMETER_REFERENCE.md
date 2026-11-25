@@ -1,35 +1,39 @@
 ---
 title: Query Parameter Reference
-description: Complete reference for query parameters across all Reveal adapters
+description: Complete reference for each noun's options (flags) and their old query keys across all Reveal adapters
 date: 2026-02-07
 help_topic: query-params
-help_description: "Query parameter reference across all adapters"
+help_description: "Each noun's options (flags) and their old query keys, across all adapters"
 help_category: feature_guides
 ---
 
 # Query Parameter Reference
 
-Query parameters allow filtering, formatting, and modifying adapter behavior using URI syntax: `adapter://resource?param=value&param2=value2`
+Each noun's options, by the name its flag and its old query key share: `reveal NOUN TARGET --param value --param2 value2`,
+and a resource URI takes the same flags (`reveal claude://session/NAME --errors`). This reference was written for the
+query-string spelling `scheme://resource?param=value&param2=value2`, which is retiring: it answers with a note naming the
+flag until 1.0, then exits 2. The keys stay listed here so an old spelling can be read back; the hosting-ops adapters
+(`cpanel://`, `ssl://`, `autossl://`, `letsencrypt://`) keep their query options.
 
 ## Quick Reference
 
-| Adapter | Query Params | Example |
-|---------|--------------|---------|
-| **imports://** | `unused`, `circular`, `violations`, `importers`, `sort`, `limit`, `entrypoints`, `components`, `external`, `detail`, `lazy`, `scope`, `tests`, `root`, `scan-limit`, `format`, `exclude` (retired, with a note: `rank`, `top`, `verbose`, `max_files`) | `imports://.?unused` |
-| **git://** | `view`, `where` (fields `author`, `email`, `message`, `hash`, `date`, `timestamp`, `content`), `detail`, `merges`, `element`, `bucket`, `ignore-commits`, `auto-ignore`, `context`, `since`, `until`, `ref`, `sort`, `limit`, `scan-limit`, `offset` (retired, with a note: `type`, `no_merges`, `raw`, `ignore`) | `reveal git://file.py --view history` |
-| **json://** | `view` (`value`, `schema`, `flatten`, `type`, `keys`, `length`), `where` (field filters), `detail`, `sort`, `limit`, `offset` (retired, with a note: the first bare words `schema`, `flatten`, `gron`, `type`, `keys`, `length`) | `json://data.json?view=schema` |
-| **markdown://** | `where` (front-matter fields), `match`, `view` (`list`, `links`, `aggregate`, `lint`), `field`, `backlinks`, `columns`, `lint-fields`, `explain`, `sort`, `limit`, `offset` (retired, with a note: `body-contains`, `fields`, `link-graph`, `lint`, `aggregate`) | `markdown://docs/?status=draft` |
-| **metrics://** | `view` (`hotspots`, `provenance`), `where` (field filters), `code-only`, `churn`, `merges`, `since`, `tests`, `detail`, `exclude`, `sort`, `limit`, `offset` (retired, with a note: `hotspots`, `top`, `min_lines`, `max_lines`, `min_complexity`, `max_complexity`, `min_functions`, `no_merges`, `summary_only`) | `metrics://.?view=hotspots` |
-| **ast://** | `kind`, `where` (fields `name`, `complexity`, `lines`, `nesting_depth`, `decorator`, `param_type`, `return_type`, `has_annotations`, `callers`, `kind`), `view` (`dict-heatmap`, `dict-schemas`), `reveal-type`, `builtins`, `sort`, `limit`, `offset` (noted legacy words: `type`, `depth`, `show`; retired, with a note: `calls`, `callee_of`, `show=calls`) | `reveal ast src --where 'complexity>10'` |
-| **calls://** | `callers`, `callees`, `detail`, `rank`, `top`, `depth`, `format`, `builtins`, `modules`, `external`, `exclude` (retired, with a note: `uncalled`, `target`, `root`) | `calls://src?callers=fn` |
-| **claude://** | `view`, `detail`, `errors`, `tools`, `match`, `where`, `sort`, `offset`, `limit`, `tokens` | `claude://session/NAME?detail=summary` |
-| **codex://** | `where` (`session~=TEXT`), `match`, `matches`, `since`, `until`, `view`, `detail`, `key`, `limit`, `offset` (retired, with a note: `filter`, `search`, `full`, `last`, `tokens`, `goal`) | `codex://sessions/?match=auth-refactor` |
-| **depends://** (retired, with a note: use `imports://?importers`) | `top`, `format` | `depends://src?top=10` |
-| **xlsx://** | `--sheet`, `--cells`, `--match`, `--limit`, `--formulas`, `--powerpivot`, `--powerquery`, `--names`, `--connections` (`?range`, `?search` legacy) | `reveal xlsx model.xlsx --sheet Sales` |
+| Noun or adapter | Options (flag `--NAME`, old query key `NAME`) | Example |
+|-----------------|------------------------------------------------|---------|
+| **imports** | `unused`, `circular`, `violations`, `importers`, `sort`, `limit`, `entrypoints`, `components`, `external`, `detail`, `lazy`, `scope`, `tests`, `root`, `scan-limit`, `format`, `exclude` (retired, with a note: `rank`, `top`, `verbose`, `max_files`) | `reveal imports . --unused` |
+| **git** | `view`, `where` (fields `author`, `email`, `message`, `hash`, `date`, `timestamp`, `content`), `detail`, `merges`, `element`, `bucket`, `ignore-commits`, `auto-ignore`, `context`, `since`, `until`, `ref`, `sort`, `limit`, `scan-limit`, `offset` (retired, with a note: `type`, `no_merges`, `raw`, `ignore`) | `reveal git://file.py --view history` |
+| **json** | `view` (`value`, `schema`, `flatten`, `type`, `keys`, `length`), `where` (field filters), `detail`, `sort`, `limit`, `offset` (retired, with a note: the first bare words `schema`, `flatten`, `gron`, `type`, `keys`, `length`) | `reveal json data.json --view schema` |
+| **markdown** | `where` (front-matter fields), `match`, `view` (`list`, `links`, `aggregate`, `lint`), `field`, `backlinks`, `columns`, `lint-fields`, `explain`, `sort`, `limit`, `offset` (retired, with a note: `body-contains`, `fields`, `link-graph`, `lint`, `aggregate`) | `reveal markdown docs/ --where status=draft` |
+| **metrics** | `view` (`hotspots`, `provenance`), `where` (field filters), `code-only`, `churn`, `merges`, `since`, `tests`, `detail`, `exclude`, `sort`, `limit`, `offset` (retired, with a note: `hotspots`, `top`, `min_lines`, `max_lines`, `min_complexity`, `max_complexity`, `min_functions`, `no_merges`, `summary_only`) | `reveal metrics . --view hotspots` |
+| **ast** | `kind`, `where` (fields `name`, `complexity`, `lines`, `nesting_depth`, `decorator`, `param_type`, `return_type`, `has_annotations`, `callers`, `kind`), `view` (`dict-heatmap`, `dict-schemas`), `reveal-type`, `builtins`, `sort`, `limit`, `offset` (noted legacy words: `type`, `depth`, `show`; retired, with a note: `calls`, `callee_of`, `show=calls`) | `reveal ast src --where 'complexity>10'` |
+| **calls** | `callers`, `callees`, `detail`, `rank`, `top`, `depth`, `format`, `builtins`, `modules`, `external`, `exclude` (retired, with a note: `uncalled`, `target`, `root`) | `reveal calls src --callers fn` |
+| **claude://** | `view`, `detail`, `errors`, `tools`, `match`, `where`, `sort`, `offset`, `limit`, `tokens` | `reveal claude://session/NAME --detail summary` |
+| **codex://** | `where` (`session~=TEXT`), `match`, `matches`, `since`, `until`, `view`, `detail`, `key`, `limit`, `offset` (retired, with a note: `filter`, `search`, `full`, `last`, `tokens`, `goal`) | `reveal codex://sessions/ --match auth-refactor` |
+| **depends://** (retired, with a note: use `reveal imports PATH --importers`) | `top`, `format` | `depends://src?top=10` |
+| **xlsx** | `--sheet`, `--cells`, `--match`, `--limit`, `--formulas`, `--powerpivot`, `--powerquery`, `--names`, `--connections` (`?range`, `?search` legacy) | `reveal xlsx model.xlsx --sheet Sales` |
 | **help://** | `--match`, `--limit` (the search only: `reveal help://search --match TEXT`, or `reveal help --match TEXT`; another topic exits 2 naming them; `--limit` caps hits, default 20, `0` = all; `?search`, `?top` and `help://search/TERM` are deprecated) | `reveal help://search --match 'find callers' --limit 50` |
 | **cpanel://** | `domain_type`, `dns-verified`, `check-live` | `cpanel://USER/ssl?domain_type=addon` |
 | **ssl://** | `expiring-within` (implies `--check`), `summary` (batch and nginx views) | `ssl://host?expiring-within=30` |
-| **diff://** | `--exclude` (a directory pair walks both sides; any other key exits 2 naming it) | `reveal diff src/ backup/src/ --exclude tests` |
+| **diff** | `--exclude` (a directory pair walks both sides; any other key exits 2 naming it) | `reveal diff src/ backup/src/ --exclude tests` |
 | **env://** | none | N/A |
 | **sqlite://** | none | N/A |
 | **mysql://** | none | N/A |
@@ -39,71 +43,70 @@ Query parameters allow filtering, formatting, and modifying adapter behavior usi
 | **domain://** | none | N/A |
 | **reveal://** | none (any key, `--sort`/`--limit` or `api.query` keyword exits 2 naming it) | N/A |
 
-`sort`, `limit` and `offset` are applied by `ast://`, `markdown://`, `json://`, `git://` and
-`metrics://`; `imports://` (`sort=-fan-in`) and `calls://` (`sort=-callers`; `limit` also caps `?uncalled`) take `sort`
-and `limit=N` for their ranking and reject `offset` (`top` is calls' legacy spelling of `limit`, with a note). Metrics'
-`--view hotspots` ranking and the retired `hotspots://` cap with `limit=N` too (`top=N` is their legacy spelling, with a
-note); `patches://?view=pressure` and the retired `depends://` cap with `top=N` (on `depends://` the `--limit N` flag maps
-to it). A declared noun rejects a key it does not
-take (exit 2, naming its controls), and one its selected answer does not read (`sort`, `limit` and `offset`
+`--sort`, `--limit` and `--offset` are applied by `ast`, `markdown`, `json`, `git` and
+`metrics`; `imports` (`--sort=-fan-in`) and `calls` (`--sort=-callers`; `--limit` also caps the retired `?uncalled`) take
+`--sort` and `--limit N` for their ranking and reject `--offset` (`top` is calls' legacy spelling of `limit`, with a note).
+Metrics' `--view hotspots` ranking and the retired `hotspots://` cap with `--limit N` too (`top=N` is their legacy
+spelling, with a note), and so does `reveal patches PATH --view pressure` (`top=N` is its legacy spelling); the retired
+`depends://` caps with `top=N` (its `--limit N` flag maps to it). A declared noun rejects an option it does not
+take (exit 2, naming its controls), and one its selected answer does not read (`--sort`, `--limit` and `--offset`
 on a Git blame, a Markdown link view or a JSON key listing) exits 2 naming the answers that read it
 ([output contract](../development/OUTPUT_CONTRACT.md#ignored-inputs)); other adapters answer
 `Unknown query param ... ignored`.
-Every adapter that walks a directory also takes `respect_gitignore=false` (the same as `--respect-gitignore off`).
+Every noun that walks a directory also takes `--respect-gitignore off` (old key `respect_gitignore=false`).
 
-**`exclude` is the walk control of every noun that walks a directory.** `?exclude=PATTERN` answers as
-`--exclude PATTERN` (the same JSON and exit) on `imports://`, `calls://`, `surface://`, `contracts://`, `patches://`,
-`metrics://`, `overview://` and `pack://`: patterns use `.gitignore` syntax, repeat or join with commas, and combine with
-`REVEAL_IGNORE` and config `ignore`. A file target needs no pruning and answers as without it, with no note. An empty
-pattern (`--exclude ''`, `?exclude=`) exits 2 with `SPELLING needs a pattern: --exclude PATTERN`. On `ast://` and
-`markdown://`, whose `where` fields come from the data, a bare `?exclude=V` is still the field filter
+**`--exclude` is the walk control of every noun that walks a directory** (`imports`, `calls`, `surface`, `contracts`,
+`patches`, `metrics`, `overview` and `pack`; the old `?exclude=PATTERN` answers the same JSON and exit): patterns use
+`.gitignore` syntax, repeat or join with commas, and combine with `REVEAL_IGNORE` and config `ignore`. A file target needs no pruning and answers as without it, with no note. An empty
+pattern (`--exclude ''`, `?exclude=`) exits 2 with `SPELLING needs a pattern: --exclude PATTERN`. On `ast` and
+`markdown`, whose `where` fields come from the data, the old bare `?exclude=V` is still the field filter
 `--where 'exclude=V'` (with a note) until 1.0; use `--exclude PATTERN` for their walk.
 
 ## Detailed Documentation
 
-### imports:// - Import Analysis
+### imports - Import Analysis
 
 **Purpose**: Detect import-related code quality issues
 
-**Query Parameters**:
+**Options**:
 
-- **`unused`** (flag) - Find unused imports
+- **`--unused`** - Find unused imports
   ```bash
   reveal imports src --unused
   ```
   Shows all imports that are declared but never referenced in the code.
 
-- **`circular`** (flag) - Detect circular dependencies
+- **`--circular`** - Detect circular dependencies
   ```bash
   reveal imports src --circular
   ```
   Identifies circular import chains that can cause runtime errors.
 
-- **`violations`** (flag) - Check layer violations
+- **`--violations`** - Check layer violations
   ```bash
   reveal imports src --violations
   ```
   Detects imports that violate architectural layer boundaries (if configured).
 
-- **`detail`** (`normal` or `full`, combine with `circular`) - `full` shows the actual cycle path (A→B→C→A) for each circular dependency group, and every file in it. The subcommand spells it `--detail full`; the retired `verbose` (and the global `--verbose`) still means `full`, with a note:
+- **`--detail`** (`normal` or `full`, combine with `--circular`) - `full` shows the actual cycle path (A→B→C→A) for each circular dependency group, and every file in it. The retired `verbose` (and the global `--verbose`) still means `full`, with a note:
   ```bash
   reveal imports src --circular --detail full
   ```
-  With `detail=normal` (the default), circular output lists the files in each SCC. With `full`, it shows the full edge sequence tracing one representative cycle per group.
+  With `--detail normal` (the default), circular output lists the files in each SCC. With `full`, it shows the full edge sequence tracing one representative cycle per group.
 
-- **`sort=-fan-in`** and **`limit=N`** - The fan-in ranking, most imported first, and how many of its rows to show (`0` = all; the retired `rank=fan-in` and `top=N` still answer, with a note):
+- **`--sort=-fan-in`** and **`--limit N`** - The fan-in ranking, most imported first, and how many of its rows to show (`0` = all; the retired `rank=fan-in` and `top=N` still answer, with a note):
   ```bash
   reveal imports src --sort=-fan-in --limit 10
   ```
 
-- **`scan-limit=N`** (integer, minimum 1) - Source files the walk may keep (default 20000): an input budget, not a row cap; a cut walk is incomplete (exit 3). It replaces the retired `max_files`.
+- **`--scan-limit N`** (integer, minimum 1) - Source files the walk may keep (default 20000): an input budget, not a row cap; a cut walk is incomplete (exit 3). It replaces the retired `max_files`.
 
-- **`lazy`** (`include`, `exclude` or `only`) - Which function-level (lazy) import edges an edge-derived answer counts
+- **`--lazy`** (`include`, `exclude` or `only`) - Which function-level (lazy) import edges an edge-derived answer counts
   ```bash
   reveal imports src --sort=-fan-in --lazy exclude   # load-time edges only: the architecture view
-  reveal imports src --circular --lazy include      # count lazy back-edges as cycle edges too
+  reveal imports src --circular --lazy include       # count lazy back-edges as cycle edges too
   ```
-  Default: `circular` (and `metadata.has_cycles`) exclude them, since a function-level import runs after
+  Default: `--circular` (and `metadata.has_cycles`) exclude them, since a function-level import runs after
   every module has loaded and is the usual way to break a cycle; fan-in, entrypoints, components and
   violations include them. Every answer prints its rule (`Rule: ...`, `edge_rule` in JSON). Python,
   PHP, JavaScript, TypeScript, TSX and Rust record import scope (Rust: see the
@@ -112,21 +115,21 @@ pattern (`--exclude ''`, `?exclude=`) exits 2 with `SPELLING needs a pattern: --
   unsupported Ruby contexts and other unclassified edges stay in `include`/`exclude`,
   not `only`, with coverage disclosed. An unknown value is an error.
 
-**Combining Parameters**: `unused`, `circular`, `violations` and the other views are separate --
-run one per call (two views in one request exit 2 naming both). `detail=full` combines with `circular`:
+**Combining options**: `--unused`, `--circular`, `--violations` and the other views are separate --
+run one per call (two views in one request exit 2 naming both). `--detail full` combines with `--circular`:
 ```bash
 reveal imports src --circular --detail full   # Cycle paths
 ```
 
 ---
 
-### git:// - Git Repository Inspection
+### git - Git Repository Inspection
 
 **Purpose**: Query git history, blame, and file tracking
 
-**Query Parameters**:
+**Options**:
 
-- **`type`** - Query type for file operations
+- **`--view`** - The answer for a file (`type` is its retired key, with a note)
   - **Values**: `history`, `blame`
   - **Examples**:
     ```bash
@@ -134,21 +137,21 @@ reveal imports src --circular --detail full   # Cycle paths
     reveal git app.py --view blame     # Git blame for file
     ```
 
-- **`detail`** - Detail level for blame (`normal`, `full`) or `raw` for a file's historical text
+- **`--detail`** - Detail level for blame (`normal`, `full`) or `raw` for a file's historical text
   - **Values**: `normal`, `full`, `raw` (`summary` is the deprecated spelling of `normal`)
   - **Example**:
     ```bash
     reveal git app.py --view blame --detail full
     ```
 
-- **`element`** - Semantic element for blame (function/class name)
+- **`--element`** - Semantic element for blame (function/class name)
   - **Example**:
     ```bash
     reveal git app.py --view blame --element load_config
     ```
   - Blames only the specified function or class
 
-- **`author`** - Filter commits by author name (case-insensitive)
+- **`--where author...`** - Filter commits by author name (case-insensitive)
   - **Operators**: `=` (exact), `~=` (contains)
   - **Examples**:
     ```bash
@@ -156,27 +159,27 @@ reveal imports src --circular --detail full   # Cycle paths
     reveal git app.py --view history --where 'author~=john'
     ```
 
-- **`email`** - Filter commits by author email
+- **`--where email...`** - Filter commits by author email
   - **Operators**: `=` (exact), `~=` (contains)
   - **Example**:
     ```bash
     reveal git app.py --view history --where 'email~=@example.com'
     ```
 
-- **`message`** - Filter commits by message (supports regex with `~=`)
+- **`--where message...`** - Filter commits by message (supports regex with `~=`)
   - **Examples**:
     ```bash
     reveal git app.py --view history --where 'message~=bug'
     reveal git app.py --view history --where 'message=Initial commit'
     ```
 
-- **`hash`** - Filter commits by short hash: `=` compares the whole 7-character hash; a prefix is `hash~=^PREFIX`
+- **`--where hash...`** - Filter commits by short hash: `=` compares the whole 7-character hash; a prefix is `hash~=^PREFIX`
   - **Example**:
     ```bash
     reveal git app.py --view history --where hash=a1b2c3d
     ```
 
-- **`date`** - Filter commits by commit date: `=`, `!=`, `>`, `<`, `>=`, `<=` or a range `=a..b`
+- **`--where date...`** - Filter commits by commit date: `=`, `!=`, `>`, `<`, `>=`, `<=` or a range `=a..b`
   - A year, month or day bound names the whole period: `date=2026-02-06` is any commit that
     day, `date!=P` any commit outside P, `date>2026-02-01` is after the end of that day,
     `date>2026-02` after the end of February, `date>2026` after the end of 2026, `date<P`
@@ -187,83 +190,83 @@ reveal imports src --circular --detail full   # Cycle paths
     its UTC offset (`2026-02-01 04:00:00 -0800`); a bound compares the clock part, and a bound
     with no zone is read in that local time too. A bound with a zone (`Z`, `+02:00`,
     `-0700`) is converted to that local time first, so it names the same instant everywhere.
-    Write `+` as itself; git:// does not percent-decode query values.
-  - `since=D` is `date>=D` and `until=D` is `date<=D`; `D` is `today` (the local date), a period or a time,
+    Write `+` as itself.
+  - `--since D` is `date>=D` and `--until D` is `date<=D`; `D` is `today` (the local date), a period or a time,
     the one grammar of `--since`/`--until` on every noun, and any other value exits 2 naming the forms
   - **Examples**:
     ```bash
-    reveal git . --where 'date>2026-02-01'                       # commits after 1 Feb
-    reveal git . --where date=2026-02-06                       # every commit on 6 Feb
-    reveal git . --since 2026-01-01 --until 2026-01-31     # all of January
-    reveal git . --where 'date>=2025' --where 'date<2026'                  # all of 2025
-    reveal git . --where 'date>2026-10-27T22:00:00Z'             # after 22:00 UTC that day
+    reveal git . --where 'date>2026-02-01'                  # commits after 1 Feb
+    reveal git . --where date=2026-02-06                    # every commit on 6 Feb
+    reveal git . --since 2026-01-01 --until 2026-01-31      # all of January
+    reveal git . --where 'date>=2025' --where 'date<2026'   # all of 2025
+    reveal git . --where 'date>2026-10-27T22:00:00Z'        # after 22:00 UTC that day
     ```
 
-- **`timestamp`** - Filter commits by commit time in epoch seconds: `timestamp>1767225600`
+- **`--where timestamp...`** - Filter commits by commit time in epoch seconds: `--where 'timestamp>1767225600'`
 
-- A filter on a field a commit does not have (`authr~=Scott`, bare or in `where=`) exits 2,
-  naming the supported controls and the commit fields, as on metrics:// (fixed field lists);
-  json:// and markdown://, whose fields come from the data, warn with `unknown_filter_field` instead.
+- A filter on a field a commit does not have (`--where 'authr~=Scott'`) exits 2,
+  naming the supported controls and the commit fields, as on metrics (fixed field lists);
+  json and markdown, whose fields come from the data, warn with `unknown_filter_field` instead.
 
-- **`ref`** - Override the starting ref (alias for `@ref` in the URI)
+- **`--ref`** - Override the starting ref (the same as `@ref` in the resource URI)
   - **Example**:
     ```bash
     reveal git src/app.py --view history --ref v0.63.0
     reveal git . --ref main          # same as git://.@main
     ```
 
-**Combining Parameters**:
+**Combining options**:
 ```bash
 reveal git . --view history --where 'author~=john' --where 'message~=fix'
 ```
 
 ---
 
-### json:// - JSON Structure Inspection
+### json - JSON Structure Inspection
 
 **Purpose**: Query and filter JSON data
 
-**Query Parameters**:
+**Options**:
 
-- **`schema`** (flag) - Show JSON schema instead of data
+- **`--view schema`** - Show JSON schema instead of data (the bare `schema` key is its retired spelling)
   ```bash
   reveal json data.json --view schema
   ```
 
-- **Field Filters** - Filter by JSON field values
-  - **Syntax**: `field=value`, `field~=pattern`, `field>N`, `field<N`
+- **`--where`** - Filter by JSON field values, repeatable
+  - **Syntax**: `--where field=value`, `--where 'field~=pattern'`, `--where 'field>N'`, `--where 'field<N'`
   - **Examples**:
     ```bash
-    reveal json data.json --where type=user           # Exact match
-    reveal json data.json --where 'name~=john'          # Regex search (any case)
-    reveal json data.json --where 'age>25'              # Numeric comparison
-    reveal json data.json --where status=active --where role=admin  # Multiple filters
+    reveal json data.json --where type=user                          # Exact match
+    reveal json data.json --where 'name~=john'                       # Regex search (any case)
+    reveal json data.json --where 'age>25'                           # Numeric comparison
+    reveal json data.json --where status=active --where role=admin   # Multiple filters
     ```
 
 **Supported Operators**:
-- `=` - Exact match (case-insensitive on json://)
+- `=` - Exact match (case-insensitive on json)
 - `~=` - Regex search (ignores case)
 - `!~` - Regex does not match
 - `>`, `<`, `>=`, `<=` - Numeric comparison (a non-numeric value matches nothing)
 - `..` - Range (e.g., `age=25..35`; string bounds compare as strings)
-- `!field` - Field absent or empty (e.g. `?!draft`; on json:// `draft=null` also matches a missing key or a null value)
+- `!field` - Field absent or empty (e.g. `--where '!draft'`; on json `draft=null` also matches a missing key or a null value)
 - `*` - Wildcard (e.g., `name=*john*`)
 
 ---
 
-### markdown:// - Markdown Document Query
+### markdown - Markdown Document Query
 
 **Purpose**: Search and filter markdown documents by frontmatter
 
-**Query Parameters**:
+**Options**:
 
-Same as **json://**, except that `=` and wildcards are case-sensitive - markdown adapter supports filtering by frontmatter fields using the unified query syntax. Frontmatter dates compare as ISO strings (`created>2026-01-01`, or a range with full dates), and `sort=` works only on result fields (`path`, `modified`, `status`, ...), not on arbitrary frontmatter keys.
+Same as **json**, except that `=` and wildcards are case-sensitive - markdown filters by frontmatter fields with the same `--where` expressions. Frontmatter dates compare as ISO strings (`created>2026-01-01`, or a range with full dates), and `--sort` works only on result fields (`path`, `modified`, `status`, ...), not on arbitrary frontmatter keys.
 
 **Examples**:
 ```bash
-reveal markdown docs/ --where status=draft              # Find drafts
-reveal markdown docs/ --where 'tags~=python'               # Documents tagged with python
-reveal markdown docs/ --where '!published'                 # Unpublished documents
+reveal markdown docs/ --where status=draft                     # Find drafts
+reveal markdown docs/ --where 'tags~=python'                   # Documents tagged with python
+reveal markdown docs/ --where '!published'                     # Unpublished documents
 reveal markdown docs/ --where created=2026-01-01..2026-12-31   # Created in 2026
 reveal markdown docs/ --where priority=high --where status=draft # High-priority drafts
 ```
@@ -275,51 +278,51 @@ reveal markdown docs/ --where 'title=*API*'    # Titles containing "API" (case-i
 
 **Body Text Search** (markdown-specific, not frontmatter):
 ```bash
-reveal markdown docs/ --match nginx                    # Body mentions "nginx"
-reveal markdown docs/ --match nginx --match ssl  # Both terms (AND)
+reveal markdown docs/ --match nginx               # Body mentions "nginx"
+reveal markdown docs/ --match nginx --match ssl   # Both terms (AND)
 ```
-`--match` is case-insensitive substring match. Repeated terms are AND'd. Combines with frontmatter filters and result control (`--sort`, `--limit`) — this is why it's spelled `match` rather than `search=` (the older `body-contains=` answers as `--match` with a note): unlike `claude://`/`codex://`/`xlsx://`/`help://search`'s `?search=`, it's a structured filter, not a standalone free-text search. See [Search vs. Filter](#search-vs-filter-two-different-conventions-on-purpose) above.
+`--match` is case-insensitive substring match. Repeated terms are AND'd. Combines with frontmatter filters and result control (`--sort`, `--limit`) — the older `body-contains=` answers as `--match` with a note. Unlike `--match` on `claude://`, `codex://`, `xlsx` and `help://search` (whose old key was `?search=`), it's a structured filter, not a standalone free-text search. See [Search vs. Filter](#search-vs-filter-two-different-conventions-on-purpose) above.
 
 **Extra columns** (markdown-specific):
 ```bash
 reveal markdown primitives/ --where type=framework --columns book,cohort  # Append book= cohort= inline per result
 ```
-`fields=f1,f2` appends comma-separated frontmatter values as `field=value` on each result row. Fields absent from a file are silently omitted.
+`--columns f1,f2` (old key `fields=f1,f2`) appends comma-separated frontmatter values as `field=value` on each result row. Fields absent from a file are silently omitted.
 
 ---
 
-### metrics:// - Code Statistics
+### metrics - Code Statistics
 
 **Purpose**: Codebase metrics and quality analysis
 
-**Query Parameters**:
+**Options**:
 
-- **`view=hotspots`** - The ranked hotspot files are the rows (the worst 10; `limit=N` for more, `0` for all)
+- **`--view hotspots`** - The ranked hotspot files are the rows (the worst 10; `--limit N` for more, `0` for all)
   ```bash
   reveal metrics . --view hotspots
   ```
   Shows files with lowest quality scores (most in need of refactoring). Replaces `hotspots=true`.
 
-- **`where`** - Field filters, repeatable (`where=lines>50`, `where=avg_complexity>=5`; the bare key `?lines>50` is the same)
+- **`--where`** - Field filters, repeatable (`--where 'lines>50'`, `--where 'avg_complexity>=5'`; the old keys `?lines>50` and `?where=lines>50` are the same)
 
-- **`code-only`** (flag) - Exclude data/config files from analysis (`code_only` is its alias)
+- **`--code-only`** - Exclude data/config files from analysis (`code_only` is its alias)
   ```bash
   reveal metrics . --code-only
   ```
   Filters out `.json` > 10KB, `.yaml`, `.xml`, `.csv`, `.toml` files.
 
-**Combining Parameters**:
+**Combining options**:
 ```bash
 reveal metrics . --view hotspots --code-only
 ```
 
 ---
 
-### ast:// - Abstract Syntax Tree Inspection
+### ast - Abstract Syntax Tree Inspection
 
 **Purpose**: Query code structure — find functions by complexity, size, name, type, and call relationships.
 
-**Query Parameters**:
+**Options**:
 
 - **`--kind`** - Filter by element type (`function`, `class`, `method`; `type` is its noted legacy word)
   ```bash
@@ -330,8 +333,8 @@ reveal metrics . --view hotspots --code-only
 - **`--where name=`** / **`name~=`** - Filter by element name (exact or substring)
   ```bash
   reveal ast src --where name=validate_item
-  reveal ast src --where 'name~=auth'          # name contains "auth"
-  reveal ast src --where 'name=*handler*'      # wildcard match
+  reveal ast src --where 'name~=auth'       # name contains "auth"
+  reveal ast src --where 'name=*handler*'   # wildcard match
   ```
 
 - **`--where 'complexity>N'`** - Filter by cyclomatic complexity
@@ -342,8 +345,8 @@ reveal metrics . --view hotspots --code-only
 
 - **`--where 'lines>N'`** - Filter by element length in lines
   ```bash
-  reveal ast src --where 'lines>50'            # functions longer than 50 lines
-  reveal ast src --where lines=20..50        # functions that are 20–50 lines long
+  reveal ast src --where 'lines>50'     # functions longer than 50 lines
+  reveal ast src --where lines=20..50   # functions that are 20–50 lines long
   ```
 
 - **`--where 'nesting_depth>N'`** - Filter by nesting depth (`depth` in `where` is its noted legacy word; a bare `depth` is the shared depth control, never a field)
@@ -355,8 +358,8 @@ reveal metrics . --view hotspots --code-only
   ```bash
   reveal ast src --where decorator=property
   reveal ast src --where decorator=staticmethod
-  reveal ast src --where decorator=HttpGet         # C# [HttpGet], [HttpGet("{id}"), Authorize]
-  reveal ast src --where decorator=derive          # Rust #[derive(Debug, Clone)]
+  reveal ast src --where decorator=HttpGet   # C# [HttpGet], [HttpGet("{id}"), Authorize]
+  reveal ast src --where decorator=derive    # Rust #[derive(Debug, Clone)]
   ```
   Bracket attributes match by name like at-style decorators; each attribute of a group such as
   `[HttpGet, Authorize]` matches on its own. A qualified name matches by its trailing segments
@@ -365,11 +368,11 @@ reveal metrics . --view hotspots --code-only
   attributes: `decorator=*Debug*` (a glob, matched against the source text too) finds
   `#[derive(Debug)]`. `decorator!=X` keeps elements without X; `decorator~=RE` is a regex.
 
-- **`calls`**, **`callee_of`**, **`show=calls`** - Retired: each still answers with a replaced-by
-  note. Use `calls://` instead
+- **`calls`**, **`callee_of`**, **`show=calls`** - Retired keys: each still answers with a replaced-by
+  note. Use `reveal calls` instead
   ```bash
   reveal calls src --callers validate_item   # was ast://src?calls=validate_item
-  reveal src --grep 'send'                     # was ast://src?calls=*send* (a pattern)
+  reveal src --grep 'send'                   # was ast://src?calls=*send* (a pattern)
   reveal calls src --callees main            # was ast://src?callee_of=main
   ```
 
@@ -385,8 +388,8 @@ reveal metrics . --view hotspots --code-only
 
 - **`--sort`** - Sort by a field, descending with a `-` prefix (`--sort=-complexity`); text keeps the sorted order
   ```bash
-  reveal ast src --sort=-complexity    # most complex first
-  reveal ast src --sort=-lines         # longest first
+  reveal ast src --sort=-complexity   # most complex first
+  reveal ast src --sort=-lines        # longest first
   ```
 
 - **`--where param_type=`** - Filter functions by parameter annotation (glob and regex supported)
@@ -403,9 +406,9 @@ reveal metrics . --view hotspots --code-only
 
 - **`--where has_annotations=`** - Filter by annotation presence (`true` = fully annotated, `false` = fully unannotated)
   ```bash
-  reveal ast src --where has_annotations=false   # find unannotated functions
-  reveal ast src --where has_annotations=true    # only annotated functions
-  reveal ast src --where has_annotations=false --kind function  # annotation coverage audit
+  reveal ast src --where has_annotations=false                   # find unannotated functions
+  reveal ast src --where has_annotations=true                    # only annotated functions
+  reveal ast src --where has_annotations=false --kind function   # annotation coverage audit
   ```
 
 - **`--where 'callers>N'`** - Filter by inbound caller count
@@ -420,86 +423,86 @@ reveal metrics . --view hotspots --code-only
   ```
   Gathers annotations, assignment RHS shapes, and loop variable hints.
 
-> For call graph queries, use `calls://` (see below). The `ast://` call filters (`calls=`, `callee_of=`, `show=calls`) are retired.
+> For call graph queries, use `reveal calls` (see below). The ast call filters (`calls=`, `callee_of=`, `show=calls`) are retired.
 
 ---
 
-### calls:// - Cross-File Call Graph
+### calls - Cross-File Call Graph
 
 **Purpose**: Find who calls a function, what a function calls, or rank functions by coupling — across the entire project.
 
-**Query Parameters**:
+**Options**:
 
-- **`callers`** - Find all callers of a function (reverse lookup). A bare name: `callers=FILE:NAME`
-  exits 2. The retired **`target`** answers the same, with a replaced-by note
+- **`--callers`** - Find all callers of a function (reverse lookup). A bare name: `--callers FILE:NAME`
+  exits 2. The retired **`target`** key answers the same, with a replaced-by note
   ```bash
   reveal calls src --callers validate_item
-  # Shorthand: calls://src/file.py:validate_item (only with no other mode; with one it exits 2)
+  # Shorthand: reveal calls src/file.py:validate_item (only with no other mode; with one it exits 2)
   ```
 
-- **`callees`** - Find everything a function calls (forward lookup); `FILE:NAME` picks one file's
-  definitions. With `depth=2-5` a level-by-level walk under the same `calls_callees` type
+- **`--callees`** - Find everything a function calls (forward lookup); `FILE:NAME` picks one file's
+  definitions. With `--depth 2` to `5` a level-by-level walk under the same `calls_callees` type
   (`levels`, `definitions`, edge totals, `walk_rule`): each definition expanded once at its
   shallowest level, every call site an edge. Beyond depth 1 is not measured (W-CALLS-9)
   ```bash
   reveal calls src --callees validate_item
-  reveal calls src --callees validate_item --builtins  # include len, str, etc.
-  reveal calls src --callees main --depth 3                 # what that calls, 3 levels
+  reveal calls src --callees validate_item --builtins   # include len, str, etc.
+  reveal calls src --callees main --depth 3             # what that calls, 3 levels
   ```
 
-- **`detail`** - With `callees` only: `normal` (default) or `full`, which adds `params` and `effects` to every
+- **`--detail`** - With `--callees` only: `normal` (default) or `full`, which adds `params` and `effects` to every
   definition reached (not measured, W-CALLS-9); with another mode it exits 2. The valueless `?detail` and
-  `true`/`false` are deprecated: a note names `detail=full` (`normal`)
+  `true`/`false` are deprecated: a note names `--detail full` (`normal`)
   ```bash
   reveal calls src --callees main --detail full
   ```
 
-- **`rank=callers`** - Rank the functions and classes defined under the path by number of unique callers (coupling metrics); `builtins=true` also ranks library methods and builtins
+- **`--sort=-callers`** (old key `rank=callers`) - Rank the functions and classes defined under the path by number of unique callers (coupling metrics); `--builtins` also ranks library methods and builtins
   ```bash
-  reveal calls src --sort=-callers          # top 10 most-called
+  reveal calls src --sort=-callers              # top 10 most-called
   reveal calls src --sort=-callers --limit 20   # top 20
   ```
 
-- **`depth`** - Levels for `?callers` and `?callees` (default 1; the retired `?root`: 2), 1-5; a value outside it exits 2 (`depth must be 1..5, got N`)
+- **`--depth`** - Levels for `--callers` and `--callees` (default 1; the retired `?root`: 2), 1-5; a value outside it exits 2 (`depth must be 1..5, got N`)
   ```bash
   reveal calls src --callers validate_item --depth 2  # callers-of-callers
   ```
 
-- **`format`** - Output format: `text` (default), `json`, `dot` (Graphviz). `dot` draws callers, a
-  callees walk (`depth=2-5` or `detail`), `root` and `modules`; callees at depth 1, `rank` and `uncalled`
+- **`--format`** - Output format: `text` (default), `json`, `dot` (Graphviz). `dot` draws callers, a
+  callees walk (`--depth 2`-`5` or `--detail`), `root` and `modules`; callees at depth 1, the ranking and `uncalled`
   have no graph and exit 2
   ```bash
   reveal calls src --callers main --format dot   # Graphviz: | dot -Tsvg > graph.svg
   ```
 
-- **`builtins`** - Include Python builtins in `?callees` (every depth), the retired `?root` and `?rank` output (default: false)
+- **`--builtins`** - Include Python builtins in `--callees` (every depth), the retired `?root` and the ranking output (default: off)
   ```bash
   reveal calls src --callees fn --builtins
   ```
 
-- **`root=<func>&depth=N`** - Retired: `?callees=<func>&depth=N` is the same walk (`?root` defaulted
-  to depth 2) and `&detail=full` adds params and side effects. `?root` still answers, with a replaced-by note
+- **`root=<func>&depth=N`** - Retired key: `--callees <func> --depth N` is the same walk (`?root` defaulted
+  to depth 2) and `--detail full` adds params and side effects. `?root` still answers, with a replaced-by note
   ```bash
-  reveal calls src --callees main --depth 2           # was ?root=main
+  reveal calls src --callees main --depth 2                          # was ?root=main
   reveal calls src --callees handle_request --depth 2 --format dot   # Graphviz: | dot -Tsvg > graph.svg
   ```
 
-- **`modules=true`** - Retired: the module graph answers from `imports://<path>?importers&scope=path`, one file→file edge per import with both ends under the path, an import used without a
+- **`modules=true`** - Retired key: the module graph answers from `reveal imports PATH --scope path --importers`, one file→file edge per import with both ends under the path, an import used without a
   call included, and no call count (an import resolving outside the path is counted in
   `outside_path_edges`). It keeps its `calls_module_graph` shape (plus `edge_rule`) and prints
-  a replaced-by note until the cut. `&format=dot` has no imports spelling yet, so the Graphviz view stays
-  here until then.
+  a replaced-by note until the cut. For a Graphviz view of those edges, use
+  `reveal imports PATH --scope path --importers --format dot`.
   ```bash
   reveal imports src --scope path --importers   # the same edges, as each module's importers
   ```
 
-One mode per request (`callers`, `callees`, `rank`, `modules`, or the retired `uncalled`, `target`
-and `root`); two exit 2.
+One mode per request (`--callers`, `--callees`, the `--sort=-callers` ranking, or the retired `modules`, `uncalled`,
+`target` and `root`); two exit 2.
 A name that names nothing exits 2 (`callees`: no definition; `callers`: no definition and no call
-site). A scanned call-source language with no recall snapshot (Elixir, Objective-C) withholds `meta.confidence` and is named (W-CALLS-10); a scope with no source file counted withholds it too (W-CALLS-12). The retired `?uncalled` withholds it in every language (W-CALLS-11 also names the measured precision for JavaScript, TypeScript, TSX, Java and PHP); use `?callers=NAME`.
+site). A scanned call-source language with no recall snapshot (Elixir, Objective-C) withholds `meta.confidence` and is named (W-CALLS-10); a scope with no source file counted withholds it too (W-CALLS-12). The retired `?uncalled` withholds it in every language (W-CALLS-11 also names the measured precision for JavaScript, TypeScript, TSX, Java and PHP); use `--callers NAME`.
 
 - **`external=true`** - Retired with `modules`: importers from the whole project root (imports'
-  default `scope=root`), not only those under the path. Import edges never reach stdlib or third-party
+  default `--scope root`), not only those under the path. Import edges never reach stdlib or third-party
   files; on the measured corpora every edge the old flag added was a file under the path that the
   default had dropped for being spelled as a host path.
   ```bash
@@ -512,52 +515,52 @@ site). A scanned call-source language with no recall snapshot (Elixir, Objective
 
 **Purpose**: Analyze Claude Code session logs (JSONL conversation files)
 
-**Query Parameters**:
+**Options**:
 
-- **`detail=summary`** - Session overview plus analytics (deprecated `summary` retains its original behavior)
+- **`--detail summary`** - Session overview plus analytics (deprecated `summary` retains its original behavior)
   ```bash
   reveal claude://my-session --detail summary
   ```
 
-- **`errors`** (flag) - Filter for messages containing errors
+- **`--errors`** - Filter for messages containing errors
   ```bash
   reveal claude://my-session --errors
   ```
 
-- **`tools=<name>`** (string) - Filter for specific tool usage
+- **`--tools NAME`** - Filter for specific tool usage
   ```bash
   reveal claude://my-session --tools Bash
   reveal claude://my-session --tools Edit
   ```
 
-- **`match=<text>`** - Narrative message text on the messages view, or tool-result text with tools/errors (deprecated `contains` retains its original scope)
+- **`--match TEXT`** - Narrative message text on the messages view, or tool-result text with tools/errors (deprecated `contains` retains its original scope)
   ```bash
   reveal claude://session/my-session/messages --match reveal
   ```
 
-- **User messages only** - there is no `role=` filter; the `prompts` view lists the
+- **User messages only** - there is no `role` filter; the `prompts` view lists the
   user's prompts
   ```bash
   reveal claude://session/my-session/prompts
   ```
 
-- **`match=<term>`** - Search session content (text, thinking, tool inputs/results), case-insensitive; the deprecated `search` retains its original codec
+- **`--match TERM`** on a session - Search session content (text, thinking, tool inputs/results), case-insensitive; the deprecated `search` retains its original codec
   ```bash
   reveal claude://my-session --match FileNotFoundError
   ```
 
-- **`view=messages&sort=-message_index&limit=N`** - Latest N assistant turns, latest-first. The deprecated `tail` preserves chronological order and zero-empty behavior; canonical limit zero is uncapped.
+- **`/messages --sort=-message_index --limit N`** - Latest N assistant turns, latest-first. The deprecated `tail` preserves chronological order and zero-empty behavior; canonical limit zero is uncapped.
   ```bash
   reveal claude://session/my-session/messages --limit 3 --sort=-message_index
   reveal claude://session/my-session/messages --limit 1 --sort=-message_index
   ```
 
-- **`view=messages&sort=-message_index&limit=1`** - Latest assistant turn. Deprecated `last` retains bare/zero-as-one behavior.
+- **`/messages --sort=-message_index --limit 1`** - Latest assistant turn. Deprecated `last` retains bare/zero-as-one behavior.
   ```bash
   reveal claude://session/my-session/messages --limit 1 --sort=-message_index
   ```
 
-- **`tokens`** (flag) - Token usage breakdown by message role (input/output/cache)
+- **`--tokens`** - Token usage breakdown by message role (input/output/cache)
   ```bash
   reveal claude://my-session --tokens
   ```
@@ -569,13 +572,13 @@ site). A scanned call-source language with no recall snapshot (Elixir, Objective
 **Purpose**: Find all files that import a given module ("what depends on this?")
 
 **Retired spelling**: `depends://` prints a note and answers as before until the cut; the
-replacement is `imports://<path>?importers` (one file: `imports://<path>/<file>?importers`):
+replacement is `reveal imports PATH --importers` (one file: `reveal imports PATH/FILE --importers`):
 ```bash
 reveal imports src --importers            # every module under src with its sorted importers
 reveal imports src --importers utils.py   # one file's importers, each with its import line
 ```
 
-**Query Parameters**:
+**Options**:
 
 - **`top=N`** (integer) - Limit to the N most-imported modules (directory) or the first N importers (file); `--limit N` maps here. The ranking's replacement:
   ```bash
@@ -583,11 +586,11 @@ reveal imports src --importers utils.py   # one file's importers, each with its 
   ```
 
 - **`format=dot`** (string) - Output GraphViz DOT format for visualization (directory mode only — single-file
-  targets ignore this param and return plain text): `depends://src?format=dot`; the current spelling is `imports://src?importers&format=dot`
+  targets ignore this param and return plain text): `depends://src?format=dot`; the current spelling is `reveal imports src --importers --format dot`
 
 ---
 
-### xlsx:// - Excel/XLSX Workbook
+### xlsx - Excel/XLSX Workbook
 
 **Purpose**: Extract data, structure, and embedded models from Excel files
 
@@ -654,7 +657,7 @@ mode, a limit that is not a whole number or an empty `--match`, exits 2 and name
 
 **Purpose**: Inspect cPanel user environments — domains, SSL certs, ACL health
 
-**Query Parameters**:
+**Options**:
 
 - **`domain_type=<type>`** (string, on `ssl` element) - Filter SSL certs by domain type
   - Values: `main_domain`, `addon`, `subdomain`, `parked`
@@ -679,9 +682,9 @@ mode, a limit that is not a whole number or an empty `--match`, exits 2 and name
 
 ---
 
-## Adapters Without Query Parameters (Current State)
+## Adapters Without Options (Current State)
 
-The following adapters use **element paths** for navigation — query params are not needed because the element path covers the use case:
+The following adapters use **element paths** for navigation — options are not needed because the element path covers the use case:
 
 - **env://** - `reveal env VAR_NAME` or `env://VAR_NAME` (resource = variable name; env takes no control)
 - **sqlite://** - `sqlite://db.sqlite/table_name` (element = table)
@@ -689,18 +692,15 @@ The following adapters use **element paths** for navigation — query params are
 - **reveal://** - `reveal://adapters` (element = topic)
 - **diff://** - `diff://LEFT:RIGHT/ELEMENT`, or `reveal diff LEFT RIGHT/ELEMENT` (element = the function, class or `Class.method` compared, after a plain-file or `git://` right side)
 
-The following adapters use CLI flags that switch routing mode (not URI filters) — they are documented in `--discover` under `cli_only_flags` but do not support query params:
+The following adapters use CLI flags that switch routing mode — they are documented in `--discover` under `cli_only_flags` and take no query keys:
 
-- **nginx://**, **domain://**, **mysql://** — `--check`, `--only-failures` are check-mode switches; migrating to query params would require routing-layer changes
-- **sqlite://** — the integrity check is the declared `--view health` (`reveal sqlite DB --view health`, or `?view=health` on the URI); `--check` is its deprecated spelling
+- **nginx://**, **domain://**, **mysql://** — `--check`, `--only-failures` are check-mode switches
+- **sqlite://** — the integrity check is the declared `--view health` (`reveal sqlite DB --view health`, or `--view health` after the `sqlite://` URI); `--check` is its deprecated spelling
 
-The following adapters still have adapter-specific options expressed as CLI flags rather than query params. These are known migration targets — the direction is to move them to URI query params so options travel with the resource:
+Options are flags, so a flag such as `claude://`'s `--base-path DIR` stays a flag; nothing moves into a query string.
 
-| Adapter | Current (CLI flag) | Target (query param) |
-|---------|-------------------|----------------------|
-| `claude://` | `reveal claude:// --base-path /path` | `reveal 'claude://?base-path=/path'` |
-
-**Already migrated** — both CLI flag and URI query param now work:
+**Ops adapters** — the flag and the query option both work, and both stay (the hosting-ops family is outside the
+one-spelling rule and is moving to a separate package):
 
 | Adapter | CLI flag | URI query param |
 |---------|---------|-----------------|
@@ -714,18 +714,21 @@ The following adapters still have adapter-specific options expressed as CLI flag
 | `autossl://` | `reveal autossl://latest --summary` | `reveal 'autossl://latest?summary'` ✅ |
 | `autossl://` | `reveal autossl://latest --user=NAME` | `reveal 'autossl://latest?user=NAME'` ✅ |
 
-The `ast://` adapter is the **reference implementation** — all filtering options are query parameters. New URI adapters should follow this pattern. See [ADAPTER_CONSISTENCY.md](../development/ADAPTER_CONSISTENCY.md#adapter-specific-flags-vs-query-parameters) for the full rationale.
+Every declared noun spells each option it declares as a flag (`reveal ast src --where 'complexity>10'`), and its old
+query key answers with a note naming that flag until 1.0, then exits 2. A new adapter declares its options once, and
+each declared option has a flag.
 
 ---
 
-## Universal Query Operators
+## Universal Filter Operators
 
-The following operators work across adapters that support field filtering (json://, markdown://):
+The following operators work in `--where` on the nouns that filter fields (json, markdown, and the others in the
+[query syntax guide](QUERY_SYNTAX_GUIDE.md)):
 
 | Operator | Description | Example |
 |----------|-------------|---------|
-| `=` | Exact match (case-insensitive on json://, case-sensitive on markdown://) | `status=published` |
-| `~=` | Regex search (ignores case; case-sensitive on ast://) | `title~=python` |
+| `=` | Exact match (case-insensitive on json, case-sensitive on markdown) | `status=published` |
+| `~=` | Regex search (ignores case; case-sensitive on ast) | `title~=python` |
 | `!~` | Regex does not match | `role!~admin` |
 | `>`, `<` | Comparison | `count>100` |
 | `>=`, `<=` | Comparison (inclusive) | `age>=18` |
@@ -741,11 +744,11 @@ Reveal has two unrelated "find text" mechanisms that look similar but answer
 different questions — knowing which one an adapter uses saves a round trip
 through the wrong syntax.
 
-**`?search=<term>` — free-text content search.** "Does this blob of text
-contain this term?" It does not combine with *field filters* (`field~=`), but it takes its
-adapter's scoping options (for example `since` and `until` on `claude://` and `codex://`, `word` and
-`snippet` on `claude://`, `matches` on `codex://`).
-Used consistently by `claude://`, `codex://`, `xlsx://`, and help's search
+**`--match TEXT` on sessions, spreadsheets and help — free-text content search** (its old key was
+`?search=<term>`). "Does this blob of text contain this term?" It does not combine with *field filters*
+(`--where 'field~=...'`), but it takes its adapter's scoping options (for example `--since` and `--until` on `claude://`
+and `codex://`, `word` and `snippet` on `claude://`, `matches` on `codex://`).
+Used consistently by `claude://`, `codex://`, `xlsx`, and help's search
 — all four search unstructured or semi-structured content (chat transcripts,
 spreadsheet cells, help docs) where there's no meaningful field to scope the
 match to. Matching precision varies by corpus size and is adapter-documented
@@ -753,20 +756,21 @@ match to. Matching precision varies by corpus size and is adapter-documented
 precision over a large transcript corpus you likely remember an exact phrase
 from; help's search does word-order-tolerant AND-of-terms matching, tuned
 for recall over a small curated doc corpus where an agent's phrasing rarely
-matches the docs verbatim). `codex://` and help spell this search `match` now
-(`reveal codex://sessions/ --match TEXT`, `reveal help://search --match TEXT`; repeat it to AND
-terms); their `?search=` is a deprecated spelling that works until 1.0 with a note.
+matches the docs verbatim). Each spells this search `--match`
+(`reveal codex://sessions/ --match TEXT`, `reveal help://search --match TEXT`, `reveal xlsx FILE --match TEXT`,
+`reveal claude://session/NAME --match TEXT`; repeat it to AND terms); `?search=` is the deprecated spelling, which works
+until 1.0 with a note naming the replacement.
 
-**`field~=value` (and markdown's `match`) — structured field filtering.** "Does
+**`--where 'field~=value'` (and markdown's `--match`) — structured field filtering.** "Does
 *this specific field* contain this substring?" AND-composable with other
-filters in the same query — `--where type=guide --match nginx`,
-`name~=auth&complexity>10`. Used by `ast://`, `git://`, `json://`, and
-`markdown` (whose `match` is this family, not the `?search=`
-family above, despite the name similarity — it combines with frontmatter
-filters and ranks results, which `?search=` adapters don't do).
+filters in the same request — `--where type=guide --match nginx`,
+`--where 'name~=auth' --where 'complexity>10'`. Used by `ast`, `git`, `json`, and
+`markdown` (whose `--match` is this family, not the free-text
+family above, despite the same name — it combines with frontmatter
+filters and ranks results, which the free-text searches don't do).
 
-**If you're unsure which an adapter uses:** `?search=` takes scoping options only;
-`~=`/`match` combine with any filter. `reveal 'help://<scheme>'` documents
+**If you're unsure which an adapter uses:** the free-text search takes scoping options only;
+`--where`/markdown's `--match` combine with any filter. `reveal 'help://<scheme>'` documents
 which one a given adapter supports.
 
 **Either family needs a term.** An empty or blank term (`--match ''`, `?match=`, `?search=`,
@@ -775,9 +779,9 @@ which one a given adapter supports.
 
 ---
 
-## Combining Query Parameters
+## Combining Options
 
-Multiple query parameters are combined with `&`:
+Give several options in one request; filters repeat:
 
 ```bash
 reveal git . --view history --where 'author~=john' --where 'message~=fix'
@@ -786,14 +790,14 @@ reveal imports . --circular --detail full
 ```
 
 **Behavior**:
-- Parameters are **AND**ed together (all must match)
+- Filters are **AND**ed together (all must match)
 - For adapters supporting field filters, multiple filters narrow results
 
 ---
 
-## Query Parameter vs Element Path
+## Option vs Element Path
 
-**When to use query parameters**:
+**When to use options**:
 - Filtering multiple results (imports, markdown documents, git commits)
 - Modifying adapter behavior (show schema, enable hotspots)
 - Applying conditions across data
@@ -807,13 +811,13 @@ reveal imports . --circular --detail full
 
 ---
 
-## Testing Query Parameters
+## Listing a Noun's Options
 
-To see what query parameters an adapter supports:
+To see what options an adapter supports (with each old query key):
 
 ```bash
-reveal help://schemas/imports      # One adapter's query parameters (any scheme)
-reveal --agent-help                # Full query reference
+reveal help://schemas/imports   # One adapter's options (any scheme)
+reveal --agent-help             # Full query reference
 ```
 
 Or programmatically:
@@ -826,24 +830,24 @@ reveal help://schemas/imports --format json | jq '.query_params'
 
 ## Best Practices
 
-1. **Use quotes** around URIs with query parameters (shell may interpret `?` and `&`)
+1. **Use quotes** around a filter whose value holds a shell character (`>`, `<`, `|`, `&`, `*`, `$`, `!`)
    ```bash
-   reveal json data.json --where 'age>25'    # ✅ Correct: the quotes keep > in the value
-   reveal json data.json --where age>25      # ❌ Unquoted, the shell reads >25 as a redirect to a file named 25
+   reveal json data.json --where 'age>25'   # ✅ Correct: the quotes keep > in the value
+   reveal json data.json --where age>25     # ❌ Unquoted, the shell reads >25 as a redirect to a file named 25
    ```
 
-2. **Start broad, then filter** - Run without params first to see data structure
+2. **Start broad, then filter** - Run without options first to see data structure
    ```bash
-   reveal git app.py --view history                    # All commits
-   reveal git app.py --view history --where 'author~=john'       # Then filter
+   reveal git app.py --view history                          # All commits
+   reveal git app.py --view history --where 'author~=john'   # Then filter
    ```
 
-3. **Combine complementary filters** - Use multiple params for precision
+3. **Combine complementary filters** - Use several filters for precision
    ```bash
    reveal markdown docs/ --where status=draft --where 'tags~=python' --where '!published'
    ```
 
-4. **Check adapter schema** for available params
+4. **Check adapter schema** for available options
    ```bash
    reveal help://schemas/imports --format json | jq '.query_params'
    ```
@@ -852,6 +856,6 @@ reveal help://schemas/imports --format json | jq '.query_params'
 
 ## See Also
 
-- [Adapter Authoring Guide](../development/ADAPTER_AUTHORING_GUIDE.md) - How to add query params to custom adapters
+- [Adapter Authoring Guide](../development/ADAPTER_AUTHORING_GUIDE.md) - How to add options to custom adapters
 - [Agent Help](../AGENT_HELP.md) - AI agent integration guide
 - [Output Contract](../development/OUTPUT_CONTRACT.md) - Adapter output format specification
