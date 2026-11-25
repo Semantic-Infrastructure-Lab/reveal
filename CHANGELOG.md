@@ -144,6 +144,7 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 - `reveal calls PATH --callees NAME --detail full` (or `normal`, the default) takes a level as every noun does; the valueless `--detail`, `?detail`, `detail=True` and `--detail true|false` answer as `full`/`normal` with a note until 1.0, and other values (`yes`, `1`) exit 2 naming the levels (BACK-2774).
 - `reveal --agent-help` (also `reveal help agent`) prints one screen of at most 150 lines built from the command list: the command model, the path reads, one line per command with a runnable example, grouped by rung or role, how options work and the exit codes. It replaces the agent guide's hand-written "About This Guide" and "Before You Read This" sections (now in `reveal help agent/full`); a missing guide file no longer makes `--agent-help` exit 1 (BACK-1055).
+- `reveal help quick` lists the ladder rung by rung from the command list, each with a runnable example; `reveal help adapters` and `--adapters` teach `reveal imports src/` and `reveal metrics src/` (BACK-1055, BACK-2819).
 
 ### Added
 
