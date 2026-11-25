@@ -88,11 +88,9 @@ No comparative agent-effectiveness claim follows from that diagnostic coverage.
    subcommand (`reveal NOUN TARGET --option`), generated from one declaration, and a shared
    idea gets one option name with one meaning on every noun (BACK-2598). A URI only names a
    resource (`git://app.py@main`, `diff://app.py:old.py/handle_request`) and takes the same
-   flags, with the same answer and exit code; the remaining resource readers bind their
-   options through the same declarations (BACK-2214). Old names, query-string options
-   included, keep working with a note until the cut. Counting rules already print as one
-   pointer line in text, with the full text in the JSON. Element views and operation
-   selectors become one view option on every noun that has them (BACK-2627).
+   flags, with the same answer and exit code. Old names, query-string options included, keep
+   working with a note until the cut. Counting rules already print as one pointer line in
+   text, with the full text in the JSON, and element views already take one `--view` option.
 2. **One import graph.** The retired `depends`, `deps` and `calls ?modules` already answer
    through `imports`; finish per-language parity before the old names stop working (BACK-2079, BACK-2063);
    the public-path recall gate and the oracle-free graph invariants run in CI and stay green
