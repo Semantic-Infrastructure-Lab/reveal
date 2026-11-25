@@ -145,6 +145,32 @@ def test_an_element_miss_raises_element_not_found(fx):
         _element('ok.py', 'nosuch')
 
 
+def test_an_element_views_miss_raises_element_not_found_and_prints_nothing(fx, capsys):
+    """An element view's source failure (NavSourceFailure, a SystemExit to the CLI) is the library's exception: an
+    element no view resolves is ElementNotFoundError with the CLI's line (BACK-2627 note #10)."""
+    from reveal.errors import ElementNotFoundError
+    with pytest.raises(ElementNotFoundError, match=r"^could not find function or method 'nosuch' in ok.py$") as caught:
+        with host_request(), log_scope(to_stderr=False):
+            answer_path_read('ok.py', {'view': 'boundary'}, 'nosuch')
+    assert caught.value.element == 'nosuch' and caught.value.__cause__ is None
+    assert capsys.readouterr() == ('', '')
+
+
+def test_a_nav_source_failure_maps_to_its_os_error_or_analysis_failure():
+    from reveal.cli.routing.typed import _nav_source_failure
+    from reveal.errors import AnalysisFailedError
+    from reveal.utils.results import FailureCause, NavSourceFailure, failure_execution_facts
+    deep = NavSourceFailure(3, execution_facts=failure_execution_facts(FailureCause.ANALYSIS),
+                            public_diagnostic="Error: --view flow could not analyze 'f' in a.py: too deep\n  No answer.")
+    assert type(_nav_source_failure(deep, 'f')) is AnalysisFailedError
+    assert str(_nav_source_failure(deep, 'f')) == "--view flow could not analyze 'f' in a.py: too deep\n  No answer."
+    unread = NavSourceFailure(3, execution_facts=failure_execution_facts(FailureCause.ANALYSIS),
+                              public_diagnostic='Error: cannot read a.py: Permission denied')
+    denied = PermissionError(13, 'Permission denied')
+    unread.__cause__ = denied
+    assert _nav_source_failure(unread, 'f') is denied
+
+
 def test_an_element_that_starts_with_a_dash_stays_the_element(fx):
     from reveal.errors import ElementNotFoundError
     with pytest.raises(ElementNotFoundError, match="'-x'"):

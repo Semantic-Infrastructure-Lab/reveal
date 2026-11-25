@@ -267,6 +267,19 @@ class _Failed(Exception):
     """The answer consumer's stop: the path read failed (exit 2 or 3); the failure is raised outside the route."""
 
 
+def _nav_source_failure(failed: Any, element: Optional[str]) -> BaseException:
+    """The exception a library caller gets for an element view's source failure (``NavSourceFailure``: the CLI's exit
+    with its authored line): a file it could not read its ``OSError``, an element no view resolves
+    ``ElementNotFoundError`` (exit 2), an analysis that could not finish ``AnalysisFailedError`` (exit 3)."""
+    from ...errors import AnalysisFailedError, ElementNotFoundError
+    if isinstance(failed.__cause__, OSError):
+        return failed.__cause__
+    text = failed.public_diagnostic.removeprefix('Error: ')
+    if failed.code == 2:
+        return ElementNotFoundError(element or '', text.partition('\n')[0])
+    return AnalysisFailedError(text)
+
+
 def answer_path_read(path: Any, controls: Mapping[str, Any], element: Optional[str] = None) -> Dict[str, Any]:
     """Answer ``reveal PATH [ELEMENT] --flags`` as the CLI's JSON document carries it (a file's envelope, a directory's
     tree, an element), through the CLI's own path-read route (``handle_file_or_directory`` with an answer consumer),
@@ -278,7 +291,7 @@ def answer_path_read(path: Any, controls: Mapping[str, Any], element: Optional[s
     from ...errors import RequestValidationError
     from ...utils.gitignore import gitignore_scope
     from ...utils.invocation_log import answer_is_json
-    from ...utils.results import execution_failed, note_incomplete
+    from ...utils.results import NavSourceFailure, execution_failed, note_incomplete
     from ..invocation import Invocation, invocation_scope, note_path_read_flags, record_typed_spellings
     from ..parser import check_navigation_args, create_argument_parser
     from .declared import JsonUsageParser
@@ -319,6 +332,8 @@ def answer_path_read(path: Any, controls: Mapping[str, Any], element: Optional[s
                 handle_file_or_directory(args.path, args, answer_consumer=consume)
         except _Failed:
             raise _failure(answers[-1], answers[-1].execution_facts) from None
+        except NavSourceFailure as failed:  # an element view's: a SystemExit to the CLI, never to a library caller
+            raise _nav_source_failure(failed, element) from None
         if not documents:
             raise RuntimeError(f'reveal {target} returned without an answer')
         document = documents[-1]
