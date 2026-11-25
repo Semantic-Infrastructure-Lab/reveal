@@ -413,7 +413,8 @@ def _run_nav_handler(handler, ctx) -> Optional[dict]:
     """Run one element-flag handler (its JSON answer, None when it printed text); an analysis too deeply nested to
     follow fails with exit 3."""
     try:
-        return handler(ctx)
+        document: Optional[dict] = handler(ctx)
+        return document
     except RecursionError:
         # BACK-2529: the variable-flow walkers recurse once per syntax level, so a few hundred
         # nested calls (generated parsers) exhaust the interpreter's limit. D6: the request was

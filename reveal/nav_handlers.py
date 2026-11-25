@@ -13,7 +13,7 @@ cli/adapters circular import at module-load time (see file_handler.py header).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, cast
 
 from .core import tree_root
 from reveal.utils.lines import split_lines
@@ -112,10 +112,9 @@ def _nav_json(flag: str, path: str, element: str, from_line: int, to_line: int,
                         {'type': 'navigation_warning', 'message': warning}
                         for warning in warnings or []]
     meta['warnings'] = [*meta.get('warnings', []), *extra_warnings]
-    result: Dict[str, Any] = ResultBuilder.create(
+    return cast(Dict[str, Any], ResultBuilder.create(
         'element_view', to_posix(path), source_type='file', contract_version=CONTRACT_VERSION,
-        meta=meta, data={'findings': findings, 'warnings': warnings or []})
-    return result
+        meta=meta, data={'findings': findings, 'warnings': warnings or []}))
 
 
 def _varflow_trust_warning(analyzer) -> Optional[str]:
@@ -201,6 +200,7 @@ def _emit_depth_navigation(ctx: _NavCtx, flag: str, from_line: int, to_line: int
         print(render())
         render_meta_warnings(result)
         _print_rules(result, fields=('meta.structure_scope.rule', 'meta.structure_scope.exit_sites'))
+    return None
 
 
 def _nav_flow(ctx: _NavCtx) -> Optional[Dict[str, Any]]:
@@ -245,7 +245,7 @@ def _nav_varflow(ctx: _NavCtx) -> Optional[Dict[str, Any]]:
         else:
             print(render_cross_var_flow(var_name, frames, split_lines(ctx.analyzer.content)))
             _print_standing_warning(trust_warning)
-        return
+        return None
     events = var_flow(ctx.func_node, var_name, from_line, to_line, ctx.get_text)
     _require_variable(ctx, var_name, from_line, to_line, '--varflow', events)
     if ctx.as_json:
@@ -256,6 +256,7 @@ def _nav_varflow(ctx: _NavCtx) -> Optional[Dict[str, Any]]:
     else:
         print(render_var_flow(var_name, events, split_lines(ctx.analyzer.content)))
         _print_standing_warning(trust_warning)
+    return None
 
 
 def _nav_narrow(ctx: _NavCtx) -> Optional[Dict[str, Any]]:
@@ -276,6 +277,7 @@ def _nav_narrow(ctx: _NavCtx) -> Optional[Dict[str, Any]]:
                          findings, extra_meta={'var': var_name}, warnings=decline)
     else:
         print(render_narrowing(var_name, events, split_lines(ctx.analyzer.content)))
+    return None
 
 
 def _implicit_nodes(ctx: _NavCtx) -> list:
@@ -298,6 +300,7 @@ def _nav_calls(ctx: _NavCtx) -> Optional[Dict[str, Any]]:
         return _nav_json('callsites', ctx.analyzer.path, ctx.element, from_line, to_line, calls)
     else:
         print(render_range_calls(calls, from_line, to_line))
+    return None
 
 
 def _emit_exit_navigation(ctx: _NavCtx, flag: str, from_line: int, to_line: int, findings: list,
@@ -318,6 +321,7 @@ def _emit_exit_navigation(ctx: _NavCtx, flag: str, from_line: int, to_line: int,
         print(render())
         render_meta_warnings(result)
         _print_rules(result, fields=('meta.exit_scope.rule', 'meta.exit_scope.implicit_tail_rule'))
+    return None
 
 
 def _nav_exits(ctx: _NavCtx) -> Optional[Dict[str, Any]]:
@@ -346,6 +350,7 @@ def _nav_deps(ctx: _NavCtx) -> Optional[Dict[str, Any]]:
         return _nav_json('inputs', ctx.analyzer.path, ctx.element, from_line, to_line, findings)
     else:
         print(render_deps(deps, from_line, to_line))
+    return None
 
 
 def _nav_mutations(ctx: _NavCtx) -> Optional[Dict[str, Any]]:
@@ -361,6 +366,7 @@ def _nav_mutations(ctx: _NavCtx) -> Optional[Dict[str, Any]]:
         return _nav_json('outputs', ctx.analyzer.path, ctx.element, from_line, to_line, findings)
     else:
         print(render_mutations(mutations, from_line, to_line))
+    return None
 
 
 def _nav_sideeffects(ctx: _NavCtx) -> Optional[Dict[str, Any]]:
@@ -407,6 +413,7 @@ def _nav_sideeffects(ctx: _NavCtx) -> Optional[Dict[str, Any]]:
               + (f'\n\nWarning: {note}' if note else ''))
     else:
         print(render_effects(effects, from_line, to_line))
+    return None
 
 
 def _nav_fanout(ctx: _NavCtx) -> Optional[Dict[str, Any]]:
@@ -434,6 +441,7 @@ def _nav_statewrites(ctx: _NavCtx) -> Optional[Dict[str, Any]]:
                          extra_meta={'mode': ctx.request.mode})
     else:
         print(render_statewrites(writes, from_line, to_line))
+    return None
 
 
 def _nav_keys(ctx: _NavCtx) -> Optional[Dict[str, Any]]:
@@ -447,6 +455,7 @@ def _nav_keys(ctx: _NavCtx) -> Optional[Dict[str, Any]]:
                          extra_meta={'var': var_name})
     else:
         print(render_keys(var_name, events, from_line, to_line))
+    return None
 
 
 def _boundary_effect_finding(effect: Dict[str, Any], transitive: bool) -> Dict[str, Any]:
@@ -509,6 +518,7 @@ def _nav_boundary(ctx: _NavCtx) -> Optional[Dict[str, Any]]:
         print(render_boundary_transitive(boundary, ctx.element, from_line, to_line, depth))
     else:
         print(render_boundary(boundary, from_line, to_line))
+    return None
 
 
 # Each element answer's handler, keyed by the bound request's ``ElementRequest.answer`` (the view, effects by its mode,
@@ -570,6 +580,7 @@ def _nav_scope(analyzer, element: str, as_json: bool) -> Optional[Dict[str, Any]
         content_lines = split_lines(analyzer.content)
         line_text = content_lines[line_no - 1].strip() if 0 < line_no <= len(content_lines) else ''
         print(render_scope_chain(line_no, chain, line_text))
+    return None
 
 
 def _nav_around(analyzer, element: str, as_json: bool, n: int) -> Optional[Dict[str, Any]]:
@@ -593,3 +604,4 @@ def _nav_around(analyzer, element: str, as_json: bool, n: int) -> Optional[Dict[
         for i in range(start - 1, end):
             prefix = '▶' if (i + 1) == line_no else ' '
             print(f'{prefix}{i + 1:5}  {content_lines[i]}')
+    return None
