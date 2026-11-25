@@ -711,11 +711,12 @@ def legacy_element_resource(name: str, path: str, element: str) -> Optional[str]
     row noted (``element_retirement``): the element after a ``/`` in the resource, the spelling the row names
     (``reveal diff://L:R NAME`` is ``diff://L:R/NAME``, BACK-2768); on an empty resource the element alone
     (``reveal help:// quick`` is ``help://quick``). None: the noun has no such row and refuses the element, as before
-    (BACK-2526)."""
+    (BACK-2526). A trailing ``/`` is dropped, but a path that ends in a scheme's ``://`` keeps it: ``env://:env://``
+    and ``PATH`` are ``env://:env:///PATH``, where stripping read ``env://:env:/PATH`` (BACK-2817)."""
     from ..invocation import element_retirement
     if element_retirement(name) is None:
         return None
-    return '/'.join(part for part in (path.rstrip('/'), element) if part)
+    return '/'.join(part for part in (path if path.endswith('://') else path.rstrip('/'), element) if part)
 
 
 def _refuse_element(name: str, path: str, element: str, args, answer_consumer=None) -> None:
