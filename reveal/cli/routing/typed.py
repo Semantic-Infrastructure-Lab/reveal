@@ -179,20 +179,23 @@ def answer_typed_request(noun: str, target: Optional[str], controls: Mapping[str
 
 # --- the path read (D21, BACK-2325): api.analyze(PATH, **controls) is ``reveal PATH --flags --format json`` -------------
 
-def path_read_options(parser: argparse.ArgumentParser) -> Dict[str, Tuple[str, argparse.Action]]:
+def path_read_options(parser: argparse.ArgumentParser, element: bool = False) -> Dict[str, Tuple[str, argparse.Action]]:
     """keyword -> (the long flag it writes, its action), for every request control of a path read, read from the main
     *parser*: its long flags with ``-`` as ``_``, minus what is no control of a file or directory read: the output and
     process options (the global options, ``--breadcrumbs`` aside), the modes that read no path or no element
     (``PATHLESS_FLAGS``, ``ELEMENT_LESS_FLAGS``), the element's own controls (the element views, ``ELEMENT_KEYS``, and
-    ``--section``, ``ELEMENT_FLAGS``: an element read) and help."""
+    ``--section``, ``ELEMENT_FLAGS``) and help. With *element* (an element read, ``api.element``) the element's own
+    controls are keywords too, every spelling the parser takes (BACK-2627 note #10)."""
     from ...nav_params import ELEMENT_KEYS, ELEMENT_VIEW_SPECS
     from ...utils.query_binding import legacy_flag_dests
     from ..parser import _build_global_options_parser
     from .file import ELEMENT_FLAGS, ELEMENT_LESS_FLAGS, PATHLESS_FLAGS
     excluded = {action.dest for action in _build_global_options_parser(main_modes=True)._actions} - {'breadcrumbs'}
-    excluded |= set(PATHLESS_FLAGS) | set(ELEMENT_LESS_FLAGS) | set(ELEMENT_FLAGS) | {'help', 'help_all', 'version'}
-    excluded |= {dest for spec in ELEMENT_VIEW_SPECS if spec.name in ELEMENT_KEYS
-                 for dest in ((spec.cli.dest if spec.cli else None) or spec.name, *legacy_flag_dests(spec))}
+    excluded |= set(PATHLESS_FLAGS) | set(ELEMENT_LESS_FLAGS) | {'help', 'help_all', 'version'}
+    if not element:
+        excluded |= set(ELEMENT_FLAGS)
+        excluded |= {dest for spec in ELEMENT_VIEW_SPECS if spec.name in ELEMENT_KEYS
+                     for dest in ((spec.cli.dest if spec.cli else None) or spec.name, *legacy_flag_dests(spec))}
     options: Dict[str, Tuple[str, argparse.Action]] = {}
     for action in parser._actions:
         if action.dest in excluded:
@@ -228,21 +231,23 @@ def _analyzer_words(parser: argparse.ArgumentParser, options: Mapping[str, Tuple
     return words
 
 
-def path_read_words(parser: argparse.ArgumentParser, controls: Mapping[str, Any]) -> List[str]:
-    """The path read's flags for *controls* (``path_read_options``); a keyword that names none is the
-    unsupported-control error (``UnsupportedOverrideError``), raised before anything runs, naming the flag keyword for
-    an analyzer word ``api.analyze`` used to forward. A ``range`` tuple ``(A, B)`` is the flag's ``A-B``."""
+def path_read_words(parser: argparse.ArgumentParser, controls: Mapping[str, Any], element: bool = False) -> List[str]:
+    """The path read's flags for *controls* (``path_read_options``, an element read's with *element*); a keyword that
+    names none is the unsupported-control error (``UnsupportedOverrideError``), raised before anything runs, naming the
+    flag keyword for an analyzer word ``api.analyze`` used to forward. A ``range`` tuple ``(A, B)`` is the flag's
+    ``A-B``."""
     from ...errors import UnsupportedOverrideError
     from .canonical import _flag_words
-    options = path_read_options(parser)
+    options = path_read_options(parser, element)
     unknown = [keyword for keyword in controls if keyword not in options]
     if unknown:
         renamed = _analyzer_words(parser, options)
         taught = [f"{word!r} is the analyzer's word that {_either(renamed[word])} set{'s' if len(renamed[word]) == 1 else ''}"
                   for word in unknown if word in renamed]
         raise UnsupportedOverrideError(
-            f"unsupported keyword{'s' if len(unknown) > 1 else ''} {', '.join(map(repr, unknown))} for a path read; "
-            f"its keywords are the flags of reveal PATH with - as _ (reveal --help)"
+            f"unsupported keyword{'s' if len(unknown) > 1 else ''} {', '.join(map(repr, unknown))} for "
+            f"{'an element read' if element else 'a path read'}; its keywords are the flags of "
+            f"reveal PATH{' ELEMENT' if element else ''} with - as _ (reveal --help)"
             + (f" ({'; '.join(taught)})" if taught else ''))
     words: List[str] = []
     for keyword, value in controls.items():
@@ -288,7 +293,7 @@ def answer_path_read(path: Any, controls: Mapping[str, Any], element: Optional[s
                                      f"api.element({target.rpartition(':')[0]!r}, {':' + target.rpartition(':')[2]!r})")
     parser = cast(JsonUsageParser, create_argument_parser(__version__))  # the main parser is one (raise_if_asked)
     parser.raise_usage_errors = True
-    words = path_read_words(parser, controls)
+    words = path_read_words(parser, controls, element is not None)
     # The format words come before '--', which ends the options, so a path or element that starts with '-' stays one.
     invocation = Invocation.parse(['reveal', *words, '--format=json', '--', target, *([] if element is None else [element])])
     answers: list = []

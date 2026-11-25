@@ -39,6 +39,33 @@ def test_output_options_modes_and_element_controls_are_not_keywords(parser, keyw
     assert keyword not in path_read_options(parser)
 
 
+def test_an_element_reads_keywords_add_every_spelling_of_the_elements_controls(parser):
+    """BACK-2627 note #10: api.element's keywords are the path read's plus the element's own controls, every flag the
+    parser takes for them (the declarations' flags and their legacy flags), derived, never listed."""
+    from reveal.nav_params import ELEMENT_KEYS, ELEMENT_VIEW_SPECS
+    from reveal.utils.query_binding import legacy_flag_dests
+    path, element = path_read_options(parser), path_read_options(parser, element=True)
+    assert set(path) < set(element)
+    dests = {dest for spec in ELEMENT_VIEW_SPECS if spec.name in ELEMENT_KEYS
+             for dest in ((spec.cli.dest if spec.cli else None) or spec.name, *legacy_flag_dests(spec))}
+    added = {action.dest for keyword, (_flag, action) in element.items() if keyword not in path}
+    assert added == dests | {'section'}
+    for keyword in ('view', 'kind', 'in_loops', 'state', 'transitive', 'nesting_depth', 'scope', 'around', 'boundary',
+                    'sideeffects', 'flow', 'deps', 'section'):
+        assert keyword in element, keyword
+    assert element['in_loops'][0] == '--in-loops'
+    for keyword in ('format', 'output', 'check', 'meta', 'help', 'rules'):
+        assert keyword not in element, keyword
+
+
+def test_an_element_reads_unknown_keyword_names_the_element_read(parser):
+    with pytest.raises(UnsupportedOverrideError, match="'bogus' for an element read; its keywords are the flags of "
+                                                       "reveal PATH ELEMENT"):
+        path_read_words(parser, {'bogus': 1}, element=True)
+    assert path_read_words(parser, {'view': 'boundary', 'in_loops': True}, element=True) == ['--view=boundary',
+                                                                                            '--in-loops']
+
+
 def test_the_words_render_values_as_flags(parser):
     assert path_read_words(parser, {'head': 2, 'outline': True, 'files': False}) == ['--head=2', '--outline']
     assert path_read_words(parser, {'range': (2, 4)}) == ['--range=2-4']
