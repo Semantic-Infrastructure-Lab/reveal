@@ -205,7 +205,7 @@ class DiffAdapter(ResourceAdapter):
         if self.embedded_element:
             # diff://a.py:b.py/element names one element: the structure call answers it, as the CLI router does through
             # get_element (BACK-2764; the API answered the whole comparison).
-            element = self.get_element(self.embedded_element, **kwargs)
+            element = self.get_element(self.embedded_element)
             if element is None:
                 raise ElementNotFoundError(self.embedded_element)
             # The element envelope the generic URI route gave it (``_element_envelope``): reveal diff and diff:// answer
@@ -214,8 +214,8 @@ class DiffAdapter(ResourceAdapter):
                     'source': f'diff://{self.resource}', 'source_type': 'runtime', **element}
 
         # Resolve both URIs using existing adapter infrastructure
-        left_struct = resolve_uri(self.left_uri, **kwargs)
-        right_struct = resolve_uri(self.right_uri, **kwargs)
+        left_struct = resolve_uri(self.left_uri)
+        right_struct = resolve_uri(self.right_uri)
 
         # Compute semantic diff
         diff_result = compute_structure_diff(left_struct, right_struct)
@@ -288,6 +288,9 @@ class DiffAdapter(ResourceAdapter):
         Args:
             element_name: Name of element to compare (e.g., 'handle_request')
 
+        Keywords are accepted as the element contract has it, and handed to no side: each side's structure call
+        takes none (one that takes no keyword answered a raw TypeError, BACK-2214).
+
         Returns:
             Detailed diff for that specific element, or None when neither side has it:
             the router fails the lookup (exit 1) and lists ``list_elements()``, as for any
@@ -295,8 +298,8 @@ class DiffAdapter(ResourceAdapter):
         """
         from ...diff import compute_element_diff
 
-        left_struct = resolve_uri(self.left_uri, **kwargs)
-        right_struct = resolve_uri(self.right_uri, **kwargs)
+        left_struct = resolve_uri(self.left_uri)
+        right_struct = resolve_uri(self.right_uri)
 
         left_elem = find_element(left_struct, element_name)
         right_elem = find_element(right_struct, element_name)

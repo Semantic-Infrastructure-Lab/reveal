@@ -40,16 +40,16 @@ def require_comparable(structure: Dict[str, Any], uri: str) -> Dict[str, Any]:
         f"Diff each side's own output with the shell diff instead.")
 
 
-def resolve_uri(uri: str, **kwargs) -> Dict[str, Any]:
+def resolve_uri(uri: str) -> Dict[str, Any]:
     """Resolve a URI to its structure, declining what diff:// cannot compare.
 
     Raises NotApplicableError for a resource with no functions, classes or imports
     (see ``require_comparable``).
     """
-    return require_comparable(_resolve_structure(uri, **kwargs), uri)
+    return require_comparable(_resolve_structure(uri), uri)
 
 
-def _resolve_structure(uri: str, **kwargs) -> Dict[str, Any]:
+def _resolve_structure(uri: str) -> Dict[str, Any]:
     """Resolve a URI to its structure using existing adapters.
 
     This is the key composition point - we delegate to existing
@@ -115,7 +115,7 @@ def _resolve_structure(uri: str, **kwargs) -> Dict[str, Any]:
             raise ValueError(f"No analyzer found for file: {resource}")
         try:
             analyzer = analyzer_class(resource)
-            return cast(Dict[str, Any], analyzer.get_structure(**kwargs))
+            return cast(Dict[str, Any], analyzer.get_structure())
         except FileNotFoundError as exc:
             if exc.filename is None or Path(exc.filename).resolve() != file_path:
                 raise
@@ -128,7 +128,7 @@ def _resolve_structure(uri: str, **kwargs) -> Dict[str, Any]:
 
     # Instantiate and get structure
     adapter = instantiate_adapter(adapter_class, scheme, resource)
-    return cast(Dict[str, Any], adapter.get_structure(**kwargs))
+    return cast(Dict[str, Any], adapter.get_structure())
 
 
 def resolve_directory(dir_path: str) -> Dict[str, Any]:
