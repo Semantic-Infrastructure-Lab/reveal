@@ -12,7 +12,6 @@ cli/adapters circular import at module-load time (see file_handler.py header).
 
 from __future__ import annotations
 
-import sys
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
@@ -532,9 +531,9 @@ NAV_BOOLEAN_FLAG_NAMES: frozenset = _no_value_words()
 
 
 def _single_line_ref(element: Optional[str], flag: str) -> int:
-    """The line number a --scope/--around element names; exits when it names none.
+    """The line number a --scope/--around element names; NavRequestValidationError (exit 2) when it names none.
 
-    A range exits 2: both flags answer for one line, and `:100-110 --around 2` used to
+    A range is refused too: both flags answer for one line, and `:100-110 --around 2` used to
     print 98-102 and drop the rest of the range without a word (BACK-2272).
     """
     from .display.element import _parse_element_syntax  # noqa: I006
@@ -547,13 +546,11 @@ def _single_line_ref(element: Optional[str], flag: str) -> int:
     start: int = syntax['start_line']
     end = syntax['end_line']
     if end is not None and end != start:
+        # An invalid request (D6) raised as every element view's refusal is, so the library API gets it, not an exit.
         hint = f'drop {flag} to print lines {element[1:]}' if flag == '--around' else 'run it once per line'
-        print(
-            f"Error: {flag} takes a single line, not the range '{element}'; only line {start} would be used.\n"
-            f'  Give one line (:{start}), or {hint}.',
-            file=sys.stderr,
-        )
-        sys.exit(2)
+        raise NavRequestValidationError(
+            f"{flag} takes a single line, not the range '{element}'; only line {start} would be used.\n"
+            f'  Give one line (:{start}), or {hint}.')
     return start
 
 

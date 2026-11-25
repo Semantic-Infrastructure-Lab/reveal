@@ -32,7 +32,11 @@ def path(tmp_path):
 def test_range_is_rejected_with_exit_2(path, flag, fmt):
     result = _run_reveal_direct(path, ':2-4', *flag, '--format', fmt)
     assert result.returncode == 2, (result.returncode, result.stdout, result.stderr)
-    assert result.stdout == ''
+    if fmt == 'json':  # the invalid-request document every element view's refusal prints (BACK-2627)
+        document = json.loads(result.stdout)
+        assert document['meta']['errors'][0]['code'] == 'invalid_request' and 'single line' in document['error']
+    else:
+        assert result.stdout == ''
     assert ':2-4' in result.stderr
     assert 'single line' in result.stderr
     assert flag[0] in result.stderr
@@ -61,5 +65,5 @@ def test_other_nav_flags_still_take_a_range(path):
 def test_mcp_reveal_nav_reports_the_rejection(path):
     from reveal.mcp_server import reveal_nav
     out = reveal_nav(path, ':2-4', 'around', '1')
-    assert 'exited with code 2' in out
-    assert 'single line' in out
+    # The refusal is the invalid request every element view raises, a public tool error with its text (BACK-2627).
+    assert out.public and out.startswith("[reveal error: --around takes a single line, not the range ':2-4'")
