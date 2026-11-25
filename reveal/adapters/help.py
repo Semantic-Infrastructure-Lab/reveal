@@ -2413,7 +2413,7 @@ class HelpAdapter(ResourceAdapter):
             # below is actively wrong for it — redirect to --help instead,
             # mirroring main.py's _check_ghost_flags() redirect at the CLI
             # flag-typo layer, one layer up at the help:// query layer.
-            from ..cli.invocation import COMMANDS
+            from ..cli.invocation import COMMANDS, current_schemes
             if adapter_name in COMMANDS:
                 return {
                     'type': 'adapter_schema',
@@ -2427,8 +2427,12 @@ class HelpAdapter(ResourceAdapter):
                     'next': [f'reveal {adapter_name} --help'],
                 }
             # Only advertise adapters that actually have a schema, so the
-            # "did you mean" list can't point at another dead end (N1).
+            # "did you mean" list can't point at another dead end (N1), and
+            # none the RETIREMENTS table retires: a hint teaches current
+            # schemes only (BACK-2532, BACK-2804).
+            current = set(current_schemes())
             available, omitted = self._adapters_with_schema()
+            available = [scheme for scheme in available if scheme in current]
             unknown: Dict[str, Any] = {
                 'type': 'adapter_schema',
                 'adapter': adapter_name,
