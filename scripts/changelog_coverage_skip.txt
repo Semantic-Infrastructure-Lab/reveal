@@ -9,3 +9,4 @@ BACK-2674  Named only by 7e20522d (a BACK-2720 fix): it repaired an unreleased r
 BACK-2149  Internal so far: docs and help lines that named a retiring spelling as the hotspots replacement, metrics' churn help, and review's metrics composition (view=hotspots, limit=0; the same answer). Deleting the noun at the cut (S7) needs its own entry: drop this line then.
 BACK-2771  Internal so far: a removed subcommand row keeps its word a command and exits 2 with its text (router, --stdin, MCP), but no row is marked removed until the cut; the cut's entry names it (S7): drop this line then.
 BACK-2795  CI only: the test job's timeout-minutes is 45 (macOS legs take 22-29 min on 3 xdist workers).
+BACK-2799  Stderr cleanliness: api.query's URI form no longer prints per-file warnings ('Warning: Failed to analyze F') on stderr; its returned answer is unchanged.
