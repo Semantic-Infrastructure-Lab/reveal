@@ -159,6 +159,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
+- JavaScript/TypeScript element reads print the line they cite: `reveal f.ts g` on `const g = () => 2` printed `() => 2;` without the name, and class-field arrows, object members, `module.exports.x = function`, `memo(() => ...)` wrappers, `export` and TypeScript `declare` lost their binding or keyword the same way. A binding split over two lines now starts at its first line (BACK-2837).
+
 - A value flag typed without its value before `--format json` (`reveal ast proj --limit --format json`) answers the invalid-request JSON document instead of argparse's text usage with empty stdout, on every subcommand and URI (BACK-2763).
 - xlsx: `sheets_with_matches` counts the sheets of every match, not of the matches a `--limit` shows, and `reveal.api.query('xlsx', FILE, sheet=..., limit=...)` binds its keywords (they were dropped, so the overview answered) (BACK-2626).
 - `reveal markdown DIR --sort FIELD` sorts by the documents' front matter as documented: `--sort -priority` warned `unknown_sort_field` and left the rows unsorted unless `--columns priority` was given (BACK-2614).

@@ -165,8 +165,11 @@ def test_extracted_source_is_the_files_own_text(fixture):
     """BACK-1597: an extracted element's source is the file's own text from the
     start of its first line. It used to start at the node, so a method came
     back as 'def f(self):' followed by body lines at their full indentation.
-    Only an element with code before it on its first line (`export function
-    f`, two definitions on one line) may start mid-line."""
+    BACK-2837 removed the mid-line exception (`export function f`, `const g =
+    () => ...`, TypeScript `declare`): every fixture element now reads from its
+    line start. The one shape that still starts mid-line, a declaration that
+    binds several names (`let a = () => 1, b = () => 2`), is pinned in
+    tests/test_element_first_line_back2837.py."""
     analyzer = _build(fixture)
     if not isinstance(analyzer, TreeSitterAnalyzer) or not analyzer.tree:
         pytest.skip("not a tree-sitter analyzer")
@@ -183,9 +186,6 @@ def test_extracted_source_is_the_files_own_text(fixture):
         text = "".join(lines[result["line_start"] - 1:result["line_end"]])
         first_line = lines[result["line_start"] - 1]
         if text.startswith(source):
-            continue
-        offset = first_line.find(source.split("\n", 1)[0])
-        if offset > 0 and first_line[:offset].strip() and source in text:
             continue
         misaligned.append(f"{name} ({result['line_start']}): {source.splitlines()[0]!r}")
     assert not misaligned, (

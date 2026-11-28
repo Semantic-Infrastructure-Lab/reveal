@@ -38,6 +38,12 @@ _FUNCTION_SCOPES = frozenset({'function_declaration', 'function_expression', 'ge
                               'generator_function_declaration', 'arrow_function', 'method_definition'})
 _DECLARATIONS = ('lexical_declaration', 'variable_declaration')
 _NAMED_DECLARATIONS = ('function_declaration', 'generator_function_declaration', 'class_declaration')
+# What a function literal is the value of when it is a named element (the four shapes of
+# `_iter_function_values`), and what may sit between them: a wrapper call (`memo(() => ...)`),
+# parentheses and TypeScript's value-preserving expressions (BACK-2837).
+_BINDINGS = ('variable_declarator', 'public_field_definition', 'field_definition', 'pair', 'assignment_expression')
+_VALUE_WRAPPERS = frozenset({'arguments', 'call_expression', 'parenthesized_expression', 'as_expression',
+                             'satisfies_expression', 'non_null_expression'})
 
 
 class JSFunctionValueMixin(_Base):
@@ -339,6 +345,63 @@ class JSFunctionValueMixin(_Base):
         if _zero_arg(first, 'kind') == 'call_expression':
             return self._call_wrapped_function_literal(first)
         return None
+
+    def _extraction_node(self, node):
+        """A function value reads from the binding that names it, and an exported
+        declaration from its `export` (BACK-2837, COMMAND_MODEL rule 9).
+
+        The element node of `const g = () => 2` is the arrow, so a read printed
+        `() => 2;` with the name cut off; likewise a class field, an object member,
+        a CommonJS assignment and a wrapped `memo(() => ...)`. Widen the literal to
+        its binding, then to the whole statement when that binds only this name
+        (`let a = () => 1, b = () => 2` keeps each declarator, so neither read
+        shows the other's text), then to the `export` statement or TypeScript
+        `declare` around the declaration. The same shape as Go's type-body
+        widening."""
+        node = super()._extraction_node(node)
+        if _zero_arg(node, 'kind') in _FUNCTION_LITERALS:
+            binding = _zero_arg(node, 'parent')
+            while binding is not None and _zero_arg(binding, 'kind') in _VALUE_WRAPPERS:
+                binding = _zero_arg(binding, 'parent')
+            if binding is not None and _zero_arg(binding, 'kind') in _BINDINGS:
+                node = self._binding_statement(binding)
+        wrapper = self._declaration_wrapper(node)
+        while wrapper is not None:
+            node, wrapper = wrapper, self._declaration_wrapper(wrapper)
+        return node
+
+    @staticmethod
+    def _declaration_wrapper(node):
+        """The `export` statement or TypeScript `declare` wrapper whose declaration
+        `node` is (`export declare function f(): void` has both), else None."""
+        holder = _zero_arg(node, 'parent')
+        kind = _zero_arg(holder, 'kind') if holder is not None else None
+        if kind == 'export_statement':
+            declaration = holder.child_by_field_name('declaration')
+        elif kind == 'ambient_declaration':
+            children = _children(holder)
+            declaration = children[-1] if children else None
+        else:
+            return None
+        if declaration is None or _zero_arg(declaration, 'start_byte') != _zero_arg(node, 'start_byte'):
+            return None
+        return holder
+
+    @staticmethod
+    def _binding_statement(binding):
+        """The statement around a binding when it holds only that binding: the
+        declaration of a lone declarator, the expression statement of an
+        assignment. Otherwise the binding itself."""
+        statement = _zero_arg(binding, 'parent')
+        if statement is None:
+            return binding
+        kind, statement_kind = _zero_arg(binding, 'kind'), _zero_arg(statement, 'kind')
+        if kind == 'variable_declarator' and statement_kind in _DECLARATIONS:
+            declarators = [c for c in _children(statement) if _zero_arg(c, 'kind') == 'variable_declarator']
+            return statement if len(declarators) == 1 else binding
+        if kind == 'assignment_expression' and statement_kind == 'expression_statement':
+            return statement
+        return binding
 
     def _extract_language_specific_functions(self) -> List[StructureItem]:
         """Every function value, then any subclass's own."""
