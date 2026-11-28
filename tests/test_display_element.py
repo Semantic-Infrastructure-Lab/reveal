@@ -21,7 +21,6 @@ from reveal.display.element import (
     _determine_target_category,
     _get_category_items,
     _build_element_from_item,
-    _get_source_for_item,
     _read_lines,
     _output_result,
 )

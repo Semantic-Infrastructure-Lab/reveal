@@ -159,6 +159,8 @@ Releases 0.128.0 through 0.130.0 were condensed on 2026-10-26 to what a user of 
 
 ### Fixed
 
+- Element reads include the comment block directly above the declaration: `reveal f.go Add` printed the function without its `//` doc comment, and Rust `///` docs and `#[attributes]`, Java and TypeScript `/** */`, C# `///`, Kotlin, Swift, PHP, Lua, Ruby, Dart, Scala, Zig, GDScript and Python `#` blocks were dropped the same way. A blank line ends the block, so a file header is not swept in. JSON `line_start` is now the first comment line and the new `decl_line` is the declaration line the outline names (BACK-2836).
+
 - JavaScript/TypeScript element reads print the line they cite: `reveal f.ts g` on `const g = () => 2` printed `() => 2;` without the name, and class-field arrows, object members, `module.exports.x = function`, `memo(() => ...)` wrappers, `export` and TypeScript `declare` lost their binding or keyword the same way. A binding split over two lines now starts at its first line (BACK-2837).
 
 - A value flag typed without its value before `--format json` (`reveal ast proj --limit --format json`) answers the invalid-request JSON document instead of argparse's text usage with empty stdout, on every subcommand and URI (BACK-2763).

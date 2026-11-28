@@ -29,7 +29,10 @@ Everything reveal does sits on one ladder, and the docs teach it in this order:
 
 About 90% of real use is five operations: extract an element (`reveal FILE NAME`), extract
 a markdown section (`reveal DOC.md "Heading"`), `--grep`, outline a file (`reveal FILE`), and
-read a line range (`reveal FILE :N-M`). A bug in one of them outranks all other work. The
+read a line range (`reveal FILE :N-M`). A bug in one of them outranks all other work. An
+element read is the whole unit: the comment block directly above a declaration (a doc comment,
+a Rust attribute, a Python `#` block) is part of it, `line_start` names its first line, and the
+new `decl_line` names the declaration the outline points at (BACK-2836). Apart from that, the
 changes below leave their text output alone; their `--format json` gains the same envelope
 every other answer carries, by addition (BACK-2601).
 

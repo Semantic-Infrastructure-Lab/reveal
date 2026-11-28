@@ -939,11 +939,13 @@ def _build_element_from_item(analyzer, item: StructureItem, category: str, ordin
     line_start = item.get('line', item.get('line_start', 1))
     line_end = item.get('line_end', line_start)
 
-    # Get source code
+    # The same span every other extraction route returns (rule 9: the read is the
+    # whole unit, so its first line, last line and text agree).
     if isinstance(analyzer, TreeSitterAnalyzer) and analyzer.tree:
-        source = _get_source_for_item(analyzer, item, line_start, line_end)
-    else:
-        source = _read_lines(analyzer.path, line_start, line_end)
+        span = _span_for_item(analyzer, item, line_start)
+        if span is not None:
+            return {'name': name, **span}
+    source = _read_lines(analyzer.path, line_start, line_end)
 
     return {
         'name': name,
@@ -953,16 +955,16 @@ def _build_element_from_item(analyzer, item: StructureItem, category: str, ordin
     }
 
 
-def _get_source_for_item(analyzer, item, line_start, line_end):
-    """Get source code for a structure item using tree-sitter if available."""
+def _span_for_item(analyzer, item, line_start):
+    """The element span (`element_span`) of the structure item the outline lists at
+    `line_start`, or None. The outline names the declaration line, so it is matched
+    on `decl_line`: the span itself may start earlier, at the comment above."""
     name = item.get('name')
     for node in _element_nodes(analyzer):
         span = analyzer.element_span(node)
-        if span['line_start'] == line_start and (not name or analyzer._get_node_name(node) == name):
-            return span['source']
-
-    # Fallback to reading lines
-    return _read_lines(analyzer.path, line_start, line_end)
+        if span['decl_line'] == line_start and (not name or analyzer._get_node_name(node) == name):
+            return span
+    return None
 
 
 def _read_lines(path, start_line, end_line):

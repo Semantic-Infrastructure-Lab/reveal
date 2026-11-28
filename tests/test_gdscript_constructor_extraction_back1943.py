@@ -18,28 +18,28 @@ def constructor(request, tmp_path):
             'func _init(seed = 1):\n    value = seed\n'
             '    if seed:\n        value += 1\n\n'
             'func ordinary():\n    return value\n',
-            {'name': '_init', 'line_start': 4, 'line_end': 7,
+            {'name': '_init', 'line_start': 4, 'decl_line': 4, 'line_end': 7,
              'source': 'func _init(seed = 1):\n    value = seed\n'
                        '    if seed:\n        value += 1'},
-            {'name': 'ordinary', 'line_start': 9, 'line_end': 10,
+            {'name': 'ordinary', 'line_start': 9, 'decl_line': 9, 'line_end': 10,
              'source': 'func ordinary():\n    return value'},
         ),
         'nested': (
             'extends Node\nclass Inner:\n    var marker = 0\n'
             '    func _init(seed = 2):\n        marker = seed\n\n'
             '    func ordinary():\n        return marker\n',
-            {'name': '_init', 'line_start': 4, 'line_end': 5,
+            {'name': '_init', 'line_start': 4, 'decl_line': 4, 'line_end': 5,
              'source': '    func _init(seed = 2):\n        marker = seed'},
-            {'name': 'ordinary', 'line_start': 7, 'line_end': 8,
+            {'name': 'ordinary', 'line_start': 7, 'decl_line': 7, 'line_end': 8,
              'source': '    func ordinary():\n        return marker'},
         ),
         'single_line': (
             'extends Node\nvar value = 0\n'
             'func _init(): value = 1; value += 2\n'
             'func ordinary(): return value\n',
-            {'name': '_init', 'line_start': 3, 'line_end': 3,
+            {'name': '_init', 'line_start': 3, 'decl_line': 3, 'line_end': 3,
              'source': 'func _init(): value = 1; value += 2'},
-            {'name': 'ordinary', 'line_start': 4, 'line_end': 4,
+            {'name': 'ordinary', 'line_start': 4, 'decl_line': 4, 'line_end': 4,
              'source': 'func ordinary(): return value'},
         ),
     }

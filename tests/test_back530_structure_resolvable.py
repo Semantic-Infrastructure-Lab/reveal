@@ -123,9 +123,10 @@ def test_every_outlined_element_is_resolvable_by_name(fixture):
                 f"{category} '{name}' (listed {line}-{line_end}, returned "
                 f"{result['line_start']}-{result['line_end']}: truncated)"
             )
-        elif exact_start and not any(span["line_start"] == line for span in hits):
-            # BACK-1478: extraction starts where the outline does (a
-            # decorated def from its first decorator). Tree-sitter definitions
+        elif exact_start and not any(span.get("decl_line", span["line_start"]) == line for span in hits):
+            # BACK-1478: the declaration starts where the outline does (a
+            # decorated def from its first decorator); the read may start
+            # earlier, at the comment above it (BACK-2836, `decl_line`). Tree-sitter definitions
             # only: a notebook cell is listed at its JSON object and extracted
             # as its source lines, by design.
             unresolved.append(

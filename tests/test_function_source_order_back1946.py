@@ -74,8 +74,8 @@ def test_same_line_mixed_and_overlapping_definitions_use_source_order(
     expected = [[name, 1, 1] for name in names]
     assert answer['outline'] == answer['functions'] == expected
     assert answer['ordinals'] == [
-        {'name': names[0], 'line_start': 1, 'line_end': 1, 'source': first},
-        {'name': names[1], 'line_start': 1, 'line_end': 1, 'source': second},
+        {'name': names[0], 'line_start': 1, 'decl_line': 1, 'line_end': 1, 'source': first},
+        {'name': names[1], 'line_start': 1, 'decl_line': 1, 'line_end': 1, 'source': second},
     ]
 
 
@@ -100,7 +100,7 @@ def test_nested_same_name_keeps_outer_selection(tmp_path, seed):
     source = 'def run; def self.run; 1; end; 2; end\n'
     answer = _fresh_probe(tmp_path, 'rb', source, seed, 'named')
     assert answer['named'] == {
-        'name': 'run', 'line_start': 1, 'line_end': 1,
+        'name': 'run', 'line_start': 1, 'decl_line': 1, 'line_end': 1,
         'source': 'def run; def self.run; 1; end; 2; end',
     }
 
@@ -112,9 +112,9 @@ def test_decorated_merge_remains_in_source_order(tmp_path, seed):
     expected = [['earlier', 1, 2], ['later', 3, 5]]
     assert answer['outline'] == answer['functions'] == expected
     assert answer['ordinals'] == [
-        {'name': 'earlier', 'line_start': 1, 'line_end': 2,
+        {'name': 'earlier', 'line_start': 1, 'decl_line': 1, 'line_end': 2,
          'source': 'def earlier():\n    return 1'},
-        {'name': 'later', 'line_start': 3, 'line_end': 5,
+        {'name': 'later', 'line_start': 3, 'decl_line': 3, 'line_end': 5,
          'source': '@wrap\ndef later():\n    return 2'},
     ]
 

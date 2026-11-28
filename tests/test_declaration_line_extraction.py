@@ -93,6 +93,6 @@ def test_php_anonymous_class_header_remains_extractable(tmp_path):
     analyzer = get_analyzer(str(path))(str(path))
     assert not analyzer.has_parse_errors()
     assert _extract_element_at_line(analyzer, 2) == {
-        'name': 'element@2', 'line_start': 2, 'line_end': 4,
+        'name': 'element@2', 'line_start': 2, 'decl_line': 2, 'line_end': 4,
         'source': 'class {\n    public function run() {}\n};',
     }

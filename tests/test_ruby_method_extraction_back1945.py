@@ -31,7 +31,7 @@ def _analyzer(tmp_path, source):
 def method(request, tmp_path):
     body, name = request.param
     analyzer = _analyzer(tmp_path, f'class Box\n{body}\nend\n')
-    expected = {'name': name, 'line_start': 2, 'line_end': 4, 'source': body}
+    expected = {'name': name, 'line_start': 2, 'decl_line': 2, 'line_end': 4, 'source': body}
     return analyzer, expected
 
 
@@ -61,7 +61,7 @@ def test_inline_ordinal_excludes_assignment_and_adjacent_method(tmp_path, receiv
     analyzer = _analyzer(tmp_path,
         f'seed = 1; def {receiver}first; 1; end; def {receiver}second; 2; end\n')
     source = f'def {receiver}{name}; {value}; end'
-    expected = {'name': name, 'line_start': 1, 'line_end': 1, 'source': source}
+    expected = {'name': name, 'line_start': 1, 'decl_line': 1, 'line_end': 1, 'source': source}
     assert _extract_by_name(analyzer, name) == expected
     assert _extract_ordinal_element(analyzer, ordinal, 'function') == expected
 
@@ -74,7 +74,7 @@ def test_owner_paths_keep_adjacent_and_nested_methods_separate(tmp_path):
         ('A.run', 2, 4, '  def run\n    1\n  end'),
         ('Outer.Inner.run', 8, 10, '    def self.run\n      2\n    end'),
     ]:
-        expected = {'name': address, 'line_start': start, 'line_end': end, 'source': source}
+        expected = {'name': address, 'line_start': start, 'decl_line': start, 'line_end': end, 'source': source}
         assert _extract_by_syntax(analyzer, address, _parse_element_syntax(address)) == expected
         for line in range(start, end + 1):
             assert _extract_element_at_line(analyzer, line) == dict(expected, name='run')
@@ -84,7 +84,7 @@ def test_instance_and_singleton_duplicate_names_keep_ambiguity(tmp_path):
     analyzer = _analyzer(tmp_path,
         'class Box\n  def run\n    1\n  end\n  def self.run\n    2\n  end\nend\n')
     assert _extract_by_name(analyzer, 'run') == {
-        'name': 'run', 'line_start': 2, 'line_end': 4, 'source': '  def run\n    1\n  end',
+        'name': 'run', 'line_start': 2, 'decl_line': 2, 'line_end': 4, 'source': '  def run\n    1\n  end',
         'candidates': [
             {'name': 'Box.run', 'line_start': 2, 'line_end': 4,
              'address': ':2-4', 'selected': True},
@@ -101,6 +101,6 @@ def test_class_nondefinition_and_anonymous_siblings_are_unchanged(tmp_path, line
         'class Empty\n  MARKER = 1\nend\n')
     assert _extract_element_at_line(analyzer, line) is None
     assert _extract_by_name(analyzer, 'Empty') == {
-        'name': 'Empty', 'line_start': 5, 'line_end': 7,
+        'name': 'Empty', 'line_start': 5, 'decl_line': 5, 'line_end': 7,
         'source': 'class Empty\n  MARKER = 1\nend',
     }

@@ -382,3 +382,51 @@ def test_zig_declaration_line_matches_named_function(runner):
     expected = (12, 25, 'processOrder')
     assert (named['line_start'], named['line_end'], named['name']) == expected
     assert (positional['line_start'], positional['line_end'], positional['name']) == expected
+
+
+# --- BACK-2836 / COMMAND_MODEL rule 9: an element read is the whole unit -----
+# Each file in core_tier/doc_reads holds a file-header comment, a blank line, then
+# `documented` under a two-line doc comment (plus an attribute/decorator/export
+# where the language has one). The read starts at the doc comment, stops at the
+# blank line, and reports the declaration line separately as decl_line.
+
+DOC_READS_DIR = CORE_DIR / "doc_reads"
+DOC_READ_FILES = sorted(p.name for p in DOC_READS_DIR.glob("doc.*"))
+
+
+# Files whose by-line and ordinal routes still skip the element span: a JS/TS function value is not
+# an indexed element node (BACK-2841). Drop the entry when that task lands.
+ROUTE_GAPS = {"doc.ts": "BACK-2841"}
+
+
+def _line_of(lines: list, needle: str) -> int:
+    return next(i for i, line in enumerate(lines, 1) if needle in line)
+
+
+def test_doc_read_fixture_covers_every_core_tier_language():
+    covered = {name.split(".", 1)[1] for name in DOC_READ_FILES}
+    assert covered == set(EXTENSIONS.values())
+
+
+@pytest.mark.parametrize("name", DOC_READ_FILES)
+def test_element_read_includes_leading_comment_block(runner, name):
+    lines = (DOC_READS_DIR / name).read_text(encoding="utf-8").split("\n")
+    first = _line_of(lines, "DOC1")
+    # The outline's line: a Python decorator or Java annotation is part of the declaration node.
+    decl = next((i for i, line in enumerate(lines, 1) if "@functools" in line or "@Deprecated" in line),
+                _line_of(lines, "documented"))
+    data = runner.json(DOC_READS_DIR, [name, "documented"])
+    assert data["line_start"] == first, "the read must start at the first doc-comment line"
+    assert data["decl_line"] == decl, "decl_line names the declaration itself"
+    assert "HEADER" not in data["content"], "a comment above a blank line is not the doc"
+    assert "DOC1" in data["content"].split("\n")[0] and "DOC2" in data["content"]
+    assert data["line_end"] - data["line_start"] + 1 == len(data["content"].split("\n"))
+    text = _text(runner, DOC_READS_DIR, [name, "documented"])
+    assert f"{name}:{data['line_start']}-{data['line_end']} | documented" in text
+    # Every route to the element returns the same unit: by line (on the comment or the
+    # declaration) and by ordinal.
+    for route in () if name in ROUTE_GAPS else (f":{first}", f":{decl}", "@1"):
+        routed = runner.json(DOC_READS_DIR, [name, route])
+        assert {k: routed[k] for k in ("line_start", "decl_line", "line_end", "content")} == {
+            k: data[k] for k in ("line_start", "decl_line", "line_end", "content")}, route
+

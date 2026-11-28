@@ -21,6 +21,7 @@ from .core import disk_cache
 from .core import suppress_treesitter_warnings
 from .core import node_children as _children
 from .core import node_next_sibling as _next_sibling
+from .core import node_prev_sibling as _prev_sibling
 from .core import iter_tree as _iter_tree
 from .core.treesitter_compat import _zero_arg, first_error_position, tree_has_recovery_artifacts, zero_arg_getter
 from .core import tree_root
@@ -459,6 +460,16 @@ def is_definition(node) -> bool:
 
 # A `;` closing a definition's last line, then only blanks to the line's end (BACK-1630).
 _TRAILING_SEMICOLON = re.compile(rb'[ \t]*(;)[ \t]*(?:\r?\n|$)')
+def _last_row(node) -> int:
+    """The last row `node` occupies. A line comment whose node swallows its newline
+    ends at column 0 of the next row (tree-sitter-rust); that row is not its own."""
+    start_row = _zero_arg(node, 'start_position').row
+    end = _zero_arg(node, 'end_position')
+    return int(end.row - 1 if end.column == 0 and end.row > start_row else end.row)
+
+
+# Attached to the declaration below as sibling nodes, not children (BACK-2836).
+_ATTACHED_SIBLING_KINDS = frozenset({'attribute_item', 'decorator'})
 
 # Namespace declarations named by a `name` field that may be a qualified name (BACK-1636).
 _NAMESPACE_KINDS = frozenset({
@@ -1638,9 +1649,14 @@ class TreeSitterAnalyzer(FileAnalyzer):
 
         The one definition every extraction route uses (by name, Class.method,
         :LINE, ordinal -- BACK-1597). The node is widened by _extraction_node
-        (decorators, Go type specs) and ended by _function_end_node (Dart
-        bodies). The source starts at the beginning of its first line when only
-        indentation precedes the node, so a method's first line keeps its
+        (decorators, Go type specs), started at the comment/attribute run that
+        sits directly above it (_leading_run_start, COMMAND_MODEL rule 9: the
+        read is the whole unit, doc comment included) and ended by
+        _function_end_node (Dart bodies). `line_start` is where the shown source
+        begins; `decl_line` is where the declaration itself begins (the line the
+        outline names), which is the same line when nothing is attached above.
+        The source starts at the beginning of its first line when only
+        indentation precedes the first node, so a method's first line keeps its
         indentation like every line after it; otherwise (`export function f`,
         two definitions on one line) it starts at the node.
 
@@ -1649,10 +1665,11 @@ class TreeSitterAnalyzer(FileAnalyzer):
         BACK-1630); anything else after the node on that line is left out.
         """
         node = self._extraction_node(node)
+        first = self._leading_run_start(node)
         end_node = self._function_end_node(node)
         content = self._source_bytes()
-        start = _zero_arg(node, 'start_byte')
-        line_begin = start - _zero_arg(node, 'start_position').column
+        start = _zero_arg(first, 'start_byte')
+        line_begin = start - _zero_arg(first, 'start_position').column
         if not content[line_begin:start].strip():
             start = line_begin
         end = _zero_arg(end_node, 'end_byte')
@@ -1660,10 +1677,39 @@ class TreeSitterAnalyzer(FileAnalyzer):
         if trailing:
             end = trailing.end(1)
         return {
-            'line_start': _zero_arg(node, 'start_position').row + 1,
+            'line_start': _zero_arg(first, 'start_position').row + 1,
+            'decl_line': _zero_arg(node, 'start_position').row + 1,
             'line_end': _zero_arg(end_node, 'end_position').row + 1,
             'source': content[start:end].decode('utf-8'),
         }
+
+    def _leading_run_start(self, node):
+        """The first node of the comment/attribute run directly above `node`, or
+        `node` itself when nothing is attached.
+
+        One rule for every language (COMMAND_MODEL rule 9, BACK-2836): previous
+        siblings that are comments (any `*comment*` kind: Go `//`, Rust `///`,
+        Javadoc, Python `#` blocks) or attributes/decorators that are siblings
+        rather than children (Rust `attribute_item`, TS method `decorator`) join,
+        walking up while each one ends on the line just above what follows it.
+        A blank line stops the run, so a file header is not swept in, and a
+        comment that trails the previous statement on its own line is not ours.
+        """
+        first = node
+        top = _zero_arg(node, 'start_position').row
+        sibling = _prev_sibling(node)
+        while sibling is not None:
+            kind = _zero_arg(sibling, 'kind')
+            if 'comment' not in kind and kind not in _ATTACHED_SIBLING_KINDS:
+                break
+            row = _zero_arg(sibling, 'start_position').row
+            if _last_row(sibling) < top - 1:
+                break
+            before = _prev_sibling(sibling)
+            if before is not None and _last_row(before) == row:
+                break
+            first, top, sibling = sibling, row, before
+        return first
 
     def _extraction_node(self, node):
         """The node whose span is shown when `node` is extracted by name.
